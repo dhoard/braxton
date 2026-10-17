@@ -43,7 +43,7 @@ key handlers.
 - [Security](#security)
 - [Project status and versioning](#project-status-and-versioning)
 - [License and notices](#license-and-notices)
-- [Acknowledgements](#acknowledgements)
+- [Acknowledgments](#acknowledgments)
 
 ---
 
@@ -258,7 +258,7 @@ shortcut.
 | `Command.readClipboard(mapper)` | Read the session's in-process clipboard buffer |
 | `Command.quit()` | End the program |
 
-Effects are epoch-guarded: replacing or cancelling an id means a late completion can never reach the
+Effects are epoch-guarded: replacing or canceling an id means a late completion can never reach the
 model. Task results, timer ticks, and clipboard reports arrive as ordinary messages, so `update` is
 never re-entered. `Command.task` bodies are the documented impure boundary — they must not touch the
 terminal, mutate captured state, or call `update`.
@@ -311,8 +311,8 @@ All widgets are immutable values or pure factories producing `StyledText`/`View`
 | `Box` | Border, title, responsive or fixed width |
 | `Badge` | Pill segments with optional pathway arrows |
 | `ProgressBar` | Active/inactive icons, separators, percentage |
-| `Quote` | Coloured bar and background |
-| `Gradient` | Vertical, horizontal, or diagonal per-grapheme colour |
+| `Quote` | Colored bar and background |
+| `Gradient` | Vertical, horizontal, or diagonal per-grapheme color |
 | `Selector` / `TableSelector` | Immutable selection state and focusable views |
 | `Animation` | Spinner and shimmer frames driven by model time |
 | `FontLoader`, `FigletFont`, `Logo` | Bundled FIGlet fonts and styled logos |
@@ -325,14 +325,14 @@ All widgets are immutable values or pure factories producing `StyledText`/`View`
 properties per session. The in-process buffer is always the dependable destination; OSC 52 is
 written at most once, through tmux-native or DCS-passthrough transport when configured.
 `ClipboardResult` distinguishes stored, emitted, truncated, deduplicated, and internal-only
-outcomes — OSC 52 has no acknowledgement, so Braxton never claims the operating-system clipboard
+outcomes — OSC 52 has no acknowledgment, so Braxton never claims the operating-system clipboard
 accepted a payload. Copy sequences share the frame output owner and cannot split a render.
 
 ## Runtime and terminal
 
 `Application.run(program)` opens one `TerminalSession`, which owns raw mode and its exact saved
 state, the alternate screen, cursor visibility, bracketed paste, optional mouse reporting, viewport
-measurement, and a cancellable input read. Closing the session wakes a blocked reader without
+measurement, and a cancelable input read. Closing the session wakes a blocked reader without
 closing `System.in`.
 
 Defaults are configuration, not hidden constants:
@@ -423,7 +423,7 @@ The build must stay warning-free under `-Xlint:all`, the core must keep zero thi
 dependencies, and the test suite must remain independent of a TTY, stdin, and raw mode. A headless
 test run does not replace a manual check of a real terminal session.
 
-MIT license headers are enforced by Spotless during `verify`. Dependency-update reports honour the
+MIT license headers are enforced by Spotless during `verify`. Dependency-update reports honor the
 pre-release filter in `.versions-rules.xml`:
 
 ```bash
@@ -466,7 +466,7 @@ Before opening a pull request:
    effects, and structural routing.
 4. Do not add a third-party runtime dependency to the core. The optional example dependency must
    remain outside the published jar.
-5. Include a focused regression test for a behaviour change and update the README/NOTICE when a
+5. Include a focused regression test for a behavior change and update the README/NOTICE when a
    contract changes.
 
 ## Security
@@ -482,7 +482,7 @@ Before opening a pull request:
 
 ## Project status and versioning
 
-Braxton is **pre-1.0** (`0.1.0-SNAPSHOT`). The public API is stabilising but may change between minor
+Braxton is **pre-1.0** (`0.1.0-SNAPSHOT`). The public API is stabilizing but may change between minor
 releases; `internal` packages are never part of the supported surface. Releases follow semantic
 versioning once 1.0 is reached.
 
@@ -491,9 +491,9 @@ versioning once 1.0 is reached.
 Braxton is licensed under the [MIT License](LICENSE). Bundled fonts, Unicode column-width data, and
 the optional example dependency retain their own notices; see [NOTICE](NOTICE).
 
-## Acknowledgements
+## Acknowledgments
 
 - The bundled FIGlet fonts come from the FIGlet project; per-font authorship and licensing are
   recorded in [NOTICE](NOTICE) and in each font header.
-- The terminal column-width policy is generated from Unicode 16.0.0 data; the licence and pinned
+- The terminal column-width policy is generated from Unicode 16.0.0 data; the license and pinned
   provenance ship with the artifact under `META-INF/braxton/unicode-16.0.0/`.
