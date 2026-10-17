@@ -1,0 +1,7 @@
+# Pinned upstream data and fonts are kept byte-for-byte; their whitespace is not ours to change.
+src/main/resources/fonts/*.flf -whitespace
+src/test/resources/fonts/*.flf -whitespace
+tools/unicode/** -whitespace
+
+# Windows batch files are CRLF by convention; the CR is part of the line ending.
+*.cmd whitespace=cr-at-eol

@@ -1,0 +1,164 @@
+/*
+ * Copyright (c) 2026-present Doug Hoard
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package io.github.dhoard.braxton.internal.render;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+
+import io.github.dhoard.braxton.layout.Alignment;
+import io.github.dhoard.braxton.layout.Rect;
+import io.github.dhoard.braxton.style.Colors;
+import io.github.dhoard.braxton.style.Style;
+import io.github.dhoard.braxton.style.StyledText;
+import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.view.Views;
+
+/** Deterministic layout: sizing, clipping, overlays, and wide-cell bookkeeping. */
+class LayoutEngineTest {
+
+    private final LayoutEngine engine = new LayoutEngine();
+
+    private Screen paint(View<?> view, int rows, int cols) {
+        return engine.layout(view, new Rect(0, 0, rows, cols)).screen();
+    }
+
+    @Test
+    void fixedAndGrowChildrenSplitTheAvailableHeight() {
+        View<?> view = Views.column(
+                Views.fixed(2, Views.text("top")),
+                Views.grow(Views.text("middle")),
+                Views.fixed(1, Views.text("bottom")));
+        Screen screen = paint(view, 9, 10);
+        assertThat(screen.plainLine(0)).isEqualTo("top");
+        assertThat(screen.plainLine(2)).isEqualTo("middle");
+        assertThat(screen.plainLine(8)).isEqualTo("bottom");
+    }
+
+    @Test
+    void textIsClippedToTheAvailableWidth() {
+        Screen screen = paint(Views.text("abcdefgh"), 1, 4);
+        assertThat(screen.plainLine(0)).isEqualTo("abcd");
+        assertThat(screen.cell(0, 5).text()).isEmpty();
+    }
+
+    @Test
+    void wideGlyphMarksAContinuationCellAndIsClippedAtTheEdge() {
+        Screen screen = paint(Views.text("\u65E5a"), 1, 4);
+        assertThat(screen.cell(0, 0).text()).isEqualTo("\u65E5");
+        assertThat(screen.isContinuation(0, 1)).isTrue();
+        assertThat(screen.cell(0, 2).text()).isEqualTo("a");
+
+        Screen narrow = paint(Views.text("\u65E5"), 1, 1);
+        assertThat(narrow.cell(0, 0).text()).isEmpty();
+    }
+
+    @Test
+    void paintingOverTheSecondHalfOfAWideGlyphClearsBothCells() {
+        Screen screen = new Screen(1, 4);
+        screen.put(0, 0, "\u65E5", Style.NONE, null, 2);
+        screen.put(0, 1, "x", Style.NONE, null, 1);
+        assertThat(screen.cell(0, 0).text()).isEmpty();
+        assertThat(screen.cell(0, 1).text()).isEqualTo("x");
+    }
+
+    @Test
+    void overlaysPaintBackToFront() {
+        View<?> view = Views.overlay(
+                Views.text("under"),
+                Views.text("OVER"));
+        Screen screen = paint(view, 1, 6);
+        assertThat(screen.plainLine(0)).isEqualTo("OVERr");
+    }
+
+    @Test
+    void backgroundFillWritesEveryCellAndIsClearedByNarrowerContentLater() {
+        Screen screen = paint(Views.fill(Style.bg(Colors.BLUE_400)), 2, 3);
+        assertThat(screen.cell(0, 0).style().background()).isEqualTo(Colors.BLUE_400);
+        assertThat(screen.cell(1, 2).style().background()).isEqualTo(Colors.BLUE_400);
+    }
+
+    @Test
+    void textPaintedOverABackgroundFillKeepsTheBackground() {
+        Style black = Style.bg(Colors.BLACK);
+        Screen screen = paint(Views.overlay(Views.fill(black), Views.text("ab")), 1, 4);
+        for (int col = 0; col < 4; col++) {
+            assertThat(screen.cell(0, col).style().background())
+                    .as("cell %d background", col)
+                    .isEqualTo(Colors.BLACK);
+        }
+    }
+
+    @Test
+    void paddingAndBordersInsetTheChild() {
+        View<?> view = Views.border(io.github.dhoard.braxton.layout.Border.SINGLE,
+                Views.padding(1, Views.text("x")));
+        Screen screen = paint(view, 5, 7);
+        assertThat(screen.plainLine(0)).startsWith("\u250C");
+        assertThat(screen.plainLine(2)).contains("x");
+    }
+
+    @Test
+    void centringUsesTheMeasuredWidthAndNeverGoesNegative() {
+        View<?> view = Views.column(Alignment.CENTER, java.util.List.of(Views.text("ab")));
+        Screen screen = paint(view, 1, 6);
+        assertThat(screen.plainLine(0)).isEqualTo("ab");
+        assertThat(screen.cell(0, 2).text()).isEqualTo("a");
+    }
+
+    @Test
+    void zeroSizeViewportsProduceAnEmptyScreenAndNoErrors() {
+        Screen screen = paint(Views.text("abc"), 0, 0);
+        assertThat(screen.rows()).isZero();
+        assertThat(screen.cols()).isZero();
+    }
+
+    @Test
+    void tinyViewportClipsInsteadOfCrashing() {
+        Screen screen = paint(Views.column(Views.text("a"), Views.text("b"), Views.text("c")), 1, 1);
+        assertThat(screen.plainLine(0)).isEqualTo("a");
+    }
+
+    @Test
+    void repeatedLayoutOfTheSameViewIsIdentical() {
+        View<?> view = Views.column(Views.text("a"), Views.text("b"));
+        assertThat(paint(view, 2, 4)).isEqualTo(paint(view, 2, 4));
+    }
+
+    @Test
+    void focusedRegionsRecordTheirPaintedBounds() {
+        View<?> view = Views.focus(io.github.dhoard.braxton.view.ElementId.of("field"), true, Views.text("x"));
+        LayoutEngine.Layout layout = engine.layout(view, new Rect(0, 0, 3, 5));
+        assertThat(layout.regions()).hasSize(1);
+        assertThat(layout.regions().get(0).id().value()).isEqualTo("field");
+        assertThat(layout.regions().get(0).bounds()).isEqualTo(new Rect(0, 0, 3, 5));
+    }
+
+    @Test
+    void textWrapsAtWordBoundariesAndExplicitNewlines() {
+        Screen screen = paint(Views.text(StyledText.plain("one two three\nfour")), 4, 7);
+        assertThat(screen.plainLine(0)).isEqualTo("one two");
+        assertThat(screen.plainLine(1)).isEqualTo("three");
+        assertThat(screen.plainLine(2)).isEqualTo("four");
+    }
+}

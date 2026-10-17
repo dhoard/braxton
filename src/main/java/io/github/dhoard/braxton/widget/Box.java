@@ -1,0 +1,146 @@
+/*
+ * Copyright (c) 2026-present Doug Hoard
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package io.github.dhoard.braxton.widget;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import io.github.dhoard.braxton.layout.Border;
+import io.github.dhoard.braxton.style.Style;
+import io.github.dhoard.braxton.style.StyledText;
+import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.view.Views;
+
+/**
+ * A framed block with an optional title in the top edge.
+ *
+ * <p>All five legacy border styles are represented by {@link Border}; a responsive box simply uses
+ * the available width, while a fixed-width box truncates content to its inner width.</p>
+ */
+public final class Box {
+
+    private Border border = Border.SINGLE;
+    private Style style = Style.NONE;
+    private StyledText title = StyledText.empty();
+    private StyledText content;
+    private boolean responsive;
+    private int fixedWidth = -1;
+
+    private Box(StyledText content) {
+        this.content = content == null ? StyledText.empty() : content;
+    }
+
+    public static Box of(StyledText content) {
+        return new Box(content);
+    }
+
+    public static Box of(String content) {
+        return new Box(StyledText.plain(content));
+    }
+
+    public Box border(Border value) {
+        border = value == null ? Border.NONE : value;
+        return this;
+    }
+
+    public Box style(Style value) {
+        style = value == null ? Style.NONE : value;
+        return this;
+    }
+
+    public Box title(String value) {
+        title = value == null || value.isEmpty() ? StyledText.empty() : StyledText.plain(value);
+        return this;
+    }
+
+    public Box title(StyledText value) {
+        title = value == null ? StyledText.empty() : value;
+        return this;
+    }
+
+    public Box responsive() {
+        responsive = true;
+        return this;
+    }
+
+    public Box width(int value) {
+        fixedWidth = value;
+        return this;
+    }
+
+    /** Renders the box at {@code width} columns (or its fixed width when configured). */
+    public StyledText render(int width) {
+        int limit = fixedWidth > 0 ? fixedWidth : Math.max(4, width);
+        List<StyledText> lines = content.lines();
+        List<StyledText> clipped = new ArrayList<>();
+        for (StyledText line : lines) {
+            clipped.add(StyledText.of(
+                    TextMeasure.truncate(line.plainText(), Math.max(0, limit - 2)),
+                    line.style()));
+        }
+        if (border == Border.NONE) {
+            return content;
+        }
+        StyledText out = StyledText.empty();
+        out = out.append(top(limit));
+        for (StyledText line : clipped) {
+            out = out.append("\n")
+                    .append(StyledText.of(String.valueOf(border.vertical()), style))
+                    .append(line)
+                    .append(StyledText.of(" ".repeat(Math.max(0,
+                            limit - 2 - TextMeasure.columns(line.plainText())))
+                            + border.vertical(), style));
+        }
+        out = out.append("\n").append(StyledText.of(
+                border.bottomLeft() + String.valueOf(border.horizontal()).repeat(limit - 2)
+                        + border.bottomRight(), style));
+        return out;
+    }
+
+    private StyledText top(int width) {
+        int inner = Math.max(0, width - 2);
+        String label = title.plainText();
+        StyledText out = StyledText.of(String.valueOf(border.topLeft()), style);
+        if (label.isEmpty()) {
+            out = out.append(StyledText.of(
+                    String.valueOf(border.horizontal()).repeat(inner), style));
+        } else {
+            String fitted = TextMeasure.truncate(label, Math.max(0, inner - 3));
+            int used = TextMeasure.columns(fitted);
+            int trailing = Math.max(0, inner - used - 3);
+            out = out.append(StyledText.of(String.valueOf(border.horizontal()) + " ", style))
+                    .append(title.withStyle(title.style().merge(style)))
+                    .append(StyledText.of(" " + String.valueOf(border.horizontal()).repeat(trailing), style));
+        }
+        return out.append(StyledText.of(String.valueOf(border.topRight()), style));
+    }
+
+    public View<Object> view(int width) {
+        return Views.text(render(width));
+    }
+
+    public boolean isResponsive() {
+        return responsive;
+    }
+}
