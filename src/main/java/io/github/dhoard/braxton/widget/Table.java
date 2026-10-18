@@ -71,13 +71,34 @@ public final class Table {
     }
 
     public Table row(StyledText... cells) {
-        rows.add(List.of(cells));
+        if (cells == null) {
+            throw new IllegalArgumentException("table cells are required");
+        }
+        List<StyledText> values = new ArrayList<>(cells.length);
+        for (StyledText cell : cells) {
+            values.add(requireCell(cell));
+        }
+        rows.add(List.copyOf(values));
         return this;
     }
 
     public Table row(List<StyledText> cells) {
-        rows.add(List.copyOf(cells));
+        if (cells == null) {
+            throw new IllegalArgumentException("table cells are required");
+        }
+        List<StyledText> values = new ArrayList<>(cells.size());
+        for (StyledText cell : cells) {
+            values.add(requireCell(cell));
+        }
+        rows.add(List.copyOf(values));
         return this;
+    }
+
+    private static StyledText requireCell(StyledText cell) {
+        if (cell == null) {
+            throw new IllegalArgumentException("table cell is required");
+        }
+        return cell;
     }
 
     public List<List<StyledText>> rows() {

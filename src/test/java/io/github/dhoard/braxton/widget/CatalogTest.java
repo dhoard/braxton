@@ -55,6 +55,16 @@ class CatalogTest {
     }
 
     @Test
+    void aTableRowRejectsAMissingCellWithADiagnostic() {
+        assertThatThrownBy(() -> Table.of().row(StyledText.plain("a"), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("required");
+        assertThatThrownBy(() -> Table.of().row((List<StyledText>) null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("required");
+    }
+
+    @Test
     void tableRenderingDoesNotMutateTheRowsItWasGiven() {
         List<StyledText> first = new ArrayList<>(List.of(StyledText.plain("a")));
         List<List<StyledText>> rows = new ArrayList<>();
