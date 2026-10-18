@@ -289,4 +289,42 @@ class EffectRunnerTest {
         assertThat(timers.pending()).isZero();
         assertThat(Timers.system()).isNotNull();
     }
+
+    @Test
+    void aMappedCommandRetypesEveryMessageItCanProduce() throws Exception {
+        // Command.map is the composition primitive: every message a command can produce - a delay's
+        // message and its rejection, a task's success and failure, a clipboard report, and a quit's
+        // status - must survive re-typing unchanged.
+        EffectRunner<String> integers = new EffectRunner<>(mailbox, environment, clipboard, 4);
+        integers.bindOwner(Thread.currentThread());
+        integers.interpret(Command.<Integer>batch(
+                Command.delay(EffectId.of("d"), Duration.ofSeconds(1), 1, 2),
+                Command.copy("hi", result -> 3)).map(value -> "mapped-" + value));
+        assertThat(nextMessage()).as("a copy reports at once, mapped").isEqualTo("mapped-3");
+        assertThat(mailbox.size()).isZero();
+        timers.advance(1_000_000_000L);
+        assertThat(nextMessage()).as("the delayed message arrives later, mapped")
+                .isEqualTo("mapped-1");
+        assertThat(integers.quitRequested()).isFalse();
+
+        EffectRunner<String> quitting = new EffectRunner<>(mailbox, environment, clipboard, 4);
+        quitting.bindOwner(Thread.currentThread());
+        quitting.interpret(Command.quit(7).map(value -> "never"));
+        assertThat(quitting.quitStatus()).as("a quit keeps its status").isEqualTo(7);
+        EffectRunner<String> mappedQuit = new EffectRunner<>(mailbox, environment, clipboard, 4);
+        mappedQuit.bindOwner(Thread.currentThread());
+        mappedQuit.interpret(Command.<Integer>quit(9).map(value -> "never"));
+        assertThat(mappedQuit.quitStatus()).isEqualTo(9);
+
+        EffectRunner<String> tasks = new EffectRunner<>(mailbox, environment, clipboard, 4);
+        tasks.bindOwner(Thread.currentThread());
+        tasks.interpret(Command.<Integer, String>task(EffectId.of("t"), () -> "ok",
+                value -> 1, failure -> 2).map(value -> "mapped-" + value));
+        assertThat(nextMessage()).isEqualTo("mapped-1");
+        tasks.interpret(Command.<Integer, String>task(EffectId.of("f"), () -> {
+            throw new IllegalStateException("boom");
+        }, value -> 1, failure -> 2).map(value -> "mapped-" + value));
+        assertThat(nextMessage()).isEqualTo("mapped-2");
+        assertThat(mailbox.size()).as("no unmapped message leaked").isZero();
+    }
 }

@@ -296,4 +296,34 @@ class SubscriptionManagerTest {
         Mailbox.AppMessage message = (Mailbox.AppMessage) mailbox.poll(20);
         assertThat(message.payload()).isEqualTo(new Child("tick"));
     }
+
+    @Test
+    void aMappedSubscriptionKeepsItsIdentityAndMapsEveryEmission() throws Exception {
+        // Subscription.map is the composition primitive for child features: it re-types emissions
+        // without changing the id or the configuration that decides whether the live resource is
+        // kept.
+        java.util.concurrent.atomic.AtomicInteger starts = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.function.Consumer<Object>[] emitter = new java.util.function.Consumer[1];
+        Subscription<String> source = Subscription.<String>source(SubscriptionId.of("child"), "cfg",
+                sink -> {
+                    starts.incrementAndGet();
+                    emitter[0] = sink;
+                    return () -> { };
+                }, Object::toString).map(value -> "parent-" + value);
+        manager.reconcile(source);
+        emitter[0].accept("a");
+        assertThat(next()).isEqualTo("parent-a");
+        manager.reconcile(Subscription.<String>interval(SubscriptionId.of("tick"),
+                Duration.ofMillis(100), time -> "tick").map(value -> "parent-" + value));
+        timers.advance(100_000_000L);
+        assertThat(next()).as("an interval keeps its period and maps its tick")
+                .isEqualTo("parent-tick");
+        manager.reconcile(Subscription.<String>resize(SubscriptionId.of("resize"),
+                size -> "resize").map(value -> "parent-" + value));
+        manager.notifyResize(new Size(3, 4));
+        assertThat(next()).isEqualTo("parent-resize");
+        assertThat(starts).as("mapping does not restart the source").hasValue(1);
+        assertThat(Subscription.<String>none().map(value -> "x").id())
+                .isEqualTo(Subscription.none().id());
+    }
 }
