@@ -58,4 +58,17 @@ class EditorMaskingTest {
         assertThat(Editor.update(state, HIDDEN, new EditorAction.Copy()).intent())
                 .isEqualTo(new EditorIntent.Copy(""));
     }
+
+    @Test
+    void copyTextIsRawWhileCopyableTextHonoursMasking() {
+        // Documented distinction: copyText returns the selection or the draft and deliberately
+        // ignores masking; copyableText (which the Copy action uses) refuses a masked draft.
+        EditorState state = EditorState.of("secret").withCaret(3);
+        assertThat(Editor.copyText(state)).isEqualTo("secret");
+        assertThat(Editor.copyText(state.withSelection(0, 2))).isEqualTo("se");
+        assertThat(Editor.copyableText(state, PASSWORD)).isEmpty();
+        assertThat(Editor.copyableText(state, EditorOptions.defaults())).contains("secret");
+        assertThat(Editor.update(state, PASSWORD, new EditorAction.Copy()).intent())
+                .isEqualTo(new EditorIntent.Copy(""));
+    }
 }

@@ -84,7 +84,13 @@ public final class Editor {
         };
     }
 
-    /** The text a copy action would place on the clipboard under this masking policy. */
+    /**
+     * The selection, or the whole draft when nothing is selected.
+     *
+     * <p>This is the raw text: it does not consider masking, so a password or hidden draft is
+     * returned verbatim. Callers that must honour {@code canCopy} use {@link #copyableText}
+     * instead, which is what the {@code Copy} action uses.</p>
+     */
     public static String copyText(EditorState state) {
         return state.hasSelection() ? state.selection() : state.text();
     }
