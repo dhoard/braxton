@@ -244,6 +244,20 @@ class CatalogTest {
     }
 
     @Test
+    void progressBarKeepsEverythingOnOneRow() {
+        StyledText labelled = ProgressBar.of(3).icons("#", "-")
+                .prepend(StyledText.plain("a\nb\tc"))
+                .append(StyledText.plain("d\ne"))
+                .render(1, 3);
+        assertThat(labelled.plainText()).doesNotContain("\n").doesNotContain("\t");
+        assertThat(labelled.plainText()).isEqualTo("a b c#--d e");
+
+        StyledText iconed = ProgressBar.of(2).icons("#\n#", "-\t-").render(1, 2);
+        assertThat(iconed.plainText()).doesNotContain("\n").doesNotContain("\t");
+        assertThat(iconed.plainText()).isEqualTo("# #- -");
+    }
+
+    @Test
     void progressBarIconsHonourTheRequestedCellCount() {
         ProgressBar bar = ProgressBar.of(10).icons("#", "-");
         assertThat(bar.icons(3, 5, 10)).containsExactly("#", "#", "#");

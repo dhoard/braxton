@@ -36,7 +36,8 @@ import io.github.dhoard.braxton.view.Views;
  * A horizontal bar with an active/inactive fill, an optional percentage label, and separators.
  *
  * <p>Values are clamped: a bar never renders more cells than its width, and an unusable width or
- * maximum leaves the bar empty instead of throwing.</p>
+ * maximum leaves the bar empty instead of throwing. The bar is one row, so line breaks and tabs in
+ * its icons, prepended label, or appended label become spaces.</p>
  */
 public final class ProgressBar {
 
@@ -80,9 +81,8 @@ public final class ProgressBar {
     }
 
     public ProgressBar icons(String active, String inactive) {
-        return new ProgressBar(width, buffer, active == null ? "" : active,
-                inactive == null ? "" : inactive, activeStyle, inactiveStyle, showPercentage,
-                prepend, append);
+        return new ProgressBar(width, buffer, singleRow(active), singleRow(inactive), activeStyle,
+                inactiveStyle, showPercentage, prepend, append);
     }
 
     public ProgressBar colors(Color active, Color inactive) {
@@ -99,12 +99,32 @@ public final class ProgressBar {
 
     public ProgressBar prepend(StyledText value) {
         return new ProgressBar(width, buffer, activeIcon, inactiveIcon, activeStyle, inactiveStyle,
-                showPercentage, value == null ? StyledText.empty() : value, append);
+                showPercentage, singleRow(value), append);
     }
 
     public ProgressBar append(StyledText value) {
         return new ProgressBar(width, buffer, activeIcon, inactiveIcon, activeStyle, inactiveStyle,
-                showPercentage, prepend, value == null ? StyledText.empty() : value);
+                showPercentage, prepend, singleRow(value));
+    }
+
+    /** A bar occupies one row, so line breaks and tabs become spaces, keeping each span's style. */
+    private static StyledText singleRow(StyledText text) {
+        if (text == null) {
+            return StyledText.empty();
+        }
+        StyledText result = StyledText.empty();
+        for (StyledText.Span span : text.spans()) {
+            result = result.append(StyledText.of(flatten(span.text()), span.style(), span.link()));
+        }
+        return result;
+    }
+
+    private static String singleRow(String text) {
+        return text == null ? "" : flatten(text);
+    }
+
+    private static String flatten(String text) {
+        return text.replace('\n', ' ').replace('\t', ' ');
     }
 
     /** Renders a fraction of {@code value / max}; invalid bounds render an empty bar. */
