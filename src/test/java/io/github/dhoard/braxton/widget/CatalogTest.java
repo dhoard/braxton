@@ -261,6 +261,19 @@ class CatalogTest {
     }
 
     @Test
+    void aNaNProgressValueRendersAnEmptyBar() {
+        // NaN has no place on the 0..1 scale, so it is unusable in the same way as a non-finite
+        // maximum; clamping would silently paint a zero-percent bar instead.
+        ProgressBar bar = ProgressBar.of(4).icons("#", "-").showPercentage(true);
+        assertThat(bar.render(Double.NaN, 10).plainText()).isEmpty();
+        assertThat(bar.columns(Double.NaN, 10)).isZero();
+        assertThat(bar.render(5, Double.NaN).plainText()).isEmpty();
+        // Finite and out-of-range values still clamp.
+        assertThat(bar.render(Double.POSITIVE_INFINITY, 10).plainText()).isEqualTo("#### 100%");
+        assertThat(bar.render(5, 10).plainText()).isEqualTo("##-- 50%");
+    }
+
+    @Test
     void progressBarFillsFromTheLeftAndClampsItsValue() {
         ProgressBar bar = ProgressBar.of(10).icons("#", "-");
         assertThat(bar.render(5, 10).plainText()).isEqualTo("#####-----");

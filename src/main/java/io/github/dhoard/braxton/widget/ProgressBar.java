@@ -130,7 +130,9 @@ public final class ProgressBar {
     /** Renders a fraction of {@code value / max}; invalid bounds render an empty bar. */
     public StyledText render(double value, double max) {
         int cells = Math.max(0, width);
-        if (cells == 0 || max <= 0 || !Double.isFinite(max)) {
+        // NaN cannot be clamped onto the 0..1 scale, so it is unusable in the same way as a
+        // non-finite maximum; an out-of-range finite (or infinite) value still clamps.
+        if (cells == 0 || max <= 0 || !Double.isFinite(max) || Double.isNaN(value)) {
             return StyledText.empty();
         }
         double clamped = Math.max(0, Math.min(1, value / max));
