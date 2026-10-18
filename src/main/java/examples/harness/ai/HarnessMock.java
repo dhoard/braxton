@@ -36,12 +36,17 @@ final class HarnessMock {
     private HarnessMock() {
     }
 
+    /** Whether the replay position still names a recorded turn. */
+    static boolean hasRecordedTurn(HarnessState state) {
+        int index = state.replayIndex();
+        return index >= 0 && index < state.turns().size();
+    }
+
     /** The next turn for {@code prompt}: the recorded turn at the replay index, or a fallback. */
     static HarnessTranscript.HarnessTurn turnFor(HarnessState state, String prompt) {
         List<HarnessTranscript.HarnessTurn> turns = state.turns();
-        int index = state.replayIndex();
-        if (index >= 0 && index < turns.size()) {
-            return turns.get(index);
+        if (hasRecordedTurn(state)) {
+            return turns.get(state.replayIndex());
         }
         return fallback(prompt, state.profile());
     }

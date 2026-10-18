@@ -126,6 +126,29 @@ class HarnessProgramTest {
     }
 
     @Test
+    void successivePromptsAdvanceThroughTheRecordedTurnsThenFallBack() {
+        Transition<HarnessState, HarnessMsg> first = update(ready(), new HarnessMsg.Submit("a"));
+        HarnessState afterFirst = update(first.model(),
+                new HarnessMsg.ResponseBlock(first.model().generation(), 0)).model();
+        assertThat(afterFirst.entries()).contains(new HarnessEntry.Assistant("two"));
+        assertThat(afterFirst.replayIndex()).isEqualTo(2);
+
+        Transition<HarnessState, HarnessMsg> second = update(afterFirst, new HarnessMsg.Submit("b"));
+        HarnessState afterSecond = second.model();
+        while (afterSecond.working()) {
+            afterSecond = update(afterSecond, new HarnessMsg.ResponseBlock(
+                    afterSecond.generation(), afterSecond.active().blockIndex())).model();
+        }
+        String lastAssistant = "";
+        for (HarnessEntry entry : afterSecond.entries()) {
+            if (entry instanceof HarnessEntry.Assistant assistant) {
+                lastAssistant = assistant.text();
+            }
+        }
+        assertThat(lastAssistant).isNotEqualTo("two").contains("\"b\"");
+    }
+
+    @Test
     void staleOrDuplicateBlocksAreIgnored() {
         Transition<HarnessState, HarnessMsg> started = update(ready(), new HarnessMsg.Submit("hi"));
         long generation = started.model().generation();

@@ -262,6 +262,10 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
                 .withWorkStarted(model.nowNanos())
                 .withEscArmed(0)
                 .withScroll(0);
+        if (HarnessMock.hasRecordedTurn(model)) {
+            // Each started prompt consumes one recorded turn; the fallback answers once they end.
+            next = next.withReplayIndex(model.replayIndex() + 1);
+        }
         return Transition.next(next, responseDelay(next, 0));
     }
 
