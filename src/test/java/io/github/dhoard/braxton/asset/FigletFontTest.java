@@ -70,6 +70,29 @@ class FigletFontTest {
         assertThat(rows.get(4)).isEqualTo(" /_/   \\_\\");
     }
 
+    @Test
+    void anAbsurdHeaderFailsWithADiagnosticInsteadOfOverflowingTheCursor() {
+        // The parser reports malformed fonts with an IOException that names the source. A header
+        // whose height or comment count overflows the cursor arithmetic must not escape as an
+        // unchecked index failure instead.
+        StringBuilder glyphs = new StringBuilder();
+        for (char code = 32; code <= 126; code++) {
+            glyphs.append("X$@\n");
+        }
+        // Each header sets both candidate comment-count fields to the same absurd value, and keeps the
+        // fifth field the parser reads today, so the case does not depend on which field the
+        // parser treats as the comment count. What matters is that an absurd count is reported.
+        for (String header : List.of("flf2a$ 2147483647 1 2147483647 2147483647",
+                "flf2a$ 2 1 3 2147483647 2147483647",
+                "flf2a$ 1 1 3 2147483648 2147483648", "flf2a$ -2147483648 1 3 3")) {
+            assertThatThrownBy(() -> FigletFont.parse(stream(header + "\n" + glyphs),
+                    "abnormal.flf"))
+                    .as("header %s", header)
+                    .isInstanceOf(IOException.class)
+                    .hasMessageContaining("abnormal.flf");
+        }
+    }
+
     private static InputStream stream(String content) {
         return new java.io.ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
     }

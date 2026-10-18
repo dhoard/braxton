@@ -85,17 +85,24 @@ public final class FigletFont {
         if (height <= 0) {
             throw new IOException("font " + name + " has an invalid height");
         }
-        int index = 1 + Math.max(0, commentLines);
+        // The cursor is derived in long arithmetic and every bound is checked against what the
+        // stream actually holds, so an absurd header is reported instead of overflowing the index
+        // (or the ArrayList capacity) on the way to the diagnostic.
+        long start = 1L + Math.max(0, commentLines);
+        if (start > lines.size()) {
+            throw new IOException("font " + name + " is truncated");
+        }
+        int index = (int) start;
         Map<Character, List<String>> glyphs = new HashMap<>();
         String firstRow = index < lines.size() ? lines.get(index) : "";
         char endMark = firstRow.isEmpty() ? hardBlankChar : firstRow.charAt(firstRow.length() - 1);
         for (char code = 32; code <= 126; code++) {
-            if (index + height > lines.size()) {
+            if (height > lines.size() - index) {
                 // A FIGlet font carries one glyph per printable ASCII code, so a short stream is
                 // malformed: keeping the glyphs read so far would render partial art.
                 throw new IOException("font " + name + " is truncated");
             }
-            List<String> rows = new ArrayList<>(height);
+            List<String> rows = new ArrayList<>(Math.min(height, lines.size() - index));
             for (int row = 0; row < height; row++) {
                 String raw = lines.get(index + row);
                 rows.add(stripEndMark(raw, endMark));
