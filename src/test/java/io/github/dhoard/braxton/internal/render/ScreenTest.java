@@ -69,6 +69,18 @@ class ScreenTest {
     }
 
     @Test
+    void overwritingTheSecondHalfOfABackgroundWideGlyphKeepsItsColumn() {
+        Screen screen = new Screen(1, 4);
+        screen.fill(new Rect(0, 0, 1, 4), Style.bg(Colors.BLACK));
+        screen.put(0, 0, "\u65E5", Style.NONE, null, 2);
+        screen.put(0, 1, "x", Style.NONE, null, 1);
+        // The cleared half is a blank cell, so it still occupies its column in the row and in
+        // the bytes the terminal receives.
+        assertThat(screen.plainLine(0)).isEqualTo(" x");
+        assertThat(AnsiEncoder.encodeRow(screen, 0)).endsWith(" x  \u001B[0m");
+    }
+
+    @Test
     void plainLineKeepsInteriorBlanksAsColumns() {
         Screen screen = new Screen(1, 6);
         screen.put(0, 0, "a", Style.NONE, null, 1);

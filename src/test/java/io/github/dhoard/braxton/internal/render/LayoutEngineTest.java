@@ -189,6 +189,16 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aNarrowOverlayOnABackgroundWideGlyphKeepsTheClearedColumn() {
+        View<?> view = Views.overlay(List.of(
+                Views.fill(Style.bg(Colors.BLACK)),
+                Views.text("\u65E5"),
+                Views.padding(new Insets(0, 0, 0, 1), Views.text("x"))), false);
+        Screen screen = paint(view, 1, 4);
+        assertThat(screen.plainLine(0)).isEqualTo(" x");
+    }
+
+    @Test
     void anOverlayLayerThatGrowsKeepsItsContentSize() {
         View<?> view = Views.column(
                 Views.overlay(List.of(Views.grow(Views.text("mid"))), false),

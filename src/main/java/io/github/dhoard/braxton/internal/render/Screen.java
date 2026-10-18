@@ -172,9 +172,11 @@ public final class Screen {
     private void clearIfContinuation(int row, int col) {
         if (inside(row, col) && continuation[index(row, col)] && col > 0) {
             Cell previous = cells[index(row, col - 1)];
+            // The cleared half keeps its ancestor's background and stays a blank that occupies
+            // its column; an empty cell would silently drop a column from the row.
             Cell blank = previous.style().background() == null
                     ? Cell.EMPTY
-                    : new Cell("", Style.NONE.withBackground(previous.style().background()), null);
+                    : new Cell(" ", Style.NONE.withBackground(previous.style().background()), null);
             cells[index(row, col - 1)] = blank;
             cells[index(row, col)] = blank;
             continuation[index(row, col)] = false;
