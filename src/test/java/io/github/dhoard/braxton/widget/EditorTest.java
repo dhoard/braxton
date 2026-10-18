@@ -234,6 +234,20 @@ class EditorTest {
     }
 
     @Test
+    void aMaskedDraftNeverCopiesEvenWhenCopyingIsEnabled() {
+        EditorOptions masked = OPTIONS.withMasking(EditorOptions.Masking.PASSWORD)
+                .withCopyEnabled(true);
+        assertThat(masked.canCopy()).isFalse();
+        assertThat(Editor.copyableText(EditorState.of("secret"), masked)).isEmpty();
+        EditorIntent.Copy copy = (EditorIntent.Copy) Editor.update(EditorState.of("secret"),
+                masked, new EditorAction.Copy()).intent();
+        assertThat(copy.text()).isEmpty();
+
+        assertThat(OPTIONS.canCopy()).isTrue();
+        assertThat(OPTIONS.withCopyEnabled(false).canCopy()).isFalse();
+    }
+
+    @Test
     void renderingShowsThePromptSelectionAndBlockCursor() {
         EditorState state = EditorState.of("ab").withSelection(0, 1);
         StyledText rendered = Editor.render(state, OPTIONS, true);

@@ -36,6 +36,9 @@ import io.github.dhoard.braxton.view.Views;
  * Pixel art rendered from an {@link ImageAsset}: one symbol per pixel, coloured per pixel, with
  * transparent pixels left blank. A transparent pixel spans as many columns as the symbol does, so
  * a wide symbol keeps the pixel grid aligned.
+ *
+ * <p>A pixel is either fully transparent (alpha zero) and left blank, or painted with its own RGB
+ * value: a terminal cell has no alpha channel, so intermediate alpha is not blended.</p>
  */
 public final class ImageView {
 

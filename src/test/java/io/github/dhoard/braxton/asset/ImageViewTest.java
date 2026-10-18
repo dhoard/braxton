@@ -44,6 +44,16 @@ class ImageViewTest {
     }
 
     @Test
+    void aPartiallyTransparentPixelIsPaintedWithItsColour() {
+        BufferedImage image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        image.setRGB(0, 0, 0x80FF0000);
+        StyledText rendered = ImageView.of(ImageAsset.of(image)).render();
+        assertThat(rendered.plainText()).isEqualTo("\u2588");
+        assertThat(rendered.spans().get(0).style().foreground())
+                .isEqualTo(new io.github.dhoard.braxton.style.Color(0xFF, 0x00, 0x00));
+    }
+
+    @Test
     void aWideSymbolLeavesTransparentPixelsJustAsWideToKeepTheGridAligned() {
         StyledText rendered = ImageView.of(ImageAsset.of(diagonalPixels()))
                 .symbol("\u65E5").render();

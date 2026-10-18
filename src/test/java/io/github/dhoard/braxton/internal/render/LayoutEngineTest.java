@@ -127,6 +127,12 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aFillCoversTheContentOfALowerLayer() {
+        Screen screen = paint(Views.overlay(Views.text("secret"), Views.fill(Style.NONE)), 1, 8);
+        assertThat(screen.plainLine(0)).isEmpty();
+    }
+
+    @Test
     void textPaintedOverABackgroundFillKeepsTheBackground() {
         Style black = Style.bg(Colors.BLACK);
         Screen screen = paint(Views.overlay(Views.fill(black), Views.text("ab")), 1, 4);

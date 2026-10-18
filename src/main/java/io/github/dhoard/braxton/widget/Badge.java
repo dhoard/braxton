@@ -72,7 +72,10 @@ public final class Badge {
         return result;
     }
 
-    /** Joins segments with a pathway arrow; the default is a single space. */
+    /**
+     * Joins segments with a pathway arrow. Without it, adjacent pills are separated only by their own
+     * padding, so the labels sit one space apart from each other on either side.
+     */
     public Badge pathway() {
         pathway = true;
         return this;

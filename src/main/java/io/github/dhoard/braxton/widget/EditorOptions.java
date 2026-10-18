@@ -34,7 +34,14 @@ public record EditorOptions(OptionalInt maxLength, PasteMode pasteMode,
         String prompt, Style promptStyle, Style textStyle, Style selectionStyle,
         int maxVisibleLines, boolean copyEnabled) {
 
-    /** How the content is displayed. Copying is disabled for non-visible masking unless enabled. */
+    /**
+     * How the content is displayed.
+     *
+     * <p>A masked draft ({@link Masking#PASSWORD} or {@link Masking#HIDDEN}) never copies: its
+     * cleartext does not leave the editor even when {@code copyEnabled} is true. Setting
+     * {@code copyEnabled} to false additionally refuses to copy a visible draft, which is how a
+     * field opts out of copying entirely.</p>
+     */
     public enum Masking {
         NONE,
         PASSWORD,

@@ -106,7 +106,13 @@ public sealed interface View<Msg> {
         }
     }
 
-    /** Paints every cell in its bounds with spaces carrying {@code style}; uses no messages. */
+    /**
+     * Paints every cell in its bounds with spaces carrying {@code style}; uses no messages.
+     *
+     * <p>A fill is opaque: it replaces whatever an earlier layer painted in those cells. Use it as a
+     * background layer (the usual case) or to clear a region deliberately, never as a tint over
+     * content you want to keep.</p>
+     */
     record Fill<Msg>(Style style) implements View<Msg> {
 
         public Fill {
