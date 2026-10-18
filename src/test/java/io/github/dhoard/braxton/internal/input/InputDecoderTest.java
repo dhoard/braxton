@@ -240,6 +240,20 @@ class InputDecoderTest {
     }
 
     @Test
+    void skippedSequencesLeaveTheFollowingInputIntact() throws IOException {
+        // An unsupported CSI with modifiers, an unknown numeric CSI, an X10 click whose three
+        // payload bytes must be consumed, and an SGR click are all skipped; the printable input,
+        // the paste and the text after it must arrive unchanged and in order.
+        InputDecoder decoder = new InputDecoder(new ByteAtATime(
+                "\u001B[1;5A\u001B[99~\u001B[M!!!\u001B[<0;10;5Mx\u001B[200~p\u001B[201~y"
+                        .getBytes(StandardCharsets.UTF_8)));
+        assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("x");
+        assertThat(decoder.read().orElseThrow()).isEqualTo(new InputEvent.PasteInput("p"));
+        assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("y");
+        assertThat(decoder.read()).isEmpty();
+    }
+
+    @Test
     void endOfInputIsEmpty() throws IOException {
         assertThat(new InputDecoder(new ByteArrayInputStream(new byte[0])).read()).isEmpty();
     }
