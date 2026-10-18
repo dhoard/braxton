@@ -120,8 +120,12 @@ public final class TableSelector {
             case Action.Left left -> moved(state, state.row(), Math.max(0, state.column() - 1));
             case Action.Right right -> moved(state, state.row(),
                     Math.min(columns - 1, state.column() + 1));
-            case Action.Confirm confirm -> new Result(state,
-                    new Intent.Chosen(state.row(), state.column(), state.selectedValue()));
+            // Without a selected cell (no rows, or no header to define columns) there is nothing
+            // to confirm; Chosen(-1, -1, "") would not name a cell.
+            case Action.Confirm confirm -> state.row() < 0 || state.column() < 0
+                    ? new Result(state, new Intent.None())
+                    : new Result(state, new Intent.Chosen(state.row(), state.column(),
+                            state.selectedValue()));
             case Action.Cancel cancel -> new Result(state, new Intent.Cancelled());
         };
     }

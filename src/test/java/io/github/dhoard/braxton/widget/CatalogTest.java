@@ -368,6 +368,17 @@ class CatalogTest {
     }
 
     @Test
+    void confirmingAnEmptyTableHasNothingToChoose() {
+        TableSelector.State empty = TableSelector.State.of(List.of("h1"), List.of());
+        TableSelector.Result result = TableSelector.update(empty, new TableSelector.Action.Confirm());
+        assertThat(result.intent()).isInstanceOf(TableSelector.Intent.None.class);
+        assertThat(result.state()).isEqualTo(empty);
+        TableSelector.State headerless = TableSelector.State.of(List.of(), List.of(List.of("a")));
+        assertThat(TableSelector.update(headerless, new TableSelector.Action.Confirm()).intent())
+                .isInstanceOf(TableSelector.Intent.None.class);
+    }
+
+    @Test
     void tableSelectorClampsAndReportsTheSelectedCell() {
         TableSelector.State state = TableSelector.State.of(List.of("h1", "h2"),
                 List.of(List.of("a", "b"), List.of("c", "d")));
