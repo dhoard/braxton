@@ -99,7 +99,9 @@ public final class Screen {
      * colour instead of reverting to the terminal default.</p>
      *
      * @param width 1 or 2 columns. A width of 2 marks the next cell as a continuation; when the
-     *     second column falls outside the screen the glyph is clipped entirely.
+     *     second column falls outside the screen the glyph is clipped entirely. Writing a narrower
+     *     glyph clears whichever half of a previous wide glyph it covers, so no stale
+     *     continuation flag is left to erase later content.
      */
     public void put(int row, int col, String grapheme, Style style, String link, int width) {
         if (!inside(row, col) || grapheme == null || grapheme.isEmpty()) {
@@ -120,6 +122,9 @@ public final class Screen {
         if (span == 2) {
             cells[index(row, col + 1)] = Cell.EMPTY;
             continuation[index(row, col + 1)] = true;
+        } else {
+            // The new glyph occupies the first half, so the old wide glyph's second half is gone.
+            clearOrphanedContinuation(row, col);
         }
     }
 
@@ -131,6 +136,15 @@ public final class Screen {
         }
         Color beneath = cells[index(row, col)].style().background();
         return beneath == null ? safe : safe.withBackground(beneath);
+    }
+
+    /** Drops a continuation flag whose wide glyph was just overwritten by a narrower one. */
+    private void clearOrphanedContinuation(int row, int col) {
+        int next = col + 1;
+        if (inside(row, next) && continuation[index(row, next)]) {
+            cells[index(row, next)] = Cell.EMPTY;
+            continuation[index(row, next)] = false;
+        }
     }
 
     private void clearIfContinuation(int row, int col) {
