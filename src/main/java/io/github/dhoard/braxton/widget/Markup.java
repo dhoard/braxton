@@ -51,7 +51,8 @@ import io.github.dhoard.braxton.view.Views;
  *
  * <p>Supported tags: {@code span}, {@code p}, {@code a}, {@code ul}/{@code li}, {@code table}/
  * {@code tr}/{@code td}, and {@code br}. Attributes are {@code color}, {@code bg-color}, and a
- * space-separated {@code style} list. Parsing never resolves external entities, DTDs, or network
+ * space-separated {@code style} list. The document's own root element is rendered, so a document
+ * may be a list, a table, or a paragraph without an extra wrapper. Parsing never resolves external entities, DTDs, or network
  * resources; malformed markup fails with a diagnostic instead of rendering partial output.</p>
  */
 public final class Markup {
