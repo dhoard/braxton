@@ -154,6 +154,16 @@ class LayoutEngineTest {
     }
 
     @Test
+    void anOverlayLayerThatGrowsKeepsItsContentSize() {
+        View<?> view = Views.column(
+                Views.overlay(List.of(Views.grow(Views.text("mid"))), false),
+                Views.text("last"));
+        Screen screen = paint(view, 2, 10);
+        assertThat(screen.plainLine(0)).isEqualTo("mid");
+        assertThat(screen.plainLine(1)).isEqualTo("last");
+    }
+
+    @Test
     void nestedFlexOverlaysStayDeterministicAndInsideTheViewport() {
         View<?> view = Views.column(Views.grow(Views.row(Views.padding(
                 Insets.symmetric(0, 1),

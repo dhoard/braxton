@@ -154,7 +154,7 @@ public final class LayoutEngine {
     private int overlayHeight(View.Overlay<?> overlay, int cols) {
         int tallest = 0;
         for (int i = 0; i < overlay.layers().size(); i++) {
-            tallest = Math.max(tallest, intrinsicHeight(overlay.layers().get(i), cols));
+            tallest = Math.max(tallest, intrinsicHeight(crossAxis(overlay.layers().get(i)), cols));
         }
         return tallest;
     }
@@ -162,7 +162,7 @@ public final class LayoutEngine {
     private int overlayWidth(View.Overlay<?> overlay, int maxCols) {
         int widest = 0;
         for (int i = 0; i < overlay.layers().size(); i++) {
-            widest = Math.max(widest, intrinsicWidth(overlay.layers().get(i), maxCols));
+            widest = Math.max(widest, intrinsicWidth(crossAxis(overlay.layers().get(i)), maxCols));
         }
         return widest;
     }
