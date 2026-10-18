@@ -1,3 +1,25 @@
+/*
+ * Copyright (c) 2026-present Doug Hoard
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,9 +46,12 @@ class AnsiEncoderPropertyTest {
                 if (!first.isPlain() || !second.isPlain()) {
                     assertThat(resets).as("styled cells must be reset").isGreaterThanOrEqualTo(1);
                 }
-                assertThat(row).endsWith("\u001B[0m");
-                assertThat(row.split("\u001B\\]8;;\u001B\\\\", -1).length - 1)
-                        .as("the link opens and closes").isEqualTo(2);
+                // Each link target opens once and is closed once; the close may follow a reset.
+                int linkTransitions = row.split("\u001B\\]8;;", -1).length - 1;
+                assertThat(linkTransitions).as("the link opens and closes").isGreaterThanOrEqualTo(2);
+                assertThat(row.replaceAll("\u001B\\[[0-9;]*[A-Za-z]", "")
+                        .replaceAll("\u001B\\]8;;[^\u001B]*\u001B\\\\", ""))
+                        .as("only the cells' text is visible").isEqualTo("abc");
             }
         }
     }

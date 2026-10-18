@@ -1,3 +1,25 @@
+/*
+ * Copyright (c) 2026-present Doug Hoard
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -11,9 +33,12 @@ class MarkupPropertyTest {
 
     @Test
     void renderedMarkupCarriesNoControlCharacters() {
-        String xml = "<root><p>a\u001B[31mb</p><span style=\"bold\">c\u009Bd</span>"
-                + "<ul><li>e\u0007</li></ul><table><tr><td>f</td></tr></table></root>";
+        String xml = "<root><p>a\u009Bb</p><span style=\"bold\">cd</span>"
+                + "<ul><li>e</li></ul><table><tr><td>f</td></tr></table></root>";
         String plain = Markup.parse(xml).plainText();
+        // Raw escape characters are not valid XML and are rejected with a diagnostic instead.
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> Markup.parse("<root>\u001B[31m</root>"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("invalid markup");
         for (char c : plain.toCharArray()) {
             assertThat(c == '\n' || c == '\t' || (c >= 0x20 && c != 0x7F && !(c >= 0x80 && c <= 0x9F)))
                     .as("control 0x%x", (int) c).isTrue();
