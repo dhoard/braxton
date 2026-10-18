@@ -82,17 +82,41 @@ class SelectorTest {
     }
 
     @Test
-    void anUnfocusedSelectorStillMarksAndHighlightsItsSelection() {
-        // Recorded, not endorsed: Selector paints the selected row with activeStyle whether or not
-        // it is focused, while TableSelector only inverts the selected cell while focused. An owner
-        // that wants the usual "dim when unfocused" behaviour passes its own styles. See
-        // HUNT_TRACKING.txt cycle 157 for the open question about the difference.
+    void anUnfocusedSelectorKeepsItsMarkerButPaintsNoActiveStyle() {
+        // A highlight says "keys land here", which is a property of focus, not of selection. The
+        // marker stays so the selection is still legible, and the active style is withheld - the
+        // same rule TableSelector follows and the same one Editor follows by dropping its caret.
         assertThat(lines(state("alpha", "beta"), false))
                 .containsExactly("\u276F alpha", "  beta");
         var screen = new ScreenRenderer().screen(view(state("alpha", "beta"), false),
                 new Viewport(6, 40));
-        assertThat(activeFlags(screen, 0, 0)).isEqualTo("invert");
-        assertThat(activeFlags(screen, 1, 0)).isEqualTo("italic");
+        assertThat(activeFlags(screen, 0, 0)).as("selected row").isEqualTo("italic");
+        assertThat(activeFlags(screen, 1, 0)).as("other row").isEqualTo("italic");
+    }
+
+    @Test
+    void bothSelectorsAgreeOnWhenTheActiveStyleIsUsed() {
+        // The two selectors take the same parameters; they must now also behave the same way, so
+        // an application cannot get two different answers from one focus state.
+        var focused = new ScreenRenderer().screen(view(state("alpha", "beta"), true),
+                new Viewport(6, 40));
+        assertThat(activeFlags(focused, 0, 0)).as("focused selector").isEqualTo("invert");
+        var blurred = new ScreenRenderer().screen(view(state("alpha", "beta"), false),
+                new Viewport(6, 40));
+        assertThat(activeFlags(blurred, 0, 0)).as("unfocused selector").isEqualTo("italic");
+
+        var tableFocused = new ScreenRenderer().screen(TableSelector.view(
+                ElementId.of("table"),
+                TableSelector.State.of(List.of("id"), List.of(List.of("alpha"), List.of("beta"))),
+                true, ACTIVE, INACTIVE, INACTIVE, action -> action.getClass().getSimpleName()),
+                new Viewport(3, 40));
+        assertThat(tableFocused.cell(1, 0).style().invert()).as("focused table").isTrue();
+        var tableBlurred = new ScreenRenderer().screen(TableSelector.view(
+                ElementId.of("table"),
+                TableSelector.State.of(List.of("id"), List.of(List.of("alpha"), List.of("beta"))),
+                false, ACTIVE, INACTIVE, INACTIVE, action -> action.getClass().getSimpleName()),
+                new Viewport(3, 40));
+        assertThat(tableBlurred.cell(1, 0).style().invert()).as("unfocused table").isFalse();
     }
 
     @Test

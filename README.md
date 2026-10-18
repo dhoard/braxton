@@ -313,7 +313,7 @@ All widgets are immutable values or pure factories producing `StyledText`/`View`
 | `ProgressBar` | Active/inactive icons, separators, percentage |
 | `Quote` | Colored bar and background |
 | `Gradient` | Vertical, horizontal, or diagonal per-grapheme color |
-| `Selector` / `TableSelector` | Immutable selection state and focusable views |
+| `Selector` / `TableSelector` | Immutable selection state and focusable views; the marker shows the selection, the active style follows focus |
 | `Animation` | Spinner and shimmer frames driven by model time |
 | `FontLoader`, `FigletFont`, `Logo` | Bundled FIGlet fonts and styled logos |
 | `ImageAsset`, `ImageView` | Explicit image loading and pixel-art rendering |

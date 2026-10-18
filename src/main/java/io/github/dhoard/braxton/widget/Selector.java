@@ -40,6 +40,11 @@ import io.github.dhoard.braxton.view.Views;
  *
  * <p>Confirming and cancelling are intents; the owning application decides whether they close a
  * dialog, advance a workflow, or exit.</p>
+ *
+ * <p>The view draws two independent signals. The marker is selection - which option is chosen - and
+ * is always painted. The active style is interaction - that keys land here - and is painted only
+ * while the view is focused, matching {@link TableSelector} and the {@link Editor}'s caret. An
+ * unfocused selector therefore still shows its selection, in the inactive style.</p>
  */
 public final class Selector {
 
@@ -113,8 +118,11 @@ public final class Selector {
         List<View<Msg>> rows = new java.util.ArrayList<>();
         for (int i = 0; i < state.options().size(); i++) {
             boolean selected = i == state.selected();
+            // The marker is selection (which option) and is always drawn; the active style means
+            // "keys land here" and so follows focus, exactly as TableSelector and the Editor's
+            // caret do.
             String marker = selected ? "\u276F " : "  ";
-            Style style = selected ? activeStyle : inactiveStyle;
+            Style style = selected && focused ? activeStyle : inactiveStyle;
             rows.add(Views.text(StyledText.of(marker + state.options().get(i), style)));
         }
         View<Msg> list = Views.column(Alignment.START, rows);
