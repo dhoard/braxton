@@ -39,7 +39,9 @@ import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.ScreenRenderer;
+import io.github.dhoard.braxton.view.View;
 
 /** Catalog widgets remain pure values with deterministic layout. */
 class CatalogTest {
@@ -506,6 +508,16 @@ class CatalogTest {
         TableSelector.State headerless = TableSelector.State.of(List.of(), List.of(List.of("a")));
         assertThat(TableSelector.update(headerless, new TableSelector.Action.Confirm()).intent())
                 .isInstanceOf(TableSelector.Intent.None.class);
+    }
+
+    @Test
+    void tableSelectorColumnsLineUpWhenACellContainsATabStop() {
+        TableSelector.State state = TableSelector.State.of(List.of("a\tb", "c"),
+                List.of(List.of("x", "y")));
+        View<Object> view = TableSelector.view(ElementId.of("table"), state, false, Style.NONE,
+                Style.NONE, Style.NONE, action -> "");
+        List<String> lines = new ScreenRenderer().plainLines(view, new Viewport(2, 20));
+        assertThat(lines.get(0).indexOf('c')).isEqualTo(lines.get(1).indexOf('y'));
     }
 
     @Test

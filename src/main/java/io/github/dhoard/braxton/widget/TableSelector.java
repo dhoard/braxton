@@ -137,15 +137,18 @@ public final class TableSelector {
     public static <Msg> View<Msg> view(ElementId id, State state, boolean focused,
             Style activeStyle, Style inactiveStyle, Style headerStyle,
             Function<Action, Msg> map) {
-        List<String> header = state.header();
+        List<String> header = expanded(state.header());
         int columns = header.size();
         int[] widths = new int[columns];
         for (int i = 0; i < columns; i++) {
             widths[i] = TextMeasure.columns(header.get(i));
         }
+        List<List<String>> rows = new ArrayList<>(state.rows().size());
         for (List<String> row : state.rows()) {
-            for (int i = 0; i < Math.min(columns, row.size()); i++) {
-                widths[i] = Math.max(widths[i], TextMeasure.columns(row.get(i)));
+            List<String> expanded = expanded(row);
+            rows.add(expanded);
+            for (int i = 0; i < Math.min(columns, expanded.size()); i++) {
+                widths[i] = Math.max(widths[i], TextMeasure.columns(expanded.get(i)));
             }
         }
         List<View<Msg>> lines = new ArrayList<>();
@@ -155,8 +158,8 @@ public final class TableSelector {
                     pad(header.get(i), widths[i] + 2), headerStyle));
         }
         lines.add(Views.text(headerLine));
-        for (int r = 0; r < state.rows().size(); r++) {
-            List<String> values = state.rows().get(r);
+        for (int r = 0; r < rows.size(); r++) {
+            List<String> values = rows.get(r);
             StyledText line = StyledText.empty();
             for (int c = 0; c < columns; c++) {
                 String value = c < values.size() ? values.get(c) : "";
@@ -183,6 +186,18 @@ public final class TableSelector {
             return action.map(map);
         };
         return Views.focus(id, focused, List.of(), handler, Views.column(lines));
+    }
+
+    /**
+     * Expands tab stops in every cell the way the text view paints them, so a measured column and a
+     * displayed column agree.
+     */
+    private static List<String> expanded(List<String> values) {
+        List<String> out = new ArrayList<>(values.size());
+        for (String value : values) {
+            out.add(TabStops.expand(StyledText.plain(value)).plainText());
+        }
+        return out;
     }
 
     private static String pad(String text, int width) {
