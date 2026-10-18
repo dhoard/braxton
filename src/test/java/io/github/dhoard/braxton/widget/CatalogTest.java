@@ -172,6 +172,25 @@ class CatalogTest {
     }
 
     @Test
+    void gradientKeepsTheTextAttributesAndLinksItColours() {
+        StyledText content = StyledText.of("ab", Style.NONE.withBold())
+                .append(StyledText.of("c", Style.NONE, "https://example.test/info"));
+        StyledText gradient = Gradient.apply(content,
+                List.of(Colors.ERROR_400, Colors.GRAY_600), Gradient.Direction.HORIZONTAL);
+        assertThat(gradient.plainText()).isEqualTo("abc");
+        assertThat(gradient.spans()).allSatisfy(span ->
+                assertThat(span.style().foreground()).isNotNull());
+        assertThat(gradient.spans()).anySatisfy(span -> {
+            assertThat(span.text()).isEqualTo("a");
+            assertThat(span.style().bold()).isTrue();
+        });
+        assertThat(gradient.spans()).anySatisfy(span -> {
+            assertThat(span.text()).isEqualTo("c");
+            assertThat(span.link()).isEqualTo("https://example.test/info");
+        });
+    }
+
+    @Test
     void gradientColoursEachGraphemeAndRejectsAnEmptyPalette() {
         StyledText plain = StyledText.plain("abc");
         assertThat(Gradient.apply(plain, List.of(), Gradient.Direction.VERTICAL)).isEqualTo(plain);

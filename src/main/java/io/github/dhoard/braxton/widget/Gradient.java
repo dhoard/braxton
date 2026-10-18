@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.widget;
 import java.util.ArrayList;
 import java.util.List;
 
-import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.View;
@@ -75,25 +74,29 @@ public final class Gradient {
         StyledText out = StyledText.empty();
         int lineIndex = 0;
         int column = 0;
-        for (String cluster : clusters) {
-            if ("\n".equals(cluster)) {
-                out = out.append("\n");
-                lineIndex++;
-                column = 0;
-                continue;
-            }
-            double fraction = switch (mode) {
-                case VERTICAL -> height <= 1 ? 0.0 : (double) lineIndex / (height - 1);
-                case HORIZONTAL -> widest <= 1 ? 0.0 : (double) column / (widest - 1);
-                case DIAGONAL -> {
-                    double vertical = height <= 1 ? 0.0 : (double) lineIndex / (height - 1);
-                    double horizontal = widest <= 1 ? 0.0 : (double) column / (widest - 1);
-                    yield (vertical + horizontal) / 2.0;
+        for (StyledText.Span span : text.spans()) {
+            for (String cluster : TextMeasure.graphemes(span.text())) {
+                if ("\n".equals(cluster)) {
+                    out = out.append("\n");
+                    lineIndex++;
+                    column = 0;
+                    continue;
                 }
-            };
-            io.github.dhoard.braxton.style.Color color = interpolate(palette, fraction);
-            out = out.append(StyledText.of(cluster, Style.fg(color)));
-            column += TextMeasure.clusterColumns(cluster, io.github.dhoard.braxton.style.WidthPolicy.PINNED);
+                double fraction = switch (mode) {
+                    case VERTICAL -> height <= 1 ? 0.0 : (double) lineIndex / (height - 1);
+                    case HORIZONTAL -> widest <= 1 ? 0.0 : (double) column / (widest - 1);
+                    case DIAGONAL -> {
+                        double vertical = height <= 1 ? 0.0 : (double) lineIndex / (height - 1);
+                        double horizontal = widest <= 1 ? 0.0 : (double) column / (widest - 1);
+                        yield (vertical + horizontal) / 2.0;
+                    }
+                };
+                io.github.dhoard.braxton.style.Color color = interpolate(palette, fraction);
+                out = out.append(StyledText.of(cluster, span.style().withForeground(color),
+                        span.link()));
+                column += TextMeasure.clusterColumns(cluster,
+                        io.github.dhoard.braxton.style.WidthPolicy.PINNED);
+            }
         }
         return out;
     }
