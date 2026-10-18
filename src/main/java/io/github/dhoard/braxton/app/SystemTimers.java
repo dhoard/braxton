@@ -22,9 +22,8 @@
 
 package io.github.dhoard.braxton.app;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -38,11 +37,23 @@ final class SystemTimers implements Timers {
 
     static final SystemTimers INSTANCE = new SystemTimers();
 
-    private final ScheduledExecutorService scheduler =
-            Executors.newSingleThreadScheduledExecutor(
-                    Thread.ofVirtual().name("braxton-timers").factory());
+    private final ScheduledThreadPoolExecutor scheduler = newScheduler();
 
     private SystemTimers() {
+    }
+
+    private static ScheduledThreadPoolExecutor newScheduler() {
+        ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1,
+                Thread.ofVirtual().name("braxton-timers").factory());
+        // Without this, a cancelled delay keeps its task (and everything it captured) in the queue
+        // until the original deadline elapses; a cancelled hour-long timer would pin its state.
+        scheduler.setRemoveOnCancelPolicy(true);
+        return scheduler;
+    }
+
+    /** Queued tasks; a cancelled delay must leave the queue at once, not at its deadline. */
+    int pendingTasks() {
+        return scheduler.getQueue().size();
     }
 
     @Override

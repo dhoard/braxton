@@ -60,6 +60,16 @@ class SystemTimersTest {
     }
 
     @Test
+    void aCancelledLongDelayLeavesTheQueueAtOnce() {
+        // A cancelled delay used to stay queued (with its captured state) until its deadline.
+        int before = SystemTimers.INSTANCE.pendingTasks();
+        Timers.Handle handle = SystemTimers.INSTANCE.schedule(3_600_000_000_000L, () -> { });
+        assertThat(SystemTimers.INSTANCE.pendingTasks()).isEqualTo(before + 1);
+        handle.cancel();
+        assertThat(SystemTimers.INSTANCE.pendingTasks()).isEqualTo(before);
+    }
+
+    @Test
     void aShortDelayStillFires() throws InterruptedException {
         CountDownLatch ran = new CountDownLatch(1);
         Timers.Handle handle = SystemTimers.INSTANCE.schedule(1_000_000L, ran::countDown);
