@@ -90,6 +90,15 @@ class CatalogTest {
     }
 
     @Test
+    void boxTruncatesALongTitleToItsFixedWidth() {
+        StyledText rendered = Box.of("x").width(10).title("a very long title").render(40);
+        List<String> lines = List.of(rendered.plainText().split("\n", -1));
+        assertThat(lines).allSatisfy(line ->
+                assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(10));
+        assertThat(lines.get(0)).startsWith("\u250C").contains("a ver").endsWith("\u2510");
+    }
+
+    @Test
     void borderlessBoxIsJustItsContent() {
         Box box = Box.of("plain").border(Border.NONE);
         assertThat(box.render(20).plainText()).isEqualTo("plain");

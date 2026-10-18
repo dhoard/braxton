@@ -126,14 +126,35 @@ public final class Box {
             out = out.append(StyledText.of(
                     String.valueOf(border.horizontal()).repeat(inner), style));
         } else {
-            String fitted = TextMeasure.truncate(label, Math.max(0, inner - 3));
-            int used = TextMeasure.columns(fitted);
+            StyledText fitted = truncate(title, Math.max(0, inner - 3));
+            int used = TextMeasure.columns(fitted.plainText());
             int trailing = Math.max(0, inner - used - 3);
             out = out.append(StyledText.of(String.valueOf(border.horizontal()) + " ", style))
-                    .append(title.withStyle(title.style().merge(style)))
+                    .append(fitted.withStyle(fitted.style().merge(style)))
                     .append(StyledText.of(" " + String.valueOf(border.horizontal()).repeat(trailing), style));
         }
         return out.append(StyledText.of(String.valueOf(border.topRight()), style));
+    }
+
+    /** Truncates to {@code maxColumns} without splitting a cluster, preserving span styling. */
+    private static StyledText truncate(StyledText text, int maxColumns) {
+        StyledText result = StyledText.empty();
+        int remaining = Math.max(0, maxColumns);
+        for (StyledText.Span span : text.spans()) {
+            if (remaining <= 0) {
+                break;
+            }
+            if (span.text().isEmpty()) {
+                continue;
+            }
+            String fitted = TextMeasure.truncate(span.text(), remaining);
+            if (fitted.isEmpty()) {
+                break;
+            }
+            result = result.append(StyledText.of(fitted, span.style(), span.link()));
+            remaining -= TextMeasure.columns(fitted);
+        }
+        return result;
     }
 
     public View<Object> view(int width) {
