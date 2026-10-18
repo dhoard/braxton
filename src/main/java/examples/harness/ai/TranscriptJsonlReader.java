@@ -222,8 +222,15 @@ final class TranscriptJsonlReader {
                 || "completed".equalsIgnoreCase(status)
                 || "failed".equalsIgnoreCase(status)
                 || "error".equalsIgnoreCase(status);
-        if (!completed && callId != null) {
-            pendingTools.put(callId, new PendingTool(name, arguments));
+        if (!completed) {
+            if (callId != null) {
+                pendingTools.put(callId, new PendingTool(name, arguments));
+                return;
+            }
+            // Nothing will complete this call, so keep it visibly pending instead of claiming
+            // a successful result that was never recorded.
+            turn.responses.add(new HarnessEntry.Tool(formatCall(name, arguments), result,
+                    truncated, HarnessEntry.ToolStatus.PENDING));
             return;
         }
         turn.responses.add(new HarnessEntry.Tool(formatCall(name, arguments), result, truncated,
