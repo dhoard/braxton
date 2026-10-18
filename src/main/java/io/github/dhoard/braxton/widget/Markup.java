@@ -117,9 +117,29 @@ public final class Markup {
         StyledText out = StyledText.empty();
         NodeList children = parent.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
-            out = out.append(renderNode(children.item(i), inherited, link));
+            Node child = children.item(i);
+            if (startsOwnLine(child, out)) {
+                out = out.append(StyledText.plain("\n"));
+            }
+            out = out.append(renderNode(child, inherited, link));
         }
         return out;
+    }
+
+    /** True when a block child must break the line of the content already rendered before it. */
+    private static boolean startsOwnLine(Node node, StyledText rendered) {
+        if (node == null || node.getNodeType() != Node.ELEMENT_NODE || rendered.isEmpty()) {
+            return false;
+        }
+        String tag = ((Element) node).getTagName().toLowerCase(java.util.Locale.ROOT);
+        if (!"ul".equals(tag) && !"table".equals(tag)) {
+            return false;
+        }
+        String plain = rendered.plainText();
+        if (plain.endsWith("\n")) {
+            return false;
+        }
+        return !plain.substring(plain.lastIndexOf('\n') + 1).isBlank();
     }
 
     private static StyledText renderNode(Node node, Style inherited, String link) {
@@ -191,11 +211,32 @@ public final class Markup {
                     || !"li".equalsIgnoreCase(item.getTagName())) {
                 continue;
             }
+            String indent = " ".repeat(Math.max(0, gap));
+            String continuation = " ".repeat(Math.max(0, gap) + TextMeasure.columns(bullet) + 1);
             StyledText content = renderChildren(item, style, link);
-            out = out.append(StyledText.of(" ".repeat(gap), style, link))
-                    .append(StyledText.of(bullet + " ", style, link))
-                    .append(content)
-                    .append("\n");
+            StyledText rendered = StyledText.of(indent + bullet + " ", style, link)
+                    .append(indentAfterFirstLine(content, continuation, style, link));
+            out = out.append(rendered);
+            if (!rendered.plainText().endsWith("\n")) {
+                out = out.append(StyledText.of("\n", style, link));
+            }
+        }
+        return out;
+    }
+
+    /** Aligns every line after the first under the first line's text, keeping span styling. */
+    private static StyledText indentAfterFirstLine(StyledText content, String indent, Style style,
+            String link) {
+        List<StyledText> lines = content.lines();
+        StyledText out = StyledText.empty();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) {
+                out = out.append(StyledText.of("\n", style, link));
+                if (!lines.get(i).isEmpty()) {
+                    out = out.append(StyledText.of(indent, style, link));
+                }
+            }
+            out = out.append(lines.get(i));
         }
         return out;
     }

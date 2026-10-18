@@ -287,6 +287,29 @@ class CatalogTest {
     }
 
     @Test
+    void markupNestsListsOnTheirOwnIndentedLines() {
+        StyledText rendered = Markup.parse(
+                "<root><ul gap=\"1\"><li>parent<ul gap=\"1\"><li>child</li></ul></li></ul></root>");
+        assertThat(rendered.plainText()).isEqualTo(" \u2022 parent\n    \u2022 child");
+    }
+
+    @Test
+    void markupListContinuationLinesAlignUnderTheItemText() {
+        StyledText rendered = Markup.parse(
+                "<root><ul gap=\"1\"><li>item<br/>tail</li></ul></root>");
+        assertThat(rendered.plainText()).isEqualTo(" \u2022 item\n   tail");
+    }
+
+    @Test
+    void markupStartsABlockChildOnANewLine() {
+        StyledText rendered = Markup.parse(
+                "<root><ul gap=\"1\"><li>item<table gap=\"1\"><tr><td>cell</td>"
+                        + "</tr></table></li></ul></root>");
+        assertThat(rendered.plainText()).startsWith(" \u2022 item\n   ");
+        assertThat(rendered.plainText()).contains("cell");
+    }
+
+    @Test
     void markupListAppliesTheListStyleToTheBulletAndIndent() {
         StyledText rendered = Markup.parse(
                 "<root><ul style=\"bold\" color=\"#ff0000\" gap=\"1\"><li>x</li></ul></root>");
