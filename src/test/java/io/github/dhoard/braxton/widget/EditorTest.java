@@ -119,6 +119,20 @@ class EditorTest {
     }
 
     @Test
+    void aMaskedCaretNeverRevealsTheCharacterUnderIt() {
+        EditorOptions masked = OPTIONS.withMasking(EditorOptions.Masking.PASSWORD);
+        for (int caret = 0; caret <= 3; caret++) {
+            String rendered = Editor.render(new EditorState("abc", caret, caret, 0), masked, true)
+                    .plainText();
+            assertThat(rendered).as("caret %d", caret)
+                    .doesNotContain("a").doesNotContain("b").doesNotContain("c");
+            assertThat(rendered.chars().filter(c -> c == 0x2022).count())
+                    .as("masks at caret %d", caret)
+                    .isEqualTo(caret < 3 ? 2 : 3);
+        }
+    }
+
+    @Test
     void lengthLimitTruncatesAtAGraphemeBoundary() {
         EditorOptions limit = OPTIONS.withMaxLength(2);
         EditorState state = Editor.update(EditorState.empty(), limit,
