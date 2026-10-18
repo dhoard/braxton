@@ -293,6 +293,45 @@ class HarnessViewTest {
         }
     }
 
+    private static List<Integer> thumbRows(HarnessState state) {
+        List<io.github.dhoard.braxton.style.StyledText> window = HarnessProjection.window(state,
+                state.viewport().cols(), state.viewport().rows(), state.editorRows());
+        List<Integer> rows = new ArrayList<>();
+        for (int i = 0; i < window.size(); i++) {
+            if (window.get(i).plainText().endsWith("\u2503")) {
+                rows.add(i);
+            }
+        }
+        return rows;
+    }
+
+    @Test
+    void theScrollbarThumbReachesBothEndsOfItsTrack() {
+        List<HarnessEntry> entries = new ArrayList<>();
+        for (int i = 0; i < 200; i++) {
+            entries.add(new HarnessEntry.User("user-" + i));
+        }
+        HarnessState base = new HarnessState(HarnessState.Status.READY, entries, PROFILE,
+                HarnessTranscript.Usage.EMPTY, 1_048_576, List.of(), 0, EditorState.empty(), 0,
+                List.of(), null, 0L, 0L, 0L, 0L, 0L, new Size(24, 80), "", "~/braxton");
+        int max = HarnessProjection.maxScroll(base);
+        assertThat(max).isPositive();
+        List<Integer> bottom = thumbRows(base.withScroll(0));
+        assertThat(bottom).isNotEmpty();
+        assertThat(bottom.get(bottom.size() - 1)).isEqualTo(
+                HarnessProjection.window(base, 80, 24, base.editorRows()).size() - 1);
+        List<Integer> top = thumbRows(base.withScroll(max));
+        assertThat(top).isNotEmpty();
+        assertThat(top.get(0)).isZero();
+        int previous = Integer.MAX_VALUE;
+        for (int scroll = 0; scroll <= max; scroll += Math.max(1, max / 40)) {
+            List<Integer> rows = thumbRows(base.withScroll(scroll));
+            assertThat(rows).as("scroll %d", scroll).isNotEmpty();
+            assertThat(rows.get(0)).as("scroll %d moves up", scroll).isLessThanOrEqualTo(previous);
+            previous = rows.get(0);
+        }
+    }
+
     @Test
     void workingRuleShowsSpinnerElapsedQueueAndHint() {
         HarnessState working = new HarnessState(HarnessState.Status.READY, List.of(), PROFILE,
