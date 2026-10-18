@@ -151,6 +151,15 @@ class InputDecoderTest {
     }
 
     @Test
+    void anInvalidUtf8LeadByteDoesNotSwallowTheFollowingCharacter() throws IOException {
+        InputDecoder stray = new InputDecoder(new ByteAtATime(new byte[] {(byte) 0x80, 'a'}));
+        assertThat(((InputEvent.KeyInput) stray.read().orElseThrow()).text()).isEqualTo("a");
+
+        InputDecoder overlong = new InputDecoder(new ByteAtATime(new byte[] {(byte) 0xC0, 'b'}));
+        assertThat(((InputEvent.KeyInput) overlong.read().orElseThrow()).text()).isEqualTo("b");
+    }
+
+    @Test
     void bracketedPasteBecomesOneAtomicEvent() throws IOException {
         InputEvent event = read("\u001B[200~hello\nworld\u001B[201~").orElseThrow();
         assertThat(event).isInstanceOf(InputEvent.PasteInput.class);

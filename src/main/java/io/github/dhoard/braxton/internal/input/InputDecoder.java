@@ -131,9 +131,22 @@ public final class InputDecoder {
         return InputEvent.KeyInput.of(keyForText(text), text);
     }
 
-    /** Reassembles a multi-byte UTF-8 scalar from the already-read lead byte. */
+    /**
+     * Reassembles a multi-byte UTF-8 scalar from the already-read lead byte. A byte that cannot
+     * start a scalar (stray continuation, overlong lead, or beyond U+10FFFF) is dropped without
+     * consuming following bytes, so the next character is still decoded.
+     */
     private String decodeUtf8(int lead) throws IOException {
-        int expected = lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4;
+        int expected;
+        if (lead >= 0xC2 && lead <= 0xDF) {
+            expected = 2;
+        } else if (lead >= 0xE0 && lead <= 0xEF) {
+            expected = 3;
+        } else if (lead >= 0xF0 && lead <= 0xF4) {
+            expected = 4;
+        } else {
+            return "";
+        }
         byte[] bytes = new byte[expected];
         bytes[0] = (byte) lead;
         for (int i = 1; i < expected; i++) {
