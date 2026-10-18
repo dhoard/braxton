@@ -106,6 +106,18 @@ class EffectRunnerTest {
     }
 
     @Test
+    void replacingAnIdAtQuotaIsAllowed() throws Exception {
+        EffectId id = EffectId.of("a");
+        runner.interpret(Command.delay(id, Duration.ofSeconds(1), "first", "rejected-a"));
+        runner.interpret(Command.delay(EffectId.of("b"), Duration.ofSeconds(1), "b", "rejected-b"));
+        runner.interpret(Command.delay(id, Duration.ofSeconds(2), "second", "rejected-a"));
+        timers.advance(1_000_000_000L);
+        assertThat(nextMessage()).isEqualTo("b");
+        timers.advance(1_000_000_000L);
+        assertThat(nextMessage()).isEqualTo("second");
+    }
+
+    @Test
     void taskSuccessAndFailureBecomeMessages() throws Exception {
         runner.interpret(Command.task(EffectId.of("ok"), () -> 7, value -> "ok:" + value,
                 failure -> "fail"));

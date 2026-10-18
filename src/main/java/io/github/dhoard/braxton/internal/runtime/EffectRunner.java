@@ -131,7 +131,7 @@ public final class EffectRunner<Msg> {
     private void startDelay(Command.Delay<Msg> command) {
         Entry entry;
         synchronized (lock) {
-            if (entries.size() >= maxEffects) {
+            if (entries.size() >= maxEffects && !entries.containsKey(command.id())) {
                 deliver(command.rejected());
                 return;
             }
@@ -161,7 +161,7 @@ public final class EffectRunner<Msg> {
     private void startTask(Command.Task<Msg> command) {
         Entry entry;
         synchronized (lock) {
-            if (entries.size() >= maxEffects) {
+            if (entries.size() >= maxEffects && !entries.containsKey(command.id())) {
                 deliver(command.onFailure().apply(
                         new IllegalStateException("effect quota exhausted: " + command.id())));
                 return;
