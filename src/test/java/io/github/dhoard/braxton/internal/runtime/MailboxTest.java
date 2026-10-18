@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
 
@@ -56,5 +57,50 @@ class MailboxTest {
         assertThat(producer.isAlive()).isFalse();
         assertThat(accepted).isTrue();
         assertThat(mailbox.poll(1_000L)).isInstanceOf(Mailbox.AppMessage.class);
+    }
+
+    @Test
+    void closeWakesABlockedProducer() throws Exception {
+        Mailbox mailbox = new Mailbox(1);
+        mailbox.enqueueFromOwner(new Mailbox.AppMessage("first"));
+        CountDownLatch started = new CountDownLatch(1);
+        AtomicBoolean accepted = new AtomicBoolean(true);
+        Thread producer = new Thread(() -> {
+            started.countDown();
+            try {
+                accepted.set(mailbox.enqueue(new Mailbox.AppMessage("second"), 60_000L));
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        producer.setDaemon(true);
+        producer.start();
+        assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+        Thread.sleep(100L);
+        mailbox.close();
+        producer.join(2_000L);
+        assertThat(producer.isAlive()).as("a blocked producer must be woken by close").isFalse();
+        assertThat(accepted).as("a closed mailbox accepts nothing").isFalse();
+        mailbox.poll(1_000L);
+    }
+
+    @Test
+    void closeWakesABlockedConsumer() throws Exception {
+        Mailbox mailbox = new Mailbox(4);
+        AtomicReference<Mailbox.Envelope> polled = new AtomicReference<>();
+        Thread consumer = new Thread(() -> {
+            try {
+                polled.set(mailbox.poll(60_000L));
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        consumer.setDaemon(true);
+        consumer.start();
+        Thread.sleep(100L);
+        mailbox.close();
+        consumer.join(2_000L);
+        assertThat(consumer.isAlive()).as("a blocked consumer must be woken by close").isFalse();
+        assertThat(polled.get()).isNull();
     }
 }

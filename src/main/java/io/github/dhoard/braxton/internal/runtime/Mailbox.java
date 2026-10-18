@@ -22,8 +22,11 @@
 
 package io.github.dhoard.braxton.internal.runtime;
 
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.input.InputEvent;
@@ -34,8 +37,8 @@ import io.github.dhoard.braxton.layout.Size;
  *
  * <p>Producers block while the queue is full and are released when the runtime closes. Messages
  * generated on the owner thread never wait for the owner: an owner-side overflow is fatal rather
- * than recursive or silent. Closing uses a flag plus a woken consumer, so a full queue can never
- * prevent shutdown.</p>
+ * than recursive or silent. A close sets the flag and signals both waiters, so a full queue can
+ * never delay shutdown and a blocked consumer returns immediately.</p>
  */
 public final class Mailbox {
 
@@ -62,13 +65,15 @@ public final class Mailbox {
     /** Largest millisecond timeout that still converts to nanoseconds without overflowing. */
     private static final long MAX_WAIT_MILLIS = Long.MAX_VALUE / 1_000_000L;
 
-    private final ArrayBlockingQueue<Envelope> queue;
+    private final Deque<Envelope> queue = new ArrayDeque<>();
+    private final ReentrantLock lock = new ReentrantLock();
+    private final Condition notEmpty = lock.newCondition();
+    private final Condition notFull = lock.newCondition();
     private final int capacity;
     private volatile boolean closed;
 
     public Mailbox(int capacity) {
         this.capacity = Math.max(1, capacity);
-        this.queue = new ArrayBlockingQueue<>(this.capacity);
     }
 
     public int capacity() {
@@ -76,7 +81,12 @@ public final class Mailbox {
     }
 
     public int size() {
-        return queue.size();
+        lock.lock();
+        try {
+            return queue.size();
+        } finally {
+            lock.unlock();
+        }
     }
 
     public boolean isClosed() {
@@ -88,22 +98,24 @@ public final class Mailbox {
      * full. Returns false when the runtime closed or the wait was interrupted.
      */
     public boolean enqueue(Envelope envelope, long timeoutMillis) throws InterruptedException {
-        // Measured from a start instant rather than an absolute deadline: a millisecond timeout
-        // large enough to overflow the nanosecond conversion would otherwise put the deadline in
-        // the past and drop the message instead of waiting for a slot.
-        long start = System.nanoTime();
-        long budgetNanos = Math.max(0L, Math.min(timeoutMillis, MAX_WAIT_MILLIS)) * 1_000_000L;
-        while (!closed) {
-            long remaining = TimeUnit.NANOSECONDS.toMillis(
-                    Math.max(0L, budgetNanos - (System.nanoTime() - start)));
-            if (queue.offer(envelope, Math.max(1L, remaining), TimeUnit.MILLISECONDS)) {
-                return true;
+        long remaining = waitNanos(timeoutMillis);
+        lock.lockInterruptibly();
+        try {
+            while (queue.size() >= capacity) {
+                if (closed || remaining <= 0L) {
+                    return false;
+                }
+                remaining = notFull.awaitNanos(remaining);
             }
-            if (System.nanoTime() - start >= budgetNanos) {
+            if (closed) {
                 return false;
             }
+            queue.addLast(envelope);
+            notEmpty.signal();
+            return true;
+        } finally {
+            lock.unlock();
         }
-        return false;
     }
 
     /**
@@ -113,8 +125,15 @@ public final class Mailbox {
      *     fatal overflow instead of dropping the message or recursing into {@code update}
      */
     public void enqueueFromOwner(Envelope envelope) {
-        if (closed || !queue.offer(envelope)) {
-            throw new IllegalStateException("runtime mailbox overflow (capacity " + capacity + ")");
+        lock.lock();
+        try {
+            if (closed || queue.size() >= capacity) {
+                throw new IllegalStateException("runtime mailbox overflow (capacity " + capacity + ")");
+            }
+            queue.addLast(envelope);
+            notEmpty.signal();
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -124,14 +143,40 @@ public final class Mailbox {
      * @return the envelope, or null on timeout or when the mailbox is closed
      */
     public Envelope poll(long timeoutMillis) throws InterruptedException {
-        if (closed) {
-            return null;
+        long remaining = waitNanos(timeoutMillis);
+        lock.lockInterruptibly();
+        try {
+            while (queue.isEmpty()) {
+                if (closed || remaining <= 0L) {
+                    return null;
+                }
+                remaining = notEmpty.awaitNanos(remaining);
+            }
+            if (closed) {
+                return null;
+            }
+            Envelope envelope = queue.pollFirst();
+            notFull.signal();
+            return envelope;
+        } finally {
+            lock.unlock();
         }
-        return queue.poll(Math.max(1L, timeoutMillis), TimeUnit.MILLISECONDS);
     }
 
     /** Wakes every blocked producer and consumer. Idempotent. */
     public void close() {
-        closed = true;
+        lock.lock();
+        try {
+            closed = true;
+            notEmpty.signalAll();
+            notFull.signalAll();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** Nanoseconds to wait, clamped so a huge millisecond value cannot overflow the conversion. */
+    private static long waitNanos(long timeoutMillis) {
+        return TimeUnit.MILLISECONDS.toNanos(Math.max(0L, Math.min(timeoutMillis, MAX_WAIT_MILLIS)));
     }
 }
