@@ -170,9 +170,20 @@ public final class LayoutEngine {
     private int textWidth(StyledText text) {
         int widest = 0;
         for (String line : text.plainText().split("\n", -1)) {
-            widest = Math.max(widest, TextMeasure.columns(line, policy));
+            widest = Math.max(widest, expandedColumns(line));
         }
         return widest;
+    }
+
+    /** Columns of one line with tabs expanded to the same four-column stops the wrapper uses. */
+    private int expandedColumns(String line) {
+        int used = 0;
+        for (String cluster : TextMeasure.graphemes(line)) {
+            used += "\t".equals(cluster)
+                    ? 4 - (used % 4)
+                    : TextMeasure.clusterColumns(cluster, policy);
+        }
+        return used;
     }
 
     // ── painting ─────────────────────────────────────────────────────────────

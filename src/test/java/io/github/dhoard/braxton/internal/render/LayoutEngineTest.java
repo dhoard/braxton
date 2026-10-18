@@ -30,6 +30,7 @@ import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
+import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
@@ -116,6 +117,13 @@ class LayoutEngineTest {
         Screen screen = paint(view, 5, 7);
         assertThat(screen.plainLine(0)).startsWith("\u250C");
         assertThat(screen.plainLine(2)).contains("x");
+    }
+
+    @Test
+    void tabStopsCountTowardTheMeasuredWidthOfText() {
+        View<?> view = Views.row(Views.text("a\tb"), Views.text("X"));
+        Screen screen = paint(view, 1, 20);
+        assertThat(screen.plainLine(0)).isEqualTo("a   bX");
     }
 
     @Test
