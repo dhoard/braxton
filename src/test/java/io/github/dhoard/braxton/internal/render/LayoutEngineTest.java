@@ -367,6 +367,65 @@ class LayoutEngineTest {
         assertThat(layout.regions().get(0).bounds()).isEqualTo(new Rect(0, 0, 3, 5));
     }
 
+    /**
+     * The height {@link LayoutEngine#intrinsicHeight} reports is enough to paint the whole tree: a
+     * taller box adds no content, only empty rows. Frames are excluded because a border paints its
+     * whole allocated rectangle, and end/centre rows are excluded because they place their content
+     * at the aligned offset of whatever height they are given.
+     */
+    @Test
+    void aMeasuredHeightIsEnoughToPaintEveryRowOfTheTree() {
+        java.util.Random random = new java.util.Random(101L);
+        for (int iteration = 0; iteration < 250; iteration++) {
+            View<Object> view = randomTree(random, 3);
+            for (int cols = 1; cols <= 12; cols++) {
+                int height = engine.intrinsicHeight(view, cols);
+                Screen taller = paint(view, height + 6, cols);
+                for (int row = height; row < height + 6; row++) {
+                    assertThat(taller.plainLine(row))
+                            .as("row %d below the measured height %d at %d columns", row, height, cols)
+                            .isBlank();
+                }
+            }
+        }
+    }
+
+    private static View<Object> randomTree(java.util.Random random, int depth) {
+        if (depth <= 0) {
+            return Views.text(randomText(random));
+        }
+        return switch (random.nextInt(8)) {
+            case 0 -> Views.text(randomText(random));
+            case 1 -> Views.blank();
+            case 2 -> Views.column(Alignment.START, randomItems(random, depth));
+            case 3 -> Views.row(Alignment.START, randomItems(random, depth));
+            case 4 -> Views.padding(Insets.uniform(random.nextInt(2)),
+                    Views.column(randomItems(random, depth)));
+            case 5 -> Views.padding(Insets.uniform(1), Views.row(Alignment.START,
+                    randomItems(random, depth)));
+            case 6 -> Views.overlay(randomItems(random, depth), false);
+            default -> Views.column(Alignment.CENTER, randomItems(random, depth));
+        };
+    }
+
+    private static List<View<Object>> randomItems(java.util.Random random, int depth) {
+        List<View<Object>> items = new java.util.ArrayList<>();
+        for (int i = 0; i < random.nextInt(3); i++) {
+            items.add(randomTree(random, depth - 1));
+        }
+        return items;
+    }
+
+    private static StyledText randomText(java.util.Random random) {
+        String[] atoms = {"a", "bb", " ", "\t", "\n", "\u65E5", "\uD83D\uDE00", "e\u0301",
+                "-", "cc dd"};
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < 1 + random.nextInt(4); i++) {
+            text.append(atoms[random.nextInt(atoms.length)]);
+        }
+        return StyledText.plain(text.toString());
+    }
+
     @Test
     void textWrapsAtWordBoundariesAndExplicitNewlines() {
         Screen screen = paint(Views.text(StyledText.plain("one two three\nfour")), 4, 7);
