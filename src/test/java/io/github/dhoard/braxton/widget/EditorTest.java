@@ -117,6 +117,22 @@ class EditorTest {
     }
 
     @Test
+    void pasteRespectsTheLengthLimitAndKeepsGraphemesWhole() {
+        EditorOptions limit = OPTIONS.withMaxLength(4);
+        EditorState state = Editor.update(EditorState.empty(), limit,
+                new EditorAction.Paste("\uD83D\uDC4D\uD83D\uDC4D\uD83D\uDC4D")).state();
+        assertThat(state.text()).isEqualTo("\uD83D\uDC4D\uD83D\uDC4D");
+    }
+
+    @Test
+    void theLimitGovernsInputAndNeverTruncatesExistingText() {
+        EditorOptions limit = OPTIONS.withMaxLength(3);
+        EditorState state = EditorState.of("abcdef");
+        EditorState after = Editor.update(state, limit, new EditorAction.Insert("x")).state();
+        assertThat(after.text()).isEqualTo("abcdef");
+    }
+
+    @Test
     void unlimitedLengthAcceptsLongInput() {
         EditorOptions unlimited = EditorOptions.defaults().withUnlimitedLength();
         String longText = "x".repeat(5_000);
