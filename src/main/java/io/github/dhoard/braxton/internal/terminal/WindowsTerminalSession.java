@@ -76,6 +76,8 @@ final class WindowsTerminalSession extends BaseTerminalSession {
     private static final MethodHandle GET_CONSOLE_SCREEN_BUFFER_INFO = down(
             "GetConsoleScreenBufferInfo",
             FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle GET_CONSOLE_OUTPUT_CP = down("GetConsoleOutputCP",
+            FunctionDescriptor.of(ValueLayout.JAVA_INT));
     private static final MethodHandle SET_CONSOLE_OUTPUT_CP = down("SetConsoleOutputCP",
             FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
 
@@ -123,6 +125,8 @@ final class WindowsTerminalSession extends BaseTerminalSession {
     private int savedOutputMode;
     private boolean inputModeSaved;
     private boolean outputModeSaved;
+    private int savedOutputCodePage;
+    private boolean outputCodePageSaved;
     private volatile boolean released;
     private Size fallbackSize;
 
@@ -179,6 +183,13 @@ final class WindowsTerminalSession extends BaseTerminalSession {
             if ((int) SET_CONSOLE_MODE.invokeExact(outputHandle,
                     savedOutputMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) == 0) {
                 throw new IllegalStateException("SetConsoleMode(CONOUT$) failed");
+            }
+            // The console keeps the code page after exit, so the shell that regains it would write
+            // UTF-8 into a legacy page. Remember it and put it back when the session closes.
+            int previousCodePage = (int) GET_CONSOLE_OUTPUT_CP.invokeExact();
+            if (previousCodePage != 0) {
+                savedOutputCodePage = previousCodePage;
+                outputCodePageSaved = true;
             }
             int ignored = (int) SET_CONSOLE_OUTPUT_CP.invokeExact(UTF8_CODE_PAGE);
         }
@@ -283,6 +294,9 @@ final class WindowsTerminalSession extends BaseTerminalSession {
             }
             if (outputModeSaved) {
                 int ignored = (int) SET_CONSOLE_MODE.invokeExact(outputHandle, savedOutputMode);
+            }
+            if (outputCodePageSaved) {
+                int ignored = (int) SET_CONSOLE_OUTPUT_CP.invokeExact(savedOutputCodePage);
             }
         } catch (Throwable ignored) {
             // Restoration is best effort once the handle is unusable.
