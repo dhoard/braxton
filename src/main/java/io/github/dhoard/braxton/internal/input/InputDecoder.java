@@ -186,6 +186,17 @@ public final class InputDecoder {
         if (second < 0x20) {
             return Optional.of(InputEvent.KeyInput.of(Key.ESCAPE));
         }
+        if (second >= 0x80) {
+            // Alt plus a printable character outside ASCII: the following bytes belong to the same
+            // UTF-8 scalar, so decode them together instead of naming the lead byte's Latin-1
+            // character and leaving a stray continuation byte behind.
+            String text = decodeUtf8(second);
+            if (text.isEmpty()) {
+                return Optional.of(InputEvent.KeyInput.of(Key.ESCAPE));
+            }
+            return Optional.of(InputEvent.KeyInput.of(
+                    keyForText(text).with(Modifiers.ALT), text));
+        }
         char c = (char) second;
         return Optional.of(InputEvent.KeyInput.of(
                 keyForText(String.valueOf(c)).with(Modifiers.ALT), String.valueOf(c)));

@@ -77,6 +77,15 @@ class InputDecoderTest {
     }
 
     @Test
+    void altModifiedMultibyteTextIsStillDecodedAsUtf8() throws IOException {
+        // ESC followed by a printable key is Alt+key. A non-ASCII character must still be decoded
+        // as one UTF-8 scalar instead of the Latin-1 character its lead byte names.
+        InputEvent.KeyInput event = (InputEvent.KeyInput) read("\u001B\u00E9").orElseThrow();
+        assertThat(event.key()).isEqualTo(Key.of("\u00E9", Modifiers.ALT));
+        assertThat(event.text()).isEqualTo("\u00E9");
+    }
+
+    @Test
     void spaceIsAKeyWithItsTextAndNeverABlankIdentity() throws IOException {
         InputEvent.KeyInput space = (InputEvent.KeyInput) read(" ").orElseThrow();
         assertThat(space.key()).isEqualTo(Key.SPACE);
