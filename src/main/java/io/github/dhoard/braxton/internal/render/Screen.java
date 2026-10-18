@@ -209,7 +209,9 @@ public final class Screen {
             if (continuation[index(row, col)]) {
                 continue;
             }
-            text.append(cells[index(row, col)].text());
+            Cell cell = cells[index(row, col)];
+            // A blank cell still occupies its column, exactly as the encoder emits it.
+            text.append(cell.isEmpty() ? " " : cell.text());
         }
         int end = text.length();
         while (end > 0 && text.charAt(end - 1) == ' ') {

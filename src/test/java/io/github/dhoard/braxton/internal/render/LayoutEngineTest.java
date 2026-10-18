@@ -122,7 +122,7 @@ class LayoutEngineTest {
     void centringUsesTheMeasuredWidthAndNeverGoesNegative() {
         View<?> view = Views.column(Alignment.CENTER, java.util.List.of(Views.text("ab")));
         Screen screen = paint(view, 1, 6);
-        assertThat(screen.plainLine(0)).isEqualTo("ab");
+        assertThat(screen.plainLine(0)).isEqualTo("  ab");
         assertThat(screen.cell(0, 2).text()).isEqualTo("a");
     }
 

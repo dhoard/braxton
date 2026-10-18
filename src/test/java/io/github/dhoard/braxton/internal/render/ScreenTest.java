@@ -69,6 +69,14 @@ class ScreenTest {
     }
 
     @Test
+    void plainLineKeepsInteriorBlanksAsColumns() {
+        Screen screen = new Screen(1, 6);
+        screen.put(0, 0, "a", Style.NONE, null, 1);
+        screen.put(0, 3, "b", Style.NONE, null, 1);
+        assertThat(screen.plainLine(0)).isEqualTo("a  b");
+    }
+
+    @Test
     void aWideOverlayGlyphDoesNotLeaveAStaleContinuationBehind() {
         View<?> view = Views.overlay(Views.text("\u65E5\u5F0F"), Views.row(
                 Views.fixed(4, Views.padding(Insets.symmetric(0, 1), Views.text("\u672C"))),
