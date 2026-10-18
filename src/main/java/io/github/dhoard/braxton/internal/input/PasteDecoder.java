@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Bounded, streaming bracketed-paste reader (DECSET 2004).
@@ -64,19 +65,22 @@ public final class PasteDecoder {
             return new Result("", false, false);
         }
         int limit = Math.max(0, maxBytes);
-        long idleNanos = Math.max(1L, idleTimeoutMillis) * 1_000_000L;
+        // Saturating conversion: a configured window above ~292 years would wrap a plain
+        // multiplication into a negative value and cut the paste off after the first poll. A huge
+        // window must remain a huge window, not become an immediate timeout.
+        long idleNanos = TimeUnit.MILLISECONDS.toNanos(Math.max(1L, idleTimeoutMillis));
         ByteArrayOutputStream payload = new ByteArrayOutputStream(Math.min(limit, 8192));
         boolean truncated = false;
         boolean terminated = false;
         int matched = 0;
-        long deadline = System.nanoTime() + idleNanos;
+        long deadline = addSaturated(System.nanoTime(), idleNanos);
 
         while (true) {
             int value = readByte(in, deadline);
             if (value == NEED_MORE) {
                 break;
             }
-            deadline = System.nanoTime() + idleNanos;
+            deadline = addSaturated(System.nanoTime(), idleNanos);
 
             if (value == (END[matched] & 0xff)) {
                 matched++;
@@ -106,6 +110,11 @@ public final class PasteDecoder {
             data = trimIncompleteUtf8Tail(data);
         }
         return new Result(new String(data, StandardCharsets.UTF_8), truncated, terminated);
+    }
+
+    /** Adds without wrapping: a saturated deadline never expires by overflow. */
+    private static long addSaturated(long start, long delta) {
+        return delta < 0L || Long.MAX_VALUE - start < delta ? Long.MAX_VALUE : start + delta;
     }
 
     private static int readByte(InputStream in, long deadline) throws IOException {
