@@ -58,13 +58,29 @@ public record Color(int red, int green, int blue) {
         if (value.length() != 7 || value.charAt(0) != '#') {
             return Optional.empty();
         }
-        int rgb;
-        try {
-            rgb = Integer.parseInt(value.substring(1), 16);
-        } catch (NumberFormatException malformed) {
-            return Optional.empty();
+        int rgb = 0;
+        for (int i = 1; i < value.length(); i++) {
+            int digit = hexDigit(value.charAt(i));
+            if (digit < 0) {
+                return Optional.empty();
+            }
+            rgb = (rgb << 4) | digit;
         }
         return Optional.of(new Color((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF));
+    }
+
+    /** ASCII hex digit value, or -1. Rejects the signs and Unicode digits parseInt would accept. */
+    private static int hexDigit(char value) {
+        if (value >= '0' && value <= '9') {
+            return value - '0';
+        }
+        if (value >= 'a' && value <= 'f') {
+            return value - 'a' + 10;
+        }
+        if (value >= 'A' && value <= 'F') {
+            return value - 'A' + 10;
+        }
+        return -1;
     }
 
     /** Parses like {@link #parse(String)} but falls back to {@code fallback} on invalid input. */
