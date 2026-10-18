@@ -7,7 +7,8 @@ not an authoritative source of requirements; verify details against `PROJECT.md`
 
 - [HUNT_LOOP working notes](memory/hunt-loop-notes.md) - the producer hand-off retry policy, the
   pyte harness probe recipe, the content/surrogate and border-visibility rules pinned in cycles
-  187-196, and coverage-hunting observations.
+  187-196, the markup/editor/widget documentation rules and the two reproducibility oracles added
+  in cycles 197-216, and coverage-hunting observations.
 
 ## Maintenance
 

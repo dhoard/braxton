@@ -72,3 +72,35 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   Cell emptiness, Colors palette ramps, focus region geometry, and "a measured height paints the
   whole tree" (the latter excludes border frames, which paint their whole allocation, and end/centre
   rows, which place content at the aligned offset).
+
+## Rules pinned at commits 9989f7e..96705e0 (cycles 197-216)
+
+- The idle-coverage oracle must wait for the *write*, not for the view counter: the owner paints
+  after `buildView` returns, so snapshotting the write log on `views == 1` recorded an empty
+  baseline and reported the initial frame as idle output (it failed 4 of 5 isolated runs).
+- Markup is one well-formed XML document: exactly one root element and explicitly closed empty
+  elements (`<br/>`; a bare `<br>` is rejected). `Markup` now says so, and
+  `MarkupTest.emptyElementsMustBeClosedExplicitlyBecauseTheDocumentIsXml` pins it.
+- `Editor.copyText` is raw (selection or draft) and ignores masking; `Editor.copyableText` and the
+  `Copy` action are the masking-aware paths. Do not describe `copyText` as honouring masking.
+- Widget assembly has two styles and they are deliberate: `ProgressBar` is an immutable value
+  (setters return a new instance); `Box`, `Badge`, `Quote`, `Table`, `ImageView` and `Logo` are
+  mutable builders whose setters return `this`. Build them inside `view`; never share one across
+  frames. Unifying the styles is an open user decision.
+- Widget padding (`Table` columns, `Quote` blocks, `ProgressBar` cells, `Markup` tables and list
+  indents) is measured with `WidthPolicy.PINNED`, so a renderer built with another policy wraps and
+  clips differently but does not realign those baked widths (README "Limitations"). Making widgets
+  policy-aware is an open user decision.
+- Two reproducibility oracles now exist that no build gate had: `Unicode16WidthReproducibilityTest`
+  re-derives the wide table from `tools/unicode/16.0.0` in Java (1,114,112 code points, 122 merged
+  ranges - the same count the Python generator prints) and `DistributionProvenanceTest` recomputes
+  the SHA-256 digests recorded in `META-INF/braxton/unicode-16.0.0/PROVENANCE.md`, checks the four
+  distribution resources are on the classpath, and checks NOTICE names every bundled `.flf`.
+- The suite is now 591 tests; `./mvnw -o clean package` is ~14 s. Test-only changes still need
+  `./mvnw -o spotless:apply` (license headers are checked in `verify`).
+- Probe deliberately: write throwaway Java against `target/classes` (no jshell in this image) or a
+  temporary JUnit class. `pyt*`/pyte is only needed when TUI code changes; no cycle in this range
+  changed TUI code.
+- When appending to `HUNT_TRACKING.txt` with a shell here-document, quote the delimiter (`<<'EOF'`)
+  and substitute the commit hash afterwards: backticks in an unquoted heredoc are command
+  substitutions and silently corrupt the record.
