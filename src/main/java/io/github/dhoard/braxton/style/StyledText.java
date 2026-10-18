@@ -30,9 +30,9 @@ import java.util.Objects;
  * Immutable styled text: an ordered list of spans, each carrying text, a {@link Style}, and an
  * optional hyperlink target.
  *
- * <p>Content never contains terminal escape sequences. Plain input is therefore safe to paste,
- * display, or copy, and only the renderer turns styles into SGR/OSC 8 output. Appending merges
- * adjacent spans with identical styling so measurement and copying stay simple.</p>
+ * <p>Content never contains terminal escape sequences or an unpaired surrogate, so it can be
+ * encoded as UTF-8 unchanged and only the renderer turns styles into SGR/OSC 8 output. Appending
+ * merges adjacent spans with identical styling so measurement and copying stay simple.</p>
  */
 public final class StyledText {
 
@@ -48,11 +48,26 @@ public final class StyledText {
             }
         }
 
-        /** Removes C0/C1 controls except tab and newline, so content cannot inject terminal commands. */
+        /**
+         * Removes C0/C1 controls except tab and newline, and drops unpaired surrogates, so content
+         * can neither inject terminal commands nor carry a text unit that the UTF-8 write boundary
+         * would replace with a different character.
+         */
         private static String sanitize(String value) {
             StringBuilder safe = new StringBuilder(value.length());
             for (int i = 0; i < value.length(); i++) {
                 char c = value.charAt(i);
+                if (Character.isHighSurrogate(c)) {
+                    // Both halves of a scalar value survive; a lone half is dropped like a control
+                    // character, because UTF-8 cannot encode it and the terminal would paint '?'.
+                    if (i + 1 < value.length() && Character.isLowSurrogate(value.charAt(i + 1))) {
+                        safe.append(c).append(value.charAt(++i));
+                    }
+                    continue;
+                }
+                if (Character.isLowSurrogate(c)) {
+                    continue;
+                }
                 if (c == '\n' || c == '\t' || (c >= 0x20 && c != 0x7F && !(c >= 0x80 && c <= 0x9F))) {
                     safe.append(c);
                 }

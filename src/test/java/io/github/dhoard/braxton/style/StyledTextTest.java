@@ -24,6 +24,9 @@ package io.github.dhoard.braxton.style;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 /** Styled text is a value: immutable, style-aware, and safe to render or copy. */
@@ -55,6 +58,30 @@ class StyledTextTest {
     @Test
     void newlinesAndTabsSurviveSanitization() {
         assertThat(StyledText.of("a\nb\tc", Style.NONE).plainText()).isEqualTo("a\nb\tc");
+    }
+
+    @Test
+    void anUnpairedSurrogateIsDroppedInsteadOfReachingTheTerminalAsAReplacement() {
+        // A Java string can hold half of a surrogate pair (a substring, a CESU-8 or mis-decoded
+        // stream). UTF-8 cannot encode that half, so the terminal paints '?' where the content
+        // says something else and an OSC 52 payload carries the replacement byte instead of the
+        // text. Every span therefore holds only scalar values: an unpaired half is dropped like a
+        // control character, and both halves of a real pair survive.
+        assertThat(StyledText.of("a\uD800b", Style.NONE).plainText()).isEqualTo("ab");
+        assertThat(StyledText.of("a\uDC00b", Style.NONE).plainText()).isEqualTo("ab");
+        assertThat(StyledText.of("a\uD83D\uDE00b", Style.NONE).plainText())
+                .isEqualTo("a\uD83D\uDE00b");
+        // Two halves in the wrong order are two unpaired surrogates, not a pair.
+        assertThat(StyledText.of("\uDE00\uD83D", Style.NONE).plainText()).isEmpty();
+        // Dropping the surrogate lets a dangling combining mark join the character before it.
+        assertThat(StyledText.of("a\uD800\u0301b", Style.NONE).plainText()).isEqualTo("a\u0301b");
+        // The surviving content is what the session writes: UTF-8 round-trips it unchanged.
+        for (String raw : List.of("a\uD800\u0301b", "\uD83D\uDE00", "e\u0301")) {
+            String content = StyledText.of(raw, Style.NONE).plainText();
+            assertThat(new String(content.getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8))
+                    .as("wire form of %s", raw)
+                    .isEqualTo(content);
+        }
     }
 
     @Test
