@@ -58,4 +58,28 @@ class RuntimeOptionsTest {
                 .isEqualTo(Duration.ofNanos(Long.MAX_VALUE));
         assertThat(options(Duration.ofSeconds(2)).shutdownGrace()).isEqualTo(Duration.ofSeconds(2));
     }
+
+    @Test
+    void theClipboardAndTerminalWithersKeepEveryOtherField() {
+        RuntimeOptions base = options(Duration.ofMillis(750));
+        io.github.dhoard.braxton.clipboard.ClipboardConfig clipboard =
+                io.github.dhoard.braxton.clipboard.ClipboardConfig.builder().maxPayloadBytes(64).build();
+        RuntimeOptions withClipboard = base.withClipboard(clipboard);
+        assertThat(withClipboard.clipboard()).isSameAs(clipboard);
+        assertThat(withClipboard.terminal()).isEqualTo(base.terminal());
+        assertThat(withClipboard.environment()).isSameAs(base.environment());
+        assertThat(withClipboard.shutdownGrace()).isEqualTo(base.shutdownGrace());
+        assertThat(withClipboard.mailboxCapacity()).isEqualTo(base.mailboxCapacity());
+        assertThat(withClipboard.maxConcurrentEffects()).isEqualTo(base.maxConcurrentEffects());
+        assertThat(withClipboard.maxSubscriptions()).isEqualTo(base.maxSubscriptions());
+
+        io.github.dhoard.braxton.terminal.TerminalOptions terminal =
+                io.github.dhoard.braxton.terminal.TerminalOptions.DEFAULT;
+        RuntimeOptions withTerminal = base.withTerminal(terminal);
+        assertThat(withTerminal.terminal()).isSameAs(terminal);
+        assertThat(withTerminal.clipboard()).isSameAs(base.clipboard());
+        assertThat(withTerminal.environment()).isSameAs(base.environment());
+        assertThat(withTerminal.shutdownGrace()).isEqualTo(base.shutdownGrace());
+        assertThat(withTerminal.mailboxCapacity()).isEqualTo(base.mailboxCapacity());
+    }
 }

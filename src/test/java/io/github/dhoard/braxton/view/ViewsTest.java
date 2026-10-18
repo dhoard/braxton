@@ -111,4 +111,19 @@ class ViewsTest {
                 .containsExactly("\u250C\u2500\u2500\u2500\u2500\u2510", "\u2502body\u2502",
                         "\u2514\u2500\u2500\u2500\u2500\u2518");
     }
+
+    @Test
+    void withFocusChangesOnlyTheFocusedFlag() {
+        io.github.dhoard.braxton.input.Binding<String> binding =
+                io.github.dhoard.braxton.input.Binding.of("a", "msg");
+        View<String> child = Views.text("body");
+        View.Focused<String> unfocused = (View.Focused<String>) Views.focus(ElementId.of("e"),
+                false, List.of(binding), event -> java.util.Optional.empty(), child);
+        View.Focused<String> focused = unfocused.withFocus(true);
+        assertThat(focused.focused()).isTrue();
+        assertThat(focused.id()).isEqualTo(unfocused.id());
+        assertThat(focused.bindings()).isEqualTo(unfocused.bindings());
+        assertThat(focused.child()).isSameAs(unfocused.child());
+        assertThat(unfocused.focused()).as("the receiver is unchanged").isFalse();
+    }
 }

@@ -60,4 +60,18 @@ class TablePropertyTest {
                     .hasSizeLessThanOrEqualTo(1);
         }
     }
+
+    @Test
+    void theBorderStyleAppliesToTheFrameOnly() {
+        Table table = Table.of().row(io.github.dhoard.braxton.style.StyledText.plain("cell"))
+                .border(io.github.dhoard.braxton.layout.Border.SINGLE)
+                .borderStyle(io.github.dhoard.braxton.style.Style.NONE.withBold());
+        java.util.List<io.github.dhoard.braxton.style.StyledText.Span> spans =
+                table.render().spans();
+        assertThat(spans.get(0).style().bold()).as("the top edge carries the border style").isTrue();
+        assertThat(spans).anySatisfy(span -> {
+            assertThat(span.text()).contains("cell");
+            assertThat(span.style().bold()).as("the cell keeps its own style").isFalse();
+        });
+    }
 }

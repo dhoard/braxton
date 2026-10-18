@@ -48,4 +48,9 @@ class ElementIdTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("child name");
     }
+
+    @Test
+    void asOptionalIsAlwaysPresent() {
+        assertThat(ElementId.of("composer").asOptional()).contains(ElementId.of("composer"));
+    }
 }
