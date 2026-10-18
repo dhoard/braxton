@@ -23,7 +23,9 @@
 package io.github.dhoard.braxton.asset;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -42,6 +44,17 @@ class FigletFontTest {
         FigletFont parsed = FigletFont.parse(stream(font.toString()), "synthetic");
         assertThat(parsed.hardBlank()).isEqualTo('$');
         assertThat(parsed.render("!")).containsExactly("X");
+    }
+
+    @Test
+    void aTruncatedFontFailsWithADiagnosticInsteadOfPartialArt() {
+        StringBuilder font = new StringBuilder("flf2a$ 2 1 3 0 0 0 0 0\n");
+        for (int glyph = 0; glyph < 3; glyph++) {
+            font.append("X$@\n").append("X$@\n");
+        }
+        assertThatThrownBy(() -> FigletFont.parse(stream(font.toString()), "short.flf"))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("short.flf");
     }
 
     @Test

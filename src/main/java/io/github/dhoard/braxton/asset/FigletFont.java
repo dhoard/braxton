@@ -91,10 +91,9 @@ public final class FigletFont {
         char endMark = firstRow.isEmpty() ? hardBlankChar : firstRow.charAt(firstRow.length() - 1);
         for (char code = 32; code <= 126; code++) {
             if (index + height > lines.size()) {
-                if (code == 32) {
-                    throw new IOException("font " + name + " is truncated");
-                }
-                break;
+                // A FIGlet font carries one glyph per printable ASCII code, so a short stream is
+                // malformed: keeping the glyphs read so far would render partial art.
+                throw new IOException("font " + name + " is truncated");
             }
             List<String> rows = new ArrayList<>(height);
             for (int row = 0; row < height; row++) {
@@ -103,9 +102,6 @@ public final class FigletFont {
             }
             index += height;
             glyphs.put(code, List.copyOf(rows));
-        }
-        if (glyphs.isEmpty()) {
-            throw new IOException("font " + name + " contains no glyphs");
         }
         return new FigletFont(name, height, hardBlankChar, glyphs);
     }
