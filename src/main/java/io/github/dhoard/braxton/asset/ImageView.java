@@ -59,7 +59,10 @@ public final class ImageView {
     }
 
     public ImageView symbol(String value) {
-        symbol = value == null || value.isEmpty() ? "\u2588" : value;
+        // A symbol that occupies no column would paint nothing and leave the pixel grid short, so
+        // it is treated like no symbol at all and falls back to the block.
+        symbol = value == null || value.isEmpty() || TextMeasure.columns(value) == 0
+                ? "\u2588" : value;
         return this;
     }
 

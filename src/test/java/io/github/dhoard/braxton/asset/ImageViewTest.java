@@ -61,4 +61,77 @@ class ImageViewTest {
         assertThat(rendered.plainText().split("\n", -1))
                 .allSatisfy(line -> assertThat(TextMeasure.columns(line)).isEqualTo(4));
     }
+
+    @Test
+    void theSymbolDefaultsToABlockAndScalesHorizontally() {
+        assertThat(ImageView.of(ImageAsset.of(diagonalPixels())).symbol(null).render().plainText())
+                .isEqualTo("\u2588 \n \u2588");
+        assertThat(ImageView.of(ImageAsset.of(diagonalPixels())).symbol("").render().plainText())
+                .isEqualTo("\u2588 \n \u2588");
+        StyledText scaled = ImageView.of(ImageAsset.of(diagonalPixels())).symbol("@").scale(3)
+                .render();
+        assertThat(scaled.plainText()).isEqualTo("@@@   \n   @@@");
+        assertThat(scaled.plainText().split("\n", -1)).allSatisfy(line ->
+                assertThat(TextMeasure.columns(line)).isEqualTo(6));
+        // Scale is horizontal repetition; zero and negative values mean one.
+        assertThat(ImageView.of(ImageAsset.of(diagonalPixels())).scale(0).render().plainText())
+                .isEqualTo("\u2588 \n \u2588");
+        assertThat(ImageView.of(ImageAsset.of(diagonalPixels())).scale(-4).render().plainText())
+                .isEqualTo("\u2588 \n \u2588");
+    }
+
+    @Test
+    void replaceMapsOneExactColourAndIgnoresAnythingUnparseable() {
+        ImageView view = ImageView.of(ImageAsset.of(diagonalPixels())).symbol("@");
+        view.replace("#ff0000", "#0000ff").replace("not a colour", "#ffffff")
+                .replace("#00ff00", "nope").replace("00ff00", "#123456");
+        StyledText rendered = view.render();
+        assertThat(rendered.spans().get(0).style().foreground())
+                .isEqualTo(new io.github.dhoard.braxton.style.Color(0, 0, 0xFF));
+        assertThat(rendered.spans().get(2).style().foreground())
+                .as("an unparseable target leaves the pixel's own colour").isEqualTo(
+                        new io.github.dhoard.braxton.style.Color(0, 0xFF, 0));
+        assertThat(rendered.spans()).as("only #rrggbb parses, so the source without one is ignored")
+                .noneMatch(span -> span.style().foreground() != null
+                        && span.style().foreground().equals(
+                                new io.github.dhoard.braxton.style.Color(0x12, 0x34, 0x56)));
+        // A replacement survives later edits and does not leak between views.
+        assertThat(view.render()).isEqualTo(rendered);
+        assertThat(ImageView.of(ImageAsset.of(diagonalPixels())).symbol("@").render().spans()
+                .get(0).style().foreground())
+                .isEqualTo(new io.github.dhoard.braxton.style.Color(0xFF, 0, 0));
+    }
+
+    @Test
+    void aSymbolWithNoVisibleColumnFallsBackToTheBlockSoTheGridStaysAligned() {
+        // The class promises one grid cell per pixel whatever symbol the caller asks for. A symbol
+        // that paints nothing at all (a zero-width space, a byte-order mark) would leave the row
+        // short, so it is treated like no symbol and falls back to the block.
+        for (String symbol : java.util.List.of("\u200B", "\uFEFF", "a", "\u65E5")) {
+            StyledText rendered = ImageView.of(ImageAsset.of(diagonalPixels()))
+                    .symbol(symbol).render();
+            int cell = Math.max(1, TextMeasure.columns(symbol));
+            assertThat(rendered.plainText().split("\n", -1)).as("symbol %s", symbol)
+                    .allSatisfy(line -> assertThat(TextMeasure.columns(line)).isEqualTo(2 * cell));
+        }
+        assertThat(ImageView.of(ImageAsset.of(diagonalPixels())).symbol("\u200B").render().plainText())
+                .isEqualTo("\u2588 \n \u2588");
+    }
+
+    @Test
+    void aCombiningMarkAttachesToThePixelBeforeItByTheUnicodeClusterRule() {
+        // TextMeasure segments Extend onto the preceding base, so a bare combining mark merges
+        // with the blank cell to its left instead of occupying a cell of its own. That is the
+        // measurement policy the project pins, not a grid the renderer can correct.
+        String rendered = ImageView.of(ImageAsset.of(diagonalPixels())).symbol("\u0301")
+                .render().plainText();
+        assertThat(TextMeasure.columns(rendered.lines().toList().get(1))).isEqualTo(1);
+        assertThat(TextMeasure.columns("\u0301")).isEqualTo(1);
+    }
+
+    @Test
+    void ofRequiresAnImage() {
+        org.assertj.core.api.Assertions.assertThatIllegalArgumentException()
+                .isThrownBy(() -> ImageView.of(null));
+    }
 }
