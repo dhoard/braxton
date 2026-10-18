@@ -28,6 +28,10 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
@@ -139,6 +143,37 @@ class EffectRunnerTest {
         limited.interpret(Command.task(EffectId.of("t"), () -> 1, value -> "ok",
                 failure -> "rejected:" + failure.getClass().getSimpleName()));
         assertThat(nextMessage()).isEqualTo("rejected:RejectedExecutionException");
+    }
+
+    @Test
+    void cancellingARunningTaskInterruptsItsBodyAndDropsItsLateResult() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            RuntimeEnvironment async = new RuntimeEnvironment(() -> 0L, executor, timers,
+                    message -> { });
+            EffectRunner<String> asyncRunner = new EffectRunner<>(mailbox, async, clipboard, 4);
+            asyncRunner.bindOwner(Thread.currentThread());
+            asyncRunner.interpret(Command.task(EffectId.of("work"), () -> {
+                entered.countDown();
+                try {
+                    Thread.sleep(60_000L);
+                } catch (InterruptedException stop) {
+                    interrupted.countDown();
+                    Thread.currentThread().interrupt();
+                }
+                return "done";
+            }, value -> "success:" + value, failure -> "failure:" + failure.getClass().getSimpleName()));
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+            asyncRunner.interpret(Command.cancel(EffectId.of("work")));
+            assertThat(interrupted.await(5, TimeUnit.SECONDS))
+                    .as("cancelling a running task must interrupt its body").isTrue();
+            Thread.sleep(100L);
+            assertThat(mailbox.size()).as("a cancelled task's result must not arrive").isZero();
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
