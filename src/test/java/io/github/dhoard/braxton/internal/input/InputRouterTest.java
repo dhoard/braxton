@@ -171,6 +171,29 @@ class InputRouterTest {
     }
 
     @Test
+    void onKeysRegistersBubbleBindingsAndAllMapsEveryChild() {
+        View<String> onKeys = Views.onKeys(List.of(Binding.of("escape", "bubbled")),
+                Views.text("leaf"));
+        assertThat(InputRouter.route(onKeys, key("escape")))
+                .as("without focus the scope's own bubble binding still fires")
+                .contains("bubbled");
+
+        View<String> focusedWins = Views.onKeys(List.of(Binding.of("x", "bubbled")),
+                Views.focus(ElementId.of("f"), true, List.of(Binding.of("x", "local")),
+                        event -> Optional.empty(), Views.text("leaf")));
+        assertThat(InputRouter.route(focusedWins, key("x"))).contains("local");
+
+        List<View<String>> mapped = Views.all(
+                List.of(Views.text("a"), Views.focus(ElementId.of("f"), true,
+                        List.of(Binding.of("enter", "child")), event -> Optional.empty(),
+                        Views.text("b"))),
+                (String message) -> "parent:" + message);
+        assertThat(mapped).hasSize(2);
+        assertThat(mapped.get(0)).isInstanceOf(View.Text.class);
+        assertThat(InputRouter.route(mapped.get(1), key("enter"))).contains("parent:child");
+    }
+
+    @Test
     void duplicateBindingsInOnePhaseAreRejected() {
         assertThatThrownBy(() -> Views.keyed(
                 List.of(Binding.of("x", "a"), Binding.of("x", "b")), Views.text("t"), List.of()))
