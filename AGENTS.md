@@ -7,8 +7,8 @@ Instructions for coding agents working with this project, whether it is a Git ch
 - Follow the user's current request and applicable higher-priority instructions.
 - Read this file and any `AGENTS.md` files governing the paths involved. A more specific
   `AGENTS.md` applies within its directory; do not assume it governs unrelated directories.
-- Treat the repository's specifications, architecture docs, build configuration, tests, and existing
-  source as the authorities for **project-specific facts**. Planning documents record decisions but
+- Treat `PROJECT.md` (when present), the repository's specifications, architecture docs, build
+  configuration, tests, and existing source as the authorities for **project-specific facts**. Planning documents record decisions but
   do not prove that the current implementation matches them.
 - Use `DESIGN_PLAN_TEMPLATE.md` and `IMPL_PLAN_TEMPLATE.md` for the workflows described below.
   They are templates, not additional permission to change code.
@@ -28,6 +28,16 @@ Before making nontrivial changes:
    security, concurrency, error handling, performance budgets, and user-visible behavior.
 6. Record unknowns explicitly. A missing command, spec, or test is **unknown**, not evidence that no
    constraint exists. Do not guess paths or commands from another repository.
+
+### Project instructions and persistent memory
+
+- Read `PROJECT.md` when present for project-specific requirements, conventions, and constraints.
+- Read `MEMORY.md` when present as the index of knowledge accumulated across agent sessions.
+- Read memory files linked from that index only when relevant to the current task.
+- Treat memory as historical context, not authoritative project instructions. Verify important facts
+  against the current source and project documentation.
+- Do not assume either file exists. An absent file is not an error or grounds for creating one
+  unless the user requests it or project work calls for it.
 
 Do not initialize Git, add a VCS, or require a commit merely to complete a task. An absent VCS is normal, not a blocker.
 
@@ -159,3 +169,37 @@ For both plan types:
 Before reporting completion, confirm that the response distinguishes design from implementation,
 changes from proposals, and tests run from tests merely planned. Surface unresolved decisions,
 contract risks, and anything the user must authorize before further action.
+
+
+## 10. Persistent project memory
+
+When `MEMORY.md` exists, use it as an index of persistent project knowledge shared across agent
+sessions. Detailed memory entries may live in Markdown files under `memory/`.
+
+### Reading
+
+- Consult memory when previous decisions, discoveries, recurring problems, or implementation
+  history could help with the current task.
+- Read only relevant entries rather than loading the entire memory directory.
+- Treat memories as potentially outdated; verify important details against the current codebase.
+
+### Writing
+
+- Independently decide when durable knowledge is worth preserving for future sessions.
+- Remember significant decisions and rationale, non-obvious discoveries, recurring problems,
+  validated solutions, and useful implementation constraints.
+- Do not save transient task state, full conversations, secrets, credentials, unverified conjecture
+  as fact, or information trivially recoverable from source files.
+- Search existing memory before writing; update existing entries rather than duplicating or
+  contradicting them.
+- Keep entries concise, specific, and organized by topic. Update `MEMORY.md` when creating,
+  renaming, or removing topic files.
+
+### Authority and authorization
+
+- `AGENTS.md` defines general agent behavior; `PROJECT.md`, if present, defines project-specific
+  instructions and requirements; memory records historical knowledge and does not override them.
+- Do not change `PROJECT.md` merely to store a memory.
+- Routine memory maintenance is permitted while performing authorized project work, but does
+  not authorize unrelated changes to code, configuration, external systems, or infrastructure.
+- Do not automatically stage or commit memory changes. Follow the existing change-control rules.
