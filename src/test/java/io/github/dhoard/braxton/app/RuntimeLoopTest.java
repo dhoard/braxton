@@ -270,6 +270,55 @@ class RuntimeLoopTest {
                 assertThat(message).contains("still running"));
     }
 
+    /** Throws from update on "boom" and from view while the model says "explode". */
+    private record Crashing() implements Program<String, String> {
+
+        @Override
+        public Transition<String, String> init(InitContext context) {
+            return Transition.stay("ok");
+        }
+
+        @Override
+        public Transition<String, String> update(String model, String message) {
+            if ("boom".equals(message)) {
+                throw new IllegalStateException("update failed");
+            }
+            return Transition.stay("explode".equals(message) ? "explode" : model);
+        }
+
+        @Override
+        public View<String> view(String model, Viewport viewport) {
+            if ("explode".equals(model)) {
+                throw new IllegalStateException("view failed");
+            }
+            return Views.keyed(List.of(Binding.of("x", "boom"), Binding.of("y", "explode")),
+                    Views.text("safe"), List.of());
+        }
+    }
+
+    @Test
+    @Timeout(15)
+    void aThrowingUpdateOrViewEndsTheRunAsAFailureAndClosesTheSession() throws Exception {
+        FakeTerminal terminal = new FakeTerminal(new Size(3, 12));
+        RuntimeOptions options = options(new FakeTerminal.ManualTimers());
+        Thread run = Thread.ofVirtual().name("crashing-update")
+                .start(() -> Application.run(new Crashing(), options, terminal));
+        await(() -> terminal.output().contains("safe"));
+        terminal.feed("x");
+        run.join(5_000L);
+        assertThat(run.isAlive()).as("a throwing update must end the run").isFalse();
+        assertThat(terminal.isOpen()).as("the session is closed on failure").isFalse();
+
+        FakeTerminal second = new FakeTerminal(new Size(3, 12));
+        Thread crashingView = Thread.ofVirtual().name("crashing-view")
+                .start(() -> Application.run(new Crashing(), options, second));
+        await(() -> second.output().contains("safe"));
+        second.feed("y");
+        crashingView.join(5_000L);
+        assertThat(crashingView.isAlive()).as("a throwing view must end the run").isFalse();
+        assertThat(second.isOpen()).as("the session is closed on failure").isFalse();
+    }
+
     @Test
     void anEmptyProgramStillPresentsOneFrame() {
         Program<Integer, String> empty = new Program<>() {
