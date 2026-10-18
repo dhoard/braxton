@@ -142,11 +142,17 @@ public final class ProgressBar {
         return TextMeasure.columns(render(value, max).plainText());
     }
 
-    /** All icon cells, used by tests to assert fill order. */
+    /** Up to {@code count} icon cells from the left, used by tests to assert fill order. */
     public List<String> icons(int count, double value, double max) {
         List<String> icons = new ArrayList<>();
+        if (count <= 0) {
+            return icons;
+        }
         StyledText bar = render(value, max);
         for (String grapheme : TextMeasure.graphemes(bar.plainText())) {
+            if (icons.size() >= count) {
+                break;
+            }
             icons.add(grapheme);
         }
         return icons;

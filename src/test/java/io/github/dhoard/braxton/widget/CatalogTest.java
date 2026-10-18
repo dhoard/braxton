@@ -182,6 +182,14 @@ class CatalogTest {
     }
 
     @Test
+    void progressBarIconsHonourTheRequestedCellCount() {
+        ProgressBar bar = ProgressBar.of(10).icons("#", "-");
+        assertThat(bar.icons(3, 5, 10)).containsExactly("#", "#", "#");
+        assertThat(bar.icons(12, 5, 10)).hasSize(10);
+        assertThat(bar.icons(0, 5, 10)).isEmpty();
+    }
+
+    @Test
     void quotePreservesTheStylingOfTheQuotedContent() {
         StyledText content = StyledText.of("hot",
                 Style.NONE.withBold().withForeground(Colors.ERROR_400));
