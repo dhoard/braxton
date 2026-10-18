@@ -117,7 +117,10 @@ public record EditorState(String text, int caret, int anchor, int preferredColum
     }
 
     public EditorState withText(String value) {
-        return new EditorState(value, value.length(), value.length(), 0);
+        // The canonical constructor and of() treat null as an empty draft; a wither must not be
+        // the one public entry point that throws instead.
+        String text = value == null ? "" : value;
+        return new EditorState(text, text.length(), text.length(), 0);
     }
 
     public EditorState withCaret(int index) {

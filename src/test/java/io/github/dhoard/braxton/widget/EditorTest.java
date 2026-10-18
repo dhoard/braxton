@@ -393,6 +393,16 @@ class EditorTest {
     }
 
     @Test
+    void textWithersAcceptNullLikeTheConstructorAndFactoryDo() {
+        EditorState state = EditorState.of("abc");
+        EditorState cleared = state.withText(null);
+        assertThat(cleared.text()).isEmpty();
+        assertThat(cleared.caret()).isZero();
+        assertThat(EditorState.of(null).text()).isEmpty();
+        assertThat(new EditorState(null, 3, 1, 0).text()).isEmpty();
+    }
+
+    @Test
     void outOfRangePositionsAreClampedToGraphemeBoundaries() {
         EditorState state = new EditorState("a" + FAMILY, 99, -3, -1);
         assertThat(state.caret()).isEqualTo(("a" + FAMILY).length());
