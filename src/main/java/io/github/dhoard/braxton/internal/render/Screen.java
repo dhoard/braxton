@@ -82,10 +82,21 @@ public final class Screen {
         return row * cols + col;
     }
 
-    /** Clears a single cell's content and continuation flag. */
+    /**
+     * Clears a cell's content and continuation flag, together with the other half of any wide glyph
+     * it belongs to, so no half-painted glyph survives.
+     */
     public void clear(int row, int col) {
         if (!inside(row, col)) {
             return;
+        }
+        if (continuation[index(row, col)] && col > 0) {
+            cells[index(row, col - 1)] = Cell.EMPTY;
+            continuation[index(row, col - 1)] = false;
+        }
+        if (col + 1 < cols && continuation[index(row, col + 1)]) {
+            cells[index(row, col + 1)] = Cell.EMPTY;
+            continuation[index(row, col + 1)] = false;
         }
         cells[index(row, col)] = Cell.EMPTY;
         continuation[index(row, col)] = false;

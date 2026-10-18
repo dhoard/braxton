@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.layout.Rect;
+import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
@@ -43,6 +44,27 @@ class ScreenTest {
         assertThat(screen.cell(0, 0).text()).isEqualTo("x");
         assertThat(screen.cell(0, 1).text()).isEqualTo("y");
         assertThat(screen.plainLine(0)).isEqualTo("xy");
+    }
+
+    @Test
+    void clearingOneHalfOfAWideGlyphClearsBothHalves() {
+        Screen screen = new Screen(1, 4);
+        screen.put(0, 0, "\u65E5", Style.NONE, null, 2);
+        screen.clear(0, 1);
+        assertThat(screen.cell(0, 0).text()).isEmpty();
+        assertThat(screen.isContinuation(0, 0)).isFalse();
+        assertThat(screen.isContinuation(0, 1)).isFalse();
+        assertThat(screen.plainLine(0)).isEmpty();
+    }
+
+    @Test
+    void aFillCoveringTheSecondHalfOfAWideGlyphDoesNotLeaveHalfAGlyph() {
+        View<?> view = Views.overlay(Views.text("\u65E5"), Views.row(
+                Views.fixed(1, Views.blank()),
+                Views.fixed(1, Views.fill(Style.bg(Colors.BLUE_400)))));
+        Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, 1, 4)).screen();
+        assertThat(screen.cell(0, 0).text()).isEmpty();
+        assertThat(screen.cell(0, 1).style().background()).isEqualTo(Colors.BLUE_400);
     }
 
     @Test
