@@ -23,6 +23,7 @@
 package io.github.dhoard.braxton.internal.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -56,6 +57,31 @@ class MailboxTest {
         assertThat(producer.isAlive()).isFalse();
         assertThat(accepted).isTrue();
         assertThat(mailbox.poll(1_000L)).isInstanceOf(Mailbox.AppMessage.class);
+    }
+
+    @Test
+    void theOwnerOverflowIsLoudWhileAProducerTimesOutQuietly() throws Exception {
+        // The owner thread must never block or drop silently: overflow is fatal. A background
+        // producer waits only as long as it was told and then reports the drop.
+        Mailbox mailbox = new Mailbox(1);
+        mailbox.enqueueFromOwner(new Mailbox.AppMessage("first"));
+        assertThatThrownBy(() -> mailbox.enqueueFromOwner(new Mailbox.AppMessage("second")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("overflow");
+        assertThat(mailbox.enqueue(new Mailbox.AppMessage("third"), 20L)).isFalse();
+        assertThat(mailbox.size()).isEqualTo(1);
+        assertThat(mailbox.poll(1_000L)).isInstanceOf(Mailbox.AppMessage.class);
+    }
+
+    @Test
+    void aClosedMailboxAcceptsNothingAndReleasesItsQueue() throws Exception {
+        Mailbox mailbox = new Mailbox(2);
+        mailbox.enqueueFromOwner(new Mailbox.AppMessage("pending"));
+        mailbox.close();
+        assertThat(mailbox.enqueue(new Mailbox.AppMessage("late"), 0L)).isFalse();
+        assertThatThrownBy(() -> mailbox.enqueueFromOwner(new Mailbox.AppMessage("late")))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(mailbox.poll(0L)).as("a closed mailbox delivers nothing").isNull();
     }
 
     @Test
