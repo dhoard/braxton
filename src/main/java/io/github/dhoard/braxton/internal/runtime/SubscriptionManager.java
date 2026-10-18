@@ -177,11 +177,14 @@ public final class SubscriptionManager<Msg> {
             }
             Map<SubscriptionId, Live> next = new HashMap<>();
             List<Live> started = new ArrayList<>();
+            // Mapper refreshes are deferred until every leaf has started: a later failure must
+            // leave the kept sources exactly as they were, including their mappers.
+            Map<Live, Subscription<Msg>> refreshed = new java.util.LinkedHashMap<>();
             try {
                 for (Subscription<Msg> leaf : leaves) {
                     Live existing = live.get(leaf.id());
                     if (existing != null && existing.configuration.equals(leaf.configuration())) {
-                        refreshMapper(existing, leaf);
+                        refreshed.put(existing, leaf);
                         next.put(leaf.id(), existing);
                     } else {
                         if (existing != null) {
@@ -202,6 +205,9 @@ public final class SubscriptionManager<Msg> {
                 rejected = failure;
             }
             if (rejected == null) {
+                for (Map.Entry<Live, Subscription<Msg>> entry : refreshed.entrySet()) {
+                    refreshMapper(entry.getKey(), entry.getValue());
+                }
                 for (Map.Entry<SubscriptionId, Live> entry : live.entrySet()) {
                     if (!next.containsKey(entry.getKey())) {
                         toClose.add(entry.getValue());

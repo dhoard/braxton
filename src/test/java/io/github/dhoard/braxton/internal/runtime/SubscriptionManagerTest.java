@@ -106,6 +106,23 @@ class SubscriptionManagerTest {
     }
 
     @Test
+    void aReconcileThatCannotStartASourceLeavesTheKeptMapperUnchanged() throws Exception {
+        manager.reconcile(Subscription.interval(SubscriptionId.of("tick"), Duration.ofMillis(100),
+                time -> "old"));
+        Subscription<String> failing = Subscription.source(SubscriptionId.of("boom"), "cfg",
+                emitter -> {
+                    throw new IllegalStateException("cannot start");
+                }, value -> "boom");
+        assertThatThrownBy(() -> manager.reconcile(Subscription.batch(
+                Subscription.interval(SubscriptionId.of("tick"), Duration.ofMillis(100),
+                        time -> "new"),
+                failing))).isInstanceOf(IllegalStateException.class);
+        timers.advance(100_000_000L);
+        assertThat(next()).as("a failed reconcile commits nothing, not even a mapper refresh")
+                .isEqualTo("old");
+    }
+
+    @Test
     void resizeSourcesReceiveTheMeasuredSize() throws Exception {
         manager.reconcile(Subscription.resize(SubscriptionId.of("resize"),
                 size -> "resized:" + size.cols()));
