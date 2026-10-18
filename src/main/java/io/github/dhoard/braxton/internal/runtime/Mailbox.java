@@ -59,6 +59,9 @@ public final class Mailbox {
     public record Close(ExitResult result) implements Envelope {
     }
 
+    /** Largest millisecond timeout that still converts to nanoseconds without overflowing. */
+    private static final long MAX_WAIT_MILLIS = Long.MAX_VALUE / 1_000_000L;
+
     private final ArrayBlockingQueue<Envelope> queue;
     private final int capacity;
     private volatile boolean closed;
@@ -85,13 +88,18 @@ public final class Mailbox {
      * full. Returns false when the runtime closed or the wait was interrupted.
      */
     public boolean enqueue(Envelope envelope, long timeoutMillis) throws InterruptedException {
-        long deadline = System.nanoTime() + Math.max(0L, timeoutMillis) * 1_000_000L;
+        // Measured from a start instant rather than an absolute deadline: a millisecond timeout
+        // large enough to overflow the nanosecond conversion would otherwise put the deadline in
+        // the past and drop the message instead of waiting for a slot.
+        long start = System.nanoTime();
+        long budgetNanos = Math.max(0L, Math.min(timeoutMillis, MAX_WAIT_MILLIS)) * 1_000_000L;
         while (!closed) {
-            long remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
+            long remaining = TimeUnit.NANOSECONDS.toMillis(
+                    Math.max(0L, budgetNanos - (System.nanoTime() - start)));
             if (queue.offer(envelope, Math.max(1L, remaining), TimeUnit.MILLISECONDS)) {
                 return true;
             }
-            if (System.nanoTime() - deadline >= 0L) {
+            if (System.nanoTime() - start >= budgetNanos) {
                 return false;
             }
         }
