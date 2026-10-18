@@ -151,6 +151,12 @@ class InputDecoderTest {
     }
 
     @Test
+    void aTruncatedUtf8SequenceDoesNotSwallowTheFollowingCharacter() throws IOException {
+        Optional<InputEvent> event = read(new byte[] {(byte) 0xE3, 'A'});
+        assertThat(event).contains(InputEvent.KeyInput.of(Key.of("a"), "A"));
+    }
+
+    @Test
     void anInvalidUtf8LeadByteDoesNotSwallowTheFollowingCharacter() throws IOException {
         InputDecoder stray = new InputDecoder(new ByteAtATime(new byte[] {(byte) 0x80, 'a'}));
         assertThat(((InputEvent.KeyInput) stray.read().orElseThrow()).text()).isEqualTo("a");

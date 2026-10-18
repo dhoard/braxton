@@ -24,6 +24,7 @@ package io.github.dhoard.braxton.internal.input;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PushbackInputStream;
 import java.util.Optional;
 
 import io.github.dhoard.braxton.input.InputEvent;
@@ -43,7 +44,7 @@ public final class InputDecoder {
     public static final int DEFAULT_ESCAPE_TIMEOUT_MILLIS = 30;
     public static final int MAX_CSI_LENGTH = 64;
 
-    private final InputStream in;
+    private final PushbackInputStream in;
     private final int escapeTimeoutMillis;
     private final int maxPasteBytes;
     private final long pasteIdleTimeoutMillis;
@@ -55,7 +56,7 @@ public final class InputDecoder {
 
     public InputDecoder(InputStream in, int escapeTimeoutMillis, int maxPasteBytes,
             long pasteIdleTimeoutMillis) {
-        this.in = in;
+        this.in = new PushbackInputStream(in, 1);
         this.escapeTimeoutMillis = Math.max(1, escapeTimeoutMillis);
         this.maxPasteBytes = Math.max(0, maxPasteBytes);
         this.pasteIdleTimeoutMillis = Math.max(1L, pasteIdleTimeoutMillis);
@@ -134,7 +135,8 @@ public final class InputDecoder {
     /**
      * Reassembles a multi-byte UTF-8 scalar from the already-read lead byte. A byte that cannot
      * start a scalar (stray continuation, overlong lead, or beyond U+10FFFF) is dropped without
-     * consuming following bytes, so the next character is still decoded.
+     * consuming following bytes, and a sequence truncated by a non-continuation byte gives that
+     * byte back, so the next character is still decoded.
      */
     private String decodeUtf8(int lead) throws IOException {
         int expected;
@@ -151,7 +153,13 @@ public final class InputDecoder {
         bytes[0] = (byte) lead;
         for (int i = 1; i < expected; i++) {
             int next = in.read();
-            if (next < 0 || (next & 0xC0) != 0x80) {
+            if (next < 0) {
+                return "";
+            }
+            if ((next & 0xC0) != 0x80) {
+                // The sequence is truncated: give the byte back so the character it starts is
+                // still decoded instead of being swallowed with the broken sequence.
+                in.unread(next);
                 return "";
             }
             bytes[i] = (byte) next;
