@@ -156,6 +156,10 @@ public sealed interface Subscription<Msg> {
      * timer worker for an interval - and the message is then enqueued for the owner thread. The
      * mapper must therefore be pure: it must not read or mutate the model, which only the owner
      * thread may touch. {@code configuration} must compare equal for an unchanged live source.</p>
+     *
+     * <p>Emitting from {@code start} itself runs on the owner thread, where an envelope never waits
+     * for the queue to drain: a burst larger than the mailbox capacity fails the run with a mailbox
+     * overflow instead of waiting for the consumer that is already blocked in {@code start}.</p>
      */
     record Source<Msg>(SubscriptionId id, Object configuration,
             Function<Consumer<Object>, AutoCloseable> start, Function<Object, Msg> mapper)

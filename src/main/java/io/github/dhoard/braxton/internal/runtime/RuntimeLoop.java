@@ -112,6 +112,7 @@ public final class RuntimeLoop<M, Msg> {
             effects.bindOwner(Thread.currentThread());
             subscriptions = new SubscriptionManager<>(mailbox, environment.timers(),
                     options.maxSubscriptions(), environment.diagnostics());
+            subscriptions.bindOwner(Thread.currentThread());
 
             inputThread = startInputThread();
             resizeThread = startResizeThread();

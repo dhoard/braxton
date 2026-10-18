@@ -164,6 +164,7 @@ public final class SubscriptionManager<Msg> {
     private final Object lock = new Object();
     private long nextEpoch = 1L;
     private boolean closed;
+    private Thread owner = Thread.currentThread();
 
     public SubscriptionManager(Mailbox mailbox, Timers timers, int maxSubscriptions,
             Consumer<String> diagnostics) {
@@ -171,6 +172,11 @@ public final class SubscriptionManager<Msg> {
         this.timers = timers;
         this.maxSubscriptions = Math.max(0, maxSubscriptions);
         this.diagnostics = diagnostics == null ? message -> { } : diagnostics;
+    }
+
+    /** Marks the thread allowed to enqueue without waiting for itself. */
+    public void bindOwner(Thread thread) {
+        this.owner = thread;
     }
 
     /** Applies a new subscription description, keeping unchanged live resources. */
@@ -323,14 +329,24 @@ public final class SubscriptionManager<Msg> {
      * <p>A full mailbox means the owner is still working, not that the emission is disposable; a
      * fixed timeout would silently drop a tick or a source value. The wait ends when the mailbox
      * is closed, which is how shutdown releases an emitter thread.</p>
+     *
+     * <p>An emission generated <em>on</em> the owner thread - a source that emits from its own
+     * {@code start} function, for instance - never waits: the owner is the only consumer, so waiting
+     * would wait for itself and wedge the run. An owner-side overflow is fatal by design, exactly as
+     * for a resize or an effect delivered on the owner thread.</p>
      */
     private void enqueue(Object message) {
         if (message == null) {
             return;
         }
+        Mailbox.Envelope envelope = new Mailbox.AppMessage(message);
+        if (Thread.currentThread() == owner) {
+            mailbox.enqueueFromOwner(envelope);
+            return;
+        }
         while (true) {
             try {
-                if (mailbox.enqueue(new Mailbox.AppMessage(message), 100L)) {
+                if (mailbox.enqueue(envelope, 100L)) {
                     return;
                 }
             } catch (InterruptedException interrupted) {

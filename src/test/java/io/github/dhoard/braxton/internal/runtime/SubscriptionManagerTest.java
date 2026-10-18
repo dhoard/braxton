@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
@@ -178,6 +179,43 @@ class SubscriptionManagerTest {
                 .as("a tick is delivered once the owner makes room, not dropped after a timeout")
                 .isInstanceOf(Mailbox.AppMessage.class);
         timer.join(2_000L);
+    }
+
+    @Test
+    @org.junit.jupiter.api.Timeout(10)
+    void aSourceThatEmitsOnTheOwnerThreadNeverWaitsForTheOwner() throws Exception {
+        // The documented threading model: an envelope generated on the owner thread does not wait
+        // for the owner, so a full mailbox there is a fatal overflow. A source that emits from its
+        // own start function runs on that thread; waiting there would wait for the consumer itself
+        // and wedge the run with no way to quit.
+        Mailbox full = new Mailbox(1);
+        SubscriptionManager<String> tight =
+                new SubscriptionManager<>(full, timers, 2, diagnostics::add);
+        full.enqueueFromOwner(new Mailbox.AppMessage("occupant"));
+        AtomicInteger started = new AtomicInteger();
+        Subscription<String> eager = Subscription.source(SubscriptionId.of("eager"), "config",
+                emitter -> {
+                    started.incrementAndGet();
+                    emitter.accept("first");
+                    return () -> { };
+                },
+                value -> "mapped:" + value);
+        assertThatThrownBy(() -> tight.reconcile(eager))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("mailbox overflow");
+        assertThat(started).as("the start function ran on this thread").hasValue(1);
+        assertThat(full.poll(20)).as("the occupant is still queued, nothing was dropped")
+                .isInstanceOf(Mailbox.AppMessage.class);
+        assertThat(full.size()).as("the emission that did not fit was not queued").isZero();
+
+        // The rejected reconcile commits nothing, so the same descriptor starts again once there
+        // is room rather than staying half-started.
+        tight.reconcile(eager);
+        assertThat(started).hasValue(2);
+        Mailbox.Envelope delivered = full.poll(20);
+        assertThat(delivered).isInstanceOf(Mailbox.AppMessage.class);
+        assertThat(((Mailbox.AppMessage) delivered).payload()).isEqualTo("mapped:first");
+        tight.closeAll();
     }
 
     @Test

@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -34,6 +35,7 @@ import io.github.dhoard.braxton.app.Timers;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.effect.SubscriptionId;
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
@@ -808,6 +810,77 @@ class RuntimeLoopTest {
         // A fake backend exercises the runtime; this check only asserts the real backend type exists
         // and that the unsupported-platform path is reachable without touching a console.
         assertThat(backend).isNotNull();
+    }
+
+    /** Subscribes to a source that emits a burst from its own start function. */
+    private record Bursting(int emissions) implements Program<Integer, String> {
+
+        @Override
+        public Transition<Integer, String> init(InitContext context) {
+            return Transition.stay(0);
+        }
+
+        @Override
+        public Transition<Integer, String> update(Integer model, String message) {
+            return Transition.stay(model + 1);
+        }
+
+        @Override
+        public View<String> view(Integer model, Viewport viewport) {
+            return Views.text("burst: " + model);
+        }
+
+        @Override
+        public Subscription<String> subscriptions(Integer model) {
+            return Subscription.source(new SubscriptionId("burst"), "config",
+                    emitter -> {
+                        for (int i = 0; i < emissions; i++) {
+                            emitter.accept("tick" + i);
+                        }
+                        return () -> { };
+                    },
+                    String::valueOf);
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aSourceThatOverflowsTheMailboxFromItsStartFunctionEndsTheRun() throws Exception {
+        // start() runs on the owner thread, so an emission there must never wait for the owner to
+        // drain: the owner is the consumer. An oversized burst is the documented fatal overflow.
+        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        RuntimeOptions tight = options(new FakeTerminal.ManualTimers()).withLimits(2, 4, 4);
+        AtomicReference<ExitResult> result = new AtomicReference<>();
+        Thread run = Thread.ofVirtual().name("burst-test")
+                .start(() -> result.set(Application.run(new Bursting(5), tight, terminal)));
+        run.join(8_000L);
+        assertThat(run.isAlive()).as("the run ends instead of waiting for itself").isFalse();
+        assertThat(result.get().kind()).isEqualTo(ExitResult.Kind.FAILURE);
+        assertThat(result.get().failure()).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("mailbox overflow");
+        assertThat(terminal.isOpen()).as("the session is still restored").isFalse();
+    }
+
+    @Test
+    @Timeout(20)
+    void aSourceThatEmitsFromItsStartFunctionStillRunsWhenTheMailboxHasRoom() throws Exception {
+        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        terminal.endInput();
+        ExitResult result = Application.run(new Counter(), options(new FakeTerminal.ManualTimers()),
+                terminal);
+        assertThat(result.kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
+        assertThat(terminal.output()).contains("count:");
+
+        FakeTerminal burstTerminal = new FakeTerminal(new Size(6, 20));
+        AtomicReference<ExitResult> burst = new AtomicReference<>();
+        Thread burstRun = Thread.ofVirtual().name("burst-control")
+                .start(() -> burst.set(Application.run(new Bursting(5),
+                        options(new FakeTerminal.ManualTimers()), burstTerminal)));
+        await(() -> burstTerminal.output().contains("burst: 5"));
+        burstTerminal.endInput();
+        burstRun.join(5_000L);
+        assertThat(burstRun.isAlive()).isFalse();
+        assertThat(burst.get().kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
     }
 
     @Test
