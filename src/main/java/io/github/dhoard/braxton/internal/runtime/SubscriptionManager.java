@@ -183,7 +183,8 @@ public final class SubscriptionManager<Msg> {
             try {
                 for (Subscription<Msg> leaf : leaves) {
                     Live existing = live.get(leaf.id());
-                    if (existing != null && existing.configuration.equals(leaf.configuration())) {
+                    if (existing != null && sameKind(existing, leaf)
+                            && existing.configuration.equals(leaf.configuration())) {
                         refreshed.put(existing, leaf);
                         next.put(leaf.id(), existing);
                     } else {
@@ -241,6 +242,22 @@ public final class SubscriptionManager<Msg> {
                 && leaf instanceof Subscription.Source<Msg> source) {
             ((ExternalLive<Msg>) external).mapper.set(source.mapper());
         }
+    }
+
+    /**
+     * Whether an existing live resource implements the same kind of source as {@code leaf}. The
+     * configuration is an arbitrary value, so two different kinds can carry an equal one (a resize
+     * source's marker is the string a caller could use as an external source's configuration, for
+     * instance); such a leaf must replace the resource, not reuse it.
+     */
+    private static boolean sameKind(Live existing, Subscription<?> leaf) {
+        return switch (leaf) {
+            case Subscription.Interval<?> interval -> existing instanceof IntervalLive<?>;
+            case Subscription.Resize<?> resize -> existing instanceof ResizeLive<?>;
+            case Subscription.Source<?> source -> existing instanceof ExternalLive<?>;
+            case Subscription.Batch<?> batch -> false;
+            case Subscription.None<?> none -> false;
+        };
     }
 
     private Live start(Subscription<Msg> leaf) {

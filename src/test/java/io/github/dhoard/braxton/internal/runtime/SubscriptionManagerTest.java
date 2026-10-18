@@ -86,6 +86,19 @@ class SubscriptionManagerTest {
     }
 
     @Test
+    void aDifferentKindOfSourceWithTheSameConfigurationIsRestarted() {
+        List<String> events = new ArrayList<>();
+        manager.reconcile(Subscription.resize(SubscriptionId.of("shared"), size -> "resize"));
+        manager.reconcile(Subscription.source(SubscriptionId.of("shared"), "resize",
+                emitter -> {
+                    events.add("started");
+                    return () -> events.add("closed");
+                }, value -> "source"));
+        assertThat(events).as("a source of another kind is not the live resize subscription")
+                .containsExactly("started");
+    }
+
+    @Test
     void removingASourceStopsEmissions() throws Exception {
         manager.reconcile(Subscription.interval(SubscriptionId.of("tick"), Duration.ofMillis(100),
                 time -> "tick"));
