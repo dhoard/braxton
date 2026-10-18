@@ -41,6 +41,9 @@ import io.github.dhoard.braxton.view.Views;
  *
  * <p>Selection is explicit state and is clamped on every action; the view inverts the selected cell
  * and never mutates the rows it was given.</p>
+ *
+ * <p>Every row is one painted line: tab stops are expanded to the shared four-column boundaries and
+ * line breaks become spaces, so a cell can never split the selection grid across rows.</p>
  */
 public final class TableSelector {
 
@@ -189,13 +192,15 @@ public final class TableSelector {
     }
 
     /**
-     * Expands tab stops in every cell the way the text view paints them, so a measured column and a
-     * displayed column agree.
+     * Prepares every cell the way the text view paints it: line breaks become spaces, and tab stops
+     * are expanded to the shared four-column boundaries, so a measured column and a displayed
+     * column agree and each row stays a single line.
      */
     private static List<String> expanded(List<String> values) {
         List<String> out = new ArrayList<>(values.size());
         for (String value : values) {
-            out.add(TabStops.expand(StyledText.plain(value)).plainText());
+            String singleRow = value.replace('\n', ' ').replace('\r', ' ');
+            out.add(TabStops.expand(StyledText.plain(singleRow)).plainText());
         }
         return out;
     }

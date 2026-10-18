@@ -535,6 +535,17 @@ class CatalogTest {
     }
 
     @Test
+    void tableSelectorKeepsAMultiLineCellOnOneRow() {
+        TableSelector.State state = TableSelector.State.of(List.of("h"),
+                List.of(List.of("a\nb"), List.of("c")));
+        View<Object> view = TableSelector.view(ElementId.of("table"), state, false, Style.NONE,
+                Style.NONE, Style.NONE, action -> "");
+        List<String> lines = new ScreenRenderer().plainLines(view, new Viewport(3, 20));
+        assertThat(lines.get(1)).startsWith("a b");
+        assertThat(lines.get(2)).startsWith("c");
+    }
+
+    @Test
     void tableSelectorColumnsLineUpWhenACellContainsATabStop() {
         TableSelector.State state = TableSelector.State.of(List.of("a\tb", "c"),
                 List.of(List.of("x", "y")));
