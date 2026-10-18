@@ -140,11 +140,60 @@ public final class LayoutEngine {
     }
 
     private int rowHeight(View.Row<?> row, int cols) {
+        List<? extends View<?>> items = row.items();
+        if (items.isEmpty()) {
+            return 0;
+        }
+        // Children paint inside their own share of the row, so each is measured at the width it
+        // will be painted at; measuring at the row's full width can wrap into fewer rows than it
+        // paints and clip the overflow.
+        int[] widths = rowWidths(items, cols);
         int tallest = 0;
-        for (int i = 0; i < row.items().size(); i++) {
-            tallest = Math.max(tallest, intrinsicHeight(crossAxis(row.items().get(i)), cols));
+        for (int i = 0; i < items.size(); i++) {
+            if (widths[i] <= 0) {
+                continue;
+            }
+            tallest = Math.max(tallest, intrinsicHeight(crossAxis(items.get(i)), widths[i]));
         }
         return tallest;
+    }
+
+    /** Main-axis width {@link #paintRow} gives each item at {@code cols} columns. */
+    private int[] rowWidths(List<? extends View<?>> items, int cols) {
+        int[] widths = new int[items.size()];
+        int used = 0;
+        int flexWeight = 0;
+        for (int i = 0; i < items.size(); i++) {
+            View<?> child = items.get(i);
+            if (child instanceof View.Grow<?> grow) {
+                flexWeight += grow.weight();
+            } else if (child instanceof View.Fixed<?> fixed) {
+                widths[i] = Math.min(fixed.size(), Math.max(0, cols - used));
+                used += widths[i];
+            } else {
+                widths[i] = Math.min(intrinsicWidth(child, Math.max(0, cols - used)),
+                        Math.max(0, cols - used));
+                used += widths[i];
+            }
+        }
+        int remaining = Math.max(0, cols - used);
+        if (flexWeight > 0) {
+            int distributed = 0;
+            for (int i = 0; i < items.size(); i++) {
+                if (items.get(i) instanceof View.Grow<?> grow) {
+                    widths[i] = remaining * grow.weight() / flexWeight;
+                    distributed += widths[i];
+                }
+            }
+            int remainder = remaining - distributed;
+            for (int i = 0; i < items.size() && remainder > 0; i++) {
+                if (items.get(i) instanceof View.Grow<?>) {
+                    widths[i]++;
+                    remainder--;
+                }
+            }
+        }
+        return widths;
     }
 
     private int rowWidth(View.Row<?> row, int maxCols) {
@@ -285,39 +334,7 @@ public final class LayoutEngine {
         if (items.isEmpty()) {
             return;
         }
-        int[] widths = new int[items.size()];
-        int used = 0;
-        int flexWeight = 0;
-        for (int i = 0; i < items.size(); i++) {
-            View<?> child = items.get(i);
-            if (child instanceof View.Grow<?> grow) {
-                flexWeight += grow.weight();
-            } else if (child instanceof View.Fixed<?> fixed) {
-                widths[i] = Math.min(fixed.size(), Math.max(0, bounds.cols() - used));
-                used += widths[i];
-            } else {
-                widths[i] = Math.min(intrinsicWidth(child, Math.max(0, bounds.cols() - used)),
-                        Math.max(0, bounds.cols() - used));
-                used += widths[i];
-            }
-        }
-        int remaining = Math.max(0, bounds.cols() - used);
-        if (flexWeight > 0) {
-            int distributed = 0;
-            for (int i = 0; i < items.size(); i++) {
-                if (items.get(i) instanceof View.Grow<?> grow) {
-                    widths[i] = remaining * grow.weight() / flexWeight;
-                    distributed += widths[i];
-                }
-            }
-            int remainder = remaining - distributed;
-            for (int i = 0; i < items.size() && remainder > 0; i++) {
-                if (items.get(i) instanceof View.Grow<?>) {
-                    widths[i]++;
-                    remainder--;
-                }
-            }
-        }
+        int[] widths = rowWidths(items, bounds.cols());
         int col = bounds.col();
         for (int i = 0; i < items.size(); i++) {
             int width = widths[i];
