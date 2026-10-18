@@ -305,9 +305,12 @@ public final class Editor {
         String pending = "";
         Style pendingStyle = opts.textStyle();
         int position = start;
-        while (position < end) {
-            int next = TextMeasure.boundaryAfter(state.text(), position);
-            String cluster = state.text().substring(position, next);
+        // Segment this line once. A per-cluster boundaryAfter() over the whole draft is O(n^2) and
+        // cost tens of milliseconds per frame on a draft at the editor's length limit; the line's
+        // own grapheme boundaries are the draft's, because a line starts and ends on a newline
+        // boundary.
+        for (String cluster : TextMeasure.graphemes(text)) {
+            int next = position + cluster.length();
             boolean selected = selectionStart >= 0 && position >= selectionStart && position < selectionEnd;
             String display = opts.masking() == EditorOptions.Masking.HIDDEN ? "" : masking ? MASK : cluster;
             boolean cursor = focused && state.caret() == position;
