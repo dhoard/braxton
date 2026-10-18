@@ -109,6 +109,29 @@ class TextMeasureTest {
     }
 
     @Test
+    void boundaryBeforeSnapsDownToTheClusterStartAndDiffersFromThePreviousBoundary() {
+        // boundaryBefore() is "the cluster boundary at or before the index", so it is the identity
+        // on a boundary and snaps back inside one; previousBoundary() is always strictly earlier.
+        String text = "a" + FAMILY + "b";
+        assertThat(TextMeasure.boundaryBefore("abc", 2)).isEqualTo(2);
+        assertThat(TextMeasure.previousBoundary("abc", 2)).isEqualTo(1);
+        int insideFamily = 2;
+        assertThat(TextMeasure.boundaryBefore(text, insideFamily)).isEqualTo(1);
+        assertThat(TextMeasure.previousBoundary(text, insideFamily)).isEqualTo(1);
+        assertThat(TextMeasure.boundaryBefore(text, 1)).isEqualTo(1);
+        assertThat(TextMeasure.boundaryBefore("abc", 0)).isZero();
+        assertThat(TextMeasure.boundaryBefore("abc", -5)).isZero();
+        assertThat(TextMeasure.boundaryBefore("abc", 99)).isEqualTo(3);
+        assertThat(TextMeasure.boundaryBefore("", 3)).isZero();
+        assertThat(TextMeasure.boundaryBefore(null, 3)).isZero();
+        // Snapping down always lands on a boundary, never inside a cluster.
+        for (int index = 0; index <= text.length(); index++) {
+            assertThat(TextMeasure.isBoundary(text, TextMeasure.boundaryBefore(text, index)))
+                    .as("boundaryBefore(%d)", index).isTrue();
+        }
+    }
+
+    @Test
     void boundaryAfterAnIndexBeforeTheTextIsItsStart() {
         assertThat(TextMeasure.boundaryAfter("ab", -1)).isZero();
         assertThat(TextMeasure.boundaryAfter("", -1)).isZero();
