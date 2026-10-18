@@ -57,6 +57,30 @@ class KeyTest {
     }
 
     @Test
+    void thePlusKeyParsesFromItsOwnCanonicalSpec() {
+        // A terminal types '+' as Key.of("+"), whose canonical spec is "+" (and "ctrl++" with a
+        // modifier). Splitting the spec on '+' turned that into an empty key name or an empty
+        // modifier, so the plus key could not be named by a binding spec at all and the diagnostic
+        // read "unknown modifier: ".
+        assertThat(Key.parse("+")).isEqualTo(Key.of("+"));
+        assertThat(Key.parse("ctrl++")).isEqualTo(Key.of("+", Modifiers.CTRL));
+        assertThat(Key.parse("alt+shift++")).isEqualTo(Key.of("+", new Modifiers(false, true, true)));
+        // A separator with no name stays ambiguous rather than silently meaning '+'.
+        assertThatThrownBy(() -> Key.parse("ctrl+")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void everyCanonicalSpecParsesBackToItsKey() {
+        List<Key> keys = new ArrayList<>(List.of(Key.of("+"), Key.of("+", Modifiers.CTRL),
+                Key.of("+", new Modifiers(true, true, true)), Key.of("-"), Key.of("="),
+                Key.of("]"), Key.of("\\"), Key.of("a"), Key.ENTER, Key.TAB, Key.ESCAPE,
+                Key.PAGE_UP, Key.of("insert"), Key.of("f12")));
+        for (Key key : keys) {
+            assertThat(Key.parse(key.toString())).as("spec of %s", key).isEqualTo(key);
+        }
+    }
+
+    @Test
     void comparisonOrdersByNameThenPrefixAndToStringIsCanonical() {
         List<Key> keys = new ArrayList<>(List.of(Key.of("b"), Key.of("a", Modifiers.CTRL),
                 Key.of("a")));

@@ -67,13 +67,22 @@ public record Key(String name, Modifiers modifiers) implements Comparable<Key> {
         return new Key(name, modifiers);
     }
 
-    /** Parses {@code ctrl+alt+x}, {@code shift+tab}, or a plain name. */
+    /** Parses {@code ctrl+alt+x}, {@code shift+tab}, {@code ctrl++}, or a plain name. */
     public static Key parse(String spec) {
         String[] parts = spec.toLowerCase(Locale.ROOT).split("\\+", -1);
+        // The canonical spec of the '+' key ends in '+', so a doubled separator is a literal plus:
+        // "+" names the plus key and "ctrl++" is Ctrl+plus. A single trailing separator ("ctrl+")
+        // still names nothing, so it stays an error instead of silently dropping its modifier.
+        int modifierCount = parts.length - 1;
+        String name = parts[modifierCount];
+        if (name.isEmpty() && modifierCount > 0 && parts[modifierCount - 1].isEmpty()) {
+            name = "+";
+            modifierCount--;
+        }
         boolean ctrl = false;
         boolean alt = false;
         boolean shift = false;
-        for (int i = 0; i < parts.length - 1; i++) {
+        for (int i = 0; i < modifierCount; i++) {
             switch (parts[i]) {
                 case "ctrl", "control" -> ctrl = true;
                 case "alt", "meta" -> alt = true;
@@ -81,7 +90,6 @@ public record Key(String name, Modifiers modifiers) implements Comparable<Key> {
                 default -> throw new IllegalArgumentException("unknown modifier: " + parts[i]);
             }
         }
-        String name = parts.length == 0 ? "" : parts[parts.length - 1];
         return new Key(name, new Modifiers(ctrl, alt, shift));
     }
 
