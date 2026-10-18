@@ -46,7 +46,6 @@ public final class Box {
     private Style style = Style.NONE;
     private StyledText title = StyledText.empty();
     private StyledText content;
-    private boolean responsive;
     private int fixedWidth = -1;
 
     private Box(StyledText content) {
@@ -91,8 +90,9 @@ public final class Box {
         return result;
     }
 
+    /** Uses the width passed to {@link #render}, discarding any fixed width set earlier. */
     public Box responsive() {
-        responsive = true;
+        fixedWidth = -1;
         return this;
     }
 
@@ -207,7 +207,8 @@ public final class Box {
         return Views.text(render(width));
     }
 
+    /** Whether {@link #render} uses its argument instead of a fixed width. */
     public boolean isResponsive() {
-        return responsive;
+        return fixedWidth <= 0;
     }
 }

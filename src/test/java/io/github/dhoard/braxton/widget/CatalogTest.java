@@ -260,6 +260,20 @@ class CatalogTest {
     }
 
     @Test
+    void aResponsiveBoxUsesTheAvailableWidthAfterAFixedWidthWasSet() {
+        Box box = Box.of("body").width(4);
+        assertThat(box.isResponsive()).isFalse();
+        box.responsive();
+        assertThat(box.isResponsive()).isTrue();
+        String rendered = box.render(10).plainText();
+        for (String line : rendered.split("\n", -1)) {
+            assertThat(TextMeasure.columns(line))
+                    .as("responsive line [%s]", line)
+                    .isEqualTo(10);
+        }
+    }
+
+    @Test
     void aWideTitleThatCannotFitFallsBackToAPlainTopEdge() {
         // "日本" needs two columns plus the dash and spacing around a label. In a six-column box the
         // label budget is one column, which no wide cluster fits, so the edge must be plain dashes
