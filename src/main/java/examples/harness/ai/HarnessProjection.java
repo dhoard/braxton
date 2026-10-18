@@ -251,8 +251,10 @@ final class HarnessProjection {
         if (!state.working()) {
             return rule(width, quitArmed ? "ctrl+c again to exit" : "");
         }
-        long elapsedMillis = Math.max(0,
-                (state.nowNanos() - state.workStartedNanos()) / 1_000_000L);
+        long started = state.workStartedNanos();
+        long elapsedMillis = started < 0L
+                ? 0L
+                : Math.max(0, (state.nowNanos() - started) / 1_000_000L);
         String queued = state.pending().size() > 0
                 ? " \u00b7 " + state.pending().size() + " queued" : "";
         String hint = state.escArmedUntilNanos() > state.nowNanos()

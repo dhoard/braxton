@@ -116,6 +116,21 @@ class HarnessProgramTest {
     }
 
     @Test
+    void theWorkingElapsedStartsAtTheFirstTickAfterTheTurnBegins() {
+        // An idle harness does not tick, so nowNanos is the last tick the runtime delivered.
+        HarnessState idle = ready().withNow(1_000_000_000L);
+        Transition<HarnessState, HarnessMsg> started = update(idle, new HarnessMsg.Submit("hi"));
+        assertThat(HarnessProjection.topRule(started.model()).plainText())
+                .contains("Working (0s)");
+        HarnessState first = update(started.model(), new HarnessMsg.Tick(61_000_000_000L)).model();
+        assertThat(HarnessProjection.topRule(first).plainText())
+                .contains("Working (0s)");
+        HarnessState later = update(first, new HarnessMsg.Tick(66_000_000_000L)).model();
+        assertThat(HarnessProjection.topRule(later).plainText())
+                .contains("Working (5s)");
+    }
+
+    @Test
     void aMatchingResponseBlockAppendsAndFinishesTheTurn() {
         Transition<HarnessState, HarnessMsg> started = update(ready(), new HarnessMsg.Submit("hi"));
         HarnessState state = update(started.model(),

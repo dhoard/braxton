@@ -167,6 +167,12 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
 
     private Transition<HarnessState, HarnessMsg> tick(HarnessState model, long nowNanos) {
         HarnessState next = model.withNow(nowNanos);
+        if (next.working() && next.workStartedNanos() < 0L) {
+            // Submission is a pure step with no clock, and an idle harness does not tick, so the
+            // last tick can be far in the past. Start the elapsed label at the first observation
+            // of the turn instead of counting the idle period before it.
+            next = next.withWorkStarted(nowNanos);
+        }
         // Clear expired deadlines (strictly after the boundary, which stays inclusive) so the tick
         // subscription stops once nothing is pending.
         if (next.escArmedUntilNanos() > 0L && nowNanos > next.escArmedUntilNanos()) {
@@ -262,7 +268,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
         long generation = model.generation() + 1;
         HarnessState next = model.withActive(new HarnessState.Active(turn, 0))
                 .withGeneration(generation)
-                .withWorkStarted(model.nowNanos())
+                .withWorkStarted(-1L)
                 .withEscArmed(0)
                 .withScroll(0);
         if (HarnessMock.hasRecordedTurn(model)) {

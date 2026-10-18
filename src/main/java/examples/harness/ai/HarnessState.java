@@ -38,6 +38,11 @@ import io.github.dhoard.braxton.widget.EditorState;
  *
  * <p>Two confirmations are time-based: {@code escArmedUntilNanos} for cancelling a turn and
  * {@code quitArmedUntilNanos} for confirming exit with a second Ctrl+C.</p>
+ *
+ * <p>{@code workStartedNanos} is {@code -1} while a turn is active but no tick has observed it
+ * yet: submit is a pure step that reads no clock, and an idle harness does not tick, so the
+ * elapsed label starts at the first tick of the turn instead of counting the idle period before
+ * it.</p>
  */
 public record HarnessState(
         Status status,
