@@ -124,6 +124,7 @@ final class LinuxTerminalSession extends BaseTerminalSession {
     private final MemorySegment winsize;
     private final Runnable onClosed;
     private int fd = -1;
+    private volatile boolean stateSaved;
     private volatile boolean released;
 
     LinuxTerminalSession(TerminalOptions options, Runnable onClosed) {
@@ -146,6 +147,7 @@ final class LinuxTerminalSession extends BaseTerminalSession {
                 throw new IllegalStateException("tcgetattr failed");
             }
             MemorySegment.copy(termios, 0, saved, 0, TERMIOS.byteSize());
+            stateSaved = true;
 
             int iflag = termios.get(ValueLayout.JAVA_INT, OFF_IFLAG);
             int lflag = termios.get(ValueLayout.JAVA_INT, OFF_LFLAG);
@@ -255,6 +257,13 @@ final class LinuxTerminalSession extends BaseTerminalSession {
                 // Best-effort close; the descriptor is already unusable to this session.
             }
         }
+        if (!stateSaved) {
+            // Setup failed before the original modes were captured (or never ran): the saved
+            // buffer is still zeroed. Writing it back would put the terminal into a raw, no-echo
+            // state with VMIN=0 instead of leaving it untouched.
+            closeArena();
+            return;
+        }
         try (Arena restore = Arena.ofConfined()) {
             MemorySegment path = restore.allocateFrom("/dev/tty");
             int restoreFd = (int) OPEN.invokeExact(path, O_RDWR);
@@ -268,6 +277,10 @@ final class LinuxTerminalSession extends BaseTerminalSession {
         } catch (Throwable ignored) {
             // Restoration already failed; surface nothing further from close().
         }
+        closeArena();
+    }
+
+    private void closeArena() {
         try {
             arena.close();
         } catch (RuntimeException ignored) {
