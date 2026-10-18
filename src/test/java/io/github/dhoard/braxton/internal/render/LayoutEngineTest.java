@@ -61,6 +61,29 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aGrowChildInARowKeepsItsContentHeight() {
+        View<?> view = Views.row(Views.text("a"), Views.grow(Views.text("middle")));
+        Screen screen = paint(view, 1, 20);
+        assertThat(screen.plainLine(0)).isEqualTo("amiddle");
+    }
+
+    @Test
+    void anEndAlignedColumnKeepsAGrowChildsContentWidth() {
+        View<?> view = Views.column(Alignment.END, List.of(Views.grow(Views.text("mid"))));
+        Screen screen = paint(view, 1, 10);
+        assertThat(screen.plainLine(0)).isEqualTo("       mid");
+    }
+
+    @Test
+    void aColumnMeasuresTheHeightOfARowHoldingAGrowChild() {
+        View<?> view = Views.column(Views.row(Views.grow(Views.text("mid"))),
+                Views.text("last"));
+        Screen screen = paint(view, 2, 10);
+        assertThat(screen.plainLine(0)).isEqualTo("mid");
+        assertThat(screen.plainLine(1)).isEqualTo("last");
+    }
+
+    @Test
     void textIsClippedToTheAvailableWidth() {
         Screen screen = paint(Views.text("abcdefgh"), 1, 4);
         assertThat(screen.plainLine(0)).isEqualTo("abcd");

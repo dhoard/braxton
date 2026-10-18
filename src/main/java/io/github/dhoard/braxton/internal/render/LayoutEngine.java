@@ -130,7 +130,7 @@ public final class LayoutEngine {
     private int columnWidth(View.Column<?> column, int maxCols) {
         int widest = 0;
         for (int i = 0; i < column.items().size(); i++) {
-            widest = Math.max(widest, intrinsicWidth(column.items().get(i), maxCols));
+            widest = Math.max(widest, intrinsicWidth(crossAxis(column.items().get(i)), maxCols));
         }
         return widest;
     }
@@ -138,7 +138,7 @@ public final class LayoutEngine {
     private int rowHeight(View.Row<?> row, int cols) {
         int tallest = 0;
         for (int i = 0; i < row.items().size(); i++) {
-            tallest = Math.max(tallest, intrinsicHeight(row.items().get(i), cols));
+            tallest = Math.max(tallest, intrinsicHeight(crossAxis(row.items().get(i)), cols));
         }
         return tallest;
     }
@@ -321,7 +321,7 @@ public final class LayoutEngine {
                 continue;
             }
             View<?> child = items.get(i);
-            int height = Math.min(intrinsicHeight(child, width), bounds.rows());
+            int height = Math.min(intrinsicHeight(crossAxis(child), width), bounds.rows());
             int offset = 0;
             if (height < bounds.rows() && !(child instanceof View.Fill<?>)) {
                 offset = switch (row.align()) {
@@ -340,10 +340,25 @@ public final class LayoutEngine {
         if (child instanceof View.Fill<?>) {
             return cols;
         }
-        // A fixed child reports its row count as a size, but inside a column that number is the
-        // main axis; the cross-axis width still comes from what the child paints.
-        View<?> measured = child instanceof View.Fixed<?> fixed ? fixed.child() : child;
-        return Math.min(cols, intrinsicWidth(measured, cols));
+        return Math.min(cols, intrinsicWidth(crossAxis(child), cols));
+    }
+
+    /**
+     * The content that decides a child's cross axis. {@link View.Fixed} reserves and {@link View.Grow}
+     * takes main-axis space from its parent, so neither wrapper's own measurement describes the
+     * cross axis; only what the wrapper contains does.
+     */
+    private static View<?> crossAxis(View<?> child) {
+        View<?> content = child;
+        while (true) {
+            if (content instanceof View.Fixed<?> fixed) {
+                content = fixed.child();
+            } else if (content instanceof View.Grow<?> grow) {
+                content = grow.child();
+            } else {
+                return content;
+            }
+        }
     }
 
     private void paintBorder(View.BorderBox<?> box, Screen screen, Rect bounds, List<Region> regions) {
