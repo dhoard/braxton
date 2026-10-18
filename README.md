@@ -349,6 +349,11 @@ Defaults are configuration, not hidden constants:
 failures without hiding the primary cause. Rendering is event-driven: an idle application does no
 work, and an interval subscription drives animation only while it is needed.
 
+The runtime runs on Java 25 virtual threads: the input reader, the resize poller, the timer worker,
+the effect executor's tasks, and the terminal-restore shutdown hook are all virtual threads, so a
+blocking read, sleep, or application task parks instead of holding a platform thread. The runtime
+owner is the caller's thread; `Application.run` does not start or hijack it.
+
 ## AI Harness
 
 `examples.harness.ai.HarnessProgram` is a complete application built on the public API:

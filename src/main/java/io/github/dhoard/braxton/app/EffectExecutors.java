@@ -25,14 +25,17 @@ package io.github.dhoard.braxton.app;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Shared daemon pool for application effect tasks. */
+/**
+ * Shared executor for application effect tasks.
+ *
+ * <p>Every task runs on its own virtual thread: a task is application work that may block on I/O,
+ * and the project requires virtual threads unless one cannot work. The executor is never shut
+ * down; virtual threads are daemons, so idle capacity cannot keep the process alive.</p>
+ */
 final class EffectExecutors {
 
-    private static final ExecutorService SHARED = Executors.newCachedThreadPool(runnable -> {
-        Thread thread = new Thread(runnable, "braxton-effect");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private static final ExecutorService SHARED = Executors.newThreadPerTaskExecutor(
+            Thread.ofVirtual().name("braxton-effect-", 0).factory());
 
     private EffectExecutors() {
     }

@@ -44,6 +44,22 @@ class SystemTimersTest {
     }
 
     @Test
+    void aScheduledTaskRunsOnAVirtualThread() throws InterruptedException {
+        java.util.concurrent.atomic.AtomicBoolean virtual = new java.util.concurrent.atomic.AtomicBoolean();
+        CountDownLatch ran = new CountDownLatch(1);
+        Timers.Handle handle = SystemTimers.INSTANCE.schedule(1_000_000L, () -> {
+            virtual.set(Thread.currentThread().isVirtual());
+            ran.countDown();
+        });
+        try {
+            assertThat(ran.await(5, TimeUnit.SECONDS)).isTrue();
+        } finally {
+            handle.cancel();
+        }
+        assertThat(virtual.get()).isTrue();
+    }
+
+    @Test
     void aShortDelayStillFires() throws InterruptedException {
         CountDownLatch ran = new CountDownLatch(1);
         Timers.Handle handle = SystemTimers.INSTANCE.schedule(1_000_000L, ran::countDown);

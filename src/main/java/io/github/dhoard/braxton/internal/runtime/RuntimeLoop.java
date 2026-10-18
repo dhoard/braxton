@@ -58,6 +58,10 @@ import io.github.dhoard.braxton.view.View;
  * touches the model: routing, {@code update}, command interpretation, subscription reconciliation,
  * layout, and output. Input, timers, tasks, and sources only enqueue immutable envelopes. Rendering
  * happens after a committed change or a resize, so an idle application performs no work.</p>
+ *
+ * <p>The owner is the caller's thread; the two reader threads (input and resize) are virtual
+ * threads. Both block on streams or sleeps, which is exactly what a virtual thread handles without
+ * holding a carrier thread.</p>
  */
 public final class RuntimeLoop<M, Msg> {
 
@@ -220,7 +224,7 @@ public final class RuntimeLoop<M, Msg> {
     // ── threads ──────────────────────────────────────────────────────────────
 
     private Thread startInputThread() {
-        Thread thread = new Thread(() -> {
+        return Thread.ofVirtual().name("braxton-input").start(() -> {
             InputDecoder decoder = new InputDecoder(session.input());
             while (!Thread.currentThread().isInterrupted()) {
                 try {
@@ -246,14 +250,11 @@ public final class RuntimeLoop<M, Msg> {
                     return;
                 }
             }
-        }, "braxton-input");
-        thread.setDaemon(true);
-        thread.start();
-        return thread;
+        });
     }
 
     private Thread startResizeThread() {
-        Thread thread = new Thread(() -> {
+        return Thread.ofVirtual().name("braxton-resize").start(() -> {
             Size last = session.size();
             while (!Thread.currentThread().isInterrupted()) {
                 try {
@@ -278,10 +279,7 @@ public final class RuntimeLoop<M, Msg> {
                     return;
                 }
             }
-        }, "braxton-resize");
-        thread.setDaemon(true);
-        thread.start();
-        return thread;
+        });
     }
 
     private void offerControl(Mailbox.Envelope envelope) {

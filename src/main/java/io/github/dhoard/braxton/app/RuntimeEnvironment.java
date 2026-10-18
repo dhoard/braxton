@@ -29,7 +29,8 @@ import java.util.function.LongSupplier;
 /**
  * Injected runtime services.
  *
- * <p>The system implementation uses real time, a shared timer, and a daemon effect executor.
+ * <p>The system implementation uses real time, a shared timer, and an effect executor that gives
+ * each task a virtual thread (e.g. a waiting task parks instead of pinning a platform thread).
  * Tests provide manual timers and a controlled executor; production injection points stay small so
  * applications cannot accidentally reach terminal or thread state from pure code.</p>
  */
@@ -43,7 +44,7 @@ public record RuntimeEnvironment(LongSupplier nanoTime, Executor effectExecutor,
         diagnostics = diagnostics == null ? message -> { } : diagnostics;
     }
 
-    /** Real time, real timers, and a shared daemon executor for effect tasks. */
+    /** Real time, real timers, and a shared virtual-thread executor for effect tasks. */
     public static RuntimeEnvironment system() {
         return new RuntimeEnvironment(System::nanoTime, EffectExecutors.shared(),
                 Timers.system(), message -> { });

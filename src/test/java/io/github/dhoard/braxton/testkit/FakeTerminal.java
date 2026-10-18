@@ -50,6 +50,10 @@ public final class FakeTerminal implements TerminalBackend, TerminalSession {
     private volatile Size size;
     private volatile boolean open;
     private volatile boolean closed;
+    private final java.util.concurrent.atomic.AtomicBoolean virtualRead =
+            new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.atomic.AtomicBoolean virtualSize =
+            new java.util.concurrent.atomic.AtomicBoolean();
     private TerminalOptions options = TerminalOptions.DEFAULT;
 
     public FakeTerminal(Size size) {
@@ -112,7 +116,18 @@ public final class FakeTerminal implements TerminalBackend, TerminalSession {
 
     @Override
     public Size size() {
+        virtualSize.compareAndSet(false, Thread.currentThread().isVirtual());
         return size;
+    }
+
+    /** Whether a read was first observed on a virtual thread. */
+    public boolean readOnVirtualThread() {
+        return virtualRead.get();
+    }
+
+    /** Whether a size probe was first observed on a virtual thread. */
+    public boolean measuredOnVirtualThread() {
+        return virtualSize.get();
     }
 
     @Override
@@ -139,7 +154,7 @@ public final class FakeTerminal implements TerminalBackend, TerminalSession {
         input.end();
     }
 
-    private static final class ScriptedInput extends InputStream {
+    private final class ScriptedInput extends InputStream {
 
         private final Deque<Integer> bytes = new ArrayDeque<>();
         private boolean ended;
@@ -165,6 +180,7 @@ public final class FakeTerminal implements TerminalBackend, TerminalSession {
 
         @Override
         public synchronized int read() {
+            recordThread();
             if (failure != null) {
                 throw failure;
             }
@@ -184,6 +200,7 @@ public final class FakeTerminal implements TerminalBackend, TerminalSession {
 
         @Override
         public synchronized int read(byte[] buffer, int offset, int length) {
+            recordThread();
             int first = read();
             if (first < 0) {
                 return -1;
@@ -200,6 +217,10 @@ public final class FakeTerminal implements TerminalBackend, TerminalSession {
         @Override
         public synchronized int available() {
             return bytes.size();
+        }
+
+        private void recordThread() {
+            virtualRead.compareAndSet(false, Thread.currentThread().isVirtual());
         }
 
         @Override

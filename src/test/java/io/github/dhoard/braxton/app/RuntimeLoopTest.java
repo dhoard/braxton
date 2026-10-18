@@ -109,8 +109,8 @@ class RuntimeLoopTest {
     void aResizeIsMeasuredAndPaintedWithoutAnotherMessage() throws Exception {
         FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
         RuntimeOptions options = options(new FakeTerminal.ManualTimers());
-        Thread run = new Thread(() -> Application.run(new Measured(), options, terminal), "resize-test");
-        run.start();
+        Thread run = Thread.ofVirtual().name("resize-test")
+                .start(() -> Application.run(new Measured(), options, terminal));
         await(() -> terminal.output().contains("size: 6x20"));
 
         terminal.resize(new Size(4, 10));
@@ -120,6 +120,21 @@ class RuntimeLoopTest {
         run.join(5_000L);
         assertThat(run.isAlive()).isFalse();
         assertThat(terminal.output()).contains("size: 4x10");
+    }
+
+    @Test
+    @Timeout(15)
+    void theReaderThreadsAreVirtualThreads() throws Exception {
+        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        RuntimeOptions options = options(new FakeTerminal.ManualTimers());
+        Thread run = Thread.ofVirtual().name("reader-kinds")
+                .start(() -> Application.run(new Counter(), options, terminal));
+        await(() -> terminal.readOnVirtualThread() && terminal.measuredOnVirtualThread());
+        terminal.endInput();
+        run.join(5_000L);
+        assertThat(run.isAlive()).isFalse();
+        assertThat(terminal.readOnVirtualThread()).as("input reader").isTrue();
+        assertThat(terminal.measuredOnVirtualThread()).as("resize poller").isTrue();
     }
 
     @Test

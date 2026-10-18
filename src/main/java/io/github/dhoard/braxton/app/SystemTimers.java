@@ -27,17 +27,20 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-/** Shared daemon scheduler for real-time operation. */
+/**
+ * Shared scheduler for real-time operation.
+ *
+ * <p>One virtual thread serializes scheduled tasks, so timer callbacks keep their previous ordering
+ * while a waiting or blocking callback parks instead of pinning a platform thread. Virtual threads
+ * are daemons, so pending timers cannot keep the process alive.</p>
+ */
 final class SystemTimers implements Timers {
 
     static final SystemTimers INSTANCE = new SystemTimers();
 
     private final ScheduledExecutorService scheduler =
-            Executors.newSingleThreadScheduledExecutor(runnable -> {
-                Thread thread = new Thread(runnable, "braxton-timers");
-                thread.setDaemon(true);
-                return thread;
-            });
+            Executors.newSingleThreadScheduledExecutor(
+                    Thread.ofVirtual().name("braxton-timers").factory());
 
     private SystemTimers() {
     }

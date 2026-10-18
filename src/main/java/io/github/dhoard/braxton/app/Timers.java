@@ -32,7 +32,7 @@ public interface Timers {
         void cancel();
     }
 
-    /** Real time, backed by a shared daemon scheduler. */
+    /** Real time, backed by a shared scheduler whose worker is a virtual thread. */
     static Timers system() {
         return SystemTimers.INSTANCE;
     }

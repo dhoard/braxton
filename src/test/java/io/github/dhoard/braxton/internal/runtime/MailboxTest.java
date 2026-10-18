@@ -40,7 +40,7 @@ class MailboxTest {
         mailbox.enqueueFromOwner(new Mailbox.AppMessage("first"));
         CountDownLatch started = new CountDownLatch(1);
         AtomicBoolean accepted = new AtomicBoolean();
-        Thread producer = new Thread(() -> {
+        Thread producer = Thread.ofVirtual().start(() -> {
             started.countDown();
             try {
                 accepted.set(mailbox.enqueue(new Mailbox.AppMessage("second"), Long.MAX_VALUE));
@@ -48,7 +48,6 @@ class MailboxTest {
                 Thread.currentThread().interrupt();
             }
         });
-        producer.start();
         assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
         Thread.sleep(100L);
         assertThat(mailbox.size()).isEqualTo(1);
@@ -65,7 +64,7 @@ class MailboxTest {
         mailbox.enqueueFromOwner(new Mailbox.AppMessage("first"));
         CountDownLatch started = new CountDownLatch(1);
         AtomicBoolean accepted = new AtomicBoolean(true);
-        Thread producer = new Thread(() -> {
+        Thread producer = Thread.ofVirtual().start(() -> {
             started.countDown();
             try {
                 accepted.set(mailbox.enqueue(new Mailbox.AppMessage("second"), 60_000L));
@@ -73,8 +72,6 @@ class MailboxTest {
                 Thread.currentThread().interrupt();
             }
         });
-        producer.setDaemon(true);
-        producer.start();
         assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
         Thread.sleep(100L);
         mailbox.close();
@@ -88,15 +85,13 @@ class MailboxTest {
     void closeWakesABlockedConsumer() throws Exception {
         Mailbox mailbox = new Mailbox(4);
         AtomicReference<Mailbox.Envelope> polled = new AtomicReference<>();
-        Thread consumer = new Thread(() -> {
+        Thread consumer = Thread.ofVirtual().start(() -> {
             try {
                 polled.set(mailbox.poll(60_000L));
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
             }
         });
-        consumer.setDaemon(true);
-        consumer.start();
         Thread.sleep(100L);
         mailbox.close();
         consumer.join(2_000L);

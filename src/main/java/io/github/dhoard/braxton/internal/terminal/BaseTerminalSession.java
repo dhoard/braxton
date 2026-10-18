@@ -51,7 +51,7 @@ abstract class BaseTerminalSession implements TerminalSession {
         this.options = options == null ? TerminalOptions.DEFAULT : options;
         this.capabilities = capabilities;
         this.input = new NativeInputStream();
-        this.shutdownHook = new Thread(this::close, "braxton-terminal-restore");
+        this.shutdownHook = Thread.ofVirtual().name("braxton-terminal-restore").unstarted(this::close);
     }
 
     /**
