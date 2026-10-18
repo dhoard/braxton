@@ -48,6 +48,32 @@ class LayoutEngineTest {
         return engine.layout(view, new Rect(0, 0, rows, cols)).screen();
     }
 
+    /** Rows whose cells carry a background, i.e. rows a fill actually painted. */
+    private static int filledRows(View<?> view, int rows, int cols) {
+        Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, rows, cols)).screen();
+        int filled = 0;
+        for (int row = 0; row < rows; row++) {
+            if (screen.cell(row, 0).style().background() != null) {
+                filled++;
+            }
+        }
+        return filled;
+    }
+
+    @Test
+    void aRootFixedOrGrowDefersToTheViewportBecauseNoParentAllocatesItsAxis() {
+        // Fixed and Grow reserve space on a parent's main axis. A document whose root is one of
+        // them has no such parent, so the child paints the whole viewport instead of being
+        // clipped to the nominal size.
+        Style background = Style.bg(Colors.ERROR_400);
+        assertThat(filledRows(Views.fixed(2, Views.fill(background)), 4, 6)).isEqualTo(4);
+        assertThat(filledRows(Views.grow(Views.fill(background)), 4, 6)).isEqualTo(4);
+        // A column of fills is only as tall as its children's intrinsic rows (one each), so a
+        // full-viewport background must be a root fill or an overlay layer.
+        assertThat(filledRows(Views.column(Views.fill(background), Views.fill(background)), 4, 6))
+                .isEqualTo(2);
+    }
+
     @Test
     void fixedAndGrowChildrenSplitTheAvailableHeight() {
         View<?> view = Views.column(
