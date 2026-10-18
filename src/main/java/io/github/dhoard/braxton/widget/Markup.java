@@ -54,6 +54,10 @@ import io.github.dhoard.braxton.view.Views;
  * space-separated {@code style} list. The document's own root element is rendered, so a document
  * may be a list, a table, or a paragraph without an extra wrapper. Parsing never resolves external entities, DTDs, or network
  * resources; malformed markup fails with a diagnostic instead of rendering partial output.</p>
+ *
+ * <p>The input is a well-formed XML document, not HTML: it has exactly one root element and an
+ * element that encloses no content is closed explicitly, so a line break is written {@code <br/>}
+ * and a bare {@code <br>} is rejected like any other malformed document.</p>
  */
 public final class Markup {
 

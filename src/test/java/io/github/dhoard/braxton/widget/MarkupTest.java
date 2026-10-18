@@ -178,4 +178,21 @@ class MarkupTest {
         assertThat(Markup.parse("<root><unknown>kept</unknown></root>").plainText())
                 .isEqualTo("kept");
     }
+
+    @Test
+    void emptyElementsMustBeClosedExplicitlyBecauseTheDocumentIsXml() {
+        // The documented contract: markup is a well-formed XML document, not HTML, so an empty
+        // element is closed explicitly. A bare void tag is a malformed document, not a break.
+        assertThat(Markup.parse("<root>a<br/>b</root>").plainText()).isEqualTo("a\nb");
+        assertThat(Markup.parse("<root><span></span>empty</root>").plainText()).isEqualTo("empty");
+        org.assertj.core.api.Assertions
+                .assertThatThrownBy(() -> Markup.parse("<root>a<br>b</root>"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("invalid markup");
+        org.assertj.core.api.Assertions
+                .assertThatThrownBy(() -> Markup.parse("<p>one</p><p>two</p>"))
+                .as("one document has exactly one root element")
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("invalid markup");
+    }
 }

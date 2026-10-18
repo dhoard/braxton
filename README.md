@@ -318,7 +318,9 @@ All widgets are immutable values or pure factories producing `StyledText`/`View`
 | `FontLoader`, `FigletFont`, `Logo` | Bundled FIGlet fonts and styled logos |
 | `ImageAsset`, `ImageView` | Explicit image loading and pixel-art rendering |
 
-`Markup` disables DTDs and external entities, so untrusted text cannot fetch a file or URL.
+`Markup` parses one well-formed XML document, so inline markup stays predictable: exactly one
+root element and explicitly closed empty elements (`<br/>`, not `<br>`). It disables DTDs and
+external entities, so untrusted text cannot fetch a file or URL.
 
 **Clipboard and paste.** `PasteSanitizer` offers `NORMAL` (preserves indentation) and `AGGRESSIVE`
 (trims and can collapse blank lines) modes. `ClipboardConfig` snapshots `braxton.clipboard.*`
