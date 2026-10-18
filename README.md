@@ -379,6 +379,8 @@ owner is the caller's thread; `Application.run` does not start or hijack it.
 | Alt+T / Alt+L | Copy the visible transcript / the last assistant reply |
 
 Any other key cancels a pending Ctrl+C confirmation; a later Ctrl+C becomes the new first press.
+Transient feedback (clipboard outcomes, a full queue, the Ctrl+C confirmation) appears on the rule
+above the footer until the next action replaces it.
 The harness is fully offline: it replays a sanitized bundled transcript and deterministic fallback
 responses, with no model, provider, network, or user-session access.
 

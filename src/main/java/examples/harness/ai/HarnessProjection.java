@@ -265,8 +265,14 @@ final class HarnessProjection {
         return rule(width, label);
     }
 
+    /**
+     * The status line. {@link HarnessState#statusMessage()} carries the program's transient
+     * feedback ("Queue full (64); prompt not submitted.", clipboard outcomes, the Ctrl+C hint), so
+     * it is painted here; an absent or blank message leaves the plain rule unchanged.
+     */
     static StyledText bottomRule(HarnessState state) {
-        return rule(Math.max(1, state.viewport().cols()), "");
+        String message = state.statusMessage();
+        return rule(Math.max(1, state.viewport().cols()), message == null ? "" : message);
     }
 
     static List<StyledText> footer(HarnessState state) {

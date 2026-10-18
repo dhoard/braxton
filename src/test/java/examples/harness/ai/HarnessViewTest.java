@@ -138,6 +138,30 @@ class HarnessViewTest {
     }
 
     @Test
+    void theStatusMessageIsPaintedOnTheBottomRule() {
+        HarnessState quiet = state("hello");
+        HarnessProjection.Allocation allocation =
+                HarnessProjection.allocate(40, quiet.editorRows());
+        int ruleRow = allocation.transcript() + allocation.gap() + allocation.topRule()
+                + allocation.composer();
+        assertThat(lines(quiet).get(ruleRow)).isEqualTo("\u2500".repeat(120));
+
+        String message = "Copied to the in-process clipboard only.";
+        List<String> speaking = lines(quiet.withStatusMessage(message));
+        assertThat(speaking.get(ruleRow)).contains(message);
+        assertThat(io.github.dhoard.braxton.style.TextMeasure.columns(speaking.get(ruleRow)))
+                .isEqualTo(120);
+
+        String head = "Queue full (64); prompt not submitted.";
+        String overlong = lines(quiet.withStatusMessage(head + " " + "x".repeat(200))).get(ruleRow);
+        assertThat(overlong).contains(head).contains("\u2026");
+        assertThat(overlong.chars().filter(c -> c == 'x').count())
+                .as("the tail is cut at the rule's label budget")
+                .isLessThan(200);
+        assertThat(io.github.dhoard.braxton.style.TextMeasure.columns(overlong)).isEqualTo(120);
+    }
+
+    @Test
     void copyVisibleOmitsTheScrollbarColumn() {
         HarnessState overflowing = state("hello").withViewport(new Size(12, 40));
         assertThat(String.join("\n", lines(overflowing))).contains("\u2502");
