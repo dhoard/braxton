@@ -498,6 +498,53 @@ class RuntimeLoopTest {
     }
 
     @Test
+    @Timeout(15)
+    void anIdleApplicationDoesNoWorkAndWritesNothing() throws Exception {
+        // The documented rendering model: "an idle application does no work". With no envelope to
+        // process, the owner must neither call update nor rebuild the view nor repaint, however
+        // many poll and resize intervals elapse.
+        FakeTerminal terminal = new FakeTerminal(new Size(4, 12));
+        java.util.concurrent.atomic.AtomicInteger updates =
+                new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger views =
+                new java.util.concurrent.atomic.AtomicInteger();
+        Program<Integer, String> program = new Program<>() {
+            @Override
+            public Transition<Integer, String> init(InitContext context) {
+                return Transition.stay(0);
+            }
+
+            @Override
+            public Transition<Integer, String> update(Integer model, String message) {
+                updates.incrementAndGet();
+                return Transition.stay(model + 1);
+            }
+
+            @Override
+            public View<String> view(Integer model, Viewport viewport) {
+                views.incrementAndGet();
+                return Views.keyed(List.of(Binding.of("a", "inc")),
+                        Views.text("idle " + model), List.of());
+            }
+        };
+        Thread run = Thread.ofVirtual().name("idle-test")
+                .start(() -> Application.run(program, options(new FakeTerminal.ManualTimers()),
+                        terminal));
+        await(() -> views.get() == 1);
+        List<String> firstFrame = terminal.writes();
+        Thread.sleep(400L);
+        assertThat(updates).as("an idle application calls no update").hasValue(0);
+        assertThat(views).as("an idle application does not rebuild its view").hasValue(1);
+        assertThat(terminal.writes()).as("an idle application writes no frame").isEqualTo(firstFrame);
+
+        terminal.feed("a");
+        await(() -> terminal.writes().size() > firstFrame.size());
+        terminal.endInput();
+        run.join(5_000L);
+        assertThat(run.isAlive()).isFalse();
+    }
+
+    @Test
     void theSessionIsClosedEvenWhenStartupFails() {
         FakeTerminal terminal = new FakeTerminal(new Size(4, 10));
         Program<Integer, String> broken = new Program<>() {
