@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
 
 /** Headless rendering measures with the same policy it lays out with. */
@@ -44,5 +45,39 @@ class ScreenRendererTest {
         String text = "\u65E5\u672C";
         assertThat(oneColumn.plainText(Views.text(text), new Viewport(1, 2))).isEqualTo(text);
         assertThat(oneColumn.columns(text)).isEqualTo(2);
+    }
+
+    @Test
+    void theHeadlessEntryPointsDescribeOneScreen() {
+        // ScreenRenderer documents four views of the same layout: the screen, one string per row
+        // with trailing blanks trimmed, the rows joined with newlines, and the policy-aware column
+        // count. They must agree for every viewport.
+        ScreenRenderer renderer = new ScreenRenderer();
+        String text = "a b\n\u65E5\u672C c";
+        io.github.dhoard.braxton.view.View<String> view = io.github.dhoard.braxton.view.Views.column(
+                io.github.dhoard.braxton.view.Views.padding(1,
+                        io.github.dhoard.braxton.view.Views.text(text)));
+        for (io.github.dhoard.braxton.layout.Viewport viewport : java.util.List.of(
+                new io.github.dhoard.braxton.layout.Viewport(1, 1),
+                new io.github.dhoard.braxton.layout.Viewport(3, 5),
+                new io.github.dhoard.braxton.layout.Viewport(6, 20))) {
+            io.github.dhoard.braxton.internal.render.Screen screen = renderer.screen(view, viewport);
+            assertThat(screen.rows()).as("rows").isEqualTo(viewport.rows());
+            assertThat(screen.cols()).as("cols").isEqualTo(viewport.cols());
+            java.util.List<String> lines = renderer.plainLines(view, viewport);
+            assertThat(lines).hasSize(viewport.rows());
+            assertThat(lines).isEqualTo(screen.plainLines());
+            assertThat(renderer.plainText(view, viewport)).isEqualTo(String.join("\n", lines));
+            assertThat(lines).allSatisfy(line -> {
+                assertThat(TextMeasure.columns(line)).as("line [%s]", line)
+                        .isLessThanOrEqualTo(viewport.cols());
+                assertThat(line).as("trailing blanks are trimmed").isEqualTo(line.stripTrailing());
+            });
+        }
+        io.github.dhoard.braxton.view.View<String> spaced = io.github.dhoard.braxton.view.Views.text(
+                "a  b");
+        assertThat(renderer.plainLines(spaced,
+                new io.github.dhoard.braxton.layout.Viewport(1, 6)))
+                .as("interior blanks are kept as columns").containsExactly("a  b");
     }
 }
