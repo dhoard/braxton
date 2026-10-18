@@ -171,7 +171,11 @@ public final class Editor {
     private static EditorState moveVertical(EditorState state, int direction) {
         int line = state.lineAt(state.caret());
         int lineStart = state.lineStart(line);
-        int column = graphemeColumn(state.text(), lineStart, state.caret());
+        // A vertical move keeps the column the caret was at on the line it came from, even when a
+        // shorter line in between clamps it; horizontal moves and edits reset the preference.
+        int column = state.preferredColumn() > 0
+                ? state.preferredColumn()
+                : graphemeColumn(state.text(), lineStart, state.caret());
         int targetLine = Math.max(0, Math.min(state.lineCount() - 1, line + direction));
         int targetStart = state.lineStart(targetLine);
         int targetEnd = state.lineEnd(targetLine);

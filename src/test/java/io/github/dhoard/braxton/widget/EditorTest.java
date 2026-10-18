@@ -145,9 +145,21 @@ class EditorTest {
     void verticalMovementKeepsThePreferredColumnWithinBounds() {
         EditorState state = EditorState.of("abcd\nx");
         state = new EditorState(state.text(), 3, 3, 0);
-        assertThat(update(state, new EditorAction.MoveDown()).caret())
-                .isEqualTo("abcd\nx".length());
-        assertThat(update(state, new EditorAction.MoveUp()).caret()).isEqualTo(3);
+        EditorState down = update(state, new EditorAction.MoveDown());
+        assertThat(down.caret()).isEqualTo("abcd\nx".length());
+        assertThat(down.preferredColumn()).isEqualTo(3);
+        assertThat(update(down, new EditorAction.MoveUp()).caret()).isEqualTo(3);
+    }
+
+    @Test
+    void verticalMovementRestoresThePreferredColumnAfterAShortLine() {
+        String text = "abcdef\nx\nabcdef";
+        EditorState state = new EditorState(text, 6, 6, 0);
+        EditorState first = update(state, new EditorAction.MoveDown());
+        assertThat(first.preferredColumn()).isEqualTo(6);
+        EditorState second = update(first, new EditorAction.MoveDown());
+        assertThat(second.caret()).isEqualTo(text.length());
+        assertThat(second.preferredColumn()).isEqualTo(6);
     }
 
     @Test
