@@ -259,6 +259,28 @@ class HarnessViewTest {
     }
 
     @Test
+    void everyScrollbarRowKeepsTheBarInItsLastColumn() {
+        // A row whose last two columns hold one wide glyph cannot be cut to width - 1 columns
+        // without dropping it, so the body must be padded before the bar is appended.
+        HarnessState narrow = new HarnessState(HarnessState.Status.READY,
+                List.of(new HarnessEntry.Assistant("\u65E5")), PROFILE,
+                HarnessTranscript.Usage.EMPTY, 1_048_576, List.of(), 0, EditorState.empty(), 0,
+                List.of(), null, 0L, 0L, 0L, 0L, 0L, new Size(9, 3), "", "~/braxton");
+        List<io.github.dhoard.braxton.style.StyledText> window =
+                HarnessProjection.window(narrow, 3, 9, narrow.editorRows());
+        assertThat(window).hasSize(2);
+        for (io.github.dhoard.braxton.style.StyledText row : window) {
+            String plain = row.plainText();
+            assertThat(io.github.dhoard.braxton.style.TextMeasure.columns(plain))
+                    .as("row [%s]", plain)
+                    .isEqualTo(3);
+            assertThat(plain.endsWith("\u2502") || plain.endsWith("\u2503"))
+                    .as("row [%s] ends with the scrollbar", plain)
+                    .isTrue();
+        }
+    }
+
+    @Test
     void workingRuleShowsSpinnerElapsedQueueAndHint() {
         HarnessState working = new HarnessState(HarnessState.Status.READY, List.of(), PROFILE,
                 HarnessTranscript.Usage.EMPTY, 1_048_576, List.of(), 0, EditorState.empty(), 0,

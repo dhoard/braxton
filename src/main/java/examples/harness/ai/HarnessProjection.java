@@ -408,6 +408,13 @@ final class HarnessProjection {
             return StyledText.empty();
         }
         StyledText body = truncateStyled(content, width - 1);
+        // A wide glyph straddling the last body column is dropped whole, so the body can end up
+        // short; pad it or the bar lands left of every other row's bar.
+        int used = TextMeasure.columns(body.plainText());
+        if (used < width - 1) {
+            body = body.append(StyledText.of(" ".repeat(width - 1 - used),
+                    HarnessTheme.BACKGROUND));
+        }
         return body.append(StyledText.of(glyph, style.withBackground(HarnessTheme.BACKGROUND_COLOR)));
     }
 
