@@ -40,6 +40,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import io.github.dhoard.braxton.style.TextMeasure;
+
 /**
  * Reads the newline-delimited transcript format used by the bundled example and by Amanda session
  * logs: each line is a JSON object with a {@code kind} and a {@code payload}. This is a data-format
@@ -327,7 +329,13 @@ final class TranscriptJsonlReader {
 
     private static String compact(String value) {
         String compact = value.replaceAll("\\s+", " ").strip();
-        return compact.length() <= 80 ? compact : compact.substring(0, 79) + "\u2026";
+        if (compact.length() <= 80) {
+            return compact;
+        }
+        // The budget is in UTF-16 units, so end the kept prefix on a grapheme boundary: a
+        // surrogate pair or an emoji sequence must never reach the view half-formed.
+        int end = TextMeasure.boundaryBefore(compact, 79);
+        return compact.substring(0, end) + "\u2026";
     }
 
     private static JsonObject parseObject(String value) {

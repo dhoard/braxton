@@ -37,6 +37,32 @@ class TranscriptJsonlReaderTest {
     }
 
     @Test
+    void aCompactToolCallNeverSplitsASurrogatePair() {
+        // The 80-unit budget falls inside the emoji, so a plain substring would leave a lone high
+        // surrogate in the rendered call line.
+        String arguments = "{\"q\":\"" + "a".repeat(72) + "\uD83D\uDE00\"}";
+        String call = TranscriptJsonlReader.formatCall("mystery", arguments);
+        assertThat(wellFormed(call)).as("call [%s]", call).isTrue();
+        assertThat(call).endsWith("\u2026");
+        assertThat(call).doesNotContain("\uD83D\uDE00");
+    }
+
+    private static boolean wellFormed(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (Character.isHighSurrogate(c)) {
+                if (i + 1 >= text.length() || !Character.isLowSurrogate(text.charAt(i + 1))) {
+                    return false;
+                }
+                i++;
+            } else if (Character.isLowSurrogate(c)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Test
     void anUnfinishedToolCallWithoutACallIdIsRenderedAsPending() throws IOException {
         HarnessTranscript transcript = read("""
                 {"kind":"event","payload":{"type":"input.attached","inputId":"i1","text":"hello"}}
