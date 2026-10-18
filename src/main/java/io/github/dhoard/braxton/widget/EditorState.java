@@ -136,9 +136,18 @@ public record EditorState(String text, int caret, int anchor, int preferredColum
     public String displayText(EditorOptions options) {
         return switch (options.masking()) {
             case NONE -> text;
-            case PASSWORD -> "\u2022".repeat(TextMeasure.graphemeCount(text));
+            case PASSWORD -> masked();
             case HIDDEN -> "";
         };
+    }
+
+    /** One mask glyph per cluster, line breaks kept, exactly as {@link Editor#render} draws them. */
+    private String masked() {
+        StringBuilder masked = new StringBuilder(text.length());
+        for (String cluster : TextMeasure.graphemes(text)) {
+            masked.append("\n".equals(cluster) ? "\n" : "\u2022");
+        }
+        return masked.toString();
     }
 
     public Optional<String> caretLine() {

@@ -102,6 +102,16 @@ class EditorTest {
     }
 
     @Test
+    void maskedDisplayTextKeepsTheDraftLineStructure() {
+        EditorOptions password = OPTIONS.withMasking(EditorOptions.Masking.PASSWORD)
+                .withPrompt("", io.github.dhoard.braxton.style.Style.NONE);
+        EditorState state = EditorState.of("ab\nc");
+        assertThat(state.displayText(password))
+                .isEqualTo(Editor.render(state, password, false).plainText())
+                .isEqualTo("\u2022\u2022\n\u2022");
+    }
+
+    @Test
     void hiddenEditorsRenderNoContent() {
         EditorOptions hidden = OPTIONS.withMasking(EditorOptions.Masking.HIDDEN);
         assertThat(Editor.render(EditorState.of("secret"), hidden, false).plainText())
