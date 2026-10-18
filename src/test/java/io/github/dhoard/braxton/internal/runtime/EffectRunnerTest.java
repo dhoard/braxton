@@ -177,6 +177,43 @@ class EffectRunnerTest {
     }
 
     @Test
+    void aThrowingSuccessMapperIsReportedThroughTheFailureMapper() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            RuntimeEnvironment async = new RuntimeEnvironment(() -> 0L, executor, timers,
+                    message -> { });
+            EffectRunner<String> asyncRunner = new EffectRunner<>(mailbox, async, clipboard, 4);
+            asyncRunner.bindOwner(Thread.currentThread());
+            asyncRunner.interpret(Command.task(EffectId.of("work"), () -> "value",
+                    value -> {
+                        throw new IllegalStateException("mapper broke");
+                    },
+                    failure -> "failure:" + failure.getMessage()));
+            String message = nextMessage();
+            assertThat(message).isEqualTo("failure:mapper broke");
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void aThrowingFailureMapperIsContainedAndReportedAsADiagnostic() throws Exception {
+        List<String> diagnostics = new ArrayList<>();
+        RuntimeEnvironment reporting = new RuntimeEnvironment(() -> 0L, Runnable::run, timers,
+                diagnostics::add);
+        EffectRunner<String> runner = new EffectRunner<>(mailbox, reporting, clipboard, 4);
+        runner.bindOwner(Thread.currentThread());
+        runner.interpret(Command.task(EffectId.of("work"), () -> {
+            throw new IllegalStateException("work broke");
+        }, value -> "ok", failure -> {
+            throw new IllegalStateException("failure mapper broke");
+        }));
+        assertThat(mailbox.size()).as("no message can be produced").isZero();
+        assertThat(diagnostics).anySatisfy(message ->
+                assertThat(message).contains("effect work").contains("failure mapper"));
+    }
+
+    @Test
     void copyReportsTheTruthfulResultAndWritesThroughTheSession() throws Exception {
         ClipboardConfig config = ClipboardConfig.builder()
                 .tmuxStrategy(io.github.dhoard.braxton.clipboard.TmuxStrategy.DIRECT).build();

@@ -162,8 +162,8 @@ public final class EffectRunner<Msg> {
         Entry entry;
         synchronized (lock) {
             if (entries.size() >= maxEffects && !entries.containsKey(command.id())) {
-                deliver(command.onFailure().apply(
-                        new IllegalStateException("effect quota exhausted: " + command.id())));
+                deliverFailure(command,
+                        new IllegalStateException("effect quota exhausted: " + command.id()));
                 return;
             }
             entry = new Entry(command.id(), nextEpoch++, true, Duration.ZERO);
@@ -174,10 +174,10 @@ public final class EffectRunner<Msg> {
             executor.execute(() -> runTask(command, entry));
         } catch (RejectedExecutionException rejected) {
             finish(entry);
-            deliver(command.onFailure().apply(rejected));
+            deliverFailure(command, rejected);
         } catch (RuntimeException rejected) {
             finish(entry);
-            deliver(command.onFailure().apply(rejected));
+            deliverFailure(command, rejected);
         }
     }
 
@@ -202,10 +202,30 @@ public final class EffectRunner<Msg> {
         if (!current) {
             return;
         }
-        if (failure == null) {
-            deliver(command.onSuccess().apply(value));
-        } else {
+        if (failure != null) {
+            deliverFailure(command, failure);
+            return;
+        }
+        Msg message;
+        try {
+            message = command.onSuccess().apply(value);
+        } catch (Throwable mapperFailure) {
+            // A completion mapper is application code. If it throws, the effect must still resolve:
+            // report the mapper's failure through the failure mapper instead of losing the effect
+            // on an uncaught exception.
+            deliverFailure(command, mapperFailure);
+            return;
+        }
+        deliver(message);
+    }
+
+    /** Reports a failed or unmappable completion, containing a throwing failure mapper. */
+    private void deliverFailure(Command.Task<Msg> command, Throwable failure) {
+        try {
             deliver(command.onFailure().apply(failure));
+        } catch (Throwable mapperFailure) {
+            environment.diagnostics().accept("effect " + command.id()
+                    + ": failure mapper threw " + mapperFailure.getClass().getSimpleName());
         }
     }
 
