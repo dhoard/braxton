@@ -95,6 +95,17 @@ class SubscriptionManagerTest {
     }
 
     @Test
+    void closeAllStopsAnIntervalFromTickingFurther() throws Exception {
+        manager.reconcile(Subscription.interval(SubscriptionId.of("tick"), Duration.ofMillis(100),
+                time -> "tick"));
+        timers.advance(100_000_000L);
+        assertThat(next()).isEqualTo("tick");
+        manager.closeAll();
+        timers.advance(500_000_000L);
+        assertThat(mailbox.size()).as("a closed interval must stop scheduling").isZero();
+    }
+
+    @Test
     void resizeSourcesReceiveTheMeasuredSize() throws Exception {
         manager.reconcile(Subscription.resize(SubscriptionId.of("resize"),
                 size -> "resized:" + size.cols()));
