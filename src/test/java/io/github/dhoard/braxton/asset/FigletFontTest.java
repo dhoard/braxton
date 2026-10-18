@@ -142,6 +142,31 @@ class FigletFontTest {
     }
 
     @Test
+    void aGlyphWhoseArtEndsWithTheEndmarkCarriesItsOwnEndOfLineMarker() throws Exception {
+        // The end-of-line marker is the last character of the line, so a glyph whose art ends with
+        // the endmark itself has to end the line with a different marker. Stripping only trailing
+        // endmark characters leaves that marker inside the art.
+        StringBuilder font = new StringBuilder("flf2a$ 1 1 3 0 0 0 0 0\n");
+        for (char code = 32; code <= 126; code++) {
+            font.append(code == '@' ? "@#\n" : "X@\n");
+        }
+        FigletFont parsed = FigletFont.parse(stream(font.toString()), "marker.flf");
+        assertThat(parsed.render("@")).containsExactly("@");
+        assertThat(parsed.render("A@B")).containsExactly("X@X");
+
+        // The shipped term font is an identity font: it draws '@' as "@#" for exactly this reason,
+        // so every printable code point must render as itself.
+        FigletFont term = FontLoader.load(FontLoader.Family.TERM);
+        StringBuilder printable = new StringBuilder();
+        for (char code = 32; code <= 126; code++) {
+            printable.append((char) code);
+        }
+        assertThat(term.render("@")).containsExactly("@");
+        assertThat(term.render(printable.toString()))
+                .containsExactly(printable.toString());
+    }
+
+    @Test
     void aRepeatedEndMarkIsStrippedWithTheGlyphArt() throws Exception {
         // A glyph whose art ends in the endmark carries it twice; both are removed, which is what
         // the canonical fonts require ("A\____/@" is drawn as "A\____/").

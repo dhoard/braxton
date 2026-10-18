@@ -119,6 +119,12 @@ public final class FigletFont {
                 || (endMark == '@' && raw.charAt(end - 1) == '@'))) {
             end--;
         }
+        if (end == raw.length() && end > 0) {
+            // The marker is the last character of the line, so a glyph whose art ends with the
+            // endmark ends the line with a different one instead (the shipped term font draws '@'
+            // as "@#"). Nothing was stripped, so the final character is that line's marker.
+            end--;
+        }
         return raw.substring(0, end);
     }
 
