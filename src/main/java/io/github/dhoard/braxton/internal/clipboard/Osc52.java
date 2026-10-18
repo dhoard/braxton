@@ -52,12 +52,14 @@ public final class Osc52 {
     /**
      * Encodes {@code text} for the system clipboard without a size limit.
      *
-     * @return the complete OSC 52 sequence, or an empty string for {@code null}
+     * @return the complete OSC 52 sequence, or an empty string when there is no text (including
+     *     {@code null}), because an empty payload would clear the user's clipboard
      */
     public static String encode(String text) {
-        // Documented: nothing to encode means nothing to write. An empty payload would otherwise
-        // reach the terminal as a sequence that clears the clipboard.
-        return text == null ? "" : encode(text, CLIPBOARD_SELECTION, Integer.MAX_VALUE).sequence();
+        // Nothing to encode means nothing to write. An empty payload would otherwise reach the
+        // terminal as a sequence that clears the clipboard.
+        return text == null || text.isEmpty()
+                ? "" : encode(text, CLIPBOARD_SELECTION, Integer.MAX_VALUE).sequence();
     }
 
     /**

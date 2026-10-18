@@ -89,6 +89,15 @@ class ClipboardTest {
     }
 
     @Test
+    void anEmptyPayloadEncodesNoSequenceAtAll() {
+        // An empty OSC 52 payload clears the clipboard, so the unbounded convenience encoder must
+        // write nothing for an empty string, exactly as it does for null.
+        assertThat(Osc52.encode("")).isEmpty();
+        assertThat(Osc52.encode("", "c", 100).text()).isEmpty();
+        assertThat(Osc52.encode("", "c", 100).truncated()).isFalse();
+    }
+
+    @Test
     void osc52TruncationNeverSplitsAGraphemeCluster() {
         String family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
         Osc52.Encoded partial = Osc52.encode(family + "x", 5);
