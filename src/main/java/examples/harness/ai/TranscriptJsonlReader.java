@@ -116,12 +116,15 @@ final class TranscriptJsonlReader {
     private static void readRecord(JsonObject record, State state, Map<String, String> inputTexts,
             Map<String, TurnBuilder> turns, Map<String, PendingTool> pendingTools,
             List<String> warnings) {
+        // Only event records are read. A record of another kind (a newer log's header, for
+        // instance) is forward-compatible noise, not a malformed event, so it is ignored before
+        // its payload is examined.
+        if (!"event".equals(string(record, "kind"))) {
+            return;
+        }
         JsonObject payload = object(record, "payload");
         if (payload == null) {
             warnings.add("Record without a payload object");
-            return;
-        }
-        if (!"event".equals(string(record, "kind"))) {
             return;
         }
         String type = string(payload, "type");

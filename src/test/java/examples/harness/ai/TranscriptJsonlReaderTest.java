@@ -49,6 +49,19 @@ class TranscriptJsonlReaderTest {
     }
 
     @Test
+    void aNonEventRecordWithoutAPayloadIsIgnoredWithoutAWarning() throws IOException {
+        // A newer log may carry header records of other kinds that have no payload. They are not
+        // events to read, but they are not malformed either, so they must not add warnings.
+        HarnessTranscript transcript = read("""
+                {"kind":"header","version":2}
+                {"kind":"event","payload":{"type":"turn.started","turnId":"t1"}}
+                {"kind":"event","payload":{"type":"assistant.completed","turnId":"t1","text":"hi"}}
+                """);
+        assertThat(transcript.warnings()).isEmpty();
+        assertThat(transcript.turns()).hasSize(1);
+    }
+
+    @Test
     void theBundledTranscriptLoadsCleanAndExercisesTheTranscript() {
         HarnessTranscript transcript = TranscriptLoader.load();
 
