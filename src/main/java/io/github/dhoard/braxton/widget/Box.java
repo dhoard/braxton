@@ -156,6 +156,14 @@ public final class Box {
                     String.valueOf(border.horizontal()).repeat(inner), style));
         } else {
             StyledText fitted = truncate(title, Math.max(0, inner - 3));
+            if (fitted.plainText().isEmpty()) {
+                // No cluster fits the label budget (a wide glyph needs two columns). Keeping the
+                // decorations would leave a hole in the edge where the title is not drawn, so the
+                // narrow box gets a plain edge instead.
+                out = out.append(StyledText.of(
+                        String.valueOf(border.horizontal()).repeat(inner), style));
+                return out.append(StyledText.of(String.valueOf(border.topRight()), style));
+            }
             int used = TextMeasure.columns(fitted.plainText());
             int trailing = Math.max(0, inner - used - 3);
             out = out.append(StyledText.of(String.valueOf(border.horizontal()) + " ", style))

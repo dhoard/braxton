@@ -248,6 +248,22 @@ class CatalogTest {
     }
 
     @Test
+    void aWideTitleThatCannotFitFallsBackToAPlainTopEdge() {
+        // "日本" needs two columns plus the dash and spacing around a label. In a six-column box the
+        // label budget is one column, which no wide cluster fits, so the edge must be plain dashes
+        // rather than the label's hole.
+        Style bold = Style.NONE.withBold();
+        String narrow = Box.of("x").width(6).title(StyledText.of("\u65E5\u672C", bold))
+                .render(6).plainText();
+        assertThat(narrow.lines().findFirst().orElseThrow()).isEqualTo("\u250C\u2500\u2500\u2500\u2500\u2510");
+        // One column wider keeps the first glyph, and the edge still ends at the frame width.
+        String fitted = Box.of("x").width(7).title(StyledText.of("\u65E5\u672C", bold))
+                .render(7).plainText();
+        assertThat(fitted.lines().findFirst().orElseThrow()).isEqualTo("\u250C\u2500 \u65E5 \u2510");
+        assertThat(TextMeasure.columns(fitted.lines().findFirst().orElseThrow())).isEqualTo(7);
+    }
+
+    @Test
     void aTitledBoxKeepsItsWidthWhenTheFrameHasNoRoomForTheTitle() {
         for (int width = 2; width <= 10; width++) {
             String rendered = Box.of("body").border(Border.ROUNDED).title("Title").width(width)
