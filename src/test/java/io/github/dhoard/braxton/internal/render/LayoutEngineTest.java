@@ -154,6 +154,15 @@ class LayoutEngineTest {
     }
 
     @Test
+    void rightAlignedTextEndingInAZeroWidthCharacterSitsFlush() {
+        View<?> view = Views.column(Alignment.END,
+                List.of(Views.text("ab\u200B"), Views.text("cd")));
+        Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, 2, 4)).screen();
+        assertThat(screen.plainLine(0).replace("\u200B", "")).isEqualTo("  ab");
+        assertThat(screen.plainLine(1)).isEqualTo("  cd");
+    }
+
+    @Test
     void centringUsesTheMeasuredWidthAndNeverGoesNegative() {
         View<?> view = Views.column(Alignment.CENTER, java.util.List.of(Views.text("ab")));
         Screen screen = paint(view, 1, 6);

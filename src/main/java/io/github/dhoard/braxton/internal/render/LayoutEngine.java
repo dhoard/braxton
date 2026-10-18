@@ -405,14 +405,34 @@ public final class LayoutEngine {
     private void paintLine(StyledText line, Screen screen, int row, int startCol, int cols) {
         int col = startCol;
         int limit = startCol + cols;
+        String lastText = null;
+        int lastCol = -1;
+        Style lastStyle = Style.NONE;
+        String lastLink = null;
+        int lastWidth = 0;
         for (StyledText.Span span : line.spans()) {
             List<String> graphemes = TextMeasure.graphemes(span.text());
             for (String grapheme : graphemes) {
                 String rendered = withBase(grapheme);
                 int width = TextMeasure.clusterColumns(rendered, policy);
+                if (width == 0) {
+                    // Invisible format characters claim no column, so they join the cell already
+                    // painted instead of starting one of their own; a leading one has no cell to
+                    // join and is dropped.
+                    if (lastText != null) {
+                        lastText += rendered;
+                        screen.put(row, lastCol, lastText, lastStyle, lastLink, lastWidth);
+                    }
+                    continue;
+                }
                 if (col + width > limit) {
                     return;
                 }
+                lastText = rendered;
+                lastCol = col;
+                lastStyle = span.style();
+                lastLink = span.link();
+                lastWidth = width;
                 screen.put(row, col, rendered, span.style(), span.link(), width);
                 col += width;
             }

@@ -408,7 +408,8 @@ API surface.
 - **Rendering is safe by construction.** Content is control-character sanitized; only the encoder
   emits SGR/OSC 8 sequences.
 - **Measurement is explicit.** Grapheme segmentation and terminal-column width are separate
-  policies; the pinned Unicode 16.0.0 table is reproducible offline.
+  policies; the pinned Unicode 16.0.0 table is reproducible offline, and invisible format
+  characters (joiners, bidi marks, a byte-order mark) contribute no column.
 - **Testing is first-class.** The same layout/rendering path is available headlessly, and the
   automated suite is TTY-free.
 

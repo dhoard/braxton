@@ -40,6 +40,23 @@ class TextMeasureTest {
     }
 
     @Test
+    void invisibleFormatCharactersOccupyNoColumn() {
+        for (String format : new String[] {"\u200B", "\u200C", "\u200D", "\u2060", "\u200E",
+                "\uFEFF"}) {
+            assertThat(TextMeasure.columns(format)).as("columns of U+%04X",
+                    (int) format.charAt(0)).isZero();
+        }
+        assertThat(TextMeasure.columns("a\u200Bb")).isEqualTo(2);
+        assertThat(TextMeasure.columns("a\uFEFFb\u200Bc")).isEqualTo(3);
+    }
+
+    @Test
+    void aBareCombiningMarkStillNeedsTheCellItsDottedBaseUses() {
+        assertThat(TextMeasure.columns("\u0301")).isEqualTo(1);
+        assertThat(TextMeasure.columns("e\u0301")).isEqualTo(1);
+    }
+
+    @Test
     void asciiIsOneColumn() {
         assertThat(TextMeasure.columns("abc")).isEqualTo(3);
         assertThat(TextMeasure.columns("")).isZero();

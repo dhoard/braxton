@@ -84,6 +84,7 @@ public final class TextMeasure {
         }
         int[] codePoints = cluster.codePoints().toArray();
         boolean base = false;
+        boolean mark = false;
         boolean wide = false;
         for (int codePoint : codePoints) {
             if (codePoint == 0xFE0E) {
@@ -95,13 +96,22 @@ public final class TextMeasure {
             }
             int type = Character.getType(codePoint);
             if (type == Character.NON_SPACING_MARK || type == Character.ENCLOSING_MARK
-                    || type == Character.COMBINING_SPACING_MARK || codePoint == 0x200D) {
+                    || type == Character.COMBINING_SPACING_MARK) {
+                mark = true;
+                continue;
+            }
+            if (type == Character.FORMAT) {
+                // Zero-width joiners, word joiners, bidi marks, and a byte-order mark add no column;
+                // painting the cluster must not advance either.
                 continue;
             }
             base = true;
             if (policy.wideEmoji() && Unicode16Width.isWide(codePoint)) {
                 wide = true;
             }
+        }
+        if (!base && !mark) {
+            return 0;
         }
         if (!base) {
             return 1;
