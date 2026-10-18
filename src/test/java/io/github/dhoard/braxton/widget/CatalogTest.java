@@ -191,6 +191,25 @@ class CatalogTest {
     }
 
     @Test
+    void aBorderThatEqualsNoneIsNotAFrame() {
+        // Border is a value type, so a border assembled from its own characters is equal to
+        // Border.NONE and must behave identically: it draws no frame and adds no inset, leaving the
+        // content alone (a fixed width still bounds it). Comparing the border by identity instead
+        // gave such a border a blank two-column frame and truncated the content to the frame's
+        // inner width.
+        Border blank = new Border(' ', ' ', ' ', ' ', ' ', ' ');
+        assertThat(blank).isEqualTo(Border.NONE);
+        assertThat(Box.of("abcd").border(blank).render(10).plainText()).isEqualTo("abcd");
+        assertThat(Box.of("abcdefgh").border(blank).width(4).render(20).plainText())
+                .isEqualTo("abcd");
+        // The frame is drawn exactly when Border.isVisible() says so; that is the question the
+        // layout engine asks before it insets its child or paints a frame.
+        Border cornersOnly = new Border('+', '+', '+', '+', '-', ' ');
+        assertThat(cornersOnly.isVisible()).isFalse();
+        assertThat(Box.of("abcd").border(cornersOnly).render(10).plainText()).isEqualTo("abcd");
+    }
+
+    @Test
     void aBorderedTableClosesItsFrameAroundTheRows() {
         Table table = Table.of().buffer(1).border(Border.SINGLE);
         table.row(StyledText.plain("a"), StyledText.plain("bb"));

@@ -115,7 +115,9 @@ public final class Box {
         for (StyledText line : lines) {
             clipped.add(truncate(line, Math.max(0, limit - 2)));
         }
-        if (border == Border.NONE) {
+        if (!border.isVisible()) {
+            // Border is a value type, so ask the border itself whether it draws a frame instead of
+            // comparing against the NONE constant: a value-equal border must not add an inset.
             if (fixedWidth <= 0) {
                 return content;
             }
