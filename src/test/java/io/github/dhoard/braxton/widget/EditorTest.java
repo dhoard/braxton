@@ -234,6 +234,16 @@ class EditorTest {
     }
 
     @Test
+    void controlJInsertsOneNewlineAndRendersOneCaret() {
+        EditorState after = update(EditorState.of("ab"), new EditorAction.Newline());
+        assertThat(after.text()).isEqualTo("ab\n");
+        assertThat(after.caret()).isEqualTo(3);
+        String rendered = Editor.render(after, OPTIONS, true).plainText();
+        assertThat(rendered.chars().filter(c -> c == Editor.CURSOR.charAt(0)).count())
+                .isEqualTo(1);
+    }
+
+    @Test
     void aMaskedDraftNeverCopiesEvenWhenCopyingIsEnabled() {
         EditorOptions masked = OPTIONS.withMasking(EditorOptions.Masking.PASSWORD)
                 .withCopyEnabled(true);
