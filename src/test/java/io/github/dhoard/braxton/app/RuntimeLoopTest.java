@@ -550,6 +550,49 @@ class RuntimeLoopTest {
 
     @Test
     @Timeout(15)
+    void theOwnerIsTheCallersThreadAndOnlyTheReadersAreVirtual() {
+        // The documented threading model: "the runtime owner is the caller's thread; Application.run
+        // does not start or hijack it", while the input and resize readers are virtual threads.
+        // Every program callback therefore observes the thread that called run().
+        FakeTerminal terminal = new FakeTerminal(new Size(4, 20));
+        Thread caller = Thread.currentThread();
+        List<Thread> callbacks = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        Program<Integer, String> program = new Program<>() {
+            @Override
+            public Transition<Integer, String> init(InitContext context) {
+                callbacks.add(Thread.currentThread());
+                return Transition.stay(0);
+            }
+
+            @Override
+            public Transition<Integer, String> update(Integer model, String message) {
+                callbacks.add(Thread.currentThread());
+                return Transition.stay(model + 1);
+            }
+
+            @Override
+            public View<String> view(Integer model, Viewport viewport) {
+                callbacks.add(Thread.currentThread());
+                return Views.keyed(List.of(Binding.of("a", "inc")), Views.text("n " + model),
+                        List.of());
+            }
+        };
+        terminal.feed("a");
+        terminal.endInput();
+        ExitResult result = Application.run(program, options(new FakeTerminal.ManualTimers()),
+                terminal);
+
+        assertThat(result.kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
+        assertThat(callbacks).as("init, update and view all run on the caller's thread")
+                .isNotEmpty().allSatisfy(thread -> assertThat(thread).isSameAs(caller));
+        assertThat(terminal.readOnVirtualThread()).as("the input reader is a virtual thread")
+                .isTrue();
+        assertThat(terminal.measuredOnVirtualThread()).as("the resize poller is a virtual thread")
+                .isTrue();
+    }
+
+    @Test
+    @Timeout(15)
     void aFailureKeepsItsPrimaryCauseAndCarriesTheCleanupFailures() throws Exception {
         // The documented contract: ExitResult "carries cleanup failures without hiding the primary
         // cause". A timer that cannot be cancelled during shutdown must not replace the exception
