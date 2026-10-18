@@ -35,6 +35,7 @@ import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.style.WidthPolicy;
 import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
@@ -175,7 +176,7 @@ public final class Editor {
         // shorter line in between clamps it; horizontal moves and edits reset the preference.
         int column = state.preferredColumn() > 0
                 ? state.preferredColumn()
-                : graphemeColumn(state.text(), lineStart, state.caret());
+                : visualColumn(state.text(), lineStart, state.caret());
         int targetLine = Math.max(0, Math.min(state.lineCount() - 1, line + direction));
         int targetStart = state.lineStart(targetLine);
         int targetEnd = state.lineEnd(targetLine);
@@ -196,22 +197,27 @@ public final class Editor {
         return new EditorState(state.text(), state.text().length(), 0, 0);
     }
 
-    private static int graphemeColumn(String text, int lineStart, int index) {
-        int column = 0;
-        int position = lineStart;
-        while (position < index) {
-            position = TextMeasure.boundaryAfter(text, position);
-            column++;
-        }
-        return column;
+    /** Visual column of {@code index} on its line, so wide glyphs count their real width. */
+    private static int visualColumn(String text, int lineStart, int index) {
+        int end = Math.max(lineStart, Math.min(index, text.length()));
+        return TextMeasure.columns(text.substring(lineStart, end));
     }
 
+    /** Caret offset at {@code column} visual columns, stopping before a glyph that would overshoot. */
     private static int indexAtColumn(String text, int lineStart, int lineEnd, int column) {
         int position = lineStart;
-        for (int i = 0; i < column && position < lineEnd; i++) {
-            position = TextMeasure.boundaryAfter(text, position);
+        int used = 0;
+        while (position < lineEnd) {
+            int next = Math.min(TextMeasure.boundaryAfter(text, position), lineEnd);
+            int width = TextMeasure.clusterColumns(text.substring(position, next),
+                    WidthPolicy.PINNED);
+            if (used + width > column) {
+                break;
+            }
+            used += width;
+            position = next;
         }
-        return Math.min(position, lineEnd);
+        return position;
     }
 
     // ── view ─────────────────────────────────────────────────────────────────

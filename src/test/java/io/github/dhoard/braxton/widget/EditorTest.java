@@ -168,6 +168,26 @@ class EditorTest {
     }
 
     @Test
+    void verticalMovementKeepsTheVisualColumnAcrossWideGlyphs() {
+        String text = "a\u65E5b\nabcdef";
+        // After "a\u65E5" the caret is at grapheme 2 but visual column 3.
+        EditorState state = new EditorState(text, 2, 2, 0);
+        EditorState down = update(state, new EditorAction.MoveDown());
+        assertThat(text.substring(4, down.caret())).isEqualTo("abc");
+        assertThat(down.preferredColumn()).isEqualTo(3);
+        assertThat(update(down, new EditorAction.MoveUp()).caret()).isEqualTo(2);
+    }
+
+    @Test
+    void verticalMovementStopsBeforeAWideGlyphItCannotFitInto() {
+        String text = "abcdef\na\u65E5b";
+        // Visual column 2 falls inside the wide glyph on the shorter line.
+        EditorState state = new EditorState(text, 2, 2, 0);
+        EditorState down = update(state, new EditorAction.MoveDown());
+        assertThat(down.caret()).isEqualTo(text.indexOf('\u65E5'));
+    }
+
+    @Test
     void verticalMovementRestoresThePreferredColumnAfterAShortLine() {
         String text = "abcdef\nx\nabcdef";
         EditorState state = new EditorState(text, 6, 6, 0);
