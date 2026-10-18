@@ -41,8 +41,16 @@ public record EffectId(String value) {
         return new EffectId(value);
     }
 
-    /** An id inside this namespace. */
+    /**
+     * An id inside this namespace.
+     *
+     * @throws IllegalArgumentException when {@code name} is null or blank; joining either would
+     *     forge an id ("parent/null", "parent/   ") that collides with a real child name
+     */
     public EffectId child(String name) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("child name must not be blank");
+        }
         return new EffectId(value + "/" + name);
     }
 
