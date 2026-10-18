@@ -25,6 +25,8 @@ package io.github.dhoard.braxton.internal.clipboard;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
+import io.github.dhoard.braxton.style.TextMeasure;
+
 /**
  * OSC 52 clipboard encoding.
  *
@@ -57,7 +59,7 @@ public final class Osc52 {
     }
 
     /**
-     * Encodes {@code text} for the system clipboard, truncating it on a UTF-8 code-point boundary
+     * Encodes {@code text} for the system clipboard, truncating it on a grapheme-cluster boundary
      * when it exceeds {@code maxBytes}.
      */
     public static Encoded encode(String text, int maxBytes) {
@@ -110,23 +112,26 @@ public final class Osc52 {
     }
 
     /**
-     * Truncates to at most {@code maxBytes} UTF-8 bytes without splitting a surrogate pair or a
-     * multibyte character.
+     * Truncates to at most {@code maxBytes} UTF-8 bytes without splitting a grapheme cluster, so a
+     * combining accent, a ZWJ emoji sequence, or a flag never reaches the clipboard half-formed.
      */
     static String limitUtf8(String text, int maxBytes) {
         if (text.isEmpty() || maxBytes <= 0) {
             return "";
         }
-        byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
-        if (bytes.length <= maxBytes) {
+        if (text.getBytes(StandardCharsets.UTF_8).length <= maxBytes) {
             return text;
         }
-        int end = maxBytes;
-        // If the first excluded byte is a continuation byte, the character straddles the limit;
-        // back up to its lead byte and exclude the incomplete character.
-        while (end > 0 && (bytes[end] & 0xC0) == 0x80) {
-            end--;
+        StringBuilder limited = new StringBuilder();
+        int used = 0;
+        for (String cluster : TextMeasure.graphemes(text)) {
+            int size = cluster.getBytes(StandardCharsets.UTF_8).length;
+            if (used + size > maxBytes) {
+                break;
+            }
+            limited.append(cluster);
+            used += size;
         }
-        return new String(bytes, 0, end, StandardCharsets.UTF_8);
+        return limited.toString();
     }
 }

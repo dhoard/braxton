@@ -79,6 +79,20 @@ class ClipboardTest {
     }
 
     @Test
+    void osc52TruncationNeverSplitsAGraphemeCluster() {
+        String family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
+        Osc52.Encoded partial = Osc52.encode(family + "x", 5);
+        assertThat(partial.truncated()).isTrue();
+        assertThat(partial.text()).isEmpty();
+        Osc52.Encoded accent = Osc52.encode("e\u0301x", 2);
+        assertThat(accent.text()).isEmpty();
+        assertThat(accent.truncated()).isTrue();
+        Osc52.Encoded whole = Osc52.encode("e\u0301x", 3);
+        assertThat(whole.text()).isEqualTo("e\u0301");
+        assertThat(whole.truncated()).isTrue();
+    }
+
+    @Test
     void tmuxPassthroughWrapsOnceAndDoublesEscapes() {
         String wrapped = TmuxClipboard.passthrough("\u001B]52;c;AA==\u0007");
         assertThat(wrapped).startsWith("\u001BPtmux;").endsWith("\u001B\\");
