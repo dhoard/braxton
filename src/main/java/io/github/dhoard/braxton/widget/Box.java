@@ -70,13 +70,23 @@ public final class Box {
     }
 
     public Box title(String value) {
-        title = value == null || value.isEmpty() ? StyledText.empty() : StyledText.plain(value);
+        title = value == null || value.isEmpty() ? StyledText.empty() : singleLine(StyledText.plain(value));
         return this;
     }
 
     public Box title(StyledText value) {
-        title = value == null ? StyledText.empty() : value;
+        title = value == null ? StyledText.empty() : singleLine(value);
         return this;
+    }
+
+    /** The title sits in a one-line top edge, so line breaks and tabs become spaces. */
+    private static StyledText singleLine(StyledText value) {
+        StyledText result = StyledText.empty();
+        for (StyledText.Span span : value.spans()) {
+            result = result.append(StyledText.of(
+                    span.text().replace('\n', ' ').replace('\t', ' '), span.style(), span.link()));
+        }
+        return result;
     }
 
     public Box responsive() {

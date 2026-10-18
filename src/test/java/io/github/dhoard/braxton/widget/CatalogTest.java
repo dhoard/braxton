@@ -99,6 +99,15 @@ class CatalogTest {
     }
 
     @Test
+    void boxTitleWithLineBreaksKeepsTheFrameOnOneLine() {
+        StyledText rendered = Box.of("x").width(12).title("a\nb\tc").render(40);
+        List<String> lines = List.of(rendered.plainText().split("\n", -1));
+        assertThat(lines).hasSize(3);
+        assertThat(lines.get(0)).startsWith("\u250C").contains("a b c").endsWith("\u2510");
+        assertThat(TextMeasure.columns(lines.get(0))).isEqualTo(12);
+    }
+
+    @Test
     void borderlessBoxIsJustItsContent() {
         Box box = Box.of("plain").border(Border.NONE);
         assertThat(box.render(20).plainText()).isEqualTo("plain");
