@@ -154,6 +154,24 @@ class CatalogTest {
     }
 
     @Test
+    void badgeKeepsEachLabelSpanStyleUnderTheSegmentBackground() {
+        StyledText label = StyledText.of("a", Style.NONE.withForeground(Colors.ERROR_400))
+                .append(StyledText.of("b", Style.NONE.withBold()));
+        StyledText rendered = Badge.of().append(label, Colors.GRAY_600).render();
+        assertThat(rendered.plainText()).isEqualTo(" ab ");
+        assertThat(rendered.spans()).anySatisfy(span -> {
+            assertThat(span.text()).isEqualTo("a");
+            assertThat(span.style().foreground()).isEqualTo(Colors.ERROR_400);
+            assertThat(span.style().background()).isEqualTo(Colors.GRAY_600);
+        });
+        assertThat(rendered.spans()).anySatisfy(span -> {
+            assertThat(span.text()).isEqualTo("b");
+            assertThat(span.style().bold()).isTrue();
+            assertThat(span.style().background()).isEqualTo(Colors.GRAY_600);
+        });
+    }
+
+    @Test
     void gradientColoursEachGraphemeAndRejectsAnEmptyPalette() {
         StyledText plain = StyledText.plain("abc");
         assertThat(Gradient.apply(plain, List.of(), Gradient.Direction.VERTICAL)).isEqualTo(plain);

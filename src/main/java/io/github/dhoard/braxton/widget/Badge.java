@@ -74,8 +74,17 @@ public final class Badge {
             }
             Segment segment = segments.get(i);
             out = out.append(StyledText.of(" ", segment.style()))
-                    .append(segment.text().withStyle(segment.style().merge(segment.text().style())))
+                    .append(restyle(segment.text(), segment.style()))
                     .append(StyledText.of(" ", segment.style()));
+        }
+        return out;
+    }
+
+    /** Applies the segment style to every label span, keeping each span's own styling. */
+    private static StyledText restyle(StyledText text, Style style) {
+        StyledText out = StyledText.empty();
+        for (StyledText.Span span : text.spans()) {
+            out = out.append(StyledText.of(span.text(), span.style().merge(style), span.link()));
         }
         return out;
     }
