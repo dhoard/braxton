@@ -216,6 +216,29 @@ class CatalogTest {
     }
 
     @Test
+    void aBoxExpandsTabStopsBeforeItMeasuresItsContent() {
+        // The text view paints a tab as spaces up to the next four-column stop. A box that
+        // measures the tab as one column pads or truncates to the wrong width, so the right frame
+        // column lands past the frame's own width.
+        String framed = new ScreenRenderer().plainText(
+                Box.of("a\tb").width(10).view(10), new Viewport(3, 20));
+        assertThat(framed).isEqualTo("""
+                \u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510
+                \u2502a   b   \u2502
+                \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518""");
+        for (String line : framed.split("\n", -1)) {
+            assertThat(TextMeasure.columns(line)).as("line [%s]", line).isEqualTo(10);
+        }
+
+        String clipped = Box.of("a\tbbbbbbbb").width(6).render(6).plainText();
+        assertThat(clipped).isEqualTo("\u250C\u2500\u2500\u2500\u2500\u2510\n"
+                + "\u2502a   \u2502\n\u2514\u2500\u2500\u2500\u2500\u2518");
+
+        String borderless = Box.of("a\tb").border(Border.NONE).width(4).render(20).plainText();
+        assertThat(borderless).isEqualTo("a   ");
+    }
+
+    @Test
     void aBoxNarrowerThanTwoColumnsStillDrawsItsFrame() {
         String rendered = Box.of("body").border(Border.SINGLE).width(1).render(10).plainText();
         assertThat(rendered).isEqualTo("\u250C\u2510\n\u2502\u2502\n\u2514\u2518");

@@ -36,7 +36,9 @@ import io.github.dhoard.braxton.view.Views;
  * A framed block with an optional title in the top edge.
  *
  * <p>All five legacy border styles are represented by {@link Border}; a responsive box simply uses
- * the available width, while a fixed-width box truncates content to its inner width.</p>
+ * the available width, while a fixed-width box truncates content to its inner width. Tabs are
+ * expanded to the same four-column stops the text view uses, so a measured line and a painted line
+ * always agree.</p>
  */
 public final class Box {
 
@@ -103,7 +105,12 @@ public final class Box {
     public StyledText render(int width) {
         // The two frame columns are the floor: a narrower box would have a negative inner width.
         int limit = fixedWidth > 0 ? Math.max(2, fixedWidth) : Math.max(4, width);
-        List<StyledText> lines = content.lines();
+        // The text view expands a tab to the next four-column stop, so the frame must measure the
+        // expanded line; otherwise a padded or truncated line paints past the frame's width.
+        List<StyledText> lines = new ArrayList<>();
+        for (StyledText line : content.lines()) {
+            lines.add(TabStops.expand(line));
+        }
         List<StyledText> clipped = new ArrayList<>();
         for (StyledText line : lines) {
             clipped.add(truncate(line, Math.max(0, limit - 2)));
