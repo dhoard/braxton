@@ -118,6 +118,14 @@ class SubscriptionManagerTest {
     }
 
     @Test
+    void reconcileAfterCloseAllDoesNotStartNewSources() {
+        manager.closeAll();
+        manager.reconcile(Subscription.interval(SubscriptionId.of("late"),
+                Duration.ofMillis(100), time -> "late"));
+        assertThat(timers.pending()).isZero();
+    }
+
+    @Test
     void duplicateIdsAndOversizedSetsAreConfigurationErrors() {
         assertThatThrownBy(() -> Subscription.leaves(Subscription.batch(
                 Subscription.interval(SubscriptionId.of("same"), Duration.ofMillis(1), t -> "a"),

@@ -170,6 +170,10 @@ public final class SubscriptionManager<Msg> {
         }
         List<Live> toClose = new ArrayList<>();
         synchronized (lock) {
+            if (closed) {
+                // Shutdown already closed every source; a late reconcile must not resurrect one.
+                return;
+            }
             Map<SubscriptionId, Live> next = new HashMap<>();
             for (Subscription<Msg> leaf : leaves) {
                 Live existing = live.get(leaf.id());
