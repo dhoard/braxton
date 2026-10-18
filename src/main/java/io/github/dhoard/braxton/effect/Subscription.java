@@ -152,8 +152,10 @@ public sealed interface Subscription<Msg> {
      * An application-supplied source.
      *
      * <p>{@code start} receives an emitter and returns the resource to close on removal. Emitted
-     * values are mapped to messages; mapping runs on the owner thread. {@code configuration} must
-     * compare equal for an unchanged live source.</p>
+     * values are mapped to messages on the thread that emits - the source's own thread, or the
+     * timer worker for an interval - and the message is then enqueued for the owner thread. The
+     * mapper must therefore be pure: it must not read or mutate the model, which only the owner
+     * thread may touch. {@code configuration} must compare equal for an unchanged live source.</p>
      */
     record Source<Msg>(SubscriptionId id, Object configuration,
             Function<Consumer<Object>, AutoCloseable> start, Function<Object, Msg> mapper)

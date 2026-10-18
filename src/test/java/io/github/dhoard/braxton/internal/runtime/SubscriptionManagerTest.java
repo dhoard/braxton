@@ -149,6 +149,32 @@ class SubscriptionManagerTest {
     }
 
     @Test
+    @org.junit.jupiter.api.Timeout(10)
+    void anIntervalMapperRunsOnTheTimerWorkerNotTheOwner() throws Exception {
+        // The documented threading model: mapping happens where the value is emitted, so a mapper
+        // must be pure and must never touch the model.
+        java.util.concurrent.atomic.AtomicReference<String> mapperThread =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.CountDownLatch ran = new java.util.concurrent.CountDownLatch(1);
+        Mailbox ownBox = new Mailbox(4);
+        SubscriptionManager<String> real = new SubscriptionManager<>(ownBox,
+                io.github.dhoard.braxton.app.Timers.system(), 2, message -> { });
+        String owner = Thread.currentThread().getName();
+        real.reconcile(Subscription.interval(SubscriptionId.of("tick"), Duration.ofMillis(1),
+                time -> {
+                    mapperThread.set(Thread.currentThread().getName());
+                    ran.countDown();
+                    return "tick";
+                }));
+        try {
+            assertThat(ran.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        } finally {
+            real.closeAll();
+        }
+        assertThat(mapperThread.get()).isNotEqualTo(owner).startsWith("braxton-timers");
+    }
+
+    @Test
     void anExternalSourceIsStartedOnceAndClosedOnce() {
         List<String> events = new ArrayList<>();
         Subscription<String> source = Subscription.source(SubscriptionId.of("external"), "config",
