@@ -127,6 +127,19 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aFillInARowCoversTheRowsFullHeight() {
+        Style black = Style.bg(Colors.BLACK);
+        Screen screen = paint(Views.row(Views.text("ab"), Views.fill(black)), 3, 4);
+        for (int row = 0; row < 3; row++) {
+            for (int col = 2; col < 4; col++) {
+                assertThat(screen.cell(row, col).style().background())
+                        .as("row %d cell %d background", row, col)
+                        .isEqualTo(Colors.BLACK);
+            }
+        }
+    }
+
+    @Test
     void aFillCoversTheContentOfALowerLayer() {
         Screen screen = paint(Views.overlay(Views.text("secret"), Views.fill(Style.NONE)), 1, 8);
         assertThat(screen.plainLine(0)).isEmpty();

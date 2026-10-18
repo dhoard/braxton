@@ -321,9 +321,13 @@ public final class LayoutEngine {
                 continue;
             }
             View<?> child = items.get(i);
-            int height = Math.min(intrinsicHeight(crossAxis(child), width), bounds.rows());
+            // A fill is the row's background, so it spans the full height rather than the one row
+            // its main-axis measurement reserves in a column.
+            int height = child instanceof View.Fill<?>
+                    ? bounds.rows()
+                    : Math.min(intrinsicHeight(crossAxis(child), width), bounds.rows());
             int offset = 0;
-            if (height < bounds.rows() && !(child instanceof View.Fill<?>)) {
+            if (height < bounds.rows()) {
                 offset = switch (row.align()) {
                     case CENTER -> (bounds.rows() - height) / 2;
                     case END -> bounds.rows() - height;
