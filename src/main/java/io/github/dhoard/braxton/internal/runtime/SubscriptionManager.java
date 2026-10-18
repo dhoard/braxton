@@ -305,14 +305,29 @@ public final class SubscriptionManager<Msg> {
         return ((ResizeLive<Msg>) live).mapper.get();
     }
 
+    /**
+     * Enqueues one emission for the owner, waiting while the owner is busy.
+     *
+     * <p>A full mailbox means the owner is still working, not that the emission is disposable; a
+     * fixed timeout would silently drop a tick or a source value. The wait ends when the mailbox
+     * is closed, which is how shutdown releases an emitter thread.</p>
+     */
     private void enqueue(Object message) {
         if (message == null) {
             return;
         }
-        try {
-            mailbox.enqueue(new Mailbox.AppMessage(message), 1_000L);
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
+        while (true) {
+            try {
+                if (mailbox.enqueue(new Mailbox.AppMessage(message), 100L)) {
+                    return;
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (mailbox.isClosed()) {
+                return;
+            }
         }
     }
 

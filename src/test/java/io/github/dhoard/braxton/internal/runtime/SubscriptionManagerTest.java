@@ -136,6 +136,24 @@ class SubscriptionManagerTest {
     }
 
     @Test
+    void anEmissionIsNotDroppedWhenTheMailboxIsFull() throws Exception {
+        Mailbox small = new Mailbox(1);
+        SubscriptionManager<String> manager =
+                new SubscriptionManager<>(small, timers, 2, diagnostics::add);
+        small.enqueueFromOwner(new Mailbox.AppMessage("occupant"));
+        manager.reconcile(Subscription.interval(SubscriptionId.of("tick"),
+                Duration.ofMillis(100), time -> "tick"));
+        Thread timer = Thread.ofVirtual().start(() -> timers.advance(100_000_000L));
+        Thread.sleep(1_200L);
+        assertThat(small.poll(2_000)).as("the queued envelope is still there")
+                .isInstanceOf(Mailbox.AppMessage.class);
+        assertThat(small.poll(2_000))
+                .as("a tick is delivered once the owner makes room, not dropped after a timeout")
+                .isInstanceOf(Mailbox.AppMessage.class);
+        timer.join(2_000L);
+    }
+
+    @Test
     void resizeSourcesReceiveTheMeasuredSize() throws Exception {
         manager.reconcile(Subscription.resize(SubscriptionId.of("resize"),
                 size -> "resized:" + size.cols()));
