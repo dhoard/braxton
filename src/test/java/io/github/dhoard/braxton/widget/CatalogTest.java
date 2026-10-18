@@ -167,6 +167,22 @@ class CatalogTest {
     }
 
     @Test
+    void aBorderedTableClosesItsFrameAroundTheRows() {
+        Table table = Table.of().buffer(1).border(Border.SINGLE);
+        table.row(StyledText.plain("a"), StyledText.plain("bb"));
+        table.row(StyledText.plain("\u65E5"), StyledText.plain("c"));
+        String rendered = table.render().plainText();
+        assertThat(rendered).isEqualTo("""
+                \u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2510
+                \u2502a  bb \u2502
+                \u2502\u65E5 c  \u2502
+                \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2518""");
+        for (String line : rendered.split("\n", -1)) {
+            assertThat(TextMeasure.columns(line)).as("line [%s]", line).isEqualTo(8);
+        }
+    }
+
+    @Test
     void aTitledBoxKeepsItsWidthWhenTheFrameHasNoRoomForTheTitle() {
         for (int width = 2; width <= 10; width++) {
             String rendered = Box.of("body").border(Border.ROUNDED).title("Title").width(width)

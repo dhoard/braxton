@@ -162,7 +162,7 @@ public final class Table {
         }
         List<StyledText> framed = new ArrayList<>();
         framed.add(StyledText.of(
-                border.topLeft() + String.valueOf(border.horizontal()).repeat(width + 2) + border.topRight(),
+                border.topLeft() + String.valueOf(border.horizontal()).repeat(width) + border.topRight(),
                 borderStyle));
         for (StyledText line : lines) {
             int pad = Math.max(0, width - TextMeasure.columns(line.plainText()));
@@ -171,7 +171,7 @@ public final class Table {
                     StyledText.of(" ".repeat(pad) + border.vertical(), borderStyle)));
         }
         framed.add(StyledText.of(
-                border.bottomLeft() + String.valueOf(border.horizontal()).repeat(width + 2) + border.bottomRight(),
+                border.bottomLeft() + String.valueOf(border.horizontal()).repeat(width) + border.bottomRight(),
                 borderStyle));
         StyledText out = StyledText.empty();
         for (int i = 0; i < framed.size(); i++) {
