@@ -530,7 +530,11 @@ class RuntimeLoopTest {
         Thread run = Thread.ofVirtual().name("idle-test")
                 .start(() -> Application.run(program, options(new FakeTerminal.ManualTimers()),
                         terminal));
-        await(() -> views.get() == 1);
+        // The owner writes its first frame after buildView returns, so waiting for the write
+        // (not for the view counter) is what makes the baseline frame complete: sampling the log
+        // while the owner is still inside its first pass records an empty frame and then reports
+        // the initial paint as idle output.
+        await(() -> !terminal.writes().isEmpty());
         List<String> firstFrame = terminal.writes();
         Thread.sleep(400L);
         assertThat(updates).as("an idle application calls no update").hasValue(0);
