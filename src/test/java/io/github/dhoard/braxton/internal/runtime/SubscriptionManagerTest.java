@@ -131,6 +131,24 @@ class SubscriptionManagerTest {
     }
 
     @Test
+    void aResizeFansOutToEveryResizeSourceAndNotToIntervals() throws Exception {
+        SubscriptionManager<String> wide = new SubscriptionManager<>(mailbox, timers, 4,
+                diagnostics::add);
+        wide.reconcile(Subscription.batch(
+                Subscription.resize(SubscriptionId.of("first"), size -> "first:" + size.rows()),
+                Subscription.resize(SubscriptionId.of("second"), size -> "second:" + size.rows()),
+                Subscription.interval(SubscriptionId.of("tick"), Duration.ofSeconds(5),
+                        time -> "tick")));
+        wide.notifyResize(new Size(7, 20));
+        assertThat(next()).isEqualTo("first:7");
+        assertThat(next()).isEqualTo("second:7");
+        assertThat(mailbox.size()).as("an interval does not receive resize events").isZero();
+        wide.notifyResize(new Size(8, 20));
+        assertThat(next()).isEqualTo("first:8");
+        assertThat(next()).isEqualTo("second:8");
+    }
+
+    @Test
     void anExternalSourceIsStartedOnceAndClosedOnce() {
         List<String> events = new ArrayList<>();
         Subscription<String> source = Subscription.source(SubscriptionId.of("external"), "config",
