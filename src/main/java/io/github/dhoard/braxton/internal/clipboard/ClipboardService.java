@@ -74,6 +74,13 @@ public final class ClipboardService {
         }
 
         Osc52.Encoded encoded = Osc52.encode(plain, config.maxPayloadBytes());
+        if (encoded.text().isEmpty()) {
+            // The payload limit left nothing to write, and an empty OSC 52 payload clears the
+            // clipboard. A copy that can carry no text must not clear what the user already had.
+            lastSequence = "";
+            return new ClipboardResult(stored, storedBytes, true, true, false, false,
+                    ClipboardPath.INTERNAL_ONLY);
+        }
         String sequence = path == ClipboardPath.TMUX_PASSTHROUGH
                 ? TmuxClipboard.passthrough(encoded.sequence())
                 : encoded.sequence();

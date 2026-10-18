@@ -147,6 +147,32 @@ class ClipboardTest {
     }
 
     @Test
+    void aPayloadThatTruncatesToNothingNeverClearsTheSystemClipboard() {
+        // An empty OSC 52 payload clears the clipboard. A copy whose whole text does not fit the
+        // configured payload limit therefore has nothing to write: writing the empty payload
+        // would clear what the user already had instead of copying.
+        List<String> writes = new ArrayList<>();
+        ClipboardConfig config = ClipboardConfig.builder().maxPayloadBytes(2).build();
+        ClipboardService clipboard = new ClipboardService(config,
+                new TerminalEnvironment(Map.of("TERM", "xterm-256color")), writes::add);
+        ClipboardResult result = clipboard.copy("\u6F22");
+        assertThat(writes).isEmpty();
+        assertThat(result.systemWriteRequested()).isFalse();
+        assertThat(result.path()).isEqualTo(ClipboardPath.INTERNAL_ONLY);
+        assertThat(result.truncated()).isTrue();
+        assertThat(result.storedInternally()).isTrue();
+        assertThat(clipboard.internalText()).isEqualTo("\u6F22");
+        // A payload that keeps some text still writes what fits.
+        List<String> partialWrites = new ArrayList<>();
+        ClipboardService partial = new ClipboardService(config,
+                new TerminalEnvironment(Map.of("TERM", "xterm-256color")), partialWrites::add);
+        ClipboardResult partialResult = partial.copy("a\u6F22");
+        assertThat(partialWrites).hasSize(1);
+        assertThat(partialResult.systemWriteRequested()).isTrue();
+        assertThat(partialResult.truncated()).isTrue();
+    }
+
+    @Test
     void tmuxAutoUsesNativeForwardingWithoutPassthroughWrapping() {
         List<String> writes = new ArrayList<>();
         ClipboardResult result = service("xterm-256color", Map.of("TMUX", "/tmp/tmux"), writes)
