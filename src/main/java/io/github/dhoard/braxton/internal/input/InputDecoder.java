@@ -183,6 +183,13 @@ public final class InputDecoder {
             }
             return Optional.ofNullable(decodeSs3((char) third));
         }
+        if (second == 0x1B) {
+            // A second escape starts the next keypress rather than modifying this one: two Escape
+            // presses are two gestures, which the "Escape Escape" cancel relies on. Give the byte
+            // back so the following read() reports it.
+            in.unread(second);
+            return Optional.of(InputEvent.KeyInput.of(Key.ESCAPE));
+        }
         if (second < 0x20) {
             return Optional.of(InputEvent.KeyInput.of(Key.ESCAPE));
         }

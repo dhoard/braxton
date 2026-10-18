@@ -169,6 +169,14 @@ class InputDecoderTest {
     }
 
     @Test
+    void aSecondEscapeIsDeliveredAsItsOwnEvent() throws IOException {
+        InputDecoder decoder = new InputDecoder(new ByteAtATime(new byte[] {0x1B, 0x1B}));
+        assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).key()).isEqualTo(Key.ESCAPE);
+        assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).key()).isEqualTo(Key.ESCAPE);
+        assertThat(decoder.read()).isEmpty();
+    }
+
+    @Test
     void multiByteUtf8SurvivesByteAtATimeReads() throws IOException {
         InputEvent.KeyInput key = (InputEvent.KeyInput) read("\u65E5").orElseThrow();
         assertThat(key.text()).isEqualTo("\u65E5");
