@@ -109,6 +109,12 @@ public sealed interface Subscription<Msg> {
             if (period.isZero() || period.isNegative()) {
                 throw new IllegalArgumentException("interval period must be positive");
             }
+            try {
+                period.toNanos();
+            } catch (ArithmeticException overflow) {
+                throw new IllegalArgumentException(
+                        "interval period must fit in nanoseconds: " + period, overflow);
+            }
             Objects.requireNonNull(onTick, "onTick");
         }
 
