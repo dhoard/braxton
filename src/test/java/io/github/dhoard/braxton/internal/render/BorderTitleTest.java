@@ -37,6 +37,41 @@ import io.github.dhoard.braxton.view.Views;
 class BorderTitleTest {
 
     @Test
+    void everyBuiltInVariantFramesItsChildWithItsOwnCharacters() {
+        // Each documented variant is a value: how it decides "is there a frame?" (isVisible, cycle
+        // 187) is shared by Box, the layout engine and Table, so the painted frame must use the
+        // variant's own characters and one column per edge.
+        record Case(Border border, String top, String bottom) {
+        }
+        java.util.List<Case> cases = java.util.List.of(
+                new Case(Border.SINGLE, "\u250C\u2500\u2500\u2510", "\u2514\u2500\u2500\u2518"),
+                new Case(Border.ROUNDED, "\u256D\u2500\u2500\u256E", "\u2570\u2500\u2500\u256F"),
+                new Case(Border.DOUBLE, "\u2554\u2550\u2550\u2557", "\u255A\u2550\u2550\u255D"));
+        assertThat(cases).allSatisfy(entry -> {
+            Screen screen = new LayoutEngine()
+                    .layout(Views.border(entry.border(), Views.text("xx")), new Rect(0, 0, 3, 4))
+                    .screen();
+            java.util.List<String> lines = screen.plainLines();
+            assertThat(lines).as("%s frame", entry.border()).hasSize(3);
+            assertThat(lines.get(0)).isEqualTo(entry.top());
+            assertThat(lines.get(1)).isEqualTo(entry.border().vertical() + "xx"
+                    + entry.border().vertical());
+            assertThat(lines.get(2)).isEqualTo(entry.bottom());
+        });
+        assertThat(Border.NONE.isVisible()).isFalse();
+        var none = new LayoutEngine()
+                .layout(Views.border(Border.NONE, Views.text("xx")), new Rect(0, 0, 1, 4)).screen();
+        assertThat(none.plainLines()).as("an invisible border adds no frame and no inset")
+                .containsExactly("xx");
+        var horizontalOnly = new LayoutEngine()
+                .layout(Views.border(new Border('\u250C', '\u2510', '\u2514', '\u2518', '\u2500', ' '),
+                        Views.text("xx")), new Rect(0, 0, 2, 4)).screen();
+        assertThat(horizontalOnly.plainLines())
+                .as("a border with a blank vertical edge is not a frame")
+                .containsExactly("xx", "");
+    }
+
+    @Test
     void aWideTitleNeverWidensTheFrame() {
         for (int width = 2; width <= 12; width++) {
             for (String title : new String[] {"", "ab", "\u65E5", "\u65E5\u672C", "abcdefghij"}) {
