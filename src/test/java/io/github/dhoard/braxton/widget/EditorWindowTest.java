@@ -191,4 +191,37 @@ class EditorWindowTest {
                     .containsOnlyOnce("> ");
         }
     }
+
+    @Test
+    void theViewFitsEveryWidthIncludingOneNarrowerThanThePrompt() {
+        // The editor view is a text view: the layout engine clips and wraps it, so any real width
+        // must paint without exceeding the viewport and must keep the caret reachable - including a
+        // width narrower than the prompt itself.
+        EditorState state = EditorState.of("hello\nworld").withCaret(3).withSelection(1, 6);
+        io.github.dhoard.braxton.view.View<String> view = Editor.view(
+                io.github.dhoard.braxton.view.ElementId.of("editor"), state,
+                EditorOptions.defaults().withPrompt(">  ", Style.NONE), true, action -> "msg");
+        for (int width = 1; width <= 8; width++) {
+            for (int rows = 1; rows <= 3; rows++) {
+                List<String> lines = new io.github.dhoard.braxton.view.ScreenRenderer()
+                        .plainLines(view, new io.github.dhoard.braxton.layout.Viewport(rows, width));
+                assertThat(lines).as("width %d rows %d", width, rows).hasSize(rows);
+                for (String line : lines) {
+                    assertThat(io.github.dhoard.braxton.style.TextMeasure.columns(line))
+                            .as("width %d rows %d line [%s]", width, rows, line)
+                            .isLessThanOrEqualTo(width);
+                }
+            }
+        }
+        assertThat(Editor.render(state, EditorOptions.defaults().withPrompt(">  ", Style.NONE), true)
+                .plainText()).as("the prompt is painted once, at the first visible line")
+                .startsWith(">  ").contains("\n");
+        String focused = Editor.render(EditorState.of("x"), EditorOptions.defaults(), true)
+                .plainText();
+        String idle = Editor.render(EditorState.of("x"), EditorOptions.defaults(), false)
+                .plainText();
+        assertThat(idle).as("an unfocused editor paints only its text").isEqualTo("x");
+        assertThat(focused).as("a focused editor adds one cursor cell").hasSize(2)
+                .startsWith("x");
+    }
 }
