@@ -10,7 +10,7 @@ Instructions for coding agents working with this project, whether it is a Git ch
 - Treat `PROJECT.md` (when present), the repository's specifications, architecture docs, build
   configuration, tests, and existing source as the authorities for **project-specific facts**. Planning documents record decisions but
   do not prove that the current implementation matches them.
-- Use `DESIGN_PLAN_TEMPLATE.md` and `IMPL_PLAN_TEMPLATE.md` for the workflows described below.
+- Use `DESIGN.md` and `IMPLEMENT.md` for the workflows described below.
   They are templates, not additional permission to change code.
 - If instructions or sources conflict, identify the conflict. Do not silently invent a resolution
   to a behavior-defining or destructive conflict.

@@ -5,8 +5,9 @@ not an authoritative source of requirements; verify details against `PROJECT.md`
 
 ## Index
 
-No memories recorded yet. Add concise, topic-specific Markdown files under `memory/` as useful
-knowledge accumulates, and link each file here with a short description.
+- [HUNT_LOOP working notes](memory/hunt-loop-notes.md) - the producer hand-off retry policy, the
+  pyte harness probe recipe, the content/surrogate and border-visibility rules pinned in cycles
+  187-196, and coverage-hunting observations.
 
 ## Maintenance
 
