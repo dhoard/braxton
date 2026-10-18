@@ -335,7 +335,12 @@ public final class Editor {
 
     // ── input mapping ────────────────────────────────────────────────────────
 
-    /** Maps one normalized input event to an editor action, or empty when unhandled. */
+    /**
+     * Maps one normalized input event to an editor action, or empty when unhandled.
+     *
+     * <p>A configured copy or paste key wins over printable text, so a shift+letter binding remains
+     * reachable.</p>
+     */
     public static Optional<EditorAction> actionFor(InputEvent event, EditorOptions options) {
         EditorOptions opts = options == null ? EditorOptions.defaults() : options;
         if (event instanceof InputEvent.PasteInput paste) {
@@ -349,14 +354,17 @@ public final class Editor {
         boolean plainModifiers = key.modifiers().none()
                 || (key.modifiers().shift() && !key.modifiers().ctrl() && !key.modifiers().alt());
 
-        if (!keyInput.text().isEmpty() && plainModifiers) {
-            return Optional.of(new EditorAction.Insert(keyInput.text()));
-        }
+        // The configured copy and paste keys are matched before printable text. Otherwise a
+        // binding such as shift+c, which also carries text, could never fire: the gesture would
+        // always insert instead.
         if (key.equals(opts.copyKey())) {
             return Optional.of(new EditorAction.Copy());
         }
         if (key.equals(opts.pasteKey())) {
             return Optional.of(new EditorAction.PasteRequest());
+        }
+        if (!keyInput.text().isEmpty() && plainModifiers) {
+            return Optional.of(new EditorAction.Insert(keyInput.text()));
         }
         if (key.modifiers().ctrl() && !key.modifiers().alt()) {
             if ("j".equals(name)) {

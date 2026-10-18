@@ -340,6 +340,20 @@ class EditorTest {
     }
 
     @Test
+    void aConfiguredPrintableCopyOrPasteKeyWinsOverInsertingItsText() {
+        // shift+c and shift+v carry text, but a binding the caller configured must still fire.
+        EditorOptions options = EditorOptions.defaults()
+                .withKeys(Key.of("c", Modifiers.SHIFT), Key.of("v", Modifiers.SHIFT));
+        assertThat(Editor.actionFor(new InputEvent.KeyInput(Key.of("c", Modifiers.SHIFT), "C", 0L),
+                options)).contains(new EditorAction.Copy());
+        assertThat(Editor.actionFor(new InputEvent.KeyInput(Key.of("v", Modifiers.SHIFT), "V", 0L),
+                options)).contains(new EditorAction.PasteRequest());
+        // With the default bindings the same gesture stays printable text.
+        assertThat(Editor.actionFor(new InputEvent.KeyInput(Key.of("c", Modifiers.SHIFT), "C", 0L),
+                EditorOptions.defaults())).contains(new EditorAction.Insert("C"));
+    }
+
+    @Test
     void anInsertedCarriageReturnBecomesTheEditorsLineBreak() {
         // The editor's line model is LF (lineAt/lineEnd, the decoder's newline and the paste
         // sanitizer all agree), so a raw CR must not sit in the draft as an invisible character
