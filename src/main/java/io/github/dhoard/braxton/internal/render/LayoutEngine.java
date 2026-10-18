@@ -340,10 +340,10 @@ public final class LayoutEngine {
         if (child instanceof View.Fill<?>) {
             return cols;
         }
-        if (child instanceof View.Fixed<?> fixed && fixed.size() <= cols) {
-            return fixed.size();
-        }
-        return Math.min(cols, intrinsicWidth(child, cols));
+        // A fixed child reports its row count as a size, but inside a column that number is the
+        // main axis; the cross-axis width still comes from what the child paints.
+        View<?> measured = child instanceof View.Fixed<?> fixed ? fixed.child() : child;
+        return Math.min(cols, intrinsicWidth(measured, cols));
     }
 
     private void paintBorder(View.BorderBox<?> box, Screen screen, Rect bounds, List<Region> regions) {

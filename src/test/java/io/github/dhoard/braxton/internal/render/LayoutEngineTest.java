@@ -154,6 +154,16 @@ class LayoutEngineTest {
     }
 
     @Test
+    void anEndAlignedColumnItemKeepsItsContentWidth() {
+        View<?> view = Views.column(Alignment.END,
+                List.of(Views.fixed(3, Views.text("tall")), Views.text("s")));
+        Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, 4, 6)).screen();
+        assertThat(screen.plainLine(0)).isEqualTo("  tall");
+        assertThat(screen.plainLine(1)).isEmpty();
+        assertThat(screen.plainLine(3)).isEqualTo("     s");
+    }
+
+    @Test
     void rightAlignedTextEndingInAZeroWidthCharacterSitsFlush() {
         View<?> view = Views.column(Alignment.END,
                 List.of(Views.text("ab\u200B"), Views.text("cd")));
