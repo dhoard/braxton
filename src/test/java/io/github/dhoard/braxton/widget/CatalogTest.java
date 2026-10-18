@@ -360,6 +360,14 @@ class CatalogTest {
     }
 
     @Test
+    void confirmingAnEmptySelectorHasNothingToChoose() {
+        Selector.State empty = Selector.State.of(List.of());
+        Selector.Result result = Selector.update(empty, new Selector.Action.Confirm());
+        assertThat(result.intent()).isInstanceOf(Selector.Intent.None.class);
+        assertThat(result.state()).isEqualTo(empty);
+    }
+
+    @Test
     void tableSelectorClampsAndReportsTheSelectedCell() {
         TableSelector.State state = TableSelector.State.of(List.of("h1", "h2"),
                 List.of(List.of("a", "b"), List.of("c", "d")));

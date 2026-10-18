@@ -100,8 +100,10 @@ public final class Selector {
             case Action.Down down -> new Result(new State(state.options(),
                     Math.min(Math.max(0, state.options().size() - 1), state.selected() + 1),
                     state.active()), new Intent.None());
-            case Action.Confirm confirm -> new Result(state,
-                    new Intent.Chosen(state.selected(), state.current()));
+            // With no options there is nothing to confirm; Chosen(-1, "") would not be a choice.
+            case Action.Confirm confirm -> state.selected() < 0
+                    ? new Result(state, new Intent.None())
+                    : new Result(state, new Intent.Chosen(state.selected(), state.current()));
             case Action.Cancel cancel -> new Result(state, new Intent.Cancelled());
         };
     }
