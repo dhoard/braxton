@@ -193,6 +193,31 @@ class HarnessProgramTest {
     }
 
     @Test
+    void aQueuedTurnRestartsTheElapsedLabel() {
+        Transition<HarnessState, HarnessMsg> first = update(ready().withNow(1_000_000_000L),
+                new HarnessMsg.Submit("one"));
+        HarnessState ticked = update(first.model(), new HarnessMsg.Tick(1_000_000_000L)).model();
+        HarnessState queued = update(ticked, new HarnessMsg.Submit("two")).model();
+        HarnessState later = update(queued, new HarnessMsg.Tick(61_000_000_000L)).model();
+        assertThat(HarnessProjection.topRule(later).plainText())
+                .contains("Working (1m 0s \u00b7 1 queued)");
+
+        // The last block of the running turn hands over to the queued one, which has not been
+        // observed by a tick yet, so its label starts at zero rather than at the old start.
+        HarnessState drained = update(later,
+                new HarnessMsg.ResponseBlock(later.generation(), 0)).model();
+        assertThat(drained.pending()).isEmpty();
+        assertThat(drained.working()).isTrue();
+        assertThat(drained.workStartedNanos()).isEqualTo(-1L);
+        assertThat(HarnessProjection.topRule(drained).plainText()).contains("Working (0s)");
+
+        HarnessState started = update(drained, new HarnessMsg.Tick(70_000_000_000L)).model();
+        assertThat(HarnessProjection.topRule(started).plainText()).contains("Working (0s)");
+        HarnessState elapsed = update(started, new HarnessMsg.Tick(73_000_000_000L)).model();
+        assertThat(HarnessProjection.topRule(elapsed).plainText()).contains("Working (3s)");
+    }
+
+    @Test
     void emptyResponsePlansCompleteWithoutAnotherDelay() {
         HarnessTranscript empty = new HarnessTranscript(List.of(
                 new HarnessTranscript.HarnessTurn("q", List.of(),
