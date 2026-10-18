@@ -304,6 +304,19 @@ class EditorTest {
     }
 
     @Test
+    void anInsertedCarriageReturnBecomesTheEditorsLineBreak() {
+        // The editor's line model is LF (lineAt/lineEnd, the decoder's newline and the paste
+        // sanitizer all agree), so a raw CR must not sit in the draft as an invisible character
+        // that shifts offsets without breaking a line.
+        EditorState state = Editor.update(EditorState.empty(), OPTIONS,
+                new EditorAction.Insert("a\r\nb\rc")).state();
+        assertThat(state.text()).isEqualTo("a\nb\nc");
+        assertThat(state.lineCount()).isEqualTo(3);
+        assertThat(state.caret()).isEqualTo(state.text().length());
+        assertThat(state.displayText(OPTIONS)).doesNotContain("\r");
+    }
+
+    @Test
     void aPromptWithATabKeepsContinuationLinesAligned() {
         // The prompt is painted by the text view, which expands its tab to the next four-column
         // stop, so the blank stand-in on later lines must be the painted width.

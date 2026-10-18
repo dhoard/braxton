@@ -93,6 +93,11 @@ public final class Editor {
         return PasteSanitizer.sanitize(text, options.pasteMode(), options.collapsePasteBlankLines());
     }
 
+    /**
+     * Inserts text at the caret or over the selection. Line endings are normalized to the editor's
+     * line break (LF), matching the paste sanitizer and the decoder, so a raw carriage return never
+     * sits in the draft as an invisible offset that does not break a line.
+     */
     private static EditorState insert(EditorState state, EditorOptions options, String raw) {
         if (raw.isEmpty()) {
             return state;
@@ -100,7 +105,7 @@ public final class Editor {
         int start = state.hasSelection() ? state.selectionStart() : state.caret();
         int end = state.hasSelection() ? state.selectionEnd() : state.caret();
         int lengthAfterRemoval = state.text().length() - (end - start);
-        String insert = raw;
+        String insert = raw.replace("\r\n", "\n").replace('\r', '\n');
         OptionalInt limit = options.maxLength();
         if (limit.isPresent()) {
             int room = Math.max(0, limit.getAsInt() - lengthAfterRemoval);
