@@ -211,6 +211,73 @@ class RuntimeLoopTest {
         assertThat(terminal.isOpen()).isFalse();
     }
 
+    @Test
+    @Timeout(30)
+    void twoSequentialRunsInOneJvmAreIndependent() {
+        // Application.run builds a fresh runtime per call, so a second run in the same JVM must
+        // start clean: its own terminal, its own first frame, its own exit, and no reader thread
+        // left over from the first run.
+        FakeTerminal first = new FakeTerminal(new Size(6, 20));
+        first.feed("q");
+        first.endInput();
+        ExitResult firstResult = Application.run(new Counter(),
+                options(new FakeTerminal.ManualTimers()), first);
+        assertThat(firstResult.kind()).isEqualTo(ExitResult.Kind.QUIT);
+        assertThat(firstResult.status()).isEqualTo(3);
+        assertThat(first.isOpen()).as("the first session is closed").isFalse();
+
+        FakeTerminal second = new FakeTerminal(new Size(6, 20));
+        second.feed("a");
+        second.feed(" ");
+        second.feed("q");
+        second.endInput();
+        ExitResult secondResult = Application.run(new Counter(),
+                options(new FakeTerminal.ManualTimers()), second);
+        assertThat(secondResult.kind()).as("the second run still quits").isEqualTo(ExitResult.Kind.QUIT);
+        assertThat(secondResult.status()).isEqualTo(3);
+        assertThat(second.isOpen()).isFalse();
+        // The second run received its own input and painted its own model, not the first one's.
+        assertThat(second.output()).as("the second run counts its own keys").contains("count: 2");
+        assertThat(second.output()).doesNotContain("count: 5");
+    }
+
+    @Test
+    @Timeout(30)
+    void aSecondRunAfterAFailedFirstRunStillWorks() {
+        FakeTerminal broken = new FakeTerminal(new Size(6, 20));
+        broken.endInput();
+        ExitResult first = Application.run(new Exploding(), options(new FakeTerminal.ManualTimers()),
+                broken);
+        assertThat(first.kind()).isEqualTo(ExitResult.Kind.FAILURE);
+
+        FakeTerminal healthy = new FakeTerminal(new Size(6, 20));
+        healthy.feed("q");
+        healthy.endInput();
+        ExitResult second = Application.run(new Counter(),
+                options(new FakeTerminal.ManualTimers()), healthy);
+        assertThat(second.kind()).isEqualTo(ExitResult.Kind.QUIT);
+        assertThat(healthy.output()).contains("count: 0");
+    }
+
+    /** Fails during init, so the run ends in a failure that must not poison the next one. */
+    private record Exploding() implements Program<Integer, String> {
+
+        @Override
+        public Transition<Integer, String> init(InitContext context) {
+            throw new IllegalStateException("boom");
+        }
+
+        @Override
+        public Transition<Integer, String> update(Integer model, String message) {
+            return Transition.stay(model);
+        }
+
+        @Override
+        public View<String> view(Integer model, Viewport viewport) {
+            return Views.text("never");
+        }
+    }
+
     /** Starts a task that ignores interruption, then asks to quit after one tick. */
     private record HangingEffect(CountDownLatch started) implements Program<Integer, String> {
 
