@@ -44,8 +44,16 @@ public record ElementId(String value) {
         return new ElementId(value);
     }
 
-    /** A child identity in this element's namespace. */
+    /**
+     * A child identity in this element's namespace.
+     *
+     * @throws IllegalArgumentException when {@code name} is null or blank; joining either would
+     *     forge an identity ("parent/null", "parent/") that collides with a real child name
+     */
     public ElementId child(String name) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("child name must not be blank");
+        }
         return new ElementId(value + "/" + name);
     }
 
