@@ -676,6 +676,61 @@ class RuntimeLoopTest {
 
     @Test
     @Timeout(15)
+    void aQuitInsideABatchEndsTheRunAndStopsTheCommandsAfterIt() {
+        // The documented contract for Command.batch: "interpreted in order; a Quit ends the batch".
+        // At the runtime level that must also end the run with the quit's status and leave nothing
+        // from the rest of the batch running.
+        java.util.List<String> diagnostics =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        java.util.concurrent.atomic.AtomicInteger updates =
+                new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger tasks =
+                new java.util.concurrent.atomic.AtomicInteger();
+        FakeTerminal.ManualTimers timers = new FakeTerminal.ManualTimers();
+        Program<Integer, String> program = new Program<>() {
+            @Override
+            public Transition<Integer, String> init(InitContext context) {
+                return Transition.next(0, Command.batch(
+                        Command.delay(EffectId.of("before"), java.time.Duration.ofSeconds(1),
+                                "before", "rejected"),
+                        Command.quit(5),
+                        Command.task(EffectId.of("after"), () -> {
+                            tasks.incrementAndGet();
+                            return "after";
+                        }, value -> "after", failure -> "after")));
+            }
+
+            @Override
+            public Transition<Integer, String> update(Integer model, String message) {
+                updates.incrementAndGet();
+                return Transition.stay(model);
+            }
+
+            @Override
+            public View<String> view(Integer model, Viewport viewport) {
+                return Views.text("batch");
+            }
+        };
+        FakeTerminal terminal = new FakeTerminal(new Size(3, 10));
+        RuntimeOptions options = RuntimeOptions.defaults().withLimits(32, 8, 8)
+                .withEnvironment(RuntimeEnvironment.system()
+                        .withTimers(timers)
+                        .withEffectExecutor(Runnable::run)
+                        .withDiagnostics(diagnostics::add)
+                        .withNanoTime(() -> 1_000L));
+        ExitResult result = Application.run(program, options, terminal);
+
+        assertThat(result.kind()).isEqualTo(ExitResult.Kind.QUIT);
+        assertThat(result.status()).isEqualTo(5);
+        assertThat(tasks).as("a task after the quit never starts").hasValue(0);
+        timers.advance(5_000_000_000L);
+        assertThat(updates).as("nothing from the batch reaches update after the quit").hasValue(0);
+        assertThat(timers.pending()).as("the cancelled delay is gone").isZero();
+        assertThat(diagnostics).isEmpty();
+    }
+
+    @Test
+    @Timeout(15)
     void aFailureKeepsItsPrimaryCauseAndCarriesTheCleanupFailures() throws Exception {
         // The documented contract: ExitResult "carries cleanup failures without hiding the primary
         // cause". A timer that cannot be cancelled during shutdown must not replace the exception
