@@ -183,6 +183,22 @@ class InputDecoderTest {
     }
 
     @Test
+    void aPasteLimitNeverLeavesABrokenCharacter() throws IOException {
+        String body = "\uD83D\uDE00ab";
+        ByteAtATime stream = new ByteAtATime(
+                ("\u001B[200~" + body + "\u001B[201~").getBytes(StandardCharsets.UTF_8));
+        InputDecoder decoder = new InputDecoder(stream, 1, 3, 4096);
+        InputEvent.PasteInput paste = (InputEvent.PasteInput) decoder.read().orElseThrow();
+        assertThat(paste.text()).isEmpty();
+
+        ByteAtATime roomy = new ByteAtATime(
+                ("\u001B[200~ab" + body + "\u001B[201~").getBytes(StandardCharsets.UTF_8));
+        InputEvent.PasteInput limited =
+                (InputEvent.PasteInput) new InputDecoder(roomy, 1, 2, 4096).read().orElseThrow();
+        assertThat(limited.text()).isEqualTo("ab");
+    }
+
+    @Test
     void wheelEventsAreMappedAndOtherMouseEventsIgnored() throws IOException {
         assertThat(((InputEvent.KeyInput) read("\u001B[<64;10;5M").orElseThrow()).key())
                 .isEqualTo(Key.WHEEL_UP);
