@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.dhoard.braxton.layout.Insets;
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
@@ -65,6 +66,18 @@ class ScreenTest {
         Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, 1, 4)).screen();
         assertThat(screen.cell(0, 0).text()).isEmpty();
         assertThat(screen.cell(0, 1).style().background()).isEqualTo(Colors.BLUE_400);
+    }
+
+    @Test
+    void aWideOverlayGlyphDoesNotLeaveAStaleContinuationBehind() {
+        View<?> view = Views.overlay(Views.text("\u65E5\u5F0F"), Views.row(
+                Views.fixed(4, Views.padding(Insets.symmetric(0, 1), Views.text("\u672C"))),
+                Views.fixed(1, Views.text("x"))));
+        Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, 1, 5)).screen();
+        assertThat(screen.cell(0, 1).text()).isEqualTo("\u672C");
+        assertThat(screen.isContinuation(0, 2)).isTrue();
+        assertThat(screen.isContinuation(0, 3)).isFalse();
+        assertThat(screen.cell(0, 4).text()).isEqualTo("x");
     }
 
     @Test

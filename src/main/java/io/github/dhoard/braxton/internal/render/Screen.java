@@ -126,6 +126,9 @@ public final class Screen {
         // Repainting over the second half of a previous wide glyph must clear its first half.
         if (span == 2) {
             clearIfContinuation(row, col + 1);
+            // A previous wide glyph may also start at col + 1; its continuation at col + 2 is
+            // covered by this glyph, so the flag must not survive as a stale marker.
+            clearContinuationAt(row, col + 2);
         }
         clearIfContinuation(row, col);
         cells[index(row, col)] = new Cell(grapheme, inheritBackground(row, col, style), link);
@@ -155,6 +158,14 @@ public final class Screen {
         if (inside(row, next) && continuation[index(row, next)]) {
             cells[index(row, next)] = Cell.EMPTY;
             continuation[index(row, next)] = false;
+        }
+    }
+
+    /** Drops a continuation whose wide glyph is being overwritten. */
+    private void clearContinuationAt(int row, int col) {
+        if (inside(row, col) && continuation[index(row, col)]) {
+            cells[index(row, col)] = Cell.EMPTY;
+            continuation[index(row, col)] = false;
         }
     }
 
