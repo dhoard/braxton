@@ -23,6 +23,7 @@
 package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 
@@ -91,6 +92,31 @@ class MarkupTest {
                     assertThat(span.style().foreground())
                             .isEqualTo(Color.parse("#ff0000").orElseThrow());
                 });
+    }
+
+    @Test
+    void aDoctypeOrEntityDeclarationIsRejectedInsteadOfBeingResolved() {
+        // The documented security rule: "Markup disables DTDs and external entities, so untrusted
+        // text cannot fetch a file or URL." A parser that resolved this document would put the
+        // file's contents (or a billion-laughs expansion) into the rendered text.
+        String externalEntity =
+                "<!DOCTYPE root [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><root>&xxe;</root>";
+        assertThatThrownBy(() -> Markup.parse(externalEntity))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("DOCTYPE")
+                .hasMessageNotContaining("root:");
+        assertThatThrownBy(() -> Markup.parse(
+                "<!DOCTYPE root SYSTEM \"file:///etc/passwd\"><root>hi</root>"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Markup.parse(
+                "<!DOCTYPE root [<!ENTITY laugh \"ha\">]><root>&laugh;</root>"))
+                .isInstanceOf(IllegalArgumentException.class);
+        // An undeclared entity is a malformed document too, not literal text to echo.
+        assertThatThrownBy(
+                () -> Markup.parse("<root>&undefined;</root>"))
+                .isInstanceOf(IllegalArgumentException.class);
+        // The ordinary document still renders, so the guard did not disable parsing.
+        assertThat(Markup.parse("<root>hi</root>").plainText()).isEqualTo("hi");
     }
 
     @Test
