@@ -44,9 +44,9 @@ final class TabStops {
     /** {@code text} with every tab replaced by spaces up to the next stop on its own line. */
     static StyledText expand(StyledText text) {
         StyledText out = StyledText.empty();
+        int used = 0;
         for (StyledText.Span span : text.spans()) {
             StringBuilder expanded = new StringBuilder();
-            int used = 0;
             for (String cluster : TextMeasure.graphemes(span.text())) {
                 if ("\n".equals(cluster)) {
                     expanded.append('\n');

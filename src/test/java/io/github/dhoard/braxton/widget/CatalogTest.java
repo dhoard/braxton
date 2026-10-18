@@ -86,6 +86,18 @@ class CatalogTest {
     }
 
     @Test
+    void tableCellsExpandATabFromTheLineStartAcrossSpans() {
+        Table plain = Table.of().buffer(0);
+        plain.row(StyledText.plain("ab\tx"));
+        Table styled = Table.of().buffer(0);
+        styled.row(StyledText.concat(StyledText.of("ab", Style.NONE.withBold()),
+                StyledText.of("\tx", Style.NONE)));
+        assertThat(styled.renderLines().get(0).plainText())
+                .isEqualTo(plain.renderLines().get(0).plainText())
+                .isEqualTo("ab  x");
+    }
+
+    @Test
     void markupTableColumnsLineUpWhenACellContainsATabStop() {
         StyledText rendered = Markup.parse("<root><table gap=\"1\">"
                 + "<tr><td>a\tb</td><td>c</td></tr>"
