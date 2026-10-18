@@ -170,6 +170,62 @@ class RuntimeLoopTest {
         assertThat(terminal.output()).contains("count: 1");
     }
 
+    /** Blocks its first update until the test releases it, so the owner is busy at end-of-input. */
+    private static final class SlowStart implements Program<Integer, String> {
+        private final CountDownLatch entered = new CountDownLatch(1);
+        private final CountDownLatch release = new CountDownLatch(1);
+
+        @Override
+        public Transition<Integer, String> init(InitContext context) {
+            return Transition.stay(0);
+        }
+
+        @Override
+        public Transition<Integer, String> update(Integer model, String message) {
+            if ("a".equals(message)) {
+                entered.countDown();
+                try {
+                    release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            return Transition.stay(model + 1);
+        }
+
+        @Override
+        public View<String> view(Integer model, Viewport viewport) {
+            return Views.keyed(List.of(Binding.of("a", "a"), Binding.of("b", "b")),
+                    Views.text("count: " + model), List.of());
+        }
+    }
+
+    @Test
+    @Timeout(15)
+    void aCleanEndOfInputIsNotReportedAsAFailureWhenTheMailboxWasFull() throws Exception {
+        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        RuntimeOptions options = options(new FakeTerminal.ManualTimers()).withLimits(1, 8, 8);
+        SlowStart program = new SlowStart();
+        java.util.concurrent.atomic.AtomicReference<ExitResult> outcome =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        Thread runner = Thread.ofVirtual().start(
+                () -> outcome.set(Application.run(program, options, terminal)));
+        terminal.feed("a");
+        assertThat(program.entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                .as("the first update is running").isTrue();
+        // The owner is busy, so this fills the one-slot mailbox; end-of-input then finds it full.
+        terminal.feed("b");
+        Thread.sleep(200L);
+        terminal.endInput();
+        Thread.sleep(300L);
+        program.release.countDown();
+        runner.join(5_000L);
+        assertThat(outcome.get()).isNotNull();
+        assertThat(outcome.get().kind())
+                .as("end-of-input is not a runtime failure: %s", outcome.get())
+                .isEqualTo(ExitResult.Kind.INPUT_CLOSED);
+    }
+
     @Test
     @Timeout(5)
     void anInputReaderFailureEndsTheRunInsteadOfHanging() {

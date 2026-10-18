@@ -286,10 +286,22 @@ public final class RuntimeLoop<M, Msg> {
         if (mailbox == null) {
             return;
         }
-        try {
-            mailbox.enqueue(envelope, 100L);
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
+        // An exit reason must not be dropped just because the owner is momentarily busy: the
+        // reader would then stop without a Close, and the owner would report the clean end of
+        // input as a runtime failure. Retry until the queue drains; close() releases this wait
+        // during shutdown, and the owner's final join interrupts it.
+        while (true) {
+            try {
+                if (mailbox.enqueue(envelope, 100L)) {
+                    return;
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (mailbox.isClosed()) {
+                return;
+            }
         }
     }
 
