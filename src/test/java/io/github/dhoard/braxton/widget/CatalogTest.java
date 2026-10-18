@@ -195,6 +195,15 @@ class CatalogTest {
     }
 
     @Test
+    void aBoxNarrowerThanTwoColumnsStillDrawsItsFrame() {
+        String rendered = Box.of("body").border(Border.SINGLE).width(1).render(10).plainText();
+        assertThat(rendered).isEqualTo("\u250C\u2510\n\u2502\u2502\n\u2514\u2518");
+        for (String line : rendered.split("\n", -1)) {
+            assertThat(TextMeasure.columns(line)).isEqualTo(2);
+        }
+    }
+
+    @Test
     void aTitledBoxKeepsItsWidthWhenTheFrameHasNoRoomForTheTitle() {
         for (int width = 2; width <= 10; width++) {
             String rendered = Box.of("body").border(Border.ROUNDED).title("Title").width(width)

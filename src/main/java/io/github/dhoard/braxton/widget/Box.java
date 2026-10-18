@@ -101,7 +101,8 @@ public final class Box {
 
     /** Renders the box at {@code width} columns (or its fixed width when configured). */
     public StyledText render(int width) {
-        int limit = fixedWidth > 0 ? fixedWidth : Math.max(4, width);
+        // The two frame columns are the floor: a narrower box would have a negative inner width.
+        int limit = fixedWidth > 0 ? Math.max(2, fixedWidth) : Math.max(4, width);
         List<StyledText> lines = content.lines();
         List<StyledText> clipped = new ArrayList<>();
         for (StyledText line : lines) {
