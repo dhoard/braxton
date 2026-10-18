@@ -53,6 +53,15 @@ public record RuntimeOptions(
         if (shutdownGrace.isNegative()) {
             throw new IllegalArgumentException("shutdown grace must not be negative");
         }
+        // The effect runner waits in nanoseconds, the scheduler's unit. A grace beyond that range
+        // is rejected here instead of throwing inside shutdown, where the failure would turn a
+        // clean quit into a failed run.
+        try {
+            shutdownGrace.toNanos();
+        } catch (ArithmeticException overflow) {
+            throw new IllegalArgumentException(
+                    "shutdown grace must fit in nanoseconds: " + shutdownGrace, overflow);
+        }
         if (mailboxCapacity < 1) {
             throw new IllegalArgumentException("mailbox capacity must be positive");
         }
