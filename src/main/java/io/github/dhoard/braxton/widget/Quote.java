@@ -83,9 +83,20 @@ public final class Quote {
                 out = out.append("\n");
             }
             out = out.append(StyledText.of(bar, borderStyle))
-                    .append(StyledText.of(" " + line.plainText() + " ".repeat(pad), background));
+                    .append(StyledText.of(" ", background))
+                    .append(restyle(line, background))
+                    .append(StyledText.of(" ".repeat(pad), background));
         }
         return out;
+    }
+
+    /** Applies the quote background to every span, keeping each span's own styling and link. */
+    private static StyledText restyle(StyledText line, Style background) {
+        StyledText body = StyledText.empty();
+        for (StyledText.Span span : line.spans()) {
+            body = body.append(StyledText.of(span.text(), span.style().merge(background), span.link()));
+        }
+        return body;
     }
 
     public View<Object> view() {

@@ -120,6 +120,23 @@ class CatalogTest {
     }
 
     @Test
+    void quotePreservesTheStylingOfTheQuotedContent() {
+        StyledText content = StyledText.of("hot",
+                Style.NONE.withBold().withForeground(Colors.ERROR_400));
+        StyledText quote = Quote.of().append(content).background(Colors.GRAY_600).render();
+        assertThat(quote.plainText()).isEqualTo("\u2502 hot");
+        List<StyledText.Span> spans = quote.spans();
+        StyledText.Span body = spans.stream()
+                .filter(span -> span.text().contains("hot"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(body.text()).isEqualTo("hot");
+        assertThat(body.style().bold()).isTrue();
+        assertThat(body.style().foreground()).isEqualTo(Colors.ERROR_400);
+        assertThat(body.style().background()).isEqualTo(Colors.GRAY_600);
+    }
+
+    @Test
     void quoteKeepsItsBarAndBackground() {
         StyledText quote = Quote.of().append("one").append("two")
                 .border(Colors.CYAN_400).render();
