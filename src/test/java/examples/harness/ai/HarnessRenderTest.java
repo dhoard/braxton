@@ -41,6 +41,21 @@ class HarnessRenderTest {
     }
 
     @Test
+    void wrappingAnOverlongIndentKeepsTheLineBlankInsteadOfInventingAnEllipsis() {
+        // A whitespace-only line must stay blank. Clipping the indent keeps its width; the old
+        // truncate() call turned it into " …", an ellipsis that was never in the text.
+        assertThat(HarnessRender.wrap("    ", 2)).containsExactly("");
+        assertThat(HarnessRender.wrap("a\n    \nb", 2)).containsExactly("a", "", "b");
+        for (int width = 1; width <= 8; width++) {
+            int limit = width;
+            List<String> lines = HarnessRender.wrap(" ".repeat(12), width);
+            assertThat(lines).as("width %d", width).noneMatch(line -> line.contains("\u2026"));
+            assertThat(lines).allSatisfy(line ->
+                    assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(limit));
+        }
+    }
+
+    @Test
     void wrappingAnIndentedLineNeverEmitsABlankLine() {
         assertThat(HarnessRender.wrap("     ab", 6)).containsExactly("ab");
         assertThat(HarnessRender.wrap("  ab", 3)).containsExactly("ab");

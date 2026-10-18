@@ -89,7 +89,9 @@ final class HarnessRender {
             int runWidth = visibleLength(run);
             if (spaces) {
                 if (currentWidth == 0) {
-                    String leading = truncate(run, limit);
+                    // The run is whitespace, so clip it instead of truncating it: truncate marks a
+                    // cut with an ellipsis, which would draw a content marker on a blank line.
+                    String leading = " ".repeat(Math.min(runWidth, limit));
                     current.append(leading);
                     currentWidth = visibleLength(leading);
                 } else if (currentWidth + runWidth <= limit) {
