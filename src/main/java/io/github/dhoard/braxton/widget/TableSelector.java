@@ -40,7 +40,9 @@ import io.github.dhoard.braxton.view.Views;
  * A focusable table with a selected row and column.
  *
  * <p>Selection is explicit state and is clamped on every action; the view inverts the selected cell
- * and never mutates the rows it was given.</p>
+ * while the table is focused, so the active style means "keys land here" exactly as it does in
+ * {@link Selector} and {@link Editor}, and an unfocused table shows no inversion. The rows it was
+ * given are never mutated.</p>
  *
  * <p>Every row is one painted line: tab stops are expanded to the shared four-column boundaries and
  * line breaks become spaces, so a cell can never split the selection grid across rows.</p>
