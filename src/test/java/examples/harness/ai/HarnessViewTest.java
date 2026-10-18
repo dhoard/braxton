@@ -416,6 +416,57 @@ class HarnessViewTest {
     }
 
     @Test
+    void everyDocumentedKeyReachesItsDocumentedAction() {
+        // The README's key table is the harness contract; route each documented gesture through
+        // the production view so a changed binding cannot drift from the documentation.
+        View<HarnessMsg> view = HarnessView.view(state(""));
+        record Case(Key key, String text, Class<?> messageType) {
+        }
+        List<Case> cases = List.of(
+                new Case(Key.ENTER, "\r", HarnessMsg.Editor.class),
+                new Case(Key.of("j", Modifiers.CTRL), "", HarnessMsg.Editor.class),
+                new Case(Key.UP, "", HarnessMsg.ScrollUp.class),
+                new Case(Key.WHEEL_UP, "", HarnessMsg.ScrollUp.class),
+                new Case(Key.DOWN, "", HarnessMsg.ScrollDown.class),
+                new Case(Key.WHEEL_DOWN, "", HarnessMsg.ScrollDown.class),
+                new Case(Key.PAGE_UP, "", HarnessMsg.PageUp.class),
+                new Case(Key.PAGE_DOWN, "", HarnessMsg.PageDown.class),
+                new Case(Key.END, "", HarnessMsg.ScrollBottom.class),
+                new Case(Key.TAB, "", HarnessMsg.FocusComposer.class),
+                new Case(Key.ESCAPE, "", HarnessMsg.Escape.class),
+                new Case(Key.of("c", Modifiers.CTRL), "", HarnessMsg.QuitRequest.class),
+                new Case(Key.of("c", Modifiers.ALT), "", HarnessMsg.Editor.class),
+                new Case(Key.of("v", Modifiers.CTRL), "", HarnessMsg.Editor.class),
+                new Case(Key.of("t", Modifiers.ALT), "", HarnessMsg.CopyVisible.class),
+                new Case(Key.of("l", Modifiers.ALT), "", HarnessMsg.CopyLastReply.class));
+        assertThat(cases).allSatisfy(entry -> {
+            Optional<HarnessMsg> routed = InputRouter.route(view,
+                    new InputEvent.KeyInput(entry.key(), entry.text(), 0L));
+            assertThat(routed).as("%s is documented but produces nothing", entry.key())
+                    .isPresent();
+            assertThat(routed.get()).as("%s routes to the documented message", entry.key())
+                    .isInstanceOf(entry.messageType());
+        });
+        // A printable key edits the composer, and the two editor gestures keep their own actions.
+        assertThat(InputRouter.route(view, new InputEvent.KeyInput(Key.of("a"), "a", 0L)))
+                .contains(new HarnessMsg.Editor(new io.github.dhoard.braxton.widget.EditorAction.Insert("a")));
+        assertThat(InputRouter.route(view,
+                InputEvent.KeyInput.of(Key.of("j", Modifiers.CTRL))))
+                .contains(new HarnessMsg.Editor(new io.github.dhoard.braxton.widget.EditorAction.Newline()));
+        assertThat(InputRouter.route(view,
+                InputEvent.KeyInput.of(Key.of("c", Modifiers.ALT))))
+                .contains(new HarnessMsg.Editor(new io.github.dhoard.braxton.widget.EditorAction.Copy()));
+        assertThat(InputRouter.route(view,
+                InputEvent.KeyInput.of(Key.of("v", Modifiers.CTRL))))
+                .contains(new HarnessMsg.Editor(
+                        new io.github.dhoard.braxton.widget.EditorAction.PasteRequest()));
+        assertThat(InputRouter.route(view,
+                InputEvent.KeyInput.of(Key.of("t", Modifiers.ALT))))
+                .as("Alt+T copies the visible transcript, not the draft")
+                .contains(new HarnessMsg.CopyVisible());
+    }
+
+    @Test
     void layoutIsDeterministic() {
         HarnessState state = state("hello");
         assertThat(lines(state)).isEqualTo(lines(state));
