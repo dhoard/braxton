@@ -78,6 +78,65 @@ class BaseTerminalSessionTest {
         }
     }
 
+    /** Blocks in waitReadable until the session closes, like a terminal with no input pending. */
+    private static final class BlockingSession extends BaseTerminalSession {
+        private final java.util.concurrent.CountDownLatch waiting =
+                new java.util.concurrent.CountDownLatch(1);
+
+        BlockingSession() {
+            super(TerminalOptions.DEFAULT, TerminalCapabilities.PLAIN);
+        }
+
+        @Override
+        protected void writeNative(String data) {
+        }
+
+        @Override
+        protected boolean waitReadable(int timeoutMillis) {
+            waiting.countDown();
+            try {
+                Thread.sleep(2L);
+            } catch (InterruptedException stop) {
+                Thread.currentThread().interrupt();
+            }
+            return false;
+        }
+
+        @Override
+        protected int readNative(byte[] buffer, int offset, int length) {
+            return -1;
+        }
+
+        @Override
+        protected Size sizeNative() {
+            return new Size(24, 80);
+        }
+
+        @Override
+        protected void releaseNative() {
+        }
+    }
+
+    @Test
+    void closingTheSessionWakesABlockedReaderWithoutClosingSystemIn() throws Exception {
+        BlockingSession session = new BlockingSession();
+        session.startSession();
+        java.util.concurrent.atomic.AtomicInteger result =
+                new java.util.concurrent.atomic.AtomicInteger(Integer.MIN_VALUE);
+        Thread reader = Thread.ofVirtual().name("blocked-reader").start(() -> {
+            try {
+                result.set(session.input().read());
+            } catch (java.io.IOException failure) {
+                result.set(Integer.MAX_VALUE);
+            }
+        });
+        assertThat(session.waiting.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        session.close();
+        reader.join(5_000L);
+        assertThat(reader.isAlive()).as("close must wake the reader").isFalse();
+        assertThat(result.get()).as("a closed session reads as end of input").isEqualTo(-1);
+    }
+
     @Test
     void closingAnEnteredSessionRestoresModesExactlyOnce() {
         ScriptedSession session = new ScriptedSession();
