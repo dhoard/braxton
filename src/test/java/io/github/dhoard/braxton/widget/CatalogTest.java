@@ -418,6 +418,24 @@ class CatalogTest {
     }
 
     @Test
+    void aWhitespaceListIconFallsBackToTheDefaultBullet() {
+        // An icon that is only whitespace is not an icon: the list treats it as absent, so the
+        // default bullet is used and each item keeps one line per row. A visible multi-column icon
+        // keeps its continuation lines under the item text.
+        String tabbed = Markup.parse(
+                "<root><ul gap=\"0\" icon=\"&#9;\"><li>a<br/>b</li></ul></root>").plainText();
+        assertThat(tabbed).isEqualTo("\u2022 a\n  b");
+        String broken = Markup.parse(
+                "<root><ul gap=\"0\" icon=\"&#10;\"><li>a<br/>b</li></ul></root>").plainText();
+        assertThat(broken).isEqualTo("\u2022 a\n  b");
+        String wide = Markup.parse(
+                "<root><ul gap=\"1\" icon=\">>\"><li>a<br/>b</li></ul></root>").plainText();
+        assertThat(wide).isEqualTo(" >> a\n    b");
+        String[] lines = wide.split("\n", -1);
+        assertThat(lines[0].indexOf('a')).isEqualTo(lines[1].indexOf('b'));
+    }
+
+    @Test
     void markupListContinuationLinesAlignUnderTheItemText() {
         StyledText rendered = Markup.parse(
                 "<root><ul gap=\"1\"><li>item<br/>tail</li></ul></root>");
