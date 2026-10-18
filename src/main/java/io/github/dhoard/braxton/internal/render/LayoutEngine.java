@@ -507,6 +507,9 @@ public final class LayoutEngine {
                         used = 0;
                         stop = 4;
                     }
+                    // A stop wider than an empty line has nowhere to wrap to, so it is clamped to
+                    // the columns it can occupy; the painted line clips the same cells.
+                    stop = Math.min(stop, cols - used);
                     current = current.append(StyledText.of(" ".repeat(stop), span.style(), span.link()));
                     used += stop;
                     continue;

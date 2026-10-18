@@ -173,6 +173,22 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aTabStopThatCannotFitOnAnEmptyLineStaysInsideTheWidth() {
+        assertThat(engine.wrapLines(StyledText.plain("\ta"), 3))
+                .extracting(line -> line.plainText())
+                .containsExactly("   ", "a");
+        for (int cols = 1; cols <= 8; cols++) {
+            List<StyledText> lines = engine.wrapLines(StyledText.plain("\ta\tb\t"), cols);
+            assertThat(lines).isNotEmpty();
+            for (StyledText line : lines) {
+                assertThat(TextMeasure.columns(line.plainText()))
+                        .as("line width at %d columns", cols)
+                        .isLessThanOrEqualTo(cols);
+            }
+        }
+    }
+
+    @Test
     void anOverlayLayerThatGrowsKeepsItsContentSize() {
         View<?> view = Views.column(
                 Views.overlay(List.of(Views.grow(Views.text("mid"))), false),
