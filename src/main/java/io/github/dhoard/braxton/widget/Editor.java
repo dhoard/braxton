@@ -321,7 +321,13 @@ public final class Editor {
             String display = opts.masking() == EditorOptions.Masking.HIDDEN ? "" : masking ? MASK : cluster;
             boolean cursor = focused && state.caret() == position;
             if (cursor) {
-                display = CURSOR;
+                // The block covers the grapheme under the caret. A two-column grapheme occupies two
+                // cells, so one block would leave the line a column short and slide everything
+                // after the caret one cell to the left. A masked draft paints one cell per cluster,
+                // so the cursor there stays one cell too.
+                int cells = masking
+                        ? 1 : TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED);
+                display = CURSOR.repeat(Math.max(1, cells));
             }
             Style style = selected ? opts.selectionStyle() : opts.textStyle();
             if (!display.isEmpty()) {

@@ -317,6 +317,23 @@ class EditorTest {
     }
 
     @Test
+    void theBlockCursorCoversAWideGraphemeWithoutMovingTheRestOfTheLine() {
+        // The block cursor covers the grapheme under it. A two-column grapheme occupies two cells,
+        // so one block leaves the line a column short and slides everything after the caret left.
+        EditorState wide = EditorState.of("a\u6F22b").withCaret(1);
+        assertThat(Editor.render(wide, EditorOptions.defaults(), false).plainText())
+                .isEqualTo("a\u6F22b");
+        assertThat(Editor.render(wide, EditorOptions.defaults(), true).plainText())
+                .isEqualTo("a" + Editor.CURSOR.repeat(2) + "b");
+
+        EditorState family = EditorState.of(FAMILY + "x").withCaret(0);
+        assertThat(Editor.render(family, EditorOptions.defaults(), false).plainText())
+                .isEqualTo(FAMILY + "x");
+        assertThat(Editor.render(family, EditorOptions.defaults(), true).plainText())
+                .isEqualTo(Editor.CURSOR.repeat(2) + "x");
+    }
+
+    @Test
     void unfocusedEditorsDoNotDrawACursor() {
         assertThat(Editor.render(EditorState.of("ab"), OPTIONS, false).plainText())
                 .doesNotContain(Editor.CURSOR);
