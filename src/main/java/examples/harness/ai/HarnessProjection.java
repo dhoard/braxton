@@ -128,7 +128,10 @@ final class HarnessProjection {
         return List.copyOf(window);
     }
 
-    /** Plain text of the currently visible transcript, used by Alt+T; never the scrollbar. */
+    /**
+     * Plain text of the currently visible transcript, used by Alt+T: no scrollbar column and no
+     * right padding, so pasted text carries the transcript only.
+     */
     static String visiblePlainText(HarnessState state) {
         List<StyledText> rows = slice(state, state.viewport().cols(), state.viewport().rows(),
                 state.editorRows()).rows();
@@ -137,7 +140,7 @@ final class HarnessProjection {
             if (i > 0) {
                 text.append('\n');
             }
-            text.append(rows.get(i).plainText());
+            text.append(rows.get(i).plainText().stripTrailing());
         }
         return text.toString().stripTrailing();
     }

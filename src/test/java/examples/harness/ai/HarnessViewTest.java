@@ -120,6 +120,14 @@ class HarnessViewTest {
     }
 
     @Test
+    void copyVisibleTrimsTheTrailingPaddingOfEachLine() {
+        HarnessState overflowing = state("hello").withViewport(new Size(12, 40));
+        String copied = HarnessProjection.visiblePlainText(overflowing);
+        assertThat(copied.lines()).allSatisfy(line -> assertThat(line).doesNotEndWith(" "));
+        assertThat(copied).contains("Yes \u2014 here.");
+    }
+
+    @Test
     void paletteIsCarriedByCellStylesRatherThanInlineAnsi() {
         Screen screen = new ScreenRenderer().screen(HarnessView.view(state("")),
                 new Viewport(40, 120));
