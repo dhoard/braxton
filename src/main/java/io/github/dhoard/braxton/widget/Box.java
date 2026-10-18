@@ -138,10 +138,19 @@ public final class Box {
             int used = TextMeasure.columns(fitted.plainText());
             int trailing = Math.max(0, inner - used - 3);
             out = out.append(StyledText.of(String.valueOf(border.horizontal()) + " ", style))
-                    .append(fitted.withStyle(fitted.style().merge(style)))
+                    .append(restyle(fitted, style))
                     .append(StyledText.of(" " + String.valueOf(border.horizontal()).repeat(trailing), style));
         }
         return out.append(StyledText.of(String.valueOf(border.topRight()), style));
+    }
+
+    /** Applies the frame style to every span, keeping each span's own styling and link. */
+    private static StyledText restyle(StyledText text, Style style) {
+        StyledText result = StyledText.empty();
+        for (StyledText.Span span : text.spans()) {
+            result = result.append(StyledText.of(span.text(), span.style().merge(style), span.link()));
+        }
+        return result;
     }
 
     /** Truncates to {@code maxColumns} without splitting a cluster, preserving span styling. */

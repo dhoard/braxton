@@ -124,6 +124,21 @@ class CatalogTest {
     }
 
     @Test
+    void aBoxTitleKeepsEachSpanStyleWithinTheFrameStyle() {
+        StyledText title = StyledText.of("T", Style.NONE.withBold())
+                .append(StyledText.of("i", Style.NONE.withForeground(Colors.ERROR_400)));
+        StyledText box = Box.of("x").title(title).render(24);
+        assertThat(box.spans()).anySatisfy(span -> {
+            assertThat(span.text()).isEqualTo("T");
+            assertThat(span.style().bold()).isTrue();
+        });
+        assertThat(box.spans()).anySatisfy(span -> {
+            assertThat(span.text()).isEqualTo("i");
+            assertThat(span.style().foreground()).isEqualTo(Colors.ERROR_400);
+        });
+    }
+
+    @Test
     void borderlessBoxIsJustItsContent() {
         Box box = Box.of("plain").border(Border.NONE);
         assertThat(box.render(20).plainText()).isEqualTo("plain");
