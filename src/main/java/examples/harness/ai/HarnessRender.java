@@ -75,6 +75,9 @@ final class HarnessRender {
     private static void wrapLine(String line, int limit, List<String> out) {
         StringBuilder current = new StringBuilder();
         int currentWidth = 0;
+        // Indentation alone is not content: a word too long for the remaining cells continues the
+        // same line instead of flushing the indent as a blank line.
+        boolean hasContent = false;
         int index = 0;
         while (index < line.length()) {
             int start = index;
@@ -99,27 +102,36 @@ final class HarnessRender {
                 continue;
             }
             if (runWidth > limit) {
-                flush(current, out);
-                currentWidth = 0;
+                if (hasContent) {
+                    flush(current, out);
+                    currentWidth = 0;
+                }
                 for (String cluster : TextMeasure.graphemes(run)) {
                     int clusterWidth = TextMeasure.columns(cluster);
                     if (currentWidth > 0 && currentWidth + clusterWidth > limit) {
-                        flush(current, out);
+                        if (hasContent) {
+                            flush(current, out);
+                        }
+                        current.setLength(0);
                         currentWidth = 0;
                     }
                     current.append(cluster);
                     currentWidth += clusterWidth;
+                    hasContent = true;
                 }
             } else if (currentWidth == 0) {
                 current.append(run);
                 currentWidth = runWidth;
+                hasContent = true;
             } else if (currentWidth + runWidth <= limit) {
                 current.append(run);
                 currentWidth += runWidth;
+                hasContent = true;
             } else {
                 flush(current, out);
                 current.append(run);
                 currentWidth = runWidth;
+                hasContent = true;
             }
         }
         flush(current, out);
