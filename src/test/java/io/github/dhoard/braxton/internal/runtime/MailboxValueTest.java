@@ -1,0 +1,49 @@
+/*
+ * Copyright (c) 2026-present Doug Hoard
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package io.github.dhoard.braxton.internal.runtime;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+
+import io.github.dhoard.braxton.layout.Size;
+
+/** Mailbox accessors and a negative timeout (treated as no wait). */
+class MailboxValueTest {
+
+    @Test
+    void accessorsReportCapacitySizeAndClosure() throws Exception {
+        Mailbox mailbox = new Mailbox(0);
+        assertThat(mailbox.capacity()).as("capacity is floored at one").isEqualTo(1);
+        assertThat(mailbox.size()).isZero();
+        assertThat(mailbox.isClosed()).isFalse();
+        mailbox.enqueueFromOwner(new Mailbox.AppMessage("x"));
+        assertThat(mailbox.size()).isEqualTo(1);
+        assertThat(mailbox.enqueue(new Mailbox.Input(null), -5L)).isFalse();
+        mailbox.close();
+        assertThat(mailbox.isClosed()).isTrue();
+        assertThat(mailbox.poll(-1L)).isNull();
+        assertThat(mailbox.poll(0L)).isNull();
+        assertThat(new Mailbox.Resize(new Size(1, 1)).size()).isEqualTo(new Size(1, 1));
+    }
+}
