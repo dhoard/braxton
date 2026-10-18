@@ -70,6 +70,34 @@ class TranscriptJsonlReaderTest {
                 .isGreaterThan(HarnessProjection.TOOL_PREVIEW_LINES));
     }
 
+    @Test
+    void malformedLinesBecomeWarningsWhileANewerLogStaysReadable() throws IOException {
+        HarnessTranscript transcript = read("""
+                2026-10-17T00:00:00Z\tINFO\t{"kind":"event","payload":\
+                {"type":"input.attached","inputId":"i1","text":"hello"}}
+                not json at all
+                {"kind":"event"}
+                {"kind":"event","payload":{"type":"future.event","whatever":true}}
+                {"kind":"event","payload":{"type":"turn.started","turnId":"t1","inputId":"i1"}}
+                {"kind":"event","payload":{"type":"assistant.completed","turnId":"t1","text":"hi"}}
+                {"kind":"event","payload":{"type":"turn.failed","turnId":"t1","text":"boom"}}
+                """);
+        // A raw session-log prefix is stripped, the two unreadable records are counted, and the
+        // unknown event type is ignored without a warning.
+        assertThat(transcript.warnings()).hasSize(2);
+        assertThat(transcript.warnings().get(0)).startsWith("Line 2:");
+        assertThat(transcript.warnings().get(1)).isEqualTo("Record without a payload object");
+        assertThat(transcript.turns()).hasSize(1);
+        assertThat(transcript.turns().get(0).userText()).isEqualTo("hello");
+        assertThat(transcript.turns().get(0).responses())
+                .filteredOn(HarnessEntry.Assistant.class::isInstance)
+                .hasSize(1);
+        assertThat(transcript.turns().get(0).responses())
+                .filteredOn(HarnessEntry.Failure.class::isInstance)
+                .singleElement()
+                .satisfies(entry -> assertThat(((HarnessEntry.Failure) entry).text()).isEqualTo("boom"));
+    }
+
     private static boolean wellFormed(String text) {
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
