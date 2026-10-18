@@ -182,6 +182,23 @@ class ClipboardTest {
     }
 
     @Test
+    void anUnpairedSurrogateLeavesBothDestinationsWithTheSameText() {
+        // The in-process buffer is the dependable destination and OSC 52 is best effort, but the
+        // same copy must not hand the two of them different text: UTF-8 encoding replaced the
+        // lone half with '?', so the payload disagreed with the buffer and with the display.
+        List<String> writes = new ArrayList<>();
+        ClipboardService clipboard = service("xterm-256color", Map.of(), writes);
+        ClipboardResult result = clipboard.copy("a\uD800b");
+        assertThat(result.text()).isEqualTo("ab");
+        assertThat(clipboard.internalText()).isEqualTo("ab");
+        assertThat(writes).hasSize(1);
+        String sequence = writes.get(0);
+        String payload = sequence.substring("\u001B]52;c;".length(), sequence.length() - 1);
+        assertThat(new String(java.util.Base64.getDecoder().decode(payload),
+                java.nio.charset.StandardCharsets.UTF_8)).isEqualTo("ab");
+    }
+
+    @Test
     void tmuxAutoUsesNativeForwardingWithoutPassthroughWrapping() {
         List<String> writes = new ArrayList<>();
         ClipboardResult result = service("xterm-256color", Map.of("TMUX", "/tmp/tmux"), writes)

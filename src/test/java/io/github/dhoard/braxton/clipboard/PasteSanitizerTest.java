@@ -50,6 +50,21 @@ class PasteSanitizerTest {
         assertThat(PasteSanitizer.plainText("a\u001B%Gb")).isEqualTo("ab");
     }
 
+    /**
+     * A clipboard payload can contain half of a surrogate pair (a substring, a mis-decoded stream).
+     * UTF-8 cannot encode that half, so keeping it would make the in-process buffer and the OSC 52
+     * payload disagree about the same copy, and would leave the editor holding an offset it cannot
+     * display. Both halves of a real pair are content and survive.
+     */
+    @Test
+    void anUnpairedSurrogateIsDroppedLikeAnyOtherUnencodableArtifact() {
+        assertThat(PasteSanitizer.plainText("a\uD800b")).isEqualTo("ab");
+        assertThat(PasteSanitizer.sanitize("a\uDC00b")).isEqualTo("ab");
+        assertThat(PasteSanitizer.plainText("\uDE00\uD83D")).isEmpty();
+        assertThat(PasteSanitizer.plainText("a\uD83D\uDE00b")).isEqualTo("a\uD83D\uDE00b");
+        assertThat(PasteSanitizer.sanitize("a\uD800\u0301b")).isEqualTo("a\u0301b");
+    }
+
     /** A sequence cut off before its final byte still consumes everything it holds. */
     @Test
     void anUnfinishedEscapeSequenceIsDroppedToTheEnd() {

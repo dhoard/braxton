@@ -114,8 +114,8 @@ public final class PasteSanitizer {
 
     /**
      * Returns plain text suitable for a clipboard payload: line endings are normalized to LF and
-     * ANSI/OSC/DCS sequences, control characters, BOMs, zero-width spaces, and nonbreaking spaces
-     * are removed or normalized. Unlike the paste modes, this method does not trim lines or remove
+     * ANSI/OSC/DCS sequences, control characters, BOMs, zero-width spaces, nonbreaking spaces, and
+     * unpaired surrogates are removed or normalized. Unlike the paste modes, this method does not trim lines or remove
      * blank lines, so copying a source selection preserves it exactly.
      */
     public static String plainText(String text) {
@@ -148,8 +148,8 @@ public final class PasteSanitizer {
 
     /**
      * Removes terminal escape sequences, C0/C1 controls, line-ending artifacts, nonbreaking spaces,
-     * and the invisible formatting characters that are safe to drop without damaging emoji or
-     * combining sequences.
+     * unpaired surrogates, and the invisible formatting characters that are safe to drop without
+     * damaging emoji or combining sequences.
      */
     private static String stripArtifacts(String text, boolean aggressive) {
         StringBuilder out = new StringBuilder(text.length());
@@ -175,6 +175,22 @@ public final class PasteSanitizer {
             }
             if (c == '\n' || c == '\t') {
                 out.append(c);
+                index++;
+                continue;
+            }
+            if (Character.isHighSurrogate(c)) {
+                // Both halves of a scalar value are content; a lone half cannot be encoded as
+                // UTF-8, so keeping it would make the in-process buffer and the OSC 52 payload
+                // disagree about the same copy and leave an offset no cell can display.
+                if (index + 1 < text.length() && Character.isLowSurrogate(text.charAt(index + 1))) {
+                    out.append(c).append(text.charAt(index + 1));
+                    index += 2;
+                } else {
+                    index++;
+                }
+                continue;
+            }
+            if (Character.isLowSurrogate(c)) {
                 index++;
                 continue;
             }
