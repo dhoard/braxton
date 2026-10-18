@@ -233,7 +233,7 @@ public final class RuntimeLoop<M, Msg> {
                         offerControl(new Mailbox.Close(ExitResult.inputClosed()));
                         return;
                     }
-                    if (!mailbox.enqueue(new Mailbox.Input(event.get()), 100L)) {
+                    if (!offer(new Mailbox.Input(event.get()))) {
                         return;
                     }
                 } catch (IOException closed) {
@@ -244,9 +244,6 @@ public final class RuntimeLoop<M, Msg> {
                     // owner polling an empty mailbox forever (a hung application that cannot even
                     // process Ctrl+C) and print a stack trace over the alternate screen.
                     offerControl(new Mailbox.Close(ExitResult.failure(failure, List.of())));
-                    return;
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
                     return;
                 }
             }
@@ -267,13 +264,10 @@ public final class RuntimeLoop<M, Msg> {
                     Size current = session.size();
                     if (!current.equals(last)) {
                         last = current;
-                        if (!mailbox.enqueue(new Mailbox.Resize(current), 100L)) {
+                        if (!offer(new Mailbox.Resize(current))) {
                             return;
                         }
                     }
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                    return;
                 } catch (RuntimeException failure) {
                     offerControl(new Mailbox.Close(ExitResult.failure(failure, List.of())));
                     return;
@@ -286,21 +280,30 @@ public final class RuntimeLoop<M, Msg> {
         if (mailbox == null) {
             return;
         }
-        // An exit reason must not be dropped just because the owner is momentarily busy: the
-        // reader would then stop without a Close, and the owner would report the clean end of
-        // input as a runtime failure. Retry until the queue drains; close() releases this wait
-        // during shutdown, and the owner's final join interrupts it.
+        offer(envelope);
+    }
+
+    /**
+     * Enqueues from a reader thread, waiting while the owner is busy.
+     *
+     * <p>An envelope must not be dropped after a fixed wait: a full mailbox means the owner is
+     * still working, not that the event is disposable. Giving up would stop the input reader (and
+     * the runtime would report a clean end-of-input as a failure), lose the key that could not be
+     * queued, or silently end resize observation. Returns false only when the mailbox is closed,
+     * which is how shutdown releases the wait; the owner's final join also interrupts it.</p>
+     */
+    private boolean offer(Mailbox.Envelope envelope) {
         while (true) {
             try {
                 if (mailbox.enqueue(envelope, 100L)) {
-                    return;
+                    return true;
                 }
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
-                return;
+                return false;
             }
             if (mailbox.isClosed()) {
-                return;
+                return false;
             }
         }
     }

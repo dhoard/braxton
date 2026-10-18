@@ -195,9 +195,38 @@ class RuntimeLoopTest {
 
         @Override
         public View<String> view(Integer model, Viewport viewport) {
-            return Views.keyed(List.of(Binding.of("a", "a"), Binding.of("b", "b")),
-                    Views.text("count: " + model), List.of());
+            return Views.keyed(List.of(Binding.of("a", "a"), Binding.of("b", "b"),
+                    Binding.of("c", "c")), Views.text("count: " + model), List.of());
         }
+    }
+
+    @Test
+    @Timeout(15)
+    void inputIsNotLostWhenTheOwnerIsBusy() throws Exception {
+        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        RuntimeOptions options = options(new FakeTerminal.ManualTimers()).withLimits(1, 8, 8);
+        SlowStart program = new SlowStart();
+        java.util.concurrent.atomic.AtomicReference<ExitResult> outcome =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        Thread runner = Thread.ofVirtual().start(
+                () -> outcome.set(Application.run(program, options, terminal)));
+        terminal.feed("a");
+        assertThat(program.entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                .as("the first update is running").isTrue();
+        // Two more keys: the first fills the one free slot, the second finds it full while the
+        // owner is still inside update.
+        terminal.feed("bc");
+        Thread.sleep(300L);
+        terminal.endInput();
+        program.release.countDown();
+        runner.join(5_000L);
+        assertThat(outcome.get()).isNotNull();
+        assertThat(outcome.get().kind())
+                .as("every key is processed, so the run ends at end-of-input: %s", outcome.get())
+                .isEqualTo(ExitResult.Kind.INPUT_CLOSED);
+        assertThat(terminal.output())
+                .as("no key is dropped while the owner is busy")
+                .contains("count: 3");
     }
 
     @Test
