@@ -218,12 +218,17 @@ public final class InputDecoder {
     private String readCsiSequence() throws IOException {
         StringBuilder sequence = new StringBuilder();
         long deadline = System.nanoTime() + escapeTimeoutMillis * 1_000_000L;
-        while (sequence.length() < MAX_CSI_LENGTH) {
+        while (true) {
             int next = readWithDeadline(deadline);
             if (next < 0) {
                 break;
             }
-            sequence.append((char) next);
+            // Past the cap the sequence is not stored, but its bytes are still consumed up to the
+            // final byte: stopping there would deliver the tail (parameters and final byte) to the
+            // application as ordinary text.
+            if (sequence.length() < MAX_CSI_LENGTH) {
+                sequence.append((char) next);
+            }
             if (next >= 0x40 && next <= 0x7E) {
                 break;
             }

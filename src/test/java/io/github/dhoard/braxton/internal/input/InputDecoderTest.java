@@ -240,6 +240,17 @@ class InputDecoderTest {
     }
 
     @Test
+    void anOverLongCsiIsSkippedWholeInsteadOfLeakingItsTailAsText() throws IOException {
+        // Past the length cap the decoder stopped consuming, so the sequence's remaining parameter
+        // bytes and its final byte arrived as ordinary text and were inserted into the draft.
+        InputDecoder decoder = new InputDecoder(new ByteAtATime(
+                ("\u001B[" + "1".repeat(70) + "mX").getBytes(StandardCharsets.UTF_8)));
+        InputEvent event = decoder.read().orElseThrow();
+        assertThat(((InputEvent.KeyInput) event).text()).isEqualTo("X");
+        assertThat(decoder.read()).isEmpty();
+    }
+
+    @Test
     void skippedSequencesLeaveTheFollowingInputIntact() throws IOException {
         // An unsupported CSI with modifiers, an unknown numeric CSI, an X10 click whose three
         // payload bytes must be consumed, and an SGR click are all skipped; the printable input,
