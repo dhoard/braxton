@@ -186,12 +186,19 @@ public final class InputDecoder {
         if (second < 0x20) {
             return Optional.of(InputEvent.KeyInput.of(Key.ESCAPE));
         }
+        if (second == 0x7F) {
+            // ESC DEL is how a terminal reports Alt+Backspace. DEL is not printable, so it must not
+            // become the name and text of a printable gesture.
+            return Optional.of(InputEvent.KeyInput.of(Key.BACKSPACE.with(Modifiers.ALT)));
+        }
         if (second >= 0x80) {
             // Alt plus a printable character outside ASCII: the following bytes belong to the same
             // UTF-8 scalar, so decode them together instead of naming the lead byte's Latin-1
             // character and leaving a stray continuation byte behind.
             String text = decodeUtf8(second);
-            if (text.isEmpty()) {
+            // A C1 control (encoded as a multibyte scalar) is not printable either; ALT plus one
+            // is reported as the escape it started with, exactly like a C0 control.
+            if (text.isEmpty() || !isPrintable(text)) {
                 return Optional.of(InputEvent.KeyInput.of(Key.ESCAPE));
             }
             return Optional.of(InputEvent.KeyInput.of(
@@ -200,6 +207,12 @@ public final class InputDecoder {
         char c = (char) second;
         return Optional.of(InputEvent.KeyInput.of(
                 keyForText(String.valueOf(c)).with(Modifiers.ALT), String.valueOf(c)));
+    }
+
+    /** Whether every code point of {@code text} is printable, so it can be a key name and text. */
+    private static boolean isPrintable(String text) {
+        return text.codePoints().noneMatch(code -> code < 0x20 || code == 0x7F
+                || (code >= 0x80 && code <= 0x9F));
     }
 
     private String readCsiSequence() throws IOException {

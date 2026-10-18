@@ -149,6 +149,21 @@ class InputDecoderTest {
     }
 
     @Test
+    void altBackspaceNeverCarriesAControlCharacterInItsNameOrText() throws IOException {
+        InputEvent.KeyInput key = (InputEvent.KeyInput) read("\u001B\u007F").orElseThrow();
+        assertThat(key.key()).isEqualTo(Key.BACKSPACE.with(Modifiers.ALT));
+        assertThat(key.text()).isEmpty();
+    }
+
+    @Test
+    void altWithAControlScalarIsNotAPrintableGesture() throws IOException {
+        InputEvent.KeyInput key = (InputEvent.KeyInput)
+                read(new byte[] {0x1B, (byte) 0xC2, (byte) 0x9B}).orElseThrow();
+        assertThat(key.key()).isEqualTo(Key.ESCAPE);
+        assertThat(key.text()).isEmpty();
+    }
+
+    @Test
     void aLoneEscapeIsEscape() throws IOException {
         assertThat(((InputEvent.KeyInput) read("\u001B").orElseThrow()).key()).isEqualTo(Key.ESCAPE);
     }
