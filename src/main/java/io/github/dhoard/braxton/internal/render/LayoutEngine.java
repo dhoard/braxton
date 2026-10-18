@@ -316,14 +316,24 @@ public final class LayoutEngine {
             View<?> child = items.get(i);
             int width = childWidth(child, bounds.cols());
             int col = bounds.col();
+            int childCols = bounds.cols();
             if (width < bounds.cols() && !(child instanceof View.Fill<?>)) {
-                col += switch (column.align()) {
-                    case CENTER -> (bounds.cols() - width) / 2;
-                    case END -> bounds.cols() - width;
-                    case START -> 0;
-                };
+                // A child that does not fill the width keeps its own size at the aligned offset;
+                // only a start-aligned child takes the rest of the column, so a frame placed at
+                // the centre stays centred instead of stretching to the right edge.
+                switch (column.align()) {
+                    case CENTER -> {
+                        col += (bounds.cols() - width) / 2;
+                        childCols = width;
+                    }
+                    case END -> {
+                        col += bounds.cols() - width;
+                        childCols = width;
+                    }
+                    case START -> { }
+                }
             }
-            Rect childBounds = new Rect(row, col, height, Math.max(0, bounds.cols() - (col - bounds.col())));
+            Rect childBounds = new Rect(row, col, height, Math.max(0, childCols));
             paint(child, screen, childBounds, regions);
             row += height;
         }

@@ -281,6 +281,23 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aCentredChildIsPaintedAtItsMeasuredWidth() {
+        // A child that fills its rectangle (a frame, say) must be placed at the measured centroid
+        // with its own width; giving it the rest of the row makes "centred" run to the right edge.
+        View<?> centred = Views.column(Alignment.CENTER,
+                List.of(Views.border(Border.SINGLE, Views.text("x"))));
+        Screen screen = paint(centred, 3, 10);
+        assertThat(screen.plainLine(0)).isEqualTo("   \u250C\u2500\u2510");
+        assertThat(screen.plainLine(1)).isEqualTo("   \u2502x\u2502");
+        assertThat(screen.plainLine(2)).isEqualTo("   \u2514\u2500\u2518");
+        View<?> ended = Views.column(Alignment.END,
+                List.of(Views.border(Border.SINGLE, Views.text("x"))));
+        Screen endScreen = paint(ended, 3, 10);
+        assertThat(endScreen.plainLine(0)).isEqualTo("       \u250C\u2500\u2510");
+        assertThat(endScreen.plainLine(1)).isEqualTo("       \u2502x\u2502");
+    }
+
+    @Test
     void aBorderedViewNeverReportsMoreColumnsThanTheAvailableWidth() {
         View<?> bordered = Views.border(io.github.dhoard.braxton.layout.Border.SINGLE,
                 Views.fill(Style.NONE));
