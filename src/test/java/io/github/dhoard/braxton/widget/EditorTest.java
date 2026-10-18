@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.input.Modifiers;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.view.View;
@@ -390,6 +391,21 @@ class EditorTest {
         assertThat(((View.Focused<String>) view).input()
                 .handle(new InputEvent.PasteInput("hello")))
                 .contains("Paste");
+    }
+
+    @Test
+    void withStylesAssignsEachStyleToItsOwnRole() {
+        Style text = Style.NONE.withBold();
+        Style prompt = Style.NONE.withItalic();
+        Style selection = Style.NONE.withUnderline();
+        EditorOptions options = EditorOptions.defaults().withStyles(text, prompt, selection);
+        assertThat(options.textStyle()).isEqualTo(text);
+        assertThat(options.promptStyle()).isEqualTo(prompt);
+        assertThat(options.selectionStyle()).isEqualTo(selection);
+        EditorState state = EditorState.of("ab");
+        assertThat(Editor.render(state, options, true).spans())
+                .as("the draft uses the text style while the cursor rule is selection styling")
+                .anySatisfy(span -> assertThat(span.style()).isEqualTo(text));
     }
 
     @Test
