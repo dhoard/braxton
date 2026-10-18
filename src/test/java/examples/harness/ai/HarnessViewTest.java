@@ -110,6 +110,16 @@ class HarnessViewTest {
     }
 
     @Test
+    void copyVisibleOmitsTheScrollbarColumn() {
+        HarnessState overflowing = state("hello").withViewport(new Size(12, 40));
+        assertThat(String.join("\n", lines(overflowing))).contains("\u2502");
+
+        String copied = HarnessProjection.visiblePlainText(overflowing);
+        assertThat(copied).doesNotContain("\u2502").doesNotContain("\u2503");
+        assertThat(copied).contains("line one").contains("Yes \u2014 here.");
+    }
+
+    @Test
     void paletteIsCarriedByCellStylesRatherThanInlineAnsi() {
         Screen screen = new ScreenRenderer().screen(HarnessView.view(state("")),
                 new Viewport(40, 120));

@@ -84,12 +84,15 @@ final class HarnessProjection {
         return Math.max(0, rows - allocation.transcript());
     }
 
-    /** The visible transcript window, padded and with a scrollbar when content overflows. */
-    static List<StyledText> window(HarnessState state, int width, int height, int editorRows) {
+    /** The visible transcript rows, padded to the allocation, before any scrollbar chrome. */
+    private record Slice(List<StyledText> rows, int start, int total) {
+    }
+
+    private static Slice slice(HarnessState state, int width, int height, int editorRows) {
         Allocation allocation = allocate(height, editorRows);
         int rows = allocation.transcript();
         if (rows <= 0 || width <= 0) {
-            return List.of();
+            return new Slice(List.of(), 0, 0);
         }
         List<StyledText> all = allRows(state, width);
         int maxScroll = Math.max(0, all.size() - rows);
@@ -100,13 +103,22 @@ final class HarnessProjection {
         while (window.size() < rows) {
             window.add(row(width, HarnessTheme.BACKGROUND_COLOR));
         }
-        if (all.size() > rows) {
+        return new Slice(List.copyOf(window), start, all.size());
+    }
+
+    /** The visible transcript window, padded and with a scrollbar when content overflows. */
+    static List<StyledText> window(HarnessState state, int width, int height, int editorRows) {
+        Slice slice = slice(state, width, height, editorRows);
+        List<StyledText> window = new ArrayList<>(slice.rows());
+        int rows = window.size();
+        if (rows > 0 && slice.total() > rows) {
+            int maxScroll = Math.max(0, slice.total() - rows);
             int thumbHeight = Math.min(rows, Math.max(2,
-                    (int) Math.round((double) rows * rows / all.size())));
+                    (int) Math.round((double) rows * rows / slice.total())));
             int maxThumbTop = rows - thumbHeight;
             int thumbTop = maxScroll == 0 ? 0
-                    : (int) Math.round((double) start / maxScroll * maxThumbTop);
-            for (int i = 0; i < window.size(); i++) {
+                    : (int) Math.round((double) slice.start() / maxScroll * maxThumbTop);
+            for (int i = 0; i < rows; i++) {
                 boolean thumb = i >= thumbTop && i < thumbTop + thumbHeight;
                 window.set(i, withScrollbar(window.get(i), width,
                         thumb ? "\u2503" : "\u2502",
@@ -116,10 +128,10 @@ final class HarnessProjection {
         return List.copyOf(window);
     }
 
-    /** Plain text of the currently visible transcript, used by Alt+T. */
+    /** Plain text of the currently visible transcript, used by Alt+T; never the scrollbar. */
     static String visiblePlainText(HarnessState state) {
-        int width = state.viewport().cols();
-        List<StyledText> rows = window(state, width, state.viewport().rows(), state.editorRows());
+        List<StyledText> rows = slice(state, state.viewport().cols(), state.viewport().rows(),
+                state.editorRows()).rows();
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < rows.size(); i++) {
             if (i > 0) {
