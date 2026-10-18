@@ -109,6 +109,14 @@ class TextMeasureTest {
     }
 
     @Test
+    void boundaryAfterAnIndexBeforeTheTextIsItsStart() {
+        assertThat(TextMeasure.boundaryAfter("ab", -1)).isZero();
+        assertThat(TextMeasure.boundaryAfter("", -1)).isZero();
+        assertThat(TextMeasure.boundaryAfter("ab", 2)).isEqualTo(2);
+        assertThat(TextMeasure.boundaryAfter("ab", 99)).isEqualTo(2);
+    }
+
+    @Test
     void fitPadsAndTruncatesToExactColumns() {
         assertThat(TextMeasure.fit("ab", 4)).isEqualTo("ab  ");
         assertThat(TextMeasure.fit("abcdef", 3)).isEqualTo("abc");

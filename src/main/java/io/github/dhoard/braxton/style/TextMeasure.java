@@ -169,10 +169,12 @@ public final class TextMeasure {
 
     /** UTF-16 index of the next cluster boundary strictly after {@code index}. */
     public static int boundaryAfter(String text, int index) {
-        if (text == null || text.isEmpty()) {
+        if (text == null || text.isEmpty() || index < 0) {
+            // The first boundary after an index before the text is the start, not the end of the
+            // first cluster.
             return 0;
         }
-        int limit = Math.max(0, Math.min(index, text.length() - 1));
+        int limit = Math.min(index, text.length() - 1);
         BreakIterator iterator = BreakIterator.getCharacterInstance(java.util.Locale.ROOT);
         iterator.setText(text);
         int next = iterator.following(limit);
