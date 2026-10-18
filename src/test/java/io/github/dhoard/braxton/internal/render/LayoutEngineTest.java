@@ -24,9 +24,13 @@ package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.layout.Alignment;
+import io.github.dhoard.braxton.layout.Border;
+import io.github.dhoard.braxton.layout.Insets;
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
@@ -124,6 +128,29 @@ class LayoutEngineTest {
         View<?> view = Views.row(Views.text("a\tb"), Views.text("X"));
         Screen screen = paint(view, 1, 20);
         assertThat(screen.plainLine(0)).isEqualTo("a   bX");
+    }
+
+    @Test
+    void nestedFlexOverlaysStayDeterministicAndInsideTheViewport() {
+        View<?> view = Views.column(Views.grow(Views.row(Views.padding(
+                Insets.symmetric(0, 1),
+                Views.text("a\tb\n\u4f60\u597d")),
+                Views.fill(Style.bg(Colors.BLUE_400)))), Views.fixed(1, Views.border(
+                        Border.ROUNDED, StyledText.plain("t"), Views.overlay(List.of(
+                                Views.text("base"), Views.text("\uD83D\uDC4D")), false))));
+        for (int rows : new int[] {0, 1, 5, 12}) {
+            for (int cols : new int[] {0, 1, 7, 20}) {
+                Rect bounds = new Rect(0, 0, rows, cols);
+                Screen first = new LayoutEngine().layout(view, bounds).screen();
+                Screen second = new LayoutEngine().layout(view, bounds).screen();
+                assertThat(first).isEqualTo(second);
+                assertThat(first.rows()).isEqualTo(rows);
+                assertThat(first.cols()).isEqualTo(cols);
+                for (int row = 0; row < rows; row++) {
+                    assertThat(TextMeasure.columns(first.plainLine(row))).isLessThanOrEqualTo(cols);
+                }
+            }
+        }
     }
 
     @Test
