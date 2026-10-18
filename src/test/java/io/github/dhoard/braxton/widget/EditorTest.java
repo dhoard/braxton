@@ -280,6 +280,16 @@ class EditorTest {
     }
 
     @Test
+    void thePromptIsDrawnOnceAtTheStartOfTheVisibleWindow() {
+        // The prompt marks the input area, not the caret: drawing it on the caret's line as well
+        // puts a second prompt (and a second caret-like marker next to the block cursor) on an
+        // added line, which is the reported double caret in the AI Harness composer.
+        EditorState state = new EditorState("one\ntwo\nthree", 13, 13, 0);
+        assertThat(Editor.render(state, OPTIONS, true).plainText())
+                .isEqualTo("> one\n  two\n  three" + Editor.CURSOR);
+    }
+
+    @Test
     void unfocusedEditorsDoNotDrawACursor() {
         assertThat(Editor.render(EditorState.of("ab"), OPTIONS, false).plainText())
                 .doesNotContain(Editor.CURSOR);

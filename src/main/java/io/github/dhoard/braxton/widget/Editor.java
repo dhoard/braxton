@@ -257,7 +257,14 @@ public final class Editor {
                 Views.text(render(state, opts, focused)));
     }
 
-    /** Pure text rendering, shared by the native view and headless tests. */
+    /**
+     * Pure text rendering, shared by the native view and headless tests.
+     *
+     * <p>The prompt marks the input area once, at the first visible line, and every other line is
+     * indented by its painted width. It deliberately does not follow the caret: doing so repeats
+     * the prompt whenever a new line is added to a multi-line draft, which reads as a second caret
+     * beside the block cursor.</p>
+     */
     public static StyledText render(EditorState state, EditorOptions options, boolean focused) {
         EditorOptions opts = options == null ? EditorOptions.defaults() : options;
         int lines = state.lineCount();
@@ -273,16 +280,16 @@ public final class Editor {
             if (line > first) {
                 result = result.append("\n");
             }
-            result = result.append(renderLine(state, opts, focused, line, promptWidth));
+            result = result.append(renderLine(state, opts, focused, line, first, promptWidth));
         }
         return result;
     }
 
     private static StyledText renderLine(EditorState state, EditorOptions opts, boolean focused,
-            int line, int promptWidth) {
+            int line, int firstLine, int promptWidth) {
         StyledText out = StyledText.empty();
         if (!opts.prompt().isEmpty()) {
-            if (line == state.lineAt(state.caret()) || line == 0) {
+            if (line == firstLine) {
                 out = out.append(StyledText.of(opts.prompt(), opts.promptStyle()));
             } else {
                 out = out.append(StyledText.of(" ".repeat(promptWidth), opts.promptStyle()));

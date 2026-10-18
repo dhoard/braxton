@@ -125,6 +125,19 @@ class HarnessViewTest {
     }
 
     @Test
+    void aMultiLineDraftShowsTheComposerPromptOnce() {
+        HarnessState multiLine = state("line1\nline2");
+        List<String> lines = lines(multiLine);
+        HarnessProjection.Allocation allocation =
+                HarnessProjection.allocate(40, multiLine.editorRows());
+        int composerRow = allocation.transcript() + allocation.gap() + allocation.topRule();
+        assertThat(lines.get(composerRow)).isEqualTo("> line1");
+        assertThat(lines.get(composerRow + 1))
+                .isEqualTo("  line2" + io.github.dhoard.braxton.widget.Editor.CURSOR);
+        assertThat(lines.stream().filter(line -> line.contains("> ")).count()).isEqualTo(1);
+    }
+
+    @Test
     void copyVisibleOmitsTheScrollbarColumn() {
         HarnessState overflowing = state("hello").withViewport(new Size(12, 40));
         assertThat(String.join("\n", lines(overflowing))).contains("\u2502");
