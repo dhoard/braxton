@@ -93,6 +93,67 @@ class FigletFontTest {
         }
     }
 
+    @Test
+    void everyBundledFontParsesAndRendersTheRightGlyphs() throws Exception {
+        // Each row below is the shipped font's own first row for "A". A comment count read from
+        // the wrong field shifts every glyph by a code point, which changes these rows and, at the
+        // end of the table, fails the parse as truncated.
+        java.util.Map<FontLoader.Family, String> firstRow = java.util.Map.of(
+                FontLoader.Family.DIGITAL, " +-+",
+                FontLoader.Family.SHADOW, "     \\",
+                FontLoader.Family.SLANT, "    ___",
+                FontLoader.Family.SMALL, "    _",
+                FontLoader.Family.SMSHADOW, "    \\",
+                FontLoader.Family.STANDARD, "     _",
+                FontLoader.Family.TERM, "A");
+        for (FontLoader.Family family : FontLoader.Family.values()) {
+            FigletFont font = FontLoader.load(family);
+            List<String> rows = font.render("A");
+            assertThat(rows).as("%s row count", family).hasSize(font.height());
+            assertThat(rows).as("%s rows", family).allSatisfy(row -> {
+                assertThat(row).as("%s row", family).doesNotContain("@").doesNotContain("$");
+                assertThat(row).as("%s row", family).isEqualTo(row.stripTrailing());
+            });
+            String expected = firstRow.get(family);
+            if (expected != null) {
+                assertThat(rows.get(0)).as("%s first row", family).isEqualTo(expected);
+            }
+            assertThat(font.render("A 1")).as("%s mixed text", family)
+                    .hasSize(font.height()).allSatisfy(row -> assertThat(row).doesNotContain("@"));
+        }
+    }
+
+    @Test
+    void theCommentCountIsTheFieldAfterTheHardblankHeaderBlock() throws Exception {
+        // flf2a headers carry the comment count in the fifth value; each bundled font has exactly
+        // that many comment lines before its first glyph row. Skipping the wrong value shifts every
+        // glyph by a code point, so the art changes.
+        StringBuilder comments = new StringBuilder();
+        for (int i = 0; i < 3; i++) {
+            comments.append("comment ").append(i).append('\n');
+        }
+        StringBuilder font = new StringBuilder("flf2a$ 1 1 3 0 3 0 0 0\n").append(comments);
+        for (char code = 32; code <= 126; code++) {
+            font.append(code).append("$@\n");
+        }
+        FigletFont parsed = FigletFont.parse(stream(font.toString()), "comments.flf");
+        assertThat(parsed.render("A")).containsExactly("A");
+        assertThat(parsed.render("AB")).containsExactly("A B");
+    }
+
+    @Test
+    void aRepeatedEndMarkIsStrippedWithTheGlyphArt() throws Exception {
+        // A glyph whose art ends in the endmark carries it twice; both are removed, which is what
+        // the canonical fonts require ("A\____/@" is drawn as "A\____/").
+        StringBuilder font = new StringBuilder("flf2a 1 1 3 0 0 0 0 0\n");
+        for (char code = 32; code <= 126; code++) {
+            font.append("X@@\n");
+        }
+        FigletFont parsed = FigletFont.parse(stream(font.toString()), "doubled.flf");
+        assertThat(parsed.hardBlank()).isEqualTo(' ');
+        assertThat(parsed.render("!")).containsExactly("X");
+    }
+
     private static InputStream stream(String content) {
         return new java.io.ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
     }
