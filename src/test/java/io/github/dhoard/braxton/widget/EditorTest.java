@@ -284,6 +284,18 @@ class EditorTest {
     }
 
     @Test
+    void copyingADisabledVisibleDraftReturnsAnEmptyIntent() {
+        // copyEnabled=false opts a visible field out of copying entirely, so the Copy intent carries
+        // no text even though the draft is not masked.
+        EditorResult result = Editor.update(EditorState.of("secret"), OPTIONS.withCopyEnabled(false),
+                new EditorAction.Copy());
+        assertThat(result.intent()).isInstanceOfSatisfying(EditorIntent.Copy.class,
+                copy -> assertThat(copy.text()).isEmpty());
+        assertThat(Editor.copyableText(EditorState.of("secret"), OPTIONS.withCopyEnabled(false)))
+                .isEmpty();
+    }
+
+    @Test
     void renderingShowsThePromptSelectionAndBlockCursor() {
         EditorState state = EditorState.of("ab").withSelection(0, 1);
         StyledText rendered = Editor.render(state, OPTIONS, true);
