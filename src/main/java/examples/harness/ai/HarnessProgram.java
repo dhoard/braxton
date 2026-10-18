@@ -328,6 +328,9 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
             return Transition.stay(model.withEscArmed(0));
         }
         if (model.escArmedUntilNanos() > 0 && atNanos <= model.escArmedUntilNanos()) {
+            // A queued prompt was accepted and is now dropped, so it is reported the way every
+            // other submission that will not run is reported.
+            int discarded = model.pending().size();
             List<HarnessEntry> entries = new ArrayList<>(model.entries());
             entries.add(new HarnessEntry.Notice("Stopped."));
             HarnessState next = model.withEntries(entries)
@@ -336,7 +339,10 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
                     .withEscArmed(0)
                     .withGeneration(model.generation() + 1)
                     .withWorkStarted(0)
-                    .withStatusMessage("");
+                    .withStatusMessage(discarded == 0 ? ""
+                            : "Stopped; " + discarded
+                                    + (discarded == 1 ? " queued prompt" : " queued prompts")
+                                    + " discarded.");
             return Transition.next(next, Command.cancelNamespace("harness"));
         }
         return Transition.stay(model.withEscArmed(atNanos + ESC_WINDOW_NANOS));

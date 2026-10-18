@@ -282,6 +282,30 @@ class HarnessProgramTest {
     }
 
     @Test
+    void stoppingReportsTheQueuedPromptsItDiscarded() {
+        HarnessState started = update(ready(), new HarnessMsg.Submit("one")).model();
+        HarnessState queued = update(started, new HarnessMsg.Submit("two")).model();
+        HarnessState twoQueued = update(queued, new HarnessMsg.Submit("three")).model();
+        assertThat(twoQueued.pending()).hasSize(2);
+
+        HarnessState armed = update(twoQueued, new HarnessMsg.Escape(1_000_000_000L)).model();
+        HarnessState stopped = update(armed, new HarnessMsg.Escape(2_000_000_000L)).model();
+        assertThat(stopped.pending()).isEmpty();
+        assertThat(stopped.statusMessage()).contains("2 queued prompts");
+
+        // Nothing queued means nothing to report, so the stop stays exactly as before.
+        HarnessState alone = update(started, new HarnessMsg.Escape(1_000_000_000L)).model();
+        HarnessState quiet = update(alone, new HarnessMsg.Escape(2_000_000_000L)).model();
+        assertThat(quiet.statusMessage()).isEmpty();
+        assertThat(quiet.entries()).contains(new HarnessEntry.Notice("Stopped."));
+
+        HarnessState oneArmed = update(queued, new HarnessMsg.Escape(1_000_000_000L)).model();
+        HarnessState oneStopped = update(oneArmed, new HarnessMsg.Escape(2_000_000_000L)).model();
+        assertThat(oneStopped.statusMessage())
+                .contains("1 queued prompt").doesNotContain("1 queued prompts");
+    }
+
+    @Test
     void escapeAfterTheWindowRearmsInsteadOfStopping() {
         HarnessState started = update(ready(), new HarnessMsg.Submit("hello")).model();
         HarnessState armed = update(started, new HarnessMsg.Escape(0L)).model();

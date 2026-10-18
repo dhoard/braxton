@@ -372,7 +372,7 @@ owner is the caller's thread; `Application.run` does not start or hijack it.
 | PageUp / PageDown | Page the transcript |
 | End | Jump to the bottom |
 | Tab | Focus the composer |
-| Esc | First press arms a 2 s cancel window; a second press inside it stops the turn |
+| Esc | First press arms a 2 s cancel window; a second press inside it stops the turn and reports any queued prompts it discarded |
 | Ctrl+C | First press arms a 2 s exit window; a second press inside it exits |
 | Alt+C | Copy the composer selection (or the whole draft) |
 | Ctrl+V | Paste the in-process clipboard buffer |
