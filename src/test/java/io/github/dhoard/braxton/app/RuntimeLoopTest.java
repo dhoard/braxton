@@ -545,6 +545,53 @@ class RuntimeLoopTest {
     }
 
     @Test
+    @Timeout(15)
+    void aFailureKeepsItsPrimaryCauseAndCarriesTheCleanupFailures() throws Exception {
+        // The documented contract: ExitResult "carries cleanup failures without hiding the primary
+        // cause". A timer that cannot be cancelled during shutdown must not replace the exception
+        // that ended the run, and it must still be reported.
+        Timers uncancellable = (delayNanos, task) -> () -> {
+            throw new IllegalStateException("cancel failed");
+        };
+        RuntimeOptions options = RuntimeOptions.defaults().withLimits(32, 8, 8)
+                .withEnvironment(RuntimeEnvironment.system()
+                        .withTimers(uncancellable)
+                        .withEffectExecutor(Runnable::run)
+                        .withNanoTime(() -> 1_000L));
+        FakeTerminal terminal = new FakeTerminal(new Size(3, 10));
+        Program<Integer, String> program = new Program<>() {
+            @Override
+            public Transition<Integer, String> init(InitContext context) {
+                return Transition.next(0, Command.delay(EffectId.of("slow"),
+                        java.time.Duration.ofSeconds(30), "late", "rejected"));
+            }
+
+            @Override
+            public Transition<Integer, String> update(Integer model, String message) {
+                throw new IllegalStateException("update broke");
+            }
+
+            @Override
+            public View<String> view(Integer model, Viewport viewport) {
+                return Views.keyed(List.of(Binding.of("a", "inc")), Views.text("safe"), List.of());
+            }
+        };
+        java.util.concurrent.atomic.AtomicReference<ExitResult> result = new java.util.concurrent.atomic.AtomicReference<>();
+        Thread run = Thread.ofVirtual().name("cleanup-failure-test")
+                .start(() -> result.set(Application.run(program, options, terminal)));
+        await(() -> !terminal.writes().isEmpty());
+        terminal.feed("a");
+        run.join(5_000L);
+        assertThat(run.isAlive()).isFalse();
+        assertThat(result.get().kind()).as("a throwing update ends the run").isEqualTo(
+                ExitResult.Kind.FAILURE);
+        assertThat(result.get().failure()).as("the primary cause is not replaced")
+                .hasMessage("update broke");
+        assertThat(result.get().cleanupFailures()).as("the cleanup failure is still reported")
+                .anySatisfy(failure -> assertThat(failure).hasMessage("cancel failed"));
+    }
+
+    @Test
     void theSessionIsClosedEvenWhenStartupFails() {
         FakeTerminal terminal = new FakeTerminal(new Size(4, 10));
         Program<Integer, String> broken = new Program<>() {
