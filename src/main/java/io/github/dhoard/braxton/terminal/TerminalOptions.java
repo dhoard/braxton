@@ -42,4 +42,8 @@ public record TerminalOptions(boolean alternateScreen, boolean mouse, boolean br
     public TerminalOptions withAlternateScreen(boolean value) {
         return new TerminalOptions(value, mouse, bracketedPaste);
     }
+
+    public TerminalOptions withBracketedPaste(boolean value) {
+        return new TerminalOptions(alternateScreen, mouse, value);
+    }
 }
