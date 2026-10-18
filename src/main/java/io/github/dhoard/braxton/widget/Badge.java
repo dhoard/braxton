@@ -55,9 +55,21 @@ public final class Badge {
     }
 
     public Badge append(StyledText text, Style style) {
-        segments.add(new Segment(text == null ? StyledText.empty() : text,
-                style == null ? Style.NONE : style));
+        segments.add(new Segment(singleRow(text), style == null ? Style.NONE : style));
         return this;
+    }
+
+    /** A pill occupies one row, so line breaks and tabs become spaces. */
+    private static StyledText singleRow(StyledText text) {
+        if (text == null) {
+            return StyledText.empty();
+        }
+        StyledText result = StyledText.empty();
+        for (StyledText.Span span : text.spans()) {
+            result = result.append(StyledText.of(
+                    span.text().replace('\n', ' ').replace('\t', ' '), span.style(), span.link()));
+        }
+        return result;
     }
 
     /** Joins segments with a pathway arrow; the default is a single space. */

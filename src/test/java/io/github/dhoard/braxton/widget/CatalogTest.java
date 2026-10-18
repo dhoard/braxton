@@ -422,6 +422,19 @@ class CatalogTest {
     }
 
     @Test
+    void badgeKeepsALabelWithLineBreaksOnOneRow() {
+        StyledText rendered = Badge.of()
+                .append(StyledText.of("a\nb\tc", Style.NONE.withBold()), Colors.GRAY_600)
+                .render();
+        assertThat(rendered.plainText()).isEqualTo(" a b c ");
+        assertThat(rendered.spans()).anySatisfy(span -> {
+            assertThat(span.text()).isEqualTo("a b c");
+            assertThat(span.style().bold()).isTrue();
+            assertThat(span.style().background()).isEqualTo(Colors.GRAY_600);
+        });
+    }
+
+    @Test
     void badgePadsSegmentsAndSupportsPathways() {
         StyledText badge = Badge.of()
                 .append(StyledText.plain("one"), Colors.BLUE_400)
