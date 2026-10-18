@@ -128,7 +128,13 @@ final class HarnessRender {
                 currentWidth += runWidth;
                 hasContent = true;
             } else {
-                flush(current, out);
+                // Indentation alone is not content: a word that does not fit after it starts the
+                // next line instead of flushing the indent as a blank one.
+                if (hasContent) {
+                    flush(current, out);
+                } else {
+                    current.setLength(0);
+                }
                 current.append(run);
                 currentWidth = runWidth;
                 hasContent = true;

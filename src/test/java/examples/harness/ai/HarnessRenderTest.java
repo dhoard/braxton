@@ -39,4 +39,17 @@ class HarnessRenderTest {
         assertThat(lines).allSatisfy(line ->
                 assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(6));
     }
+
+    @Test
+    void wrappingAnIndentedLineNeverEmitsABlankLine() {
+        assertThat(HarnessRender.wrap("     ab", 6)).containsExactly("ab");
+        assertThat(HarnessRender.wrap("  ab", 3)).containsExactly("ab");
+        for (int width = 1; width <= 8; width++) {
+            int limit = width;
+            List<String> lines = HarnessRender.wrap("       x", width);
+            assertThat(lines).as("width %d", width).noneMatch(String::isEmpty);
+            assertThat(lines).allSatisfy(line ->
+                    assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(limit));
+        }
+    }
 }
