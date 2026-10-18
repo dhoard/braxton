@@ -84,7 +84,11 @@ public final class LayoutEngine {
             case View.Fill<?> fill -> 1;
             case View.Column<?> column -> columnHeight(column, cols);
             case View.Row<?> row -> rowHeight(row, cols);
-            case View.Padding<?> padding -> padding.insets().vertical() + intrinsicHeight(padding.child(), cols);
+            // The child is painted inside the horizontal insets, so it must be measured at that
+            // width; measuring at the full width can wrap into fewer rows than it paints.
+            case View.Padding<?> padding -> padding.insets().vertical()
+                    + intrinsicHeight(padding.child(),
+                            Math.max(0, cols - padding.insets().horizontal()));
             case View.BorderBox<?> box -> (box.border().isVisible() ? 2 : 0)
                     + intrinsicHeight(box.child(), Math.max(0, cols - (box.border().isVisible() ? 2 : 0)));
             case View.Fixed<?> fixed -> fixed.size();

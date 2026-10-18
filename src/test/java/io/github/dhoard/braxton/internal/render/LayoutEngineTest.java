@@ -166,6 +166,17 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aColumnReservesTheHeightAPaddedChildNeedsAtItsInnerWidth() {
+        View<?> padded = Views.padding(Insets.symmetric(0, 1), Views.text("aaaa bbbb"));
+        assertThat(engine.intrinsicHeight(padded, 10)).isEqualTo(2);
+        View<?> view = Views.column(padded, Views.text("next"));
+        Screen screen = paint(view, 3, 10);
+        assertThat(screen.plainLine(0)).isEqualTo(" aaaa bbb");
+        assertThat(screen.plainLine(1)).isEqualTo(" b");
+        assertThat(screen.plainLine(2)).isEqualTo("next");
+    }
+
+    @Test
     void tabStopsCountTowardTheMeasuredWidthOfText() {
         View<?> view = Views.row(Views.text("a\tb"), Views.text("X"));
         Screen screen = paint(view, 1, 20);
