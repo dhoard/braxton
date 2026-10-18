@@ -127,6 +127,15 @@ class LayoutEngineTest {
     }
 
     @Test
+    void intrinsicWidthIsCappedAtTheAvailableColumns() {
+        View<?> padded = Views.padding(2, Views.fill(Style.NONE));
+        assertThat(engine.intrinsicWidth(padded, 10)).isEqualTo(10);
+        View<?> bordered = Views.border(io.github.dhoard.braxton.layout.Border.SINGLE,
+                Views.padding(1, Views.fill(Style.NONE)));
+        assertThat(engine.intrinsicWidth(bordered, 10)).isEqualTo(10);
+    }
+
+    @Test
     void zeroSizeViewportsProduceAnEmptyScreenAndNoErrors() {
         Screen screen = paint(Views.text("abc"), 0, 0);
         assertThat(screen.rows()).isZero();

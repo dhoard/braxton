@@ -106,7 +106,9 @@ public final class LayoutEngine {
             case View.Fill<?> fill -> maxCols;
             case View.Column<?> column -> columnWidth(column, maxCols);
             case View.Row<?> row -> rowWidth(row, maxCols);
-            case View.Padding<?> padding -> padding.insets().horizontal() + intrinsicWidth(padding.child(), maxCols);
+            case View.Padding<?> padding -> Math.min(maxCols,
+                    padding.insets().horizontal() + intrinsicWidth(padding.child(),
+                            Math.max(0, maxCols - padding.insets().horizontal())));
             case View.BorderBox<?> box -> (box.border().isVisible() ? 2 : 0)
                     + intrinsicWidth(box.child(), Math.max(0, maxCols - (box.border().isVisible() ? 2 : 0)));
             case View.Fixed<?> fixed -> Math.min(maxCols, fixed.size());
