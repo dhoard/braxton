@@ -40,8 +40,9 @@ import io.github.dhoard.braxton.terminal.TerminalSession;
 /**
  * An in-memory terminal: scripted input, recorded output, adjustable size, and no native access.
  *
- * <p>Reads block until bytes are available or end-of-file is signalled, exactly like a real session,
- * so tests exercise the runtime's real input path without a TTY.</p>
+ * <p>Reads block until bytes are available or end-of-file is signalled, and a closed session drops
+ * writes, exactly like a real session, so tests exercise the runtime's real input and output path
+ * without a TTY.</p>
  */
 public final class FakeTerminal implements TerminalBackend, TerminalSession {
 
@@ -137,6 +138,11 @@ public final class FakeTerminal implements TerminalBackend, TerminalSession {
 
     @Override
     public void write(String data) {
+        if (closed) {
+            // BaseTerminalSession.write drops output once the session is closed; a fake that
+            // recorded it would let the runtime emit a frame no real terminal ever shows.
+            return;
+        }
         if (data != null && !data.isEmpty()) {
             writes.add(data);
         }
