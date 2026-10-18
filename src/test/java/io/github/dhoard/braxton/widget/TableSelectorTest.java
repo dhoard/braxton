@@ -1,0 +1,114 @@
+/*
+ * Copyright (c) 2026-present Doug Hoard
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package io.github.dhoard.braxton.widget;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
+
+import io.github.dhoard.braxton.input.InputEvent;
+import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.style.Style;
+import io.github.dhoard.braxton.view.ElementId;
+import io.github.dhoard.braxton.view.ScreenRenderer;
+
+/** A table selector: navigation, confirmation, and the drawn grid. */
+class TableSelectorTest {
+
+    private static final List<String> HEADER = List.of("id", "name");
+    private static final List<List<String>> ROWS = List.of(List.of("1", "alpha"), List.of("2", "be"));
+
+    private static TableSelector.State state() {
+        return TableSelector.State.of(HEADER, ROWS);
+    }
+
+    @Test
+    void navigationClampsAndConfirmNamesTheSelectedCell() {
+        TableSelector.State state = state();
+        assertThat(TableSelector.update(state, new TableSelector.Action.Up()).state().row()).isZero();
+        assertThat(TableSelector.update(state, new TableSelector.Action.Left()).state().column())
+                .isZero();
+        TableSelector.State moved = TableSelector.update(state, new TableSelector.Action.Down())
+                .state();
+        moved = TableSelector.update(moved, new TableSelector.Action.Down()).state();
+        moved = TableSelector.update(moved, new TableSelector.Action.Right()).state();
+        moved = TableSelector.update(moved, new TableSelector.Action.Right()).state();
+        assertThat(moved.row()).as("the last row is the floor").isEqualTo(1);
+        assertThat(moved.column()).as("the last column is the floor").isEqualTo(1);
+        assertThat(moved.selectedValue()).isEqualTo("be");
+        assertThat(TableSelector.update(moved, new TableSelector.Action.Confirm()).intent())
+                .isEqualTo(new TableSelector.Intent.Chosen(1, 1, "be"));
+        assertThat(TableSelector.update(moved, new TableSelector.Action.Cancel()).intent())
+                .isEqualTo(new TableSelector.Intent.Cancelled());
+    }
+
+    @Test
+    void anEmptyTableHasNothingToConfirmAndNoSelectedValue() {
+        TableSelector.State empty = TableSelector.State.of(List.of(), List.of());
+        assertThat(empty.row()).isEqualTo(-1);
+        assertThat(empty.column()).isEqualTo(-1);
+        assertThat(empty.selectedValue()).isEmpty();
+        assertThat(TableSelector.update(empty, new TableSelector.Action.Confirm()).intent())
+                .isEqualTo(new TableSelector.Intent.None());
+        // A header without rows still has a column, but no row to name.
+        TableSelector.State headerOnly = TableSelector.State.of(HEADER, List.of());
+        assertThat(headerOnly.column()).isZero();
+        assertThat(TableSelector.update(headerOnly, new TableSelector.Action.Confirm()).intent())
+                .isEqualTo(new TableSelector.Intent.None());
+    }
+
+    @Test
+    void aRowShorterThanTheHeaderHasNoValueForTheMissingCell() {
+        TableSelector.State shortRow =
+                TableSelector.State.of(HEADER, List.of(List.of("only")));
+        assertThat(shortRow.selectedValue()).isEqualTo("only");
+        TableSelector.State moved = TableSelector.update(shortRow, new TableSelector.Action.Right()).state();
+        assertThat(moved.column()).isEqualTo(1);
+        assertThat(moved.selectedValue()).as("a missing cell reads as empty").isEmpty();
+    }
+
+    @Test
+    void theViewPadsColumnsToOneGridAndMapsItsKeys() {
+        List<String> lines = new ScreenRenderer().plainLines(
+                TableSelector.view(ElementId.of("table"), state(), true, Style.NONE.withInvert(),
+                        Style.NONE, Style.NONE.withBold(), action -> action.getClass().getSimpleName()),
+                new Viewport(3, 40));
+        assertThat(lines).containsExactly("id  name", "1   alpha", "2   be");
+        java.util.Optional<String> down = actionFor(Key.DOWN);
+        assertThat(down).contains("Down");
+        assertThat(actionFor(Key.ENTER)).contains("Confirm");
+        assertThat(actionFor(Key.ESCAPE)).contains("Cancel");
+        assertThat(actionFor(Key.of("x"))).isEmpty();
+    }
+
+    private static java.util.Optional<String> actionFor(Key key) {
+        var view = TableSelector.view(ElementId.of("table"), state(), true, Style.NONE,
+                Style.NONE, Style.NONE, action -> action.getClass().getSimpleName());
+        return view instanceof io.github.dhoard.braxton.view.View.Focused<String> focused
+                ? focused.input().handle(InputEvent.KeyInput.of(key, ""))
+                : java.util.Optional.empty();
+    }
+}
