@@ -132,7 +132,7 @@ public final class Markup {
             return false;
         }
         String tag = ((Element) node).getTagName().toLowerCase(java.util.Locale.ROOT);
-        if (!"ul".equals(tag) && !"table".equals(tag)) {
+        if (!"p".equals(tag) && !"ul".equals(tag) && !"table".equals(tag)) {
             return false;
         }
         String plain = rendered.plainText();

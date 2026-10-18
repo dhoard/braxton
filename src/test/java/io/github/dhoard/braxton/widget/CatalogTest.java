@@ -350,6 +350,12 @@ class CatalogTest {
     }
 
     @Test
+    void markupStartsAParagraphOnANewLineAfterInlineText() {
+        StyledText rendered = Markup.parse("<root>intro<p>para</p>tail</root>");
+        assertThat(rendered.plainText()).isEqualTo("intro\npara\ntail");
+    }
+
+    @Test
     void markupStartsABlockChildOnANewLine() {
         StyledText rendered = Markup.parse(
                 "<root><ul gap=\"1\"><li>item<table gap=\"1\"><tr><td>cell</td>"
