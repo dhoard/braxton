@@ -225,7 +225,7 @@ public final class Markup {
         int[] widths = new int[columns];
         for (List<StyledText> row : rows) {
             for (int column = 0; column < row.size(); column++) {
-                String plain = row.get(column).plainText();
+                String plain = TabStops.expand(row.get(column)).plainText();
                 int width = 0;
                 for (String line : plain.split("\n", -1)) {
                     width = Math.max(width, TextMeasure.columns(line));
@@ -238,7 +238,8 @@ public final class Markup {
             List<List<StyledText>> cellLines = new ArrayList<>(columns);
             int height = 1;
             for (int column = 0; column < columns; column++) {
-                StyledText cell = column < row.size() ? row.get(column) : StyledText.empty();
+                StyledText cell = column < row.size()
+                        ? TabStops.expand(row.get(column)) : StyledText.empty();
                 List<StyledText> lines = cell.lines();
                 cellLines.add(lines);
                 height = Math.max(height, lines.size());

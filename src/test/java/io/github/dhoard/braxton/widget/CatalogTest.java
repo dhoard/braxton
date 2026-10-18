@@ -86,6 +86,16 @@ class CatalogTest {
     }
 
     @Test
+    void markupTableColumnsLineUpWhenACellContainsATabStop() {
+        StyledText rendered = Markup.parse("<root><table gap=\"1\">"
+                + "<tr><td>a\tb</td><td>c</td></tr>"
+                + "<tr><td>x</td><td>y</td></tr></table></root>");
+        List<String> lines = new ScreenRenderer().plainLines(
+                io.github.dhoard.braxton.view.Views.text(rendered), new Viewport(2, 24));
+        assertThat(lines.get(0).indexOf('c')).isEqualTo(lines.get(1).indexOf('y'));
+    }
+
+    @Test
     void emptyTableRendersNothing() {
         assertThat(Table.of().render().plainText()).isEmpty();
         assertThat(Table.of().renderLines()).isEmpty();
