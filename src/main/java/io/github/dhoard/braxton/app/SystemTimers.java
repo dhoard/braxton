@@ -44,7 +44,9 @@ final class SystemTimers implements Timers {
 
     @Override
     public Handle schedule(long delayNanos, Runnable task) {
-        long millis = Math.max(0L, (delayNanos + 999_999L) / 1_000_000L);
+        // Round up to the next millisecond without the overflow that `delayNanos + 999_999` has
+        // near Long.MAX_VALUE, which would schedule a very long delay for right now.
+        long millis = delayNanos <= 0L ? 0L : 1L + (delayNanos - 1L) / 1_000_000L;
         ScheduledFuture<?> future = scheduler.schedule(task, millis, TimeUnit.MILLISECONDS);
         return () -> future.cancel(false);
     }
