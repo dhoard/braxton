@@ -85,4 +85,38 @@ class AnimationTest {
         assertThat(unlit.plainText()).isEqualTo("ab");
         assertThat(unlit.spans()).allSatisfy(span -> assertThat(span.style()).isEqualTo(Style.NONE));
     }
+
+    @Test
+    void extremeAndBackwardsClocksStillProduceValidFrames() {
+        // Frames are pure functions of a monotonic clock, which may be any long value: a clock
+        // that has not started yet (now before started), a negative monotonic origin, and
+        // Long.MAX_VALUE must all yield a real frame instead of an exception or a bad index.
+        assertThat(Animation.spinner(0L, 10_000_000_000L, Style.NONE).plainText())
+                .as("a clock before the start is frame zero")
+                .isEqualTo(Animation.spinner(0L, 0L, Style.NONE).plainText());
+        assertThat(Animation.spinner(Long.MAX_VALUE, 0L, Style.NONE).plainText()).isNotEmpty();
+        assertThat(Animation.spinner(Long.MAX_VALUE, Long.MIN_VALUE, Style.NONE).plainText())
+                .isNotEmpty();
+        assertThat(Animation.spinner(0L, 0L, null).style()).as("a null style is the default")
+                .isEqualTo(Style.NONE);
+        // Four frames of 250 ms make a one-second cycle; the glyph set repeats the second glyph,
+        // so the cycle is proven by wrapping rather than by counting distinct glyphs.
+        java.util.List<String> frames = new java.util.ArrayList<>();
+        for (int frame = 0; frame <= Animation.spinnerFrames(); frame++) {
+            frames.add(Animation.spinner(frame * 250_000_000L, 0L, Style.NONE).plainText());
+        }
+        assertThat(frames).allSatisfy(frame -> assertThat(frame).isNotEmpty());
+        assertThat(frames.get(Animation.spinnerFrames()))
+                .as("the cycle repeats after four frames").isEqualTo(frames.get(0));
+        assertThat(frames.subList(0, Animation.spinnerFrames()).stream().distinct().count())
+                .as("the frames advance").isGreaterThan(1);
+
+        assertThat(Animation.shimmer("abcdef", Long.MIN_VALUE, BASE, LIGHT).plainText())
+                .isEqualTo("abcdef");
+        assertThat(Animation.shimmer("abcdef", Long.MAX_VALUE, BASE, LIGHT).plainText())
+                .isEqualTo("abcdef");
+        assertThat(litIndices(Animation.shimmer("abcdef", Long.MIN_VALUE, BASE, LIGHT)))
+                .as("a negative clock still lands inside the shimmer window")
+                .hasSizeLessThanOrEqualTo(4);
+    }
 }
