@@ -46,6 +46,13 @@ class TextMeasureTest {
     }
 
     @Test
+    void styledValuesMeasureTheirWidestLineLikeStyledTextColumns() {
+        StyledText value = StyledText.plain("ab\ncdef");
+        assertThat(TextMeasure.columns(value)).isEqualTo(4);
+        assertThat(TextMeasure.columns(value)).isEqualTo(value.columns());
+    }
+
+    @Test
     void eastAsianWideAndDefaultEmojiAreTwoColumns() {
         assertThat(TextMeasure.columns("\u65E5")).isEqualTo(2);
         assertThat(TextMeasure.columns("\uD83D\uDE00")).isEqualTo(2);

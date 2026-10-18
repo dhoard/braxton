@@ -193,8 +193,8 @@ public final class TextMeasure {
         return iterator.isBoundary(index);
     }
 
-    /** Visible length of a {@link StyledText} value, in columns. */
+    /** Columns of the widest line of a {@link StyledText} value; newlines are not columns. */
     public static int columns(StyledText text) {
-        return columns(text.plainText());
+        return text.columns();
     }
 }
