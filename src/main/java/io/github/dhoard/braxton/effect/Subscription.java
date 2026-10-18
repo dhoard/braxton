@@ -209,7 +209,10 @@ public sealed interface Subscription<Msg> {
         return new Source<>(id, configuration, start, mapper);
     }
 
-    /** Flattens a subscription tree into its distinct leaves (deduplicating by id). */
+    /**
+     * Flattens a subscription tree into its leaves in declaration order. Duplicate ids are a
+     * configuration error and rejected, not deduplicated: two sources cannot share one identity.
+     */
     static <Msg> List<Subscription<Msg>> leaves(Subscription<Msg> subscription) {
         List<Subscription<Msg>> leaves = new ArrayList<>();
         collect(subscription, leaves);
