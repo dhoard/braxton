@@ -41,6 +41,29 @@ class HarnessRenderTest {
     }
 
     @Test
+    void displayFormattersStepAtTheirBoundaries() {
+        assertThat(HarnessRender.formatTokens(0)).isEqualTo("0");
+        assertThat(HarnessRender.formatTokens(999)).isEqualTo("999");
+        assertThat(HarnessRender.formatTokens(1_000)).isEqualTo("1.0k");
+        assertThat(HarnessRender.formatTokens(9_999)).isEqualTo("10.0k");
+        assertThat(HarnessRender.formatTokens(10_000)).isEqualTo("10k");
+        assertThat(HarnessRender.formatTokens(999_499)).isEqualTo("999k");
+        assertThat(HarnessRender.formatTokens(999_500)).isEqualTo("1.0M");
+        assertThat(HarnessRender.formatTokens(9_999_999)).isEqualTo("10.0M");
+        assertThat(HarnessRender.formatTokens(10_000_000)).isEqualTo("10M");
+
+        assertThat(HarnessRender.formatElapsed(0)).isEqualTo("0s");
+        assertThat(HarnessRender.formatElapsed(65)).isEqualTo("1m 5s");
+        assertThat(HarnessRender.formatElapsed(3_605)).isEqualTo("1h 0m 5s");
+        assertThat(HarnessRender.formatElapsed(-5)).as("a negative elapsed reads as zero").isEqualTo("0s");
+
+        assertThat(HarnessRender.formatRate(null)).isEqualTo("- t/s");
+        assertThat(HarnessRender.formatRate(Double.NaN)).isEqualTo("- t/s");
+        assertThat(HarnessRender.formatRate(-1.0)).isEqualTo("- t/s");
+        assertThat(HarnessRender.formatRate(63.6)).isEqualTo("64 t/s");
+    }
+
+    @Test
     void wrappingAnOverlongIndentKeepsTheLineBlankInsteadOfInventingAnEllipsis() {
         // A whitespace-only line must stay blank. Clipping the indent keeps its width; the old
         // truncate() call turned it into " …", an ellipsis that was never in the text.
