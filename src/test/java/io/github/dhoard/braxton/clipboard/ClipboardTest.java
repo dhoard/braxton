@@ -292,6 +292,24 @@ class ClipboardTest {
     }
 
     @Test
+    void aCopiedPayloadNeverCarriesTerminalEscapes() {
+        // Copied content is sanitized before it is stored or encoded, so a hostile selection cannot
+        // inject a sequence into the OSC 52 write or come back through the in-process paste.
+        String hostile = "a\u001B]0;title\u0007b\u001B[31mc\u001B[0m\u0000\u009B1m"
+                + "\u001BPdcs\u001B\\d";
+        assertThat(PasteSanitizer.plainText(hostile)).isEqualTo("abcd");
+        List<String> writes = new ArrayList<>();
+        ClipboardService clipboard = service("xterm-256color", Map.of(), writes);
+        ClipboardResult result = clipboard.copy(hostile);
+        assertThat(result.text()).isEqualTo("abcd");
+        assertThat(clipboard.internalText()).isEqualTo("abcd");
+        assertThat(writes).hasSize(1);
+        String encoded = java.util.Base64.getEncoder()
+                .encodeToString("abcd".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertThat(writes.get(0)).isEqualTo("\u001B]52;c;" + encoded + "\u0007");
+    }
+
+    @Test
     void internalTextIsAvailableForApplicationPaste() {
         ClipboardService clipboard = service("dumb", Map.of(), new ArrayList<>());
         clipboard.copy("payload");
