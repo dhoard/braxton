@@ -169,35 +169,57 @@ public final class SubscriptionManager<Msg> {
                     + " > " + maxSubscriptions);
         }
         List<Live> toClose = new ArrayList<>();
+        Throwable rejected = null;
         synchronized (lock) {
             if (closed) {
                 // Shutdown already closed every source; a late reconcile must not resurrect one.
                 return;
             }
             Map<SubscriptionId, Live> next = new HashMap<>();
-            for (Subscription<Msg> leaf : leaves) {
-                Live existing = live.get(leaf.id());
-                if (existing != null && existing.configuration.equals(leaf.configuration())) {
-                    refreshMapper(existing, leaf);
-                    next.put(leaf.id(), existing);
-                } else {
-                    if (existing != null) {
-                        toClose.add(existing);
+            List<Live> started = new ArrayList<>();
+            try {
+                for (Subscription<Msg> leaf : leaves) {
+                    Live existing = live.get(leaf.id());
+                    if (existing != null && existing.configuration.equals(leaf.configuration())) {
+                        refreshMapper(existing, leaf);
+                        next.put(leaf.id(), existing);
+                    } else {
+                        if (existing != null) {
+                            toClose.add(existing);
+                        }
+                        Live created = start(leaf);
+                        started.add(created);
+                        next.put(leaf.id(), created);
                     }
-                    next.put(leaf.id(), start(leaf));
                 }
+            } catch (RuntimeException | Error failure) {
+                // A descriptor could not be started. Nothing is committed yet, so keep the
+                // previously live sources (and their replacement candidates) untouched and close
+                // exactly the sources this call created; otherwise a started resource would never
+                // be reachable by closeAll and its emissions would stay live.
+                toClose.clear();
+                toClose.addAll(started);
+                rejected = failure;
             }
-            for (Map.Entry<SubscriptionId, Live> entry : live.entrySet()) {
-                if (!next.containsKey(entry.getKey())) {
-                    toClose.add(entry.getValue());
+            if (rejected == null) {
+                for (Map.Entry<SubscriptionId, Live> entry : live.entrySet()) {
+                    if (!next.containsKey(entry.getKey())) {
+                        toClose.add(entry.getValue());
+                    }
                 }
+                live.clear();
+                live.putAll(next);
             }
-            live.clear();
-            live.putAll(next);
         }
         for (Live removed : toClose) {
             removed.epoch = -1L;
             removed.close();
+        }
+        if (rejected instanceof RuntimeException runtime) {
+            throw runtime;
+        }
+        if (rejected instanceof Error error) {
+            throw error;
         }
     }
 

@@ -140,6 +140,21 @@ class SubscriptionManagerTest {
     }
 
     @Test
+    void aReconcileThatCannotStartASourceClosesTheSourcesItAlreadyStarted() {
+        java.util.concurrent.atomic.AtomicInteger closes = new java.util.concurrent.atomic.AtomicInteger();
+        assertThatThrownBy(() -> manager.reconcile(Subscription.batch(
+                Subscription.source(SubscriptionId.of("first"), "one",
+                        emitter -> closes::incrementAndGet, value -> "first"),
+                Subscription.source(SubscriptionId.of("second"), "two", emitter -> {
+                    throw new IllegalStateException("cannot start");
+                }, value -> "second"))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("cannot start");
+        manager.closeAll();
+        assertThat(closes).hasValue(1);
+    }
+
+    @Test
     void mappingChangesTheChildIdentityWithoutBreakingReconciliation() throws Exception {
         record Child(String name) {
         }
