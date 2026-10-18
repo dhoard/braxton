@@ -240,6 +240,14 @@ class CatalogTest {
     }
 
     @Test
+    void quoteExpandsTabsSoItsLinesStayTheSameWidth() {
+        StyledText rendered = Quote.of().append("a\tb").append("cc").render();
+        assertThat(rendered.plainText()).isEqualTo("\u2502 a   b\n\u2502 cc   ");
+        assertThat(rendered.plainText().split("\n", -1))
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line)).isEqualTo(7));
+    }
+
+    @Test
     void quotePreservesTheStylingOfTheQuotedContent() {
         StyledText content = StyledText.of("hot",
                 Style.NONE.withBold().withForeground(Colors.ERROR_400));

@@ -32,7 +32,12 @@ import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 
-/** A block quote: a coloured bar, the quoted content, and an optional background. */
+/**
+ * A block quote: a coloured bar, the quoted content, and an optional background.
+ *
+ * <p>Tabs are expanded to the same four-column stops the text view uses, so the block keeps one
+ * width instead of padding to a tab that paint expands wider.</p>
+ */
 public final class Quote {
 
     private final List<StyledText> lines = new ArrayList<>();
@@ -71,13 +76,17 @@ public final class Quote {
     }
 
     public StyledText render() {
+        List<StyledText> body = new ArrayList<>(lines.size());
+        for (StyledText line : lines) {
+            body.add(TabStops.expand(line));
+        }
         StyledText out = StyledText.empty();
         int width = 0;
-        for (StyledText line : lines) {
+        for (StyledText line : body) {
             width = Math.max(width, TextMeasure.columns(line.plainText()));
         }
-        for (int i = 0; i < lines.size(); i++) {
-            StyledText line = lines.get(i);
+        for (int i = 0; i < body.size(); i++) {
+            StyledText line = body.get(i);
             int pad = Math.max(0, width - TextMeasure.columns(line.plainText()));
             if (i > 0) {
                 out = out.append("\n");
