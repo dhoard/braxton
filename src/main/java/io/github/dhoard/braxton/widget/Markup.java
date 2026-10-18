@@ -235,15 +235,25 @@ public final class Markup {
         }
         StyledText out = StyledText.empty();
         for (List<StyledText> row : rows) {
+            List<List<StyledText>> cellLines = new ArrayList<>(columns);
+            int height = 1;
             for (int column = 0; column < columns; column++) {
                 StyledText cell = column < row.size() ? row.get(column) : StyledText.empty();
-                String plain = cell.plainText();
-                int used = TextMeasure.columns(plain);
-                out = out.append(cell)
-                        .append(StyledText.of(" ".repeat(Math.max(gap,
-                                widths[column] - used + gap)), style));
+                List<StyledText> lines = cell.lines();
+                cellLines.add(lines);
+                height = Math.max(height, lines.size());
             }
-            out = out.append("\n");
+            for (int line = 0; line < height; line++) {
+                for (int column = 0; column < columns; column++) {
+                    List<StyledText> lines = cellLines.get(column);
+                    StyledText value = line < lines.size() ? lines.get(line) : StyledText.empty();
+                    int used = TextMeasure.columns(value.plainText());
+                    out = out.append(value)
+                            .append(StyledText.of(" ".repeat(Math.max(gap,
+                                    widths[column] - used + gap)), style));
+                }
+                out = out.append("\n");
+            }
         }
         return out;
     }

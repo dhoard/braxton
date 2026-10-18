@@ -171,6 +171,18 @@ class CatalogTest {
     }
 
     @Test
+    void markupTableAlignsColumnsAcrossMultiLineCells() {
+        StyledText rendered = Markup.parse("<root><table gap=\"2\">"
+                + "<tr><td>ab<br/>c</td><td>x</td></tr>"
+                + "<tr><td>d</td><td>y</td></tr></table></root>");
+        List<String> lines = rendered.lines().stream().map(StyledText::plainText).toList();
+        int firstRowColumn = lines.get(0).indexOf('x');
+        int secondRowColumn = lines.get(2).indexOf('y');
+        assertThat(firstRowColumn).isGreaterThan(0);
+        assertThat(secondRowColumn).isEqualTo(firstRowColumn);
+    }
+
+    @Test
     void markupPreservesNestedInheritanceAndCdata() {
         StyledText rendered = Markup.parse(
                 "<root><span color=\"#00ff00\"><span style=\"bold\">x</span>y</span>"
