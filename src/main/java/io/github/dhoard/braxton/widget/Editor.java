@@ -197,10 +197,17 @@ public final class Editor {
         return new EditorState(state.text(), state.text().length(), 0, 0);
     }
 
-    /** Visual column of {@code index} on its line, so wide glyphs count their real width. */
+    /**
+     * Visual column of {@code index} on its line: wide glyphs count their real width and a tab
+     * counts the columns the text view paints for it.
+     */
     private static int visualColumn(String text, int lineStart, int index) {
         int end = Math.max(lineStart, Math.min(index, text.length()));
-        return TextMeasure.columns(text.substring(lineStart, end));
+        int used = 0;
+        for (String cluster : TextMeasure.graphemes(text.substring(lineStart, end))) {
+            used += visualWidth(cluster, used);
+        }
+        return used;
     }
 
     /** Caret offset at {@code column} visual columns, stopping before a glyph that would overshoot. */
@@ -209,8 +216,7 @@ public final class Editor {
         int used = 0;
         while (position < lineEnd) {
             int next = Math.min(TextMeasure.boundaryAfter(text, position), lineEnd);
-            int width = TextMeasure.clusterColumns(text.substring(position, next),
-                    WidthPolicy.PINNED);
+            int width = visualWidth(text.substring(position, next), used);
             if (used + width > column) {
                 break;
             }
@@ -218,6 +224,18 @@ public final class Editor {
             position = next;
         }
         return position;
+    }
+
+    /**
+     * Columns one cluster occupies after {@code used} columns of its line. A tab advances to the
+     * next four-column stop, exactly as the text view paints the draft; measuring it as one column
+     * would move the caret to a column it is not drawn at.
+     */
+    private static int visualWidth(String cluster, int used) {
+        if ("\t".equals(cluster)) {
+            return TabStops.WIDTH - (used % TabStops.WIDTH);
+        }
+        return TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED);
     }
 
     // ── view ─────────────────────────────────────────────────────────────────

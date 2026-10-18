@@ -189,6 +189,18 @@ class EditorTest {
     }
 
     @Test
+    void verticalMovementCountsATabAsTheColumnsTheTextViewPaints() {
+        String text = "a\tb\nabcdef";
+        // The draft is painted by the text view, which expands the tab to the next four-column
+        // stop, so the caret before "b" sits at visual column 4 rather than 2.
+        EditorState state = new EditorState(text, 2, 2, 0);
+        EditorState down = update(state, new EditorAction.MoveDown());
+        assertThat(down.caret()).isEqualTo(text.indexOf("abcd") + 4);
+        assertThat(down.preferredColumn()).isEqualTo(4);
+        assertThat(update(down, new EditorAction.MoveUp()).caret()).isEqualTo(2);
+    }
+
+    @Test
     void verticalMovementStopsBeforeAWideGlyphItCannotFitInto() {
         String text = "abcdef\na\u65E5b";
         // Visual column 2 falls inside the wide glyph on the shorter line.
