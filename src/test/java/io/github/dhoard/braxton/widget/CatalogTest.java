@@ -108,6 +108,22 @@ class CatalogTest {
     }
 
     @Test
+    void aBorderedBoxKeepsEachContentSpanStyleAndLink() {
+        StyledText content = StyledText.of("a", Style.NONE.withBold())
+                .append(StyledText.of("b", Style.NONE, "https://example.test/info"));
+        StyledText box = Box.of(content).render(20);
+        assertThat(box.plainText()).contains("ab");
+        assertThat(box.spans()).anySatisfy(span -> {
+            assertThat(span.text()).isEqualTo("a");
+            assertThat(span.style().bold()).isTrue();
+        });
+        assertThat(box.spans()).anySatisfy(span -> {
+            assertThat(span.text()).isEqualTo("b");
+            assertThat(span.link()).isEqualTo("https://example.test/info");
+        });
+    }
+
+    @Test
     void borderlessBoxIsJustItsContent() {
         Box box = Box.of("plain").border(Border.NONE);
         assertThat(box.render(20).plainText()).isEqualTo("plain");

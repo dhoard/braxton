@@ -105,9 +105,7 @@ public final class Box {
         List<StyledText> lines = content.lines();
         List<StyledText> clipped = new ArrayList<>();
         for (StyledText line : lines) {
-            clipped.add(StyledText.of(
-                    TextMeasure.truncate(line.plainText(), Math.max(0, limit - 2)),
-                    line.style()));
+            clipped.add(truncate(line, Math.max(0, limit - 2)));
         }
         if (border == Border.NONE) {
             return content;
