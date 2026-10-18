@@ -28,12 +28,14 @@ import java.util.Map;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
+import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 
 /**
  * Pixel art rendered from an {@link ImageAsset}: one symbol per pixel, coloured per pixel, with
- * transparent pixels left blank.
+ * transparent pixels left blank. A transparent pixel spans as many columns as the symbol does, so
+ * a wide symbol keeps the pixel grid aligned.
  */
 public final class ImageView {
 
@@ -79,6 +81,7 @@ public final class ImageView {
     }
 
     public StyledText render() {
+        int cellColumns = Math.max(1, TextMeasure.columns(symbol));
         StyledText out = StyledText.empty();
         for (int y = 0; y < image.height(); y++) {
             if (y > 0) {
@@ -88,7 +91,7 @@ public final class ImageView {
                 int argb = image.argb(x, y);
                 int alpha = (argb >>> 24) & 0xFF;
                 if (alpha == 0) {
-                    out = out.append(" ".repeat(scale));
+                    out = out.append(" ".repeat(cellColumns * scale));
                     continue;
                 }
                 int rgb = argb & 0xFFFFFF;
