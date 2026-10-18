@@ -181,6 +181,116 @@ class ClipboardTest {
         assertThat(writes.get(0)).doesNotContain("tmux;");
     }
 
+    private static ClipboardService matrix(TmuxStrategy strategy, boolean osc52,
+            Map<String, String> extra, List<String> writes) {
+        Map<String, String> environment = new java.util.LinkedHashMap<>(extra);
+        environment.put("TERM", "xterm-256color");
+        ClipboardConfig config = ClipboardConfig.builder().osc52Enabled(osc52)
+                .tmuxStrategy(strategy).build();
+        return new ClipboardService(config, new TerminalEnvironment(environment), writes::add);
+    }
+
+    @Test
+    void everyTmuxStrategySelectsTheDocumentedTransport() {
+        Map<String, String> tmux = Map.of("TMUX", "/tmp/tmux-1000/default,1,0");
+        assertThat(matrix(TmuxStrategy.AUTO, true, tmux, new ArrayList<>()).copy("a").path())
+                .isEqualTo(ClipboardPath.TMUX_NATIVE);
+        assertThat(matrix(TmuxStrategy.AUTO, true, Map.of(), new ArrayList<>()).copy("a").path())
+                .isEqualTo(ClipboardPath.OSC52_DIRECT);
+        assertThat(matrix(TmuxStrategy.DIRECT, true, tmux, new ArrayList<>()).copy("a").path())
+                .isEqualTo(ClipboardPath.OSC52_DIRECT);
+        assertThat(matrix(TmuxStrategy.TMUX_NATIVE, true, tmux, new ArrayList<>()).copy("a").path())
+                .isEqualTo(ClipboardPath.TMUX_NATIVE);
+        assertThat(matrix(TmuxStrategy.TMUX_NATIVE, true, Map.of(), new ArrayList<>())
+                .copy("a").path()).isEqualTo(ClipboardPath.OSC52_DIRECT);
+        assertThat(matrix(TmuxStrategy.TMUX_PASSTHROUGH, true, tmux, new ArrayList<>())
+                .copy("a").path()).isEqualTo(ClipboardPath.TMUX_PASSTHROUGH);
+        assertThat(matrix(TmuxStrategy.TMUX_PASSTHROUGH, true, Map.of(), new ArrayList<>())
+                .copy("a").path()).isEqualTo(ClipboardPath.OSC52_DIRECT);
+        assertThat(matrix(TmuxStrategy.OFF, true, tmux, new ArrayList<>()).copy("a").path())
+                .isEqualTo(ClipboardPath.INTERNAL_ONLY);
+        assertThat(matrix(TmuxStrategy.AUTO, false, tmux, new ArrayList<>()).copy("a").path())
+                .isEqualTo(ClipboardPath.INTERNAL_ONLY);
+    }
+
+    @Test
+    void tmuxPassthroughWrapsTheOsc52SequenceExactlyOnce() {
+        List<String> writes = new ArrayList<>();
+        ClipboardResult result = matrix(TmuxStrategy.TMUX_PASSTHROUGH, true,
+                Map.of("TMUX", "/tmp/tmux-1000/default,1,0"), writes).copy("hi");
+        assertThat(result.path()).isEqualTo(ClipboardPath.TMUX_PASSTHROUGH);
+        assertThat(writes).hasSize(1);
+        String written = writes.get(0);
+        assertThat(written).startsWith("\u001BPtmux;").endsWith("\u001B\\");
+        // The inner OSC 52 keeps its own ESC, doubled for the single unescape layer.
+        assertThat(written).contains("\u001B\u001B]52;c;");
+        assertThat(TmuxClipboard.passthrough(written)).isEqualTo(written);
+    }
+
+    @Test
+    void aDumbTerminalNeverWritesEvenWhenAPassthroughIsConfigured() {
+        List<String> writes = new ArrayList<>();
+        Map<String, String> environment = Map.of("TERM", "dumb", "TMUX", "/tmp/tmux");
+        ClipboardConfig config = ClipboardConfig.builder()
+                .tmuxStrategy(TmuxStrategy.TMUX_PASSTHROUGH).build();
+        ClipboardResult result = new ClipboardService(config,
+                new TerminalEnvironment(environment), writes::add).copy("hi");
+        assertThat(result.path()).isEqualTo(ClipboardPath.INTERNAL_ONLY);
+        assertThat(writes).isEmpty();
+    }
+
+    @Test
+    void identicalPayloadsAreDeduplicatedPerTransport() {
+        List<String> writes = new ArrayList<>();
+        ClipboardService clipboard = matrix(TmuxStrategy.TMUX_PASSTHROUGH, true,
+                Map.of("TMUX", "/tmp/tmux"), writes);
+        assertThat(clipboard.copy("same").deduplicated()).isFalse();
+        assertThat(clipboard.copy("same").deduplicated()).isTrue();
+        assertThat(writes).hasSize(1);
+    }
+
+    @Test
+    void aFailedWriteKeepsTheTextAndRetriesTheNextTime() {
+        List<String> writes = new ArrayList<>();
+        boolean[] failing = {true};
+        ClipboardService clipboard = new ClipboardService(ClipboardConfig.defaults(),
+                new TerminalEnvironment(Map.of("TERM", "xterm-256color")), sequence -> {
+                    if (failing[0]) {
+                        failing[0] = false;
+                        throw new IllegalStateException("output closed");
+                    }
+                    writes.add(sequence);
+                });
+        ClipboardResult failed = clipboard.copy("payload");
+        assertThat(failed.path()).isEqualTo(ClipboardPath.INTERNAL_ONLY);
+        assertThat(failed.systemWriteRequested()).isFalse();
+        assertThat(failed.storedInternally()).isTrue();
+        assertThat(clipboard.internalText()).isEqualTo("payload");
+        ClipboardResult retried = clipboard.copy("payload");
+        assertThat(retried.systemWriteRequested()).isTrue();
+        assertThat(writes).hasSize(1);
+    }
+
+    @Test
+    void clipboardConfigurationClampsItsLimitsAndParsesStrategyNames() {
+        ClipboardConfig config = ClipboardConfig.builder().maxPayloadBytes(0).maxInternalChars(0)
+                .tmuxStrategy(null).build();
+        assertThat(config.maxPayloadBytes()).isEqualTo(1);
+        assertThat(config.maxInternalChars()).isEqualTo(1);
+        assertThat(config.tmuxStrategy()).isEqualTo(TmuxStrategy.AUTO);
+        assertThat(config.osc52Enabled()).isTrue();
+        assertThat(config.toBuilder().osc52Enabled(false).build().osc52Enabled()).isFalse();
+        assertThat(TmuxStrategy.parse(" tmux_passthrough ", TmuxStrategy.AUTO))
+                .isEqualTo(TmuxStrategy.TMUX_PASSTHROUGH);
+        assertThat(TmuxStrategy.parse("TMUX_NATIVE", TmuxStrategy.AUTO))
+                .isEqualTo(TmuxStrategy.TMUX_NATIVE);
+        assertThat(TmuxStrategy.parse("nonsense", TmuxStrategy.OFF)).isEqualTo(TmuxStrategy.OFF);
+        assertThat(TmuxStrategy.parse(null, TmuxStrategy.DIRECT)).isEqualTo(TmuxStrategy.DIRECT);
+        assertThat(PasteMode.parse(" aggressive ", PasteMode.NORMAL))
+                .isEqualTo(PasteMode.AGGRESSIVE);
+        assertThat(PasteMode.parse("unknown", PasteMode.NORMAL)).isEqualTo(PasteMode.NORMAL);
+    }
+
     @Test
     void internalTextIsAvailableForApplicationPaste() {
         ClipboardService clipboard = service("dumb", Map.of(), new ArrayList<>());
