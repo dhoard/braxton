@@ -55,7 +55,9 @@ public final class Osc52 {
      * @return the complete OSC 52 sequence, or an empty string for {@code null}
      */
     public static String encode(String text) {
-        return encode(text, CLIPBOARD_SELECTION, Integer.MAX_VALUE).sequence();
+        // Documented: nothing to encode means nothing to write. An empty payload would otherwise
+        // reach the terminal as a sequence that clears the clipboard.
+        return text == null ? "" : encode(text, CLIPBOARD_SELECTION, Integer.MAX_VALUE).sequence();
     }
 
     /**

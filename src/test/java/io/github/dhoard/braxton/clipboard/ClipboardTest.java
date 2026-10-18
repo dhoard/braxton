@@ -79,6 +79,16 @@ class ClipboardTest {
     }
 
     @Test
+    void aNullPayloadEncodesNoSequenceAtAll() {
+        // Osc52.encode(String) documents an empty string for null: there is nothing to write, so
+        // no sequence may reach the terminal. The bounded overload still treats null as an empty
+        // payload, as its own contract states.
+        assertThat(Osc52.encode((String) null)).isEmpty();
+        assertThat(Osc52.encode((String) null, 100).text()).isEmpty();
+        assertThat(Osc52.encode((String) null, 100).sequence()).isNotEmpty();
+    }
+
+    @Test
     void osc52TruncationNeverSplitsAGraphemeCluster() {
         String family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
         Osc52.Encoded partial = Osc52.encode(family + "x", 5);
