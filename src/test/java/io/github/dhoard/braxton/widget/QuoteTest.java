@@ -136,4 +136,27 @@ class QuoteTest {
             }
         }
     }
+
+    @Test
+    void theBlockPaddingUsesThePinnedPolicyWhateverTheRendererPolicyIs() {
+        // Documented limitation: widget padding is measured with the pinned policy, so a renderer
+        // built with another policy clips and wraps differently but does not change the padding the
+        // widget already baked in. Pin that so making widgets policy-aware is a deliberate change.
+        Quote quote = Quote.of().append("\u65E5").append("ab");
+        java.util.List<String> pinned = new io.github.dhoard.braxton.view.ScreenRenderer()
+                .plainLines(quote.view(), new io.github.dhoard.braxton.layout.Viewport(2, 10));
+        java.util.List<String> oneColumn = new io.github.dhoard.braxton.view.ScreenRenderer(
+                io.github.dhoard.braxton.style.WidthPolicy.ONE_COLUMN)
+                .plainLines(quote.view(), new io.github.dhoard.braxton.layout.Viewport(2, 10));
+        assertThat(oneColumn).as("the widget's own widths do not follow the renderer policy")
+                .isEqualTo(pinned);
+        assertThat(pinned.stream().map(TextMeasure::columns).distinct())
+                .as("under the pinned policy both rows are the same width").hasSize(1);
+        assertThat(oneColumn.stream()
+                .map(line -> TextMeasure.columns(line,
+                        io.github.dhoard.braxton.style.WidthPolicy.ONE_COLUMN))
+                .distinct())
+                .as("under a one-column policy the mixed row is short by the wide glyph")
+                .hasSize(2);
+    }
 }

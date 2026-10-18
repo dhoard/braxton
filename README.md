@@ -463,6 +463,10 @@ Linux/glibc x86_64 `termios` layout; other Unix ABIs are refused rather than gue
   tests a documented policy; that is not a guarantee about every terminal.
 - Terminals that encode Enter as LF cannot be distinguished from Ctrl+J; LF is treated as a newline.
 - Mouse support covers wheel scrolling, not click-drag selection.
+- Widget padding - `Table` columns, `Quote` blocks, `ProgressBar` cells, `Markup` tables and list
+  indents - is measured with the pinned width policy. A renderer built with another policy
+  (`WidthPolicy.ONE_COLUMN`, or an application's own) applies to text wrapping and clipping, not
+  to those computed widths, so a widget mixing wide and narrow content can look ragged under it.
 - Cancellation is cooperative: a task that ignores interruption is not forcibly stopped; its result
   is suppressed and shutdown waits only for the configured grace period. User task code is not
   sandboxed.
