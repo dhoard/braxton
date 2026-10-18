@@ -221,8 +221,11 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
         return switch (result.intent()) {
             case EditorIntent.None none -> Transition.stay(next);
             case EditorIntent.Submit submit -> submit(next, submit.text());
-            case EditorIntent.Copy copy -> Transition.next(next,
-                    Command.copy(copy.text(), HarnessMsg.Copied::new));
+            // Copy carries "" when there is nothing to copy (an empty draft or a policy that
+            // refuses); forwarding it would clear the in-process clipboard instead.
+            case EditorIntent.Copy copy -> copy.text().isEmpty()
+                    ? Transition.stay(next.withStatusMessage("Nothing to copy."))
+                    : Transition.next(next, Command.copy(copy.text(), HarnessMsg.Copied::new));
             case EditorIntent.PasteRequest request -> Transition.next(next,
                     Command.readClipboard(text -> new HarnessMsg.Editor(new EditorAction.Paste(text))));
         };

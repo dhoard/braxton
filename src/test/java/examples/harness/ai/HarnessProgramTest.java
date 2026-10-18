@@ -320,6 +320,14 @@ class HarnessProgramTest {
     }
 
     @Test
+    void anEmptyCopyIntentDoesNotTouchTheClipboard() {
+        Transition<HarnessState, HarnessMsg> transition =
+                update(ready(), new HarnessMsg.Editor(new EditorAction.Copy()));
+        assertThat(transition.command()).isInstanceOf(Command.None.class);
+        assertThat(transition.model().statusMessage()).isEqualTo("Nothing to copy.");
+    }
+
+    @Test
     void copyLastReplyWithoutAReplyIsANoticeNotACopy() {
         HarnessState blank = HarnessState.initial(new Size(24, 80), "~/braxton", List.of())
                 .withTranscript(HarnessTranscript.empty(List.of()));
