@@ -104,6 +104,24 @@ class TableSelectorTest {
         assertThat(actionFor(Key.of("x"))).isEmpty();
     }
 
+    @Test
+    void onlyTheSelectedCellIsInvertedAndOnlyWhileFocused() {
+        var screen = new ScreenRenderer().screen(TableSelector.view(ElementId.of("table"), state(),
+                true, Style.NONE.withInvert(), Style.NONE, Style.NONE.withBold(),
+                action -> action.getClass().getSimpleName()), new Viewport(3, 40));
+        assertThat(screen.cell(1, 0).style().invert()).as("selected cell").isTrue();
+        assertThat(screen.cell(2, 0).style().invert()).as("other row").isFalse();
+        assertThat(screen.cell(1, 4).style().invert()).as("other column").isFalse();
+        assertThat(screen.cell(0, 0).style().bold()).as("header").isTrue();
+
+        var unfocused = new ScreenRenderer().screen(TableSelector.view(ElementId.of("table"),
+                state(), false, Style.NONE.withInvert(), Style.NONE, Style.NONE.withBold(),
+                action -> action.getClass().getSimpleName()), new Viewport(3, 40));
+        assertThat(unfocused.cell(1, 0).style().invert()).as("nothing is selected while unfocused")
+                .isFalse();
+        assertThat(unfocused.plainLine(1)).as("the rows are drawn the same").isEqualTo("1   alpha");
+    }
+
     private static java.util.Optional<String> actionFor(Key key) {
         var view = TableSelector.view(ElementId.of("table"), state(), true, Style.NONE,
                 Style.NONE, Style.NONE, action -> action.getClass().getSimpleName());
