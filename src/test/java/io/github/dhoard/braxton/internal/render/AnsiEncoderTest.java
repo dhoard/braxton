@@ -67,6 +67,19 @@ class AnsiEncoderTest {
     }
 
     @Test
+    void aResizedScreenIsRepaintedInFullInsteadOfDiffed() {
+        // Cell-by-cell diffs only make sense for the same geometry; a resize must repaint every row
+        // of the new screen or stale columns survive.
+        Screen previous = new Screen(2, 4);
+        previous.put(0, 0, "x", Style.NONE, null, 1);
+        Screen resized = new Screen(3, 6);
+        resized.put(0, 0, "y", Style.NONE, null, 1);
+        String diff = AnsiEncoder.diff(previous, resized);
+        assertThat(diff).isEqualTo(AnsiEncoder.frame(resized));
+        assertThat(diff).contains("\u001B[3;1H");
+    }
+
+    @Test
     void linksAreOpenedAndClosedOncePerRun() {
         Screen screen = new Screen(1, 4);
         screen.put(0, 0, "a", Style.NONE, "https://example.com", 1);
