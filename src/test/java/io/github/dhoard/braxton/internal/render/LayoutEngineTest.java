@@ -127,6 +127,13 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aBorderedViewNeverReportsMoreColumnsThanTheAvailableWidth() {
+        View<?> bordered = Views.border(io.github.dhoard.braxton.layout.Border.SINGLE,
+                Views.fill(Style.NONE));
+        assertThat(engine.intrinsicWidth(bordered, 1)).isLessThanOrEqualTo(1);
+    }
+
+    @Test
     void intrinsicWidthIsCappedAtTheAvailableColumns() {
         View<?> padded = Views.padding(2, Views.fill(Style.NONE));
         assertThat(engine.intrinsicWidth(padded, 10)).isEqualTo(10);
