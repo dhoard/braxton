@@ -709,4 +709,46 @@ class CatalogTest {
                 new TableSelector.Action.Confirm()).intent();
         assertThat(((TableSelector.Intent.Chosen) chosen).value()).isEqualTo("d");
     }
+
+    @Test
+    void multiPartWidgetsFollowTheirDocumentedAssemblyStyleAndRenderReadOnly() {
+        // The documented split: ProgressBar is an immutable value (setters return a new instance),
+        // the other multi-part widgets are mutable builders (setters return the same instance), and
+        // rendering any of them reads only the built value, so a frame can be built repeatedly.
+        io.github.dhoard.braxton.widget.ProgressBar bar =
+                io.github.dhoard.braxton.widget.ProgressBar.of(4);
+        io.github.dhoard.braxton.widget.ProgressBar shown = bar.showPercentage(true);
+        io.github.dhoard.braxton.widget.ProgressBar buffered = bar.buffer(1);
+        assertThat(shown).isNotSameAs(bar);
+        assertThat(buffered).isNotSameAs(bar);
+        assertThat(bar.render(1, 4).plainText()).as("the original never gains the label")
+                .doesNotContain("%");
+        assertThat(bar.render(1, 4)).as("the receiver is unchanged")
+                .isEqualTo(bar.render(1, 4));
+        assertThat(bar.render(1, 4).plainText()).doesNotContain("%");
+        assertThat(shown.render(1, 4).plainText()).contains("%");
+
+        io.github.dhoard.braxton.widget.Badge badge =
+                io.github.dhoard.braxton.widget.Badge.of().append(
+                        io.github.dhoard.braxton.style.StyledText.plain("one"));
+        assertThat(badge.append(io.github.dhoard.braxton.style.StyledText.plain("two")))
+                .as("the builder returns itself").isSameAs(badge);
+        assertThat(badge.segments()).hasSize(2);
+        assertThat(badge.render()).isEqualTo(badge.render());
+        assertThat(badge.columns()).isEqualTo(TextMeasure.columns(badge.render().plainText()));
+
+        io.github.dhoard.braxton.widget.Quote quote =
+                io.github.dhoard.braxton.widget.Quote.of().append("a").append("bb");
+        assertThat(quote.background(io.github.dhoard.braxton.style.Color.BLACK)).isSameAs(quote);
+        assertThat(quote.render()).isEqualTo(quote.render());
+
+        Table table = Table.of().row(io.github.dhoard.braxton.style.StyledText.plain("a"));
+        assertThat(table.buffer(0)).isSameAs(table);
+        assertThat(table.renderLines()).isEqualTo(table.renderLines());
+
+        io.github.dhoard.braxton.widget.Box box =
+                io.github.dhoard.braxton.widget.Box.of("body");
+        assertThat(box.responsive()).isSameAs(box);
+        assertThat(box.view(8)).isEqualTo(box.view(8));
+    }
 }

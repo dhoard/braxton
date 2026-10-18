@@ -302,7 +302,12 @@ Guarantees:
 
 ## Widgets, assets, and clipboard
 
-All widgets are immutable values or pure factories producing `StyledText`/`View`:
+Widgets are pure factories producing immutable `StyledText`/`View` values, and rendering one
+mutates nothing. Two assembly styles exist for the multi-part widgets. `ProgressBar` is an
+immutable value: every setter returns a new instance. `Table`, `Box`, `Badge`, `Quote`,
+`ImageView`, and `Logo` are assembled with a small mutable builder whose setters return the same
+instance, so build one inside `view` (or a factory) instead of sharing it across frames. Widget
+state you own - `Selector.State`, `EditorState` - is a value in your model:
 
 | Type | Purpose |
 | --- | --- |
