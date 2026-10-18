@@ -90,15 +90,28 @@ public final class AnsiEncoder {
     public static String encodeRow(Screen screen, int row) {
         StringBuilder out = new StringBuilder();
         out.append("\u001B[").append(row + 1).append(";1H\u001B[2K");
+        int last = lastPaintedColumn(screen, row);
         Style active = Style.NONE;
         String activeLink = null;
         boolean styled = false;
-        for (int col = 0; col < screen.cols(); col++) {
+        for (int col = 0; col <= last; col++) {
             if (screen.isContinuation(row, col)) {
                 continue;
             }
             Cell cell = screen.cell(row, col);
-            if (cell.isEmpty() && activeLink == null) {
+            if (cell.isEmpty()) {
+                // The line was cleared first, but a gap still has to occupy its column; otherwise
+                // the cells after it would be written to the left of where the grid placed them.
+                if (activeLink != null) {
+                    out.append(OSC8_OPEN).append(STRING_TERMINATOR);
+                    activeLink = null;
+                }
+                if (styled) {
+                    out.append(RESET);
+                    styled = false;
+                    active = Style.NONE;
+                }
+                out.append(' ');
                 continue;
             }
             if (!cell.style().equals(active) || (cell.link() == null) != (activeLink == null)) {
@@ -132,6 +145,16 @@ public final class AnsiEncoder {
             out.append(RESET);
         }
         return out.toString();
+    }
+
+    /** Last column holding painted content; trailing blanks need no output after the line clear. */
+    private static int lastPaintedColumn(Screen screen, int row) {
+        for (int col = screen.cols() - 1; col >= 0; col--) {
+            if (!screen.isContinuation(row, col) && !screen.cell(row, col).isEmpty()) {
+                return col;
+            }
+        }
+        return -1;
     }
 
     private static String safeLink(String link) {

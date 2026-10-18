@@ -87,6 +87,31 @@ class AnsiEncoderTest {
     }
 
     @Test
+    void interiorBlankCellsAreEncodedSoLaterContentKeepsItsColumn() {
+        Screen screen = new Screen(1, 4);
+        screen.put(0, 1, "b", Style.NONE, null, 1);
+        assertThat(AnsiEncoder.encodeRow(screen, 0))
+                .isEqualTo("\u001B[1;1H\u001B[2K b");
+    }
+
+    @Test
+    void aBlankCellAfterStyledContentDoesNotInheritItsStyle() {
+        Screen screen = new Screen(1, 4);
+        screen.put(0, 0, "a", Style.bg(io.github.dhoard.braxton.style.Colors.BLACK), null, 1);
+        screen.put(0, 2, "c", Style.NONE, null, 1);
+        assertThat(AnsiEncoder.encodeRow(screen, 0))
+                .endsWith("a\u001B[0m c");
+    }
+
+    @Test
+    void trailingBlankCellsAreNotEncoded() {
+        Screen screen = new Screen(1, 6);
+        screen.put(0, 0, "a", Style.NONE, null, 1);
+        assertThat(AnsiEncoder.encodeRow(screen, 0))
+                .isEqualTo("\u001B[1;1H\u001B[2Ka");
+    }
+
+    @Test
     void aFullFrameWritesEveryRowInOrder() {
         Screen screen = new Screen(2, 2);
         screen.put(0, 0, "a", Style.NONE, null, 1);
