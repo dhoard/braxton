@@ -592,6 +592,89 @@ class RuntimeLoopTest {
     }
 
     @Test
+    @Timeout(20)
+    void shutdownWaitsOnlyTheGracePeriodForATaskThatIgnoresInterruption() throws Exception {
+        // The documented limitation: "cancellation is cooperative: a task that ignores interruption
+        // is not forcibly stopped; its result is suppressed and shutdown waits only for the
+        // configured grace period".
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch finished = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicInteger updates =
+                new java.util.concurrent.atomic.AtomicInteger();
+        Program<Integer, String> program = new Program<>() {
+            @Override
+            public Transition<Integer, String> init(InitContext context) {
+                return Transition.next(0, Command.task(EffectId.of("stubborn"), () -> {
+                    started.countDown();
+                    while (true) {
+                        try {
+                            release.await();
+                            break;
+                        } catch (InterruptedException ignored) {
+                            // Deliberately uncooperative: the runtime must not force it.
+                        }
+                    }
+                    finished.countDown();
+                    return "late";
+                }, value -> "done", failure -> "failed"));
+            }
+
+            @Override
+            public Transition<Integer, String> update(Integer model, String message) {
+                updates.incrementAndGet();
+                return Transition.stay(model);
+            }
+
+            @Override
+            public View<String> view(Integer model, Viewport viewport) {
+                return Views.text("working");
+            }
+        };
+        java.util.List<String> diagnostics =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        java.util.concurrent.ExecutorService executor =
+                java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+        FakeTerminal terminal = new FakeTerminal(new Size(4, 20));
+        RuntimeEnvironment environment = RuntimeEnvironment.system()
+                .withTimers(new FakeTerminal.ManualTimers())
+                .withEffectExecutor(executor)
+                .withDiagnostics(diagnostics::add)
+                .withNanoTime(() -> 1_000L);
+        RuntimeOptions options = new RuntimeOptions(java.time.Duration.ofMillis(200), 32, 8, 8,
+                io.github.dhoard.braxton.clipboard.ClipboardConfig.defaults(),
+                io.github.dhoard.braxton.terminal.TerminalOptions.DEFAULT, environment);
+        java.util.concurrent.atomic.AtomicReference<ExitResult> result =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        Thread run = Thread.ofVirtual().name("grace-test")
+                .start(() -> result.set(Application.run(program, options, terminal)));
+        try {
+            assertThat(started.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                    .as("the stubborn task starts").isTrue();
+            long startedAt = System.nanoTime();
+            terminal.endInput();
+            run.join(10_000L);
+            long elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000L;
+
+            assertThat(run.isAlive()).as("the run ends without waiting for the task").isFalse();
+            assertThat(elapsedMillis).as("shutdown waits for the grace period, then returns")
+                    .isGreaterThanOrEqualTo(150L).isLessThan(5_000L);
+            assertThat(result.get().kind())
+                    .as("a task that ignores interruption is not a failure").isEqualTo(
+                            ExitResult.Kind.INPUT_CLOSED);
+            assertThat(diagnostics).anySatisfy(message ->
+                    assertThat(message).contains("shutdown").contains("still running"));
+        } finally {
+            release.countDown();
+            finished.await(5, java.util.concurrent.TimeUnit.SECONDS);
+            executor.close();
+            run.join(1_000L);
+        }
+        Thread.sleep(100L);
+        assertThat(updates).as("the late result never reaches update").hasValue(0);
+    }
+
+    @Test
     @Timeout(15)
     void aFailureKeepsItsPrimaryCauseAndCarriesTheCleanupFailures() throws Exception {
         // The documented contract: ExitResult "carries cleanup failures without hiding the primary
