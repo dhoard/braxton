@@ -104,7 +104,7 @@ public final class Box {
     /** Renders the box at {@code width} columns (or its fixed width when configured). */
     public StyledText render(int width) {
         // The two frame columns are the floor: a narrower box would have a negative inner width.
-        int limit = fixedWidth > 0 ? Math.max(2, fixedWidth) : Math.max(4, width);
+        int limit = fixedWidth > 0 ? Math.max(2, fixedWidth) : Math.max(2, width);
         // The text view expands a tab to the next four-column stop, so the frame must measure the
         // expanded line; otherwise a padded or truncated line paints past the frame's width.
         List<StyledText> lines = new ArrayList<>();
