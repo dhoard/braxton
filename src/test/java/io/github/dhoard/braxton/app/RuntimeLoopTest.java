@@ -25,11 +25,15 @@ package io.github.dhoard.braxton.app;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import io.github.dhoard.braxton.app.Timers;
 import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.effect.EffectId;
+import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
@@ -205,6 +209,65 @@ class RuntimeLoopTest {
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.QUIT);
         assertThat(result.status()).isEqualTo(3);
         assertThat(terminal.isOpen()).isFalse();
+    }
+
+    /** Starts a task that ignores interruption, then asks to quit after one tick. */
+    private record HangingEffect(CountDownLatch started) implements Program<Integer, String> {
+
+        @Override
+        public Transition<Integer, String> init(InitContext context) {
+            Command<String> work = Command.task(EffectId.of("work"), () -> {
+                started.countDown();
+                while (true) {
+                    try {
+                        Thread.sleep(60_000L);
+                    } catch (InterruptedException ignored) {
+                        // Deliberately ignores cancellation: shutdown must not hang on it.
+                    }
+                }
+            }, value -> "done", failure -> "failed");
+            return Transition.next(0, work);
+        }
+
+        @Override
+        public Transition<Integer, String> update(Integer model, String message) {
+            return "tick".equals(message)
+                    ? Transition.next(model, Command.quit())
+                    : Transition.stay(model);
+        }
+
+        @Override
+        public Subscription<String> subscriptions(Integer model) {
+            return Subscription.interval(io.github.dhoard.braxton.effect.SubscriptionId.of("tick"),
+                    java.time.Duration.ofMillis(20), time -> "tick");
+        }
+
+        @Override
+        public View<String> view(Integer model, Viewport viewport) {
+            return Views.text("hanging");
+        }
+    }
+
+    @Test
+    @Timeout(15)
+    void shutdownAbandonsAHangingEffectAfterTheGracePeriod() throws Exception {
+        FakeTerminal terminal = new FakeTerminal(new Size(4, 20));
+        CountDownLatch started = new CountDownLatch(1);
+        List<String> diagnostics = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        FakeTerminal.ManualTimers ignored = new FakeTerminal.ManualTimers();
+        RuntimeOptions options = RuntimeOptions.defaults()
+                .withLimits(32, 8, 8)
+                .withEnvironment(RuntimeEnvironment.system()
+                        .withTimers(Timers.system())
+                        .withDiagnostics(diagnostics::add));
+        Thread run = Thread.ofVirtual().name("hanging-effect")
+                .start(() -> Application.run(new HangingEffect(started), options, terminal));
+        assertThat(started.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        run.join(10_000L);
+        assertThat(run.isAlive()).as("shutdown must not wait for a task that ignores interruption")
+                .isFalse();
+        assertThat(diagnostics).anySatisfy(message ->
+                assertThat(message).contains("still running"));
     }
 
     @Test
