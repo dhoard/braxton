@@ -132,7 +132,11 @@ public sealed interface View<Msg> {
         }
     }
 
-    /** Children stacked top to bottom; each child gets the full width. */
+    /**
+     * Children stacked top to bottom, each in the rows it measured. A start-aligned child spans the
+     * column's full width; a centred or end-aligned child keeps its measured width at the aligned
+     * offset.
+     */
     record Column<Msg>(List<View<Msg>> items, Alignment align) implements View<Msg> {
 
         public Column {
@@ -151,7 +155,11 @@ public sealed interface View<Msg> {
         }
     }
 
-    /** Children side by side; each child gets the full height. */
+    /**
+     * Children side by side, each in the columns it measured. A start-aligned child is painted from
+     * the top at its content height; a centred or end-aligned child keeps its content height at the
+     * aligned offset.
+     */
     record Row<Msg>(List<View<Msg>> items, Alignment align) implements View<Msg> {
 
         public Row {
