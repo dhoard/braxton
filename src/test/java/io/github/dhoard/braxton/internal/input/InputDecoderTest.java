@@ -130,6 +130,26 @@ class InputDecoderTest {
     }
 
     @Test
+    void carriageReturnIsEnterAndLineFeedKeepsTheDocumentedCtrlJEncoding() throws IOException {
+        // The documented limitation: "terminals that encode Enter as LF cannot be distinguished
+        // from Ctrl+J; LF is treated as a newline". CR is the enter key; LF is Ctrl+J, which the
+        // editor turns into a newline rather than a submission.
+        InputEvent.KeyInput enter = (InputEvent.KeyInput) read("\r").orElseThrow();
+        assertThat(enter.key()).isEqualTo(Key.ENTER);
+        assertThat(enter.text()).isEmpty();
+        InputEvent.KeyInput lineFeed = (InputEvent.KeyInput) read("\n").orElseThrow();
+        assertThat(lineFeed.key()).isEqualTo(Key.of("j", Modifiers.CTRL));
+        assertThat(lineFeed.text()).isEmpty();
+        assertThat(io.github.dhoard.braxton.widget.Editor.actionFor(lineFeed,
+                io.github.dhoard.braxton.widget.EditorOptions.defaults()))
+                .contains(new io.github.dhoard.braxton.widget.EditorAction.Newline());
+        assertThat(io.github.dhoard.braxton.widget.Editor.actionFor(enter,
+                io.github.dhoard.braxton.widget.EditorOptions.defaults()))
+                .as("only CR submits")
+                .contains(new io.github.dhoard.braxton.widget.EditorAction.Submit());
+    }
+
+    @Test
     void csiArrowsAndEditingKeysAreNormalized() throws IOException {
         assertThat(((InputEvent.KeyInput) read("\u001B[A").orElseThrow()).key()).isEqualTo(Key.UP);
         assertThat(((InputEvent.KeyInput) read("\u001B[B").orElseThrow()).key()).isEqualTo(Key.DOWN);
