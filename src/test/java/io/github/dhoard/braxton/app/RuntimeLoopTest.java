@@ -74,6 +74,54 @@ class RuntimeLoopTest {
                         .withNanoTime(() -> 1_000L));
     }
 
+    /** Renders the viewport it was given, so a resize is visible in the output. */
+    private record Measured() implements Program<Integer, String> {
+
+        @Override
+        public Transition<Integer, String> init(InitContext context) {
+            return Transition.stay(0);
+        }
+
+        @Override
+        public Transition<Integer, String> update(Integer model, String message) {
+            return Transition.stay(model);
+        }
+
+        @Override
+        public View<String> view(Integer model, Viewport viewport) {
+            return Views.text("size: " + viewport.rows() + "x" + viewport.cols());
+        }
+    }
+
+    private static void await(java.util.function.BooleanSupplier condition) throws InterruptedException {
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (System.nanoTime() < deadline) {
+            if (condition.getAsBoolean()) {
+                return;
+            }
+            Thread.sleep(10L);
+        }
+        throw new AssertionError("condition not met within the deadline");
+    }
+
+    @Test
+    @Timeout(15)
+    void aResizeIsMeasuredAndPaintedWithoutAnotherMessage() throws Exception {
+        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        RuntimeOptions options = options(new FakeTerminal.ManualTimers());
+        Thread run = new Thread(() -> Application.run(new Measured(), options, terminal), "resize-test");
+        run.start();
+        await(() -> terminal.output().contains("size: 6x20"));
+
+        terminal.resize(new Size(4, 10));
+
+        await(() -> terminal.output().contains("size: 4x10"));
+        terminal.endInput();
+        run.join(5_000L);
+        assertThat(run.isAlive()).isFalse();
+        assertThat(terminal.output()).contains("size: 4x10");
+    }
+
     @Test
     void inputIsRoutedAndRenderedBeforeEndOfInput() {
         FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
