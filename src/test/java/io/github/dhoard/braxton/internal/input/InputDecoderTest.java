@@ -197,6 +197,43 @@ class InputDecoderTest {
         assertThat(((InputEvent.KeyInput) overlong.read().orElseThrow()).text()).isEqualTo("b");
     }
 
+    /**
+     * A well-formed lead can still start an ill-formed sequence: an overlong form, a surrogate, or a
+     * code point past U+10FFFF. The JDK decoder turns those into replacement characters, which would
+     * reach the application as printable text and be inserted into a draft; the decoder drops them
+     * exactly as it drops a stray continuation byte or an overlong lead.
+     */
+    @Test
+    void anOverlongOrSurrogateSequenceIsDroppedInsteadOfBecomingAReplacementCharacter()
+            throws IOException {
+        InputDecoder overlong = new InputDecoder(
+                new ByteAtATime(new byte[] {(byte) 0xE0, (byte) 0x80, (byte) 0x80}), 5, 1024, 5L);
+        InputDecoder surrogate = new InputDecoder(
+                new ByteAtATime(new byte[] {(byte) 0xED, (byte) 0xA0, (byte) 0x80}), 5, 1024, 5L);
+        InputDecoder outOfRange = new InputDecoder(new ByteAtATime(
+                new byte[] {(byte) 0xF4, (byte) 0x90, (byte) 0x80, (byte) 0x80}), 5, 1024, 5L);
+
+        assertThat(overlong.read()).isEmpty();
+        assertThat(surrogate.read()).isEmpty();
+        assertThat(outOfRange.read()).isEmpty();
+    }
+
+    /** Dropping an ill-formed sequence must not swallow the character that follows it. */
+    @Test
+    void theCharacterAfterAnIllFormedSequenceIsStillDecoded() throws IOException {
+        InputDecoder decoder = new InputDecoder(new ByteAtATime(
+                new byte[] {(byte) 0xED, (byte) 0xA0, (byte) 0x80, 'x'}), 5, 1024, 5L);
+        assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("x");
+    }
+
+    /** U+FFFD is a character a terminal may really send; only ill-formed bytes are dropped. */
+    @Test
+    void aLiteralReplacementCharacterIsStillDecoded() throws IOException {
+        InputEvent.KeyInput key = (InputEvent.KeyInput) read("\uFFFD").orElseThrow();
+        assertThat(key.text()).isEqualTo("\uFFFD");
+        assertThat(key.key()).isEqualTo(Key.of("\uFFFD"));
+    }
+
     @Test
     void bracketedPasteBecomesOneAtomicEvent() throws IOException {
         InputEvent event = read("\u001B[200~hello\nworld\u001B[201~").orElseThrow();

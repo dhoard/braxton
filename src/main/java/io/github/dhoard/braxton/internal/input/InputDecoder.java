@@ -136,7 +136,10 @@ public final class InputDecoder {
      * Reassembles a multi-byte UTF-8 scalar from the already-read lead byte. A byte that cannot
      * start a scalar (stray continuation, overlong lead, or beyond U+10FFFF) is dropped without
      * consuming following bytes, and a sequence truncated by a non-continuation byte gives that
-     * byte back, so the next character is still decoded.
+     * byte back, so the next character is still decoded. A complete sequence that is itself
+     * ill-formed (an overlong form, a surrogate, or past U+10FFFF) is dropped as well: a string
+     * decoder would report it as U+FFFD, and that replacement character would reach the application
+     * as printable text it never typed.
      */
     private String decodeUtf8(int lead) throws IOException {
         int expected;
@@ -164,7 +167,30 @@ public final class InputDecoder {
             }
             bytes[i] = (byte) next;
         }
-        return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+        int codePoint = codePoint(bytes, expected);
+        return codePoint < 0 ? "" : new String(Character.toChars(codePoint));
+    }
+
+    /**
+     * Code point of one complete UTF-8 sequence, or -1 when the sequence is overlong, a surrogate, or
+     * beyond U+10FFFF. Only the payload bits are read: the lead byte's range was already checked.
+     */
+    private static int codePoint(byte[] bytes, int length) {
+        int codePoint = switch (length) {
+            case 2 -> bytes[0] & 0x1F;
+            case 3 -> bytes[0] & 0x0F;
+            default -> bytes[0] & 0x07;
+        };
+        for (int i = 1; i < length; i++) {
+            codePoint = (codePoint << 6) | (bytes[i] & 0x3F);
+        }
+        boolean overlong = switch (length) {
+            case 2 -> codePoint < 0x80;
+            case 3 -> codePoint < 0x800;
+            default -> codePoint < 0x10000;
+        };
+        boolean surrogate = codePoint >= 0xD800 && codePoint <= 0xDFFF;
+        return overlong || surrogate || codePoint > 0x10FFFF ? -1 : codePoint;
     }
 
     private Optional<InputEvent> readEscape() throws IOException {
