@@ -192,8 +192,8 @@ public final class Markup {
                 continue;
             }
             StyledText content = renderChildren(item, style, link);
-            out = out.append(StyledText.plain(" ".repeat(gap)))
-                    .append(StyledText.plain(bullet + " "))
+            out = out.append(StyledText.of(" ".repeat(gap), style, link))
+                    .append(StyledText.of(bullet + " ", style, link))
                     .append(content)
                     .append("\n");
         }

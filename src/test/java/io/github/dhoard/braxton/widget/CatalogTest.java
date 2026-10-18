@@ -188,6 +188,18 @@ class CatalogTest {
     }
 
     @Test
+    void markupListAppliesTheListStyleToTheBulletAndIndent() {
+        StyledText rendered = Markup.parse(
+                "<root><ul style=\"bold\" color=\"#ff0000\" gap=\"1\"><li>x</li></ul></root>");
+        assertThat(rendered.plainText()).isEqualTo(" \u2022 x");
+        assertThat(rendered.spans()).allSatisfy(span -> {
+            assertThat(span.style().bold()).isTrue();
+            assertThat(span.style().foreground())
+                    .isEqualTo(io.github.dhoard.braxton.style.Color.parse("#ff0000").orElseThrow());
+        });
+    }
+
+    @Test
     void markupTableAlignsColumnsAcrossMultiLineCells() {
         StyledText rendered = Markup.parse("<root><table gap=\"2\">"
                 + "<tr><td>ab<br/>c</td><td>x</td></tr>"
