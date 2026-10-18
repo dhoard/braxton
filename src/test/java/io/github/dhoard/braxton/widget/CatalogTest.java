@@ -424,6 +424,24 @@ class CatalogTest {
     }
 
     @Test
+    void markupRendersTheRootElementItselfInsteadOfDroppingItsFormatting() {
+        // The root is the caller's outermost element, not a wrapper. Rendering its children lost a
+        // root list's bullets and line breaks, a root table's columns, and a root link's href.
+        assertThat(Markup.parse("<ul><li>one</li><li>two</li></ul>").plainText())
+                .isEqualTo("  \u2022 one\n  \u2022 two");
+        assertThat(Markup.parse("<table gap=\"1\"><tr><td>a</td><td>bb</td></tr>"
+                + "<tr><td>cc</td><td>d</td></tr></table>").plainText())
+                .isEqualTo("a  bb \ncc d  ");
+        StyledText link = Markup.parse("<a href=\"https://x\">link</a>");
+        assertThat(link.plainText()).isEqualTo("link");
+        assertThat(link.spans()).anySatisfy(span ->
+                assertThat(span.link()).isEqualTo("https://x"));
+        assertThat(Markup.parse("<p color=\"#ff0000\">para</p>").spans()).anySatisfy(span ->
+                assertThat(span.style().foreground()).isEqualTo(
+                        io.github.dhoard.braxton.style.Color.parse("#ff0000").orElseThrow()));
+    }
+
+    @Test
     void markupNestsListsOnTheirOwnIndentedLines() {
         StyledText rendered = Markup.parse(
                 "<root><ul gap=\"1\"><li>parent<ul gap=\"1\"><li>child</li></ul></li></ul></root>");

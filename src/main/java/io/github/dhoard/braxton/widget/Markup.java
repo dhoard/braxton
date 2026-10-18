@@ -88,7 +88,11 @@ public final class Markup {
         if (root == null) {
             throw new IllegalArgumentException("markup requires a single root element");
         }
-        return renderChildren(root, Style.NONE, null).stripTrailingNewlines();
+        // The root is the caller's outermost element, not a wrapper: rendering its children
+        // instead would drop a root list's bullets, a root table's columns, a root paragraph's
+        // attributes and a root link's href. A <root> or <span> wrapper still renders exactly as
+        // before, because those tags already render their children.
+        return renderNode(root, Style.NONE, null).stripTrailingNewlines();
     }
 
     private static Document document(String xml) {
