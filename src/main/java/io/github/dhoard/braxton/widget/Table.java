@@ -30,6 +30,7 @@ import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.style.WidthPolicy;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 
@@ -37,7 +38,9 @@ import io.github.dhoard.braxton.view.Views;
  * Row/column table with deterministic column widths.
  *
  * <p>Columns are as wide as their widest cell plus the configured buffer. Measuring never mutates
- * the rows the caller supplied. Styling is part of a cell, not of its width.</p>
+ * the rows the caller supplied. Styling is part of a cell, not of its width. Tab stops are expanded
+ * to the same four-column boundary the text view uses, so a measured column and a displayed column
+ * always agree.</p>
  */
 public final class Table {
 
@@ -92,7 +95,7 @@ public final class Table {
         for (List<StyledText> row : rows) {
             for (int i = 0; i < row.size(); i++) {
                 int width = 0;
-                for (String line : row.get(i).plainText().split("\n", -1)) {
+                for (String line : expandTabs(row.get(i)).plainText().split("\n", -1)) {
                     width = Math.max(width, TextMeasure.columns(line));
                 }
                 widths[i] = Math.max(widths[i], width);
@@ -102,6 +105,33 @@ public final class Table {
             widths[i] += buffer;
         }
         return widths;
+    }
+
+    /**
+     * Expands tab stops the way the text view does, so a measured cell and a displayed cell have the
+     * same width. Styles and links are preserved.
+     */
+    private static StyledText expandTabs(StyledText cell) {
+        StyledText out = StyledText.empty();
+        for (StyledText.Span span : cell.spans()) {
+            StringBuilder text = new StringBuilder();
+            int used = 0;
+            for (String cluster : TextMeasure.graphemes(span.text())) {
+                if ("\n".equals(cluster)) {
+                    text.append('\n');
+                    used = 0;
+                } else if ("\t".equals(cluster)) {
+                    int stop = 4 - (used % 4);
+                    text.append(" ".repeat(stop));
+                    used += stop;
+                } else {
+                    text.append(cluster);
+                    used += TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED);
+                }
+            }
+            out = out.append(StyledText.of(text.toString(), span.style(), span.link()));
+        }
+        return out;
     }
 
     /** Rendered rows; each row is padded to its column boundaries. */
@@ -115,7 +145,7 @@ public final class Table {
             List<List<StyledText>> cellLines = new ArrayList<>();
             int height = 1;
             for (int i = 0; i < widths.length; i++) {
-                StyledText cell = i < row.size() ? row.get(i) : StyledText.empty();
+                StyledText cell = i < row.size() ? expandTabs(row.get(i)) : StyledText.empty();
                 List<StyledText> lines = cell.lines();
                 cellLines.add(lines);
                 height = Math.max(height, lines.size());

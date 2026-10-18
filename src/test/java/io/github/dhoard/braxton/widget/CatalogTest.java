@@ -34,10 +34,12 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.layout.Border;
+import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.view.ScreenRenderer;
 
 /** Catalog widgets remain pure values with deterministic layout. */
 class CatalogTest {
@@ -71,6 +73,16 @@ class CatalogTest {
         List<StyledText> lines = table.renderLines();
         assertThat(lines.get(0).plainText()).isEqualTo("a   b  ");
         assertThat(lines.get(1).plainText()).isEqualTo("cc  d  ");
+    }
+
+    @Test
+    void tableColumnsLineUpWhenACellContainsATabStop() {
+        Table table = Table.of();
+        table.row(StyledText.plain("a\tb"), StyledText.plain("c"));
+        table.row(StyledText.plain("x"), StyledText.plain("y"));
+        List<String> lines = new ScreenRenderer().plainLines(table.view(),
+                new Viewport(2, 24));
+        assertThat(lines.get(0).indexOf('c')).isEqualTo(lines.get(1).indexOf('y'));
     }
 
     @Test
