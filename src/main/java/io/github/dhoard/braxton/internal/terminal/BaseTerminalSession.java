@@ -127,8 +127,11 @@ abstract class BaseTerminalSession implements TerminalSession {
         if (options.mouse()) {
             out.append(AnsiEncoder.ENABLE_MOUSE);
         }
-        writeNative(out.toString());
+        // Marked before the write: a descriptor can fail after applying part of the entry (a short
+        // write), and close() must still emit the inverse modes rather than leaving the alternate
+        // screen and the hidden cursor behind.
         modesEntered = true;
+        writeNative(out.toString());
     }
 
     private void leaveApplicationModes() {
