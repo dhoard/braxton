@@ -39,13 +39,15 @@ import io.github.dhoard.braxton.style.WidthPolicy;
 public final class ScreenRenderer {
 
     private final LayoutEngine engine;
+    private final WidthPolicy policy;
 
     public ScreenRenderer() {
         this(WidthPolicy.PINNED);
     }
 
     public ScreenRenderer(WidthPolicy policy) {
-        this.engine = new LayoutEngine(policy);
+        this.policy = policy == null ? WidthPolicy.PINNED : policy;
+        this.engine = new LayoutEngine(this.policy);
     }
 
     /** Painted screen for {@code view}. */
@@ -70,6 +72,6 @@ public final class ScreenRenderer {
 
     /** Visible column width under the renderer's policy. */
     public int columns(String text) {
-        return io.github.dhoard.braxton.style.TextMeasure.columns(text);
+        return io.github.dhoard.braxton.style.TextMeasure.columns(text, policy);
     }
 }
