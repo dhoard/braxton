@@ -87,7 +87,8 @@ public final class FigletFont {
         }
         int index = 1 + Math.max(0, commentLines);
         Map<Character, List<String>> glyphs = new HashMap<>();
-        char endMark = hardBlankChar;
+        String firstRow = index < lines.size() ? lines.get(index) : "";
+        char endMark = firstRow.isEmpty() ? hardBlankChar : firstRow.charAt(firstRow.length() - 1);
         for (char code = 32; code <= 126; code++) {
             if (index + height > lines.size()) {
                 if (code == 32) {
@@ -149,7 +150,7 @@ public final class FigletFont {
                 }
             }
             for (String row : rows) {
-                result.add(row.stripTrailing().replace(hardBlank, ' '));
+                result.add(row.replace(hardBlank, ' ').stripTrailing());
             }
         }
         return List.copyOf(result);
