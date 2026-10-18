@@ -95,14 +95,28 @@ public final class InputRouter {
         return Optional.empty();
     }
 
-    /** Restricts routing to the topmost modal layer when the tree declares one. */
+    /** Restricts routing to the topmost modal layer declared anywhere in the tree. */
     public static <Msg> View<Msg> modalScope(View<Msg> root) {
-        View<Msg> current = root;
-        while (current instanceof View.Overlay<Msg> overlay
-                && overlay.modal() && !overlay.layers().isEmpty()) {
-            current = overlay.layers().get(overlay.layers().size() - 1);
+        View<Msg> layer = topmostModalLayer(root);
+        return layer == null ? root : layer;
+    }
+
+    /** The last-painted modal layer, if the tree declares one. */
+    private static <Msg> View<Msg> topmostModalLayer(View<Msg> view) {
+        if (view instanceof View.Overlay<Msg> overlay && overlay.modal()
+                && !overlay.layers().isEmpty()) {
+            View<Msg> top = overlay.layers().get(overlay.layers().size() - 1);
+            View<Msg> nested = topmostModalLayer(top);
+            return nested == null ? top : nested;
         }
-        return current;
+        List<View<Msg>> children = view.children();
+        for (int i = children.size() - 1; i >= 0; i--) {
+            View<Msg> found = topmostModalLayer(children.get(i));
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
     }
 
     /** Path from the scope to the focused element, or null when nothing is focused. */

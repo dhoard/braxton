@@ -102,6 +102,16 @@ class InputRouterTest {
     }
 
     @Test
+    void nestedModalOverlayBlocksEverythingUnderneath() {
+        View<String> base = Views.focus(ElementId.of("base"), true,
+                List.of(Binding.of("x", "base")), event -> Optional.empty(), Views.text("b"));
+        View<String> dialog = Views.focus(ElementId.of("dialog"), true,
+                List.of(Binding.of("x", "dialog")), event -> Optional.empty(), Views.text("d"));
+        View<String> view = Views.column(Views.text("header"), Views.modal(base, dialog));
+        assertThat(InputRouter.route(view, key("x"))).contains("dialog");
+    }
+
+    @Test
     void aNonModalOverlayStillRoutesToTheFocusedLayer() {
         View<String> base = Views.text("b");
         View<String> layer = Views.focus(ElementId.of("layer"), true,
