@@ -64,15 +64,18 @@ public final class SubscriptionManager<Msg> {
         final Timers timers;
         final long periodNanos;
         final Consumer<Object> emitter;
+        final Consumer<String> diagnostics;
         Timers.Handle handle;
 
         IntervalLive(Timers timers, SubscriptionId id, Duration period,
-                Function<Long, Msg> mapper, long epoch, Consumer<Object> emitter) {
+                Function<Long, Msg> mapper, long epoch, Consumer<Object> emitter,
+                Consumer<String> diagnostics) {
             super(id, period);
             this.timers = timers;
             this.mapper = new AtomicReference<>(mapper);
             this.periodNanos = Math.max(1L, period.toNanos());
             this.emitter = emitter;
+            this.diagnostics = diagnostics;
             this.epoch = epoch;
             scheduleNext();
         }
@@ -83,9 +86,18 @@ public final class SubscriptionManager<Msg> {
                 if (current == null) {
                     return;
                 }
-                Msg message = current.apply(System.nanoTime());
-                if (message != null) {
-                    emitter.accept(message);
+                try {
+                    Msg message = current.apply(System.nanoTime());
+                    if (message != null) {
+                        emitter.accept(message);
+                    }
+                } catch (RuntimeException failure) {
+                    // A mapper is application code. Letting the failure escape ends this tick
+                    // chain while reconcile still keeps the resource, which would leave a
+                    // declared subscription permanently dead and unreported, so the failure is
+                    // reported and the interval keeps ticking.
+                    diagnostics.accept("subscription " + id + " mapper threw "
+                            + failure.getClass().getSimpleName());
                 }
                 if (mapper.get() != null) {
                     scheduleNext();
@@ -264,7 +276,7 @@ public final class SubscriptionManager<Msg> {
         long epoch = nextEpoch++;
         if (leaf instanceof Subscription.Interval<Msg> interval) {
             return new IntervalLive<>(timers, interval.id(), interval.period(), interval.onTick(), epoch,
-                    this::enqueue);
+                    this::enqueue, diagnostics);
         }
         if (leaf instanceof Subscription.Resize<Msg> resize) {
             return new ResizeLive<>(resize.id(), resize.onResize(), epoch);

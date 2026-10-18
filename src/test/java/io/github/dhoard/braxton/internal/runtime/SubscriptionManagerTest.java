@@ -64,6 +64,33 @@ class SubscriptionManagerTest {
     }
 
     @Test
+    void anIntervalMapperThatThrowsIsReportedAndTheIntervalKeepsTicking() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        manager.reconcile(Subscription.interval(SubscriptionId.of("tick"), Duration.ofMillis(100),
+                time -> {
+                    if (calls.incrementAndGet() == 2) {
+                        throw new IllegalStateException("boom");
+                    }
+                    return "tick-" + calls.get();
+                }));
+        timers.advance(100_000_000L);
+        assertThat(next()).isEqualTo("tick-1");
+        try {
+            // A real scheduler swallows the throwable into the timer future; the manual clock
+            // surfaces it here so the test can observe what the runtime did with the source.
+            timers.advance(100_000_000L);
+        } catch (RuntimeException swallowedByTheScheduler) {
+            // Expected before the fix: the tick task died without rescheduling itself.
+        }
+        timers.advance(100_000_000L);
+        assertThat(next()).as("a throwing mapper must not end a declared subscription")
+                .isEqualTo("tick-3");
+        assertThat(diagnostics).as("the mapper failure is reported, not silently swallowed")
+                .anySatisfy(message -> assertThat(message).contains("tick")
+                        .contains("IllegalStateException"));
+    }
+
+    @Test
     void unchangedIdentityKeepsTheResourceAndRefreshesOnlyTheMapper() throws Exception {
         manager.reconcile(Subscription.interval(SubscriptionId.of("tick"), Duration.ofMillis(100),
                 time -> "old"));
