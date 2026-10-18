@@ -94,7 +94,12 @@ public sealed interface Command<Msg> {
         }
     }
 
-    /** Delivers {@code message} after {@code delay}; {@code rejected} if the quota is exhausted. */
+    /**
+     * Delivers {@code message} after {@code delay}; {@code rejected} if the quota is exhausted.
+     *
+     * <p>The delay must be representable in nanoseconds, the unit the scheduler uses; a longer
+     * delay is rejected here instead of overflowing when it is scheduled.</p>
+     */
     record Delay<Msg>(EffectId id, Duration delay, Msg message, Msg rejected) implements Command<Msg> {
 
         public Delay {
@@ -102,6 +107,12 @@ public sealed interface Command<Msg> {
             Objects.requireNonNull(delay, "delay");
             if (delay.isNegative()) {
                 throw new IllegalArgumentException("delay must not be negative");
+            }
+            try {
+                delay.toNanos();
+            } catch (ArithmeticException overflow) {
+                throw new IllegalArgumentException(
+                        "delay must fit in nanoseconds: " + delay, overflow);
             }
         }
 
