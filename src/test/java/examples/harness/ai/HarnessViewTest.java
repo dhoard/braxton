@@ -71,6 +71,21 @@ class HarnessViewTest {
     }
 
     @Test
+    void aDraftTallerThanTheViewportStillShowsTheCaret() {
+        StringBuilder draft = new StringBuilder();
+        for (int line = 0; line < 8; line++) {
+            draft.append(line > 0 ? "\n" : "").append("line ").append(line);
+        }
+        HarnessState shortViewport = HarnessState
+                .initial(new Size(4, 40), "~/Development/braxton", List.of())
+                .withDraft(EditorState.of(draft.toString()));
+        List<String> rendered = lines(shortViewport);
+        assertThat(rendered).hasSize(4);
+        assertThat(rendered).anySatisfy(line ->
+                assertThat(line).contains(io.github.dhoard.braxton.widget.Editor.CURSOR));
+    }
+
+    @Test
     void allocationKeepsTheDocumentedChrome() {
         HarnessProjection.Allocation one = HarnessProjection.allocate(40, 1);
         assertThat(one.transcript()).isEqualTo(33);

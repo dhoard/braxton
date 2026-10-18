@@ -37,6 +37,7 @@ import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorOptions;
 
 /**
  * The harness view: one native Braxton view tree built from a model snapshot and explicit geometry.
@@ -75,8 +76,12 @@ final class HarnessView {
                     Views.text(HarnessProjection.topRule(state))));
         }
         if (allocation.composer() > 0) {
+            // The editor keeps the caret inside the lines it draws, so it must draw no more rows
+            // than this allocation gives it; otherwise the caret's line is clipped away.
+            EditorOptions composerOptions = HarnessProgram.editorOptions()
+                    .withVisibleLines(Math.max(1, allocation.composer()));
             parts.add(Views.fixed(allocation.composer(),
-                    Editor.view(COMPOSER, state.draft(), HarnessProgram.editorOptions(), true,
+                    Editor.view(COMPOSER, state.draft(), composerOptions, true,
                             HarnessMsg.Editor::new)));
         }
         if (allocation.bottomRule() > 0) {
