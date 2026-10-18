@@ -85,6 +85,14 @@ class StyledTextTest {
     }
 
     @Test
+    void columnsIsTheWidestLineRatherThanTheWholeValue() {
+        assertThat(StyledText.plain("ab\ncd").columns()).isEqualTo(2);
+        assertThat(StyledText.plain("a\nbbb").columns()).isEqualTo(3);
+        assertThat(StyledText.plain("abc").columns()).isEqualTo(3);
+        assertThat(StyledText.empty().columns()).isZero();
+    }
+
+    @Test
     void diagnosticsNeverContainEscapeSequences() {
         StyledText text = StyledText.of("hello", Style.fg(Colors.BLUE_400).withBold());
         assertThat(text.toString()).isEqualTo("StyledText[hello]").doesNotContain("\u001B");

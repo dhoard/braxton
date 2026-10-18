@@ -128,7 +128,11 @@ public final class StyledText {
 
     /** Terminal columns of the widest line under {@link WidthPolicy#PINNED}. */
     public int columns() {
-        return TextMeasure.columns(this);
+        int widest = 0;
+        for (String line : plainText().split("\n", -1)) {
+            widest = Math.max(widest, TextMeasure.columns(line));
+        }
+        return widest;
     }
 
     /** Number of grapheme clusters across all lines. */
