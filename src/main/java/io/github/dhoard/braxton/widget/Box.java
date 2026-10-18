@@ -130,7 +130,9 @@ public final class Box {
         int inner = Math.max(0, width - 2);
         String label = title.plainText();
         StyledText out = StyledText.of(String.valueOf(border.topLeft()), style);
-        if (label.isEmpty()) {
+        // A label needs a dash, a space either side of it, so an inner width below three has no
+        // room; drawing the decorations anyway would push the top edge past the box width.
+        if (label.isEmpty() || inner < 3) {
             out = out.append(StyledText.of(
                     String.valueOf(border.horizontal()).repeat(inner), style));
         } else {

@@ -167,6 +167,19 @@ class CatalogTest {
     }
 
     @Test
+    void aTitledBoxKeepsItsWidthWhenTheFrameHasNoRoomForTheTitle() {
+        for (int width = 2; width <= 10; width++) {
+            String rendered = Box.of("body").border(Border.ROUNDED).title("Title").width(width)
+                    .render(width).plainText();
+            for (String line : rendered.split("\n", -1)) {
+                assertThat(TextMeasure.columns(line))
+                        .as("width %d line [%s]", width, line)
+                        .isEqualTo(width);
+            }
+        }
+    }
+
+    @Test
     void progressBarFillsFromTheLeftAndClampsItsValue() {
         ProgressBar bar = ProgressBar.of(10).icons("#", "-");
         assertThat(bar.render(5, 10).plainText()).isEqualTo("#####-----");
