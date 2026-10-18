@@ -208,6 +208,33 @@ class HarnessProgramTest {
     }
 
     @Test
+    void everyRecordedBlockWaitsTwoSecondsBeforeTheNextBox() {
+        HarnessTranscript paced = new HarnessTranscript(List.of(
+                new HarnessTranscript.HarnessTurn("q",
+                        List.of(new HarnessEntry.Reasoning("one"),
+                                new HarnessEntry.Assistant("two"),
+                                new HarnessEntry.Assistant("three")),
+                        HarnessTranscript.Usage.EMPTY, PROFILE)), PROFILE,
+                HarnessTranscript.Usage.EMPTY, 1000, List.of());
+        HarnessProgram program = new HarnessProgram(() -> paced, "~/braxton", List.of());
+        HarnessState state = HarnessState.initial(new Size(24, 80), "~/braxton", List.of())
+                .withTranscript(paced).withReplayIndex(0);
+
+        Transition<HarnessState, HarnessMsg> started = program.update(state,
+                new HarnessMsg.Submit("x"));
+        assertThat(delayOf(started)).isEqualTo(HarnessProgram.RESPONSE_DELAY);
+        Transition<HarnessState, HarnessMsg> second = program.update(started.model(),
+                new HarnessMsg.ResponseBlock(started.model().generation(), 0));
+        assertThat(second.model().entries()).contains(new HarnessEntry.Reasoning("one"));
+        assertThat(delayOf(second)).isEqualTo(HarnessProgram.RESPONSE_DELAY);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Duration delayOf(Transition<HarnessState, HarnessMsg> transition) {
+        return ((Command.Delay<HarnessMsg>) transition.command()).delay();
+    }
+
+    @Test
     void escapeIsANoOpWhenIdle() {
         HarnessState state = ready();
         HarnessState next = update(state, new HarnessMsg.Escape(1_000L)).model();

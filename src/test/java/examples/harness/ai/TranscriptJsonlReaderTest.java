@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
@@ -45,6 +46,28 @@ class TranscriptJsonlReaderTest {
         assertThat(wellFormed(call)).as("call [%s]", call).isTrue();
         assertThat(call).endsWith("\u2026");
         assertThat(call).doesNotContain("\uD83D\uDE00");
+    }
+
+    @Test
+    void theBundledTranscriptLoadsCleanAndExercisesTheTranscript() {
+        HarnessTranscript transcript = TranscriptLoader.load();
+
+        assertThat(transcript.warnings()).isEmpty();
+        assertThat(transcript.turns()).hasSize(2);
+        assertThat(transcript.turns().get(1).responses()).hasSizeGreaterThan(50);
+
+        List<HarnessEntry.Tool> tools = transcript.turns().stream()
+                .flatMap(turn -> turn.responses().stream())
+                .filter(HarnessEntry.Tool.class::isInstance)
+                .map(HarnessEntry.Tool.class::cast)
+                .toList();
+        // The fixture must stay rich enough to exercise the transcript: every tool kind the
+        // showcase formats, and results long enough to need the "more lines" preview note.
+        assertThat(tools).anySatisfy(tool -> assertThat(tool.call()).startsWith("$ "));
+        assertThat(tools).anySatisfy(tool -> assertThat(tool.call()).startsWith("read "));
+        assertThat(tools).anySatisfy(tool -> assertThat(tool.call()).startsWith("edit "));
+        assertThat(tools).anySatisfy(tool -> assertThat(tool.result().lines().count())
+                .isGreaterThan(HarnessProjection.TOOL_PREVIEW_LINES));
     }
 
     private static boolean wellFormed(String text) {

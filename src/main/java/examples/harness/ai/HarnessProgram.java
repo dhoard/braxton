@@ -53,6 +53,8 @@ import io.github.dhoard.braxton.view.View;
  */
 public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
 
+    /** Each recorded block (one transcript box) is delivered this far apart so the replay is
+     * watchable rather than appearing all at once. */
     static final Duration RESPONSE_DELAY = Duration.ofSeconds(2);
     static final Duration TICK = Duration.ofMillis(50);
     static final long ESC_WINDOW_NANOS = 2_000_000_000L;
