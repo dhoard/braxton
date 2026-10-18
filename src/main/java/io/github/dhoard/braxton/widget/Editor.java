@@ -259,7 +259,10 @@ public final class Editor {
         int visible = Math.min(opts.maxVisibleLines(), lines);
         int caretLine = state.lineAt(state.caret());
         int first = Math.max(0, Math.min(caretLine - visible + 1, lines - visible));
-        int promptWidth = TextMeasure.columns(opts.prompt());
+        // The prompt is painted by the text view, which expands a tab to the next four-column
+        // stop, so the blank stand-in on continuation lines uses the painted width.
+        int promptWidth = TextMeasure.columns(
+                TabStops.expand(StyledText.plain(opts.prompt())).plainText());
         StyledText result = StyledText.empty();
         for (int line = first; line < first + visible; line++) {
             if (line > first) {

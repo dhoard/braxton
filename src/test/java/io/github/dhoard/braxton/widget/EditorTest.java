@@ -304,6 +304,21 @@ class EditorTest {
     }
 
     @Test
+    void aPromptWithATabKeepsContinuationLinesAligned() {
+        // The prompt is painted by the text view, which expands its tab to the next four-column
+        // stop, so the blank stand-in on later lines must be the painted width.
+        EditorOptions options = EditorOptions.defaults().withPrompt(">\t",
+                io.github.dhoard.braxton.style.Style.NONE);
+        EditorState state = new EditorState("a\nb", 0, 0, 0);
+        java.util.List<String> lines = new io.github.dhoard.braxton.view.ScreenRenderer().plainLines(
+                Editor.view(io.github.dhoard.braxton.view.ElementId.of("composer"), state, options,
+                        false, (EditorAction action) -> action),
+                new io.github.dhoard.braxton.layout.Viewport(6, 12));
+        assertThat(lines.get(0)).isEqualTo(">   a");
+        assertThat(lines.get(1)).isEqualTo("    b");
+    }
+
+    @Test
     void editorViewDeclaresFocusAndHandlesPaste() {
         View<String> view = Editor.view(io.github.dhoard.braxton.view.ElementId.of("editor"), EditorState.empty(),
                 OPTIONS, true, action -> action.getClass().getSimpleName());
