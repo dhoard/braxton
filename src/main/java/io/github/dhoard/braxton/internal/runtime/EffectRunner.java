@@ -318,6 +318,14 @@ public final class EffectRunner<Msg> {
         }
     }
 
+    /**
+     * Delivers one result to the owner.
+     *
+     * <p>Owner-side delivery never waits (an overflow there is fatal by design). From an effect
+     * thread a full mailbox means the owner is still working, not that the result is disposable, so
+     * the wait is retried until the mailbox accepts it or is closed: a fixed timeout would silently
+     * lose a task result or a delayed message.</p>
+     */
     private void deliver(Msg message) {
         if (message == null) {
             return;
@@ -327,10 +335,18 @@ public final class EffectRunner<Msg> {
             mailbox.enqueueFromOwner(envelope);
             return;
         }
-        try {
-            mailbox.enqueue(envelope, 1_000L);
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
+        while (true) {
+            try {
+                if (mailbox.enqueue(envelope, 100L)) {
+                    return;
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (mailbox.isClosed()) {
+                return;
+            }
         }
     }
 }

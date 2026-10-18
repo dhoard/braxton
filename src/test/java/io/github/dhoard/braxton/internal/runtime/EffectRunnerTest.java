@@ -82,6 +82,29 @@ class EffectRunnerTest {
     }
 
     @Test
+    void aTaskResultIsNotDroppedWhenTheMailboxIsFull() throws Exception {
+        Mailbox small = new Mailbox(1);
+        java.util.concurrent.ExecutorService executor =
+                java.util.concurrent.Executors.newThreadPerTaskExecutor(
+                        Thread.ofVirtual().factory());
+        try {
+            EffectRunner<String> runner = new EffectRunner<>(small,
+                    new RuntimeEnvironment(() -> 0L, executor, timers, message -> { }), clipboard, 2);
+            runner.bindOwner(Thread.currentThread());
+            small.enqueueFromOwner(new Mailbox.AppMessage("occupant"));
+            runner.interpret(Command.task(EffectId.of("t"), () -> "done",
+                    value -> "result:" + value, failure -> "failed"));
+            Thread.sleep(1_300L);
+            assertThat(small.poll(2_000)).isInstanceOf(Mailbox.AppMessage.class);
+            assertThat(small.poll(2_000))
+                    .as("the task result is delivered once the owner makes room")
+                    .isInstanceOf(Mailbox.AppMessage.class);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void cancellingAnEffectSuppressesDelivery() throws Exception {
         EffectId id = EffectId.of("a");
         runner.interpret(Command.delay(id, Duration.ofSeconds(1), "tick", "rejected"));
