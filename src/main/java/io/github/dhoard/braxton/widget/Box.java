@@ -109,7 +109,18 @@ public final class Box {
             clipped.add(truncate(line, Math.max(0, limit - 2)));
         }
         if (border == Border.NONE) {
-            return content;
+            if (fixedWidth <= 0) {
+                return content;
+            }
+            // No frame to draw, but a fixed width still bounds the content it would have framed.
+            StyledText bounded = StyledText.empty();
+            for (int i = 0; i < lines.size(); i++) {
+                if (i > 0) {
+                    bounded = bounded.append("\n");
+                }
+                bounded = bounded.append(truncate(lines.get(i), limit));
+            }
+            return bounded;
         }
         StyledText out = StyledText.empty();
         out = out.append(top(limit));

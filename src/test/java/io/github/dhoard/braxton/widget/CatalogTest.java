@@ -207,6 +207,15 @@ class CatalogTest {
     }
 
     @Test
+    void aBorderlessFixedWidthBoxStillTruncatesItsContent() {
+        String rendered = Box.of("abcdefgh").border(Border.NONE).width(4).render(20).plainText();
+        assertThat(rendered).isEqualTo("abcd");
+        String multiline = Box.of("abcdef\nghi").border(Border.NONE).width(4)
+                .render(20).plainText();
+        assertThat(multiline).isEqualTo("abcd\nghi");
+    }
+
+    @Test
     void aBoxNarrowerThanTwoColumnsStillDrawsItsFrame() {
         String rendered = Box.of("body").border(Border.SINGLE).width(1).render(10).plainText();
         assertThat(rendered).isEqualTo("\u250C\u2510\n\u2502\u2502\n\u2514\u2518");
