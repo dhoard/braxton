@@ -120,6 +120,41 @@ class InputRouterTest {
     }
 
     @Test
+    void aModalOverlayRoutesOnlyToItsTopmostLayer() {
+        // The last layer is the one painted on top, so it is also the only scope input may reach,
+        // whatever the layers beneath it declare.
+        View<String> under = Views.focus(ElementId.of("under"), true,
+                List.of(Binding.of("x", "under")), event -> Optional.empty(), Views.text("u"));
+        View<String> middle = Views.focus(ElementId.of("middle"), true,
+                List.of(Binding.of("x", "middle")), event -> Optional.empty(), Views.text("m"));
+        View<String> top = Views.focus(ElementId.of("top"), true,
+                List.of(Binding.of("x", "top")), event -> Optional.empty(), Views.text("t"));
+        View<String> modal = Views.overlay(List.of(under, middle, top), true);
+        assertThat(InputRouter.route(modal, key("x"))).contains("top");
+        assertThat(InputRouter.modalScope(modal)).isSameAs(top);
+
+        // Without the modal flag the whole stack stays in scope, and the router takes the first
+        // focused node in paint order. Two focused layers at once is a contradictory tree (focus is
+        // singular), so this records the precedence rather than a contract of its own.
+        assertThat(InputRouter.route(Views.overlay(List.of(under, middle, top), false), key("x")))
+                .contains("under");
+        // An overlay with no layers at all is not a scope of its own.
+        View<String> empty = Views.overlay(List.of(), true);
+        assertThat(InputRouter.modalScope(empty)).isSameAs(empty);
+    }
+
+    @Test
+    void aTopLayerThatItselfHoldsAModalOverlayIsThatOverlay() {
+        View<String> under = Views.focus(ElementId.of("under"), true,
+                List.of(Binding.of("x", "under")), event -> Optional.empty(), Views.text("u"));
+        View<String> dialog = Views.focus(ElementId.of("dialog"), true,
+                List.of(Binding.of("x", "dialog")), event -> Optional.empty(), Views.text("d"));
+        View<String> sheet = Views.overlay(List.of(under, Views.modal(Views.text("s"), dialog)), true);
+        assertThat(InputRouter.modalScope(sheet)).isSameAs(dialog);
+        assertThat(InputRouter.route(sheet, key("x"))).contains("dialog");
+    }
+
+    @Test
     void withoutFocusOnlyTheScopeBindingsCanConsume() {
         View<String> view = Views.keyed(List.of(Binding.of("q", "quit")), Views.text("x"), List.of());
         assertThat(InputRouter.route(view, key("q"))).contains("quit");
