@@ -227,15 +227,18 @@ public final class PasteSanitizer {
             case '[' -> skipCsi(text, next + 1);
             case ']' -> skipControlString(text, next + 1);
             case 'P', 'X', '^', '_' -> skipControlString(text, next + 1);
-            case '(', ')', '*', '+', '-', '.', '/' -> Math.min(text.length(), next + 2);
             default -> {
-                // Two-character escapes (ESC 7, ESC M, ESC =, …) are removed whole; every
-                // printable byte is a valid escape final in the ANSI grammar. A lone ESC before a
-                // non-printable character drops only the ESC.
-                if (c >= 0x20 && c <= 0x7e) {
-                    yield next + 1;
+                // Every other sequence is intermediates (0x20-0x2F, possibly none) followed by one
+                // final byte (0x30-0x7E): ESC M is two bytes, ESC ( B and ESC # 8 are three. Only
+                // the bytes the sequence actually holds are removed, so a lone ESC before a
+                // non-printable character drops just the ESC.
+                int i = next;
+                while (i < text.length() && text.charAt(i) >= 0x20 && text.charAt(i) <= 0x2f) {
+                    i++;
                 }
-                yield next;
+                yield i < text.length() && text.charAt(i) >= 0x30 && text.charAt(i) <= 0x7e
+                        ? i + 1
+                        : i;
             }
         };
     }
