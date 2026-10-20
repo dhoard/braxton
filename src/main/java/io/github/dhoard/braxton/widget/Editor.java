@@ -308,7 +308,7 @@ public final class Editor {
         int selectionStart = state.hasSelection() ? state.selectionStart() : -1;
         int selectionEnd = state.hasSelection() ? state.selectionEnd() : -1;
 
-        String pending = "";
+        StringBuilder pending = new StringBuilder(Math.max(16, end - start));
         Style pendingStyle = opts.textStyle();
         int position = start;
         // Segment this line once. A per-cluster boundaryAfter() over the whole draft is O(n^2) and
@@ -332,19 +332,20 @@ public final class Editor {
             Style style = selected ? opts.selectionStyle() : opts.textStyle();
             if (!display.isEmpty()) {
                 if (style.equals(pendingStyle)) {
-                    pending += display;
+                    pending.append(display);
                 } else {
-                    out = out.append(StyledText.of(pending, pendingStyle));
-                    pending = display;
+                    out = out.append(StyledText.of(pending.toString(), pendingStyle));
+                    pending.setLength(0);
+                    pending.append(display);
                     pendingStyle = style;
                 }
             }
             position = next;
         }
         if (focused && state.caret() == end) {
-            pending += CURSOR;
+            pending.append(CURSOR);
         }
-        out = out.append(StyledText.of(pending, pendingStyle));
+        out = out.append(StyledText.of(pending.toString(), pendingStyle));
         return out;
     }
 
