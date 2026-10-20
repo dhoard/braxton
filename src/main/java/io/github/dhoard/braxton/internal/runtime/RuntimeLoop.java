@@ -57,7 +57,8 @@ import io.github.dhoard.braxton.view.View;
  * <p>It opens one terminal session, initializes the program, then serializes everything that
  * touches the model: routing, {@code update}, command interpretation, subscription reconciliation,
  * layout, and output. Input, timers, tasks, and sources only enqueue immutable envelopes. Rendering
- * happens after a committed change or a resize, so an idle application performs no work.</p>
+ * coalesces application changes with a minimum 16 ms gap between presentations. Input, resize,
+ * and orderly exit flush dirty state immediately; an idle application performs no view work.</p>
  *
  * <p>The owner is the caller's thread; the two reader threads (input and resize) are virtual
  * threads. Both block on streams or sleeps, which is exactly what a virtual thread handles without
@@ -67,6 +68,7 @@ public final class RuntimeLoop<M, Msg> {
 
     private static final long POLL_MILLIS = 50L;
     private static final long RESIZE_POLL_MILLIS = 100L;
+    private static final long FRAME_NANOS = TimeUnit.MILLISECONDS.toNanos(16L);
 
     private final Program<M, Msg> program;
     private final RuntimeOptions options;
@@ -87,6 +89,7 @@ public final class RuntimeLoop<M, Msg> {
     private Viewport viewport = Viewport.EMPTY;
     private boolean viewDirty = true;
     private boolean failed;
+    private long nextFrameAtNanos;
 
     private Thread inputThread;
     private Thread resizeThread;
@@ -136,7 +139,10 @@ public final class RuntimeLoop<M, Msg> {
             if (effects.quitRequested()) {
                 return ExitResult.quit(effects.quitStatus());
             }
-            Mailbox.Envelope envelope = mailbox.poll(POLL_MILLIS);
+            if (viewDirty && frameReady()) {
+                present();
+            }
+            Mailbox.Envelope envelope = mailbox.poll(pollMillis());
             if (envelope == null) {
                 if (mailbox.isClosed()) {
                     return ExitResult.inputClosed();
@@ -150,6 +156,9 @@ public final class RuntimeLoop<M, Msg> {
                 continue;
             }
             if (envelope instanceof Mailbox.Close close) {
+                if (viewDirty && close.result().failure() == null) {
+                    present();
+                }
                 return close.result();
             }
             if (envelope instanceof Mailbox.AppMessage message) {
@@ -159,13 +168,27 @@ public final class RuntimeLoop<M, Msg> {
             } else if (envelope instanceof Mailbox.Resize resize) {
                 applyResize(resize.size());
             }
-            if (viewDirty) {
+            if (viewDirty && (envelope instanceof Mailbox.Input || envelope instanceof Mailbox.Resize
+                    || effects.quitRequested() || frameReady())) {
                 present();
             }
             if (effects.quitRequested()) {
                 return ExitResult.quit(effects.quitStatus());
             }
         }
+    }
+
+    private boolean frameReady() {
+        return System.nanoTime() - nextFrameAtNanos >= 0;
+    }
+
+    private long pollMillis() {
+        if (!viewDirty) {
+            return POLL_MILLIS;
+        }
+        long remaining = Math.max(0L, nextFrameAtNanos - System.nanoTime());
+        return Math.max(1L, Math.min(POLL_MILLIS,
+                TimeUnit.NANOSECONDS.toMillis(remaining + 999_999L)));
     }
 
     @SuppressWarnings("unchecked")
@@ -176,6 +199,10 @@ public final class RuntimeLoop<M, Msg> {
     }
 
     private void applyInput(Mailbox.Input input) {
+        if (viewDirty) {
+            // Bindings belong to the latest model even when its paint is deferred.
+            currentView = program.view(model, viewport);
+        }
         InputEvent event = stamp(input.event());
         Optional<Msg> routed = InputRouter.route(currentView, event);
         routed.ifPresent(message -> {
@@ -220,6 +247,8 @@ public final class RuntimeLoop<M, Msg> {
         currentView = view;
         currentScreen = screen;
         viewDirty = false;
+        // Match the mailbox's real wait clock, independent of application timestamps.
+        nextFrameAtNanos = System.nanoTime() + FRAME_NANOS;
     }
 
     // ── threads ──────────────────────────────────────────────────────────────
@@ -385,7 +414,7 @@ public final class RuntimeLoop<M, Msg> {
         return model;
     }
 
-    /** Exposed for tests: the last committed view, if any. */
+    /** Exposed for tests: the last built view; a pending model may await presentation. */
     public View<Msg> view() {
         return currentView;
     }

@@ -24,6 +24,7 @@ package io.github.dhoard.braxton.internal.render;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Border;
@@ -515,14 +516,14 @@ public final class LayoutEngine {
         if (cols <= 0) {
             return lines;
         }
-        StyledText current = StyledText.empty();
+        LineBuilder current = new LineBuilder();
         int used = 0;
         boolean softWrapped = false;
         for (StyledText.Span span : text.spans()) {
             for (String raw : TextMeasure.graphemes(span.text())) {
                 if ("\n".equals(raw)) {
-                    lines.add(current);
-                    current = StyledText.empty();
+                    lines.add(current.build());
+                    current = new LineBuilder();
                     used = 0;
                     softWrapped = false;
                     continue;
@@ -533,15 +534,15 @@ public final class LayoutEngine {
                 if ("\t".equals(raw)) {
                     int stop = 4 - (used % 4);
                     if (used + stop > cols && used > 0) {
-                        lines.add(current);
-                        current = StyledText.empty();
+                        lines.add(current.build());
+                        current = new LineBuilder();
                         used = 0;
                         stop = 4;
                     }
                     // A stop wider than an empty line has nowhere to wrap to, so it is clamped to
                     // the columns it can occupy; the painted line clips the same cells.
                     stop = Math.min(stop, cols - used);
-                    current = current.append(StyledText.of(" ".repeat(stop), span.style(), span.link()));
+                    current.append(" ".repeat(stop), span.style(), span.link());
                     used += stop;
                     continue;
                 }
@@ -549,8 +550,8 @@ public final class LayoutEngine {
                 int width = TextMeasure.clusterColumns(grapheme, policy);
                 if (used + width > cols) {
                     if (used > 0) {
-                        lines.add(current);
-                        current = StyledText.empty();
+                        lines.add(current.build());
+                        current = new LineBuilder();
                         used = 0;
                         softWrapped = true;
                         if (" ".equals(raw)) {
@@ -561,12 +562,41 @@ public final class LayoutEngine {
                         continue;
                     }
                 }
-                current = current.append(StyledText.of(grapheme, span.style(), span.link()));
+                current.append(grapheme, span.style(), span.link());
                 used += width;
                 softWrapped = false;
             }
         }
-        lines.add(current);
+        lines.add(current.build());
         return lines;
+    }
+
+    /** Accumulates a complete styled run before creating an immutable span. */
+    private static final class LineBuilder {
+        private final List<StyledText> parts = new ArrayList<>();
+        private final StringBuilder text = new StringBuilder();
+        private Style style;
+        private String link;
+
+        void append(String value, Style nextStyle, String nextLink) {
+            if (!Objects.equals(style, nextStyle) || !Objects.equals(link, nextLink)) {
+                flush();
+                style = nextStyle;
+                link = nextLink;
+            }
+            text.append(value);
+        }
+
+        private void flush() {
+            if (!text.isEmpty()) {
+                parts.add(StyledText.of(text.toString(), style, link));
+                text.setLength(0);
+            }
+        }
+
+        StyledText build() {
+            flush();
+            return StyledText.concat(parts.toArray(StyledText[]::new));
+        }
     }
 }

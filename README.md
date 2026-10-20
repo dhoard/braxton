@@ -356,6 +356,17 @@ Defaults are configuration, not hidden constants:
 failures without hiding the primary cause. Rendering is event-driven: an idle application does no
 work, and an interval subscription drives animation only while it is needed.
 
+Application messages update the model, commands, and subscriptions in order. Their dirty screens
+share presentations with a minimum 16 ms gap, using the mailbox's real monotonic wait clock.
+A pending screen is painted even if no further message arrives; continuous traffic cannot defer
+it indefinitely. Input and resize request immediate presentation, and input bindings are rebuilt
+from the latest committed model before routing. Orderly quit/end-of-input flushes a pending screen.
+An unchanged model does not request a frame. Pacing adds no rendering thread or recurring idle timer.
+
+Text wrapping and concatenation assemble whole styled runs rather than copying an immutable
+prefix for each grapheme. Printable ASCII uses the same one-column semantics without Unicode
+iterator/code-point allocation; other text retains the pinned Unicode and width-policy behavior.
+
 The runtime runs on Java 25 virtual threads: the input reader, the resize poller, the timer worker,
 the effect executor's tasks, and the terminal-restore shutdown hook are all virtual threads, so a
 blocking read, sleep, or application task parks instead of holding a platform thread. The runtime

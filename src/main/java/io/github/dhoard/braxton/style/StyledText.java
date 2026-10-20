@@ -54,6 +54,27 @@ public final class StyledText {
          * would replace with a different character.
          */
         private static String sanitize(String value) {
+            boolean clean = true;
+            for (int i = 0; i < value.length(); i++) {
+                char c = value.charAt(i);
+                if (Character.isHighSurrogate(c)) {
+                    if (i + 1 < value.length() && Character.isLowSurrogate(value.charAt(i + 1))) {
+                        i++;
+                        continue;
+                    }
+                    clean = false;
+                    break;
+                }
+                if (Character.isLowSurrogate(c)
+                        || !(c == '\n' || c == '\t'
+                        || (c >= 0x20 && c != 0x7F && !(c >= 0x80 && c <= 0x9F)))) {
+                    clean = false;
+                    break;
+                }
+            }
+            if (clean) {
+                return value;
+            }
             StringBuilder safe = new StringBuilder(value.length());
             for (int i = 0; i < value.length(); i++) {
                 char c = value.charAt(i);
@@ -109,11 +130,31 @@ public final class StyledText {
 
     /** Joins values that may be heterogeneous, preserving each span's own styling. */
     public static StyledText concat(StyledText... parts) {
-        StyledText result = EMPTY;
+        List<Span> spans = new ArrayList<>();
+        Span last = null;
+        StringBuilder run = null;
         for (StyledText part : parts) {
-            result = result.append(part);
+            Objects.requireNonNull(part, "part");
+            for (Span span : part.spans) {
+                if (last != null && last.style().equals(span.style())
+                        && Objects.equals(last.link(), span.link())) {
+                    if (run == null) {
+                        run = new StringBuilder(last.text());
+                    }
+                    run.append(span.text());
+                } else {
+                    if (last != null) {
+                        spans.add(run == null ? last : new Span(run.toString(), last.style(), last.link()));
+                    }
+                    last = span;
+                    run = null;
+                }
+            }
         }
-        return result;
+        if (last != null) {
+            spans.add(run == null ? last : new Span(run.toString(), last.style(), last.link()));
+        }
+        return spans.isEmpty() ? EMPTY : new StyledText(List.copyOf(spans));
     }
 
     public List<Span> spans() {

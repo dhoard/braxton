@@ -37,6 +37,14 @@ import io.github.dhoard.braxton.internal.text.Unicode16Width;
  */
 public final class TextMeasure {
 
+    private static final String[] ASCII = new String[95];
+
+    static {
+        for (int i = 0; i < ASCII.length; i++) {
+            ASCII[i] = String.valueOf((char) (i + 0x20));
+        }
+    }
+
     /** Rendered in front of a cluster that has no base character to occupy a cell. */
     public static final String DOTTED_CIRCLE = "\u25CC";
 
@@ -49,6 +57,12 @@ public final class TextMeasure {
             return List.of();
         }
         List<String> clusters = new ArrayList<>();
+        if (ascii(text)) {
+            for (int i = 0; i < text.length(); i++) {
+                clusters.add(ASCII[text.charAt(i) - 0x20]);
+            }
+            return clusters;
+        }
         BreakIterator iterator = BreakIterator.getCharacterInstance(java.util.Locale.ROOT);
         iterator.setText(text);
         int start = iterator.first();
@@ -70,6 +84,9 @@ public final class TextMeasure {
 
     /** Terminal columns used by a single line of {@code text}. */
     public static int columns(String text, WidthPolicy policy) {
+        if (text != null && policy != null && ascii(text)) {
+            return text.length();
+        }
         int total = 0;
         for (String cluster : graphemes(text)) {
             total += clusterColumns(cluster, policy);
@@ -81,6 +98,10 @@ public final class TextMeasure {
     public static int clusterColumns(String cluster, WidthPolicy policy) {
         if (cluster.isEmpty()) {
             return 0;
+        }
+        if (policy != null && cluster.length() == 1
+                && cluster.charAt(0) >= 0x20 && cluster.charAt(0) <= 0x7E) {
+            return 1;
         }
         int[] codePoints = cluster.codePoints().toArray();
         boolean base = false;
@@ -117,6 +138,15 @@ public final class TextMeasure {
             return 1;
         }
         return wide ? 2 : 1;
+    }
+
+    private static boolean ascii(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) < 0x20 || text.charAt(i) > 0x7E) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
