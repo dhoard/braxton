@@ -9,6 +9,9 @@ not an authoritative source of requirements; verify details against `PROJECT.md`
   pyte harness probe recipe, the content/surrogate and border-visibility rules pinned in cycles
   187-196, the markup/editor/widget documentation rules and the two reproducibility oracles added
   in cycles 197-216, and coverage-hunting observations.
+- [JMH benchmark harness](memory/jmh-benchmarks.md) - how to run the offline benchmark suite, the
+  JDK 23+ annotation-processor and `-Xlint:processing` build traps, the evidence discipline for
+  benchmark numbers, and the measured performance gaps recorded as hunt candidates.
 
 ## Maintenance
 
