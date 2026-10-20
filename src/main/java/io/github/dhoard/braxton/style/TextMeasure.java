@@ -188,6 +188,9 @@ public final class TextMeasure {
             return 0;
         }
         int limit = Math.min(index, text.length());
+        if (asciiGap(text, limit)) {
+            return limit;
+        }
         BreakIterator iterator = BreakIterator.getCharacterInstance(java.util.Locale.ROOT);
         iterator.setText(text);
         if (iterator.isBoundary(limit)) {
@@ -205,6 +208,9 @@ public final class TextMeasure {
             return 0;
         }
         int limit = Math.min(index, text.length() - 1);
+        if (asciiGap(text, limit + 1)) {
+            return limit + 1;
+        }
         BreakIterator iterator = BreakIterator.getCharacterInstance(java.util.Locale.ROOT);
         iterator.setText(text);
         int next = iterator.following(limit);
@@ -216,9 +222,13 @@ public final class TextMeasure {
         if (text == null || text.isEmpty() || index <= 0) {
             return 0;
         }
+        int limit = Math.min(index, text.length());
+        if (asciiGap(text, limit - 1)) {
+            return limit - 1;
+        }
         BreakIterator iterator = BreakIterator.getCharacterInstance(java.util.Locale.ROOT);
         iterator.setText(text);
-        int previous = iterator.preceding(Math.min(index, text.length()));
+        int previous = iterator.preceding(limit);
         return previous == BreakIterator.DONE ? 0 : previous;
     }
 
@@ -230,9 +240,29 @@ public final class TextMeasure {
         if (index < 0 || index > text.length()) {
             return false;
         }
+        if (asciiGap(text, index)) {
+            return true;
+        }
         BreakIterator iterator = BreakIterator.getCharacterInstance(java.util.Locale.ROOT);
         iterator.setText(text);
         return iterator.isBoundary(index);
+    }
+
+    /**
+     * True when the gap at {@code index} has a printable ASCII character on each side. No grapheme
+     * break rule joins two characters in that range: none of them is a carriage return, line feed,
+     * extend, format, spacing mark, regional indicator, hangul element or pictograph, so the gap is
+     * a cluster boundary whatever the rest of the text holds. Answering it locally keeps a caret or
+     * word operation off the break iterator, which copies the whole draft on every lookup.
+     */
+    private static boolean asciiGap(String text, int index) {
+        return index > 0 && index < text.length()
+                && isPrintableAscii(text.charAt(index - 1))
+                && isPrintableAscii(text.charAt(index));
+    }
+
+    private static boolean isPrintableAscii(char value) {
+        return value >= 0x20 && value <= 0x7E;
     }
 
     /** Columns of the widest line of a {@link StyledText} value; newlines are not columns. */
