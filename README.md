@@ -37,6 +37,7 @@ key handlers.
 - [Architecture](#architecture)
 - [Design principles](#design-principles)
 - [Testing and quality gates](#testing-and-quality-gates)
+- [Benchmarks](#benchmarks)
 - [Compatibility](#compatibility)
 - [Limitations](#limitations)
 - [Contributing](#contributing)
@@ -455,6 +456,36 @@ pre-release filter in `.versions-rules.xml`:
 ```bash
 ./mvnw versions:display-dependency-updates
 ```
+
+## Benchmarks
+
+The JMH suite under `src/test/java/io/github/dhoard/braxton/benchmark` measures the paths a frame
+actually costs time in: text measurement and wrapping, styled-run assembly, whole-tree layout, cell
+painting and ANSI encoding, editor draft rendering, input decoding, and one whole frame end to end.
+
+```bash
+./mvnw -o -B -ntp test-compile dependency:build-classpath \
+    -Dmdep.includeScope=test -Dmdep.outputFile=target/bench-cp.txt
+
+java -cp "$(cat target/bench-cp.txt):target/classes:target/test-classes" \
+    org.openjdk.jmh.Main -l                       # list the benchmarks
+
+java -cp "$(cat target/bench-cp.txt):target/classes:target/test-classes" \
+    org.openjdk.jmh.Main -f 1 -wi 1 -i 1 -r 1 -w 1 -prof gc   # smoke run, seconds
+
+java -cp "$(cat target/bench-cp.txt):target/classes:target/test-classes" \
+    org.openjdk.jmh.Main -prof gc -rff target/benchmarks/results.csv   # full suite, ~18 min
+```
+
+Benchmarks are compiled by the normal build and **never run by `verify`** — surefire excludes them.
+Fork, warm-up and measurement counts live in the benchmark annotations, so a full run is comparable
+across changes; overriding them on the command line (as the smoke run does) produces a number that
+must not be compared with a recorded baseline. Every result carries an error margin and an allocation
+rate (`gc.alloc.rate.norm`), and both are specific to the machine and JDK that produced them.
+
+A benchmark delta is not by itself a reason to change the library. A performance change follows the
+project's hunt workflow: one issue per cycle, a deterministic in-repo oracle that fails before the
+change and passes after it, the full gate, and a terminal-emulation check when TUI code is touched.
 
 ## Compatibility
 
