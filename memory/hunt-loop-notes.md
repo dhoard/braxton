@@ -169,7 +169,21 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   bullet (`CatalogTest.aWhitespaceListIconFallsBackToTheDefaultBullet`).
 - Consequence to remember: `TextMeasure.columns` counts a tab and a line break as one column, so
   every widget that measures a tab-bearing prefix must expand it first (`TabStops`).
-- Unfixed leads (no decision yet): `Selector` options and `Quote.bar` are inserted raw, so a line
-  break there splits a one-row element, and `ScreenRenderer.columns`/`TextMeasure.columns` report
-  a tab as one column while the layout engine paints 1-4, which cannot be fixed inside
-  `columns()` alone because `truncate`/`fit` need the positional stop rule.
+- Unfixed leads (no decision yet): `Quote.bar` is inserted raw, so a line break there splits a
+  one-row element, and `ScreenRenderer.columns`/`TextMeasure.columns` report a tab as one column
+  while the layout engine paints 1-4, which cannot be fixed inside `columns()` alone because
+  `truncate`/`fit` need the positional stop rule.
+
+## Selector option boundary (2026-10-21)
+
+- `Selector.view` builds `marker + option` as one text row, so an option is one painted row and the
+  marker always names a whole option. `Selector.singleLine` flattens CRLF/CR/LF to one space, the
+  same rule `Markup`, `EditorOptions`, `Box`, `Badge` and `ProgressBar` apply: raw text split the
+  option across rows ("❯ a" / "b" for option `a\nb`) and pushed every later option down, and a
+  bare CR was dropped by the styled-text boundary (`c\rd` painted `cd`). Pinned by
+  `SelectorTest.anOptionCannotSplitItsRowAcrossLineBreaks`, which asserts the painted rows and that
+  the list measures one row per option (`LayoutEngine.intrinsicHeight`).
+- `Selector` does not expand tabs itself: it never measures the option, and the layout engine
+  expands a tab from the line start, which already includes the two-cell marker. A tab therefore
+  paints as the engine paints it; measuring a selector row is still subject to the `columns()` tab
+  lead below.

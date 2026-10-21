@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.internal.render.LayoutEngine;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.TextMeasure;
@@ -55,7 +56,10 @@ class SelectorTest {
     }
 
     private static List<String> lines(Selector.State state, boolean focused) {
-        int rows = Math.max(1, state.options().size());
+        return lines(state, focused, Math.max(1, state.options().size()));
+    }
+
+    private static List<String> lines(Selector.State state, boolean focused, int rows) {
         return new ScreenRenderer().plainLines(view(state, focused), new Viewport(rows, 40));
     }
 
@@ -137,6 +141,19 @@ class SelectorTest {
                 .isEqualTo(new Selector.Intent.Cancelled());
         assertThat(Selector.update(start, new Selector.Action.Up()).intent())
                 .isEqualTo(new Selector.Intent.None());
+    }
+
+    @Test
+    void anOptionCannotSplitItsRowAcrossLineBreaks() {
+        // One painted row per option is what makes the marker a legible answer to "which option".
+        // An option inserted raw split its own row, pushed every later option down, and left the
+        // continuation unmarked; a bare CR was dropped instead of becoming the space it stands for.
+        Selector.State three = state("a\nb", "c\rd", "e\r\nf");
+        assertThat(lines(three, true, 3)).containsExactly("\u276F a b", "  c d", "  e f");
+        // The list also measures one row per option, so a taller viewport cannot paint the breaks
+        // as extra rows that the marker does not name.
+        assertThat(new LayoutEngine().intrinsicHeight(view(three, true), 40))
+                .as("rows measured for three options").isEqualTo(3);
     }
 
     @Test

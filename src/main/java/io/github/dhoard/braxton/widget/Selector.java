@@ -45,6 +45,10 @@ import io.github.dhoard.braxton.view.Views;
  * is always painted. The active style is interaction - that keys land here - and is painted only
  * while the view is focused, matching {@link TableSelector} and the {@link Editor}'s caret. An
  * unfocused selector therefore still shows its selection, in the inactive style.</p>
+ *
+ * <p>Every option is one painted row, so the marker always names a whole option. A line break in an
+ * option is painted as a space rather than splitting the row and pushing every later option down,
+ * the same one-line rule {@link TableSelector} applies to its cells.</p>
  */
 public final class Selector {
 
@@ -113,6 +117,15 @@ public final class Selector {
         };
     }
 
+    /**
+     * Flattens an option to the one row it is painted on: CRLF, CR and LF each become one space,
+     * so no break can split the row and the styled-text boundary cannot drop a CR and merge the
+     * words on either side of it.
+     */
+    private static String singleLine(String value) {
+        return value.replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ');
+    }
+
     public static <Msg> View<Msg> view(ElementId id, State state, boolean focused,
             Style activeStyle, Style inactiveStyle, Function<Action, Msg> map) {
         List<View<Msg>> rows = new java.util.ArrayList<>();
@@ -123,7 +136,7 @@ public final class Selector {
             // caret do.
             String marker = selected ? "\u276F " : "  ";
             Style style = selected && focused ? activeStyle : inactiveStyle;
-            rows.add(Views.text(StyledText.of(marker + state.options().get(i), style)));
+            rows.add(Views.text(StyledText.of(marker + singleLine(state.options().get(i)), style)));
         }
         View<Msg> list = Views.column(Alignment.START, rows);
         View.InputHandler<Msg> handler = event -> {
