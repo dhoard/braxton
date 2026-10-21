@@ -75,7 +75,12 @@ public final class LayoutEngine {
 
     // ── measurement ──────────────────────────────────────────────────────────
 
-    /** Intrinsic height at {@code cols} columns; flex children measure as zero main-axis size. */
+    /**
+     * Intrinsic height at {@code cols} columns; flex children measure as zero main-axis size.
+     *
+     * <p>Content taller than {@link Integer#MAX_VALUE} rows saturates at that ceiling rather than
+     * wrapping into a negative measurement.</p>
+     */
     public int intrinsicHeight(View<?> view, int cols) {
         return intrinsicHeight(view, cols, Integer.MAX_VALUE);
     }
@@ -84,6 +89,8 @@ public final class LayoutEngine {
         if (cols <= 0 || maxRows <= 0) {
             return 0;
         }
+        // Every case answers at most maxRows, so the sums that accumulate child heights stay inside
+        // the int range and a measurement can never go negative or claim rows that were not offered.
         return switch (view) {
             case View.Text<?> text -> wrapLines(text.text(), cols, maxRows).size();
             case View.Blank<?> blank -> 0;
@@ -92,14 +99,22 @@ public final class LayoutEngine {
             case View.Row<?> row -> rowHeight(row, cols, maxRows);
             // The child is painted inside the horizontal insets, so it must be measured at that
             // width; measuring at the full width can wrap into fewer rows than it paints.
-            case View.Padding<?> padding -> padding.insets().vertical()
-                    + intrinsicHeight(padding.child(),
-                            Math.max(0, cols - padding.insets().horizontal()),
-                            Math.max(0, maxRows - padding.insets().vertical()));
-            case View.BorderBox<?> box -> (box.border().isVisible() ? 2 : 0)
-                    + intrinsicHeight(box.child(), Math.max(0, cols - (box.border().isVisible() ? 2 : 0)),
-                            Math.max(0, maxRows - (box.border().isVisible() ? 2 : 0)));
-            case View.Fixed<?> fixed -> fixed.size();
+            case View.Padding<?> padding -> {
+                int vertical = padding.insets().vertical();
+                int inner = intrinsicHeight(padding.child(),
+                        Math.max(0, cols - padding.insets().horizontal()),
+                        Math.max(0, maxRows - vertical));
+                yield cappedSum(vertical, inner, maxRows);
+            }
+            case View.BorderBox<?> box -> {
+                int frame = box.border().isVisible() ? 2 : 0;
+                int inner = intrinsicHeight(box.child(), Math.max(0, cols - frame),
+                        Math.max(0, maxRows - frame));
+                yield cappedSum(frame, inner, maxRows);
+            }
+            // The reservation is capped by the rows still available: a child cannot need more than
+            // its parent offers, and the uncapped size would overflow the sums that accumulate it.
+            case View.Fixed<?> fixed -> Math.min(fixed.size(), maxRows);
             case View.Grow<?> grow -> 0;
             case View.Overlay<?> overlay -> overlayHeight(overlay, cols, maxRows);
             case View.Keyed<?> keyed -> intrinsicHeight(keyed.child(), cols, maxRows);
@@ -140,6 +155,11 @@ public final class LayoutEngine {
             }
         }
         return total;
+    }
+
+    /** {@code a + b}, saturated at {@code maxRows}: a measurement never claims rows it was not offered. */
+    private static int cappedSum(int a, int b, int maxRows) {
+        return (int) Math.min(maxRows, (long) a + b);
     }
 
     private int columnWidth(View.Column<?> column, int maxCols) {

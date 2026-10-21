@@ -266,3 +266,24 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   column lands on the same painted column), which asserts the painted grid through `ScreenRenderer`.
 - Tabs are still expanded after the break flattening, from the cell's own start, because the cell is
   painted as a unit; the stored state and `selectedValue()` remain the caller's raw text.
+
+## Intrinsic measurement saturation (2026-10-21)
+
+- `LayoutEngine.intrinsicHeight(view, cols)` must answer at most the rows it was offered (the
+  private `maxRows`, `Integer.MAX_VALUE` for the public call), but `View.Fixed` returned its raw
+  size and `Padding`/`BorderBox` added their edges with `int` arithmetic. Two `Fixed(2_000_000_000)`
+  children in a column measured -294,967,296, vertical insets of 1,000,000,000 on top of such a
+  reservation measured -1,294,967,296, and a border over `Fixed(Integer.MAX_VALUE)` measured
+  -2,147,483,647, so a caller sizing a viewport from the measurement cannot build a `Rect`.
+  Every height case now respects `maxRows`: `Fixed` caps its size, and `Padding`/`BorderBox` add
+  their edges through a `cappedSum` helper (widened sum clamped to `maxRows`). The sums in
+  `columnHeight` therefore stay inside the int range and saturate at `Integer.MAX_VALUE` instead of
+  wrapping; painting already clipped to the viewport, so painted output is unchanged. Pinned by
+  `LayoutEngineTest.aContentHeightPastTheIntRangeSaturatesInsteadOfGoingNegative` (five shapes:
+  two reservations, insets plus reservation, border plus reservation, insets larger than the rows
+  a previous sibling left, and the border-wrapped form).
+- A 20,000-tree probe with sizes near `Integer.MAX_VALUE` reported 295 negative measurements and
+  93 layout exceptions before the change, and 0 negative measurements after it; the 91 remaining
+  `RuntimeException`s are all `Rect.inset` origin overflow (see "Geometry arithmetic"), reached
+  through `LayoutEngine.paint`'s padding inset, not the measurement path. The width side needed no
+  change: every width case already caps at `maxCols`.

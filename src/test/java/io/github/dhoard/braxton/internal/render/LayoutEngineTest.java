@@ -245,6 +245,34 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aContentHeightPastTheIntRangeSaturatesInsteadOfGoingNegative() {
+        // Content taller than an int can describe still has a height, and the only representable
+        // answer is the saturating ceiling; a negative measurement would place content above the
+        // viewport and contradict the documented "never by negative arithmetic" degradation.
+        View<?> overflowingInsets = Views.padding(new Insets(Integer.MAX_VALUE, 0, 0, 0),
+                Views.text("a"));
+        List<View<?>> views = List.of(
+                // Two reservations that fit apart but not together.
+                Views.column(
+                        Views.fixed(2_000_000_000, Views.text("a")),
+                        Views.fixed(2_000_000_000, Views.text("b"))),
+                // Insets and border edges added on top of a reservation.
+                Views.padding(new Insets(500_000_000, 0, 500_000_000, 0),
+                        Views.fixed(2_000_000_000, Views.text("a"))),
+                Views.border(Border.SINGLE, Views.fixed(Integer.MAX_VALUE, Views.text("a"))),
+                // Insets that cannot even fit in the rows the previous sibling left.
+                Views.column(
+                        Views.fixed(2_000_000_000, Views.text("a")),
+                        overflowingInsets),
+                Views.border(Border.SINGLE, Views.column(
+                        Views.fixed(2_000_000_000, Views.text("a")),
+                        overflowingInsets)));
+        for (View<?> view : views) {
+            assertThat(engine.intrinsicHeight(view, 10)).isEqualTo(Integer.MAX_VALUE);
+        }
+    }
+
+    @Test
     void tabStopsCountTowardTheMeasuredWidthOfText() {
         View<?> view = Views.row(Views.text("a\tb"), Views.text("X"));
         Screen screen = paint(view, 1, 20);
