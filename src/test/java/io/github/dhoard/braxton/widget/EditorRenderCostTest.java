@@ -142,15 +142,21 @@ class EditorRenderCostTest {
             int selectionStart = state.hasSelection() ? state.selectionStart() : -1;
             int selectionEnd = state.hasSelection() ? state.selectionEnd() : -1;
             int position = start;
+            // Columns already painted on this line; a tab advances to the next four-column stop
+            // from there, so the reference measures a tab the way the text view expands it.
+            int used = promptWidth;
             for (String cluster : TextMeasure.graphemes(state.text().substring(start, end))) {
                 boolean selected = selectionStart >= 0
                         && position >= selectionStart && position < selectionEnd;
                 String display = opts.masking() == EditorOptions.Masking.HIDDEN
                         ? "" : masking ? "\u2022" : cluster;
+                int cells = masking ? 1
+                        : "\t".equals(cluster)
+                                ? TabStops.WIDTH - (used % TabStops.WIDTH)
+                                : TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED);
                 if (focused && state.caret() == position) {
-                    int cells = masking ? 1
-                            : TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED);
-                    display = Editor.CURSOR.repeat(Math.max(1, cells));
+                    cells = Math.max(1, cells);
+                    display = Editor.CURSOR.repeat(cells);
                 }
                 Style style = selected ? opts.selectionStyle() : opts.textStyle();
                 if (!display.isEmpty()) {
@@ -164,6 +170,7 @@ class EditorRenderCostTest {
                         run.append(display);
                         lastStyle = style;
                     }
+                    used += cells;
                 }
                 position += cluster.length();
             }

@@ -315,6 +315,10 @@ public final class Editor {
         StringBuilder pending = new StringBuilder(Math.max(16, end - start));
         Style pendingStyle = opts.textStyle();
         int position = start;
+        // Painted columns before this line's draft: the prompt, or the blank stand-in that keeps
+        // later lines aligned. A tab advances to the next stop from there, exactly as the text view
+        // expands it, so the caret's block can cover the cells the draft really occupies.
+        int used = promptWidth;
         // Segment this line once. A per-cluster boundaryAfter() over the whole draft is O(n^2) and
         // cost tens of milliseconds per frame on a draft at the editor's length limit; the line's
         // own grapheme boundaries are the draft's, because a line starts and ends on a newline
@@ -324,14 +328,16 @@ public final class Editor {
             boolean selected = selectionStart >= 0 && position >= selectionStart && position < selectionEnd;
             String display = opts.masking() == EditorOptions.Masking.HIDDEN ? "" : masking ? MASK : cluster;
             boolean cursor = focused && state.caret() == position;
+            // The cells this cluster occupies where it is painted. A tab is the gap to its stop, so
+            // measuring it as one column (as the masking glyph is) would disagree with the text
+            // view, and with {@link #visualWidth}, which already counts it that way for movement.
+            int cells = masking ? 1 : visualWidth(cluster, used);
             if (cursor) {
-                // The block covers the grapheme under the caret. A two-column grapheme occupies two
-                // cells, so one block would leave the line a column short and slide everything
-                // after the caret one cell to the left. A masked draft paints one cell per cluster,
-                // so the cursor there stays one cell too.
-                int cells = masking
-                        ? 1 : TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED);
-                display = CURSOR.repeat(Math.max(1, cells));
+                // The block covers the grapheme under the caret. A two-column grapheme, and a tab
+                // reaching its stop, occupy those cells; one block would leave the line short and
+                // slide everything after the caret to the left.
+                cells = Math.max(1, cells);
+                display = CURSOR.repeat(cells);
             }
             Style style = selected ? opts.selectionStyle() : opts.textStyle();
             if (!display.isEmpty()) {
@@ -343,6 +349,7 @@ public final class Editor {
                     pending.append(display);
                     pendingStyle = style;
                 }
+                used += cells;
             }
             position = next;
         }

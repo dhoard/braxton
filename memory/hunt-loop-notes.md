@@ -141,3 +141,17 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   before measuring. A value with no measured column still falls back to the block. Pinned by
   `ImageViewTest.aSymbolThatCannotPaintOnOneLineCannotSplitOrShortenAnImageRow`; the editor prompt
   uses the same break-to-space rule at `EditorOptions`.
+
+## Editor caret width boundary (2026-10-21)
+
+- `Editor.renderLine` measures every cluster where it is painted: the caret's block covers that
+  cluster's painted width, and a tab is the gap to the next four-column stop counted from the
+  prompt (or its blank stand-in) plus the clusters already painted. A one-cell block over a tab
+  slid the rest of the line left by the tab's remaining columns (a `"> ab\tc"` composer painted
+  `"> ab█c"` with the caret on the tab). `Editor.visualWidth` is now the single tab-width rule for
+  both caret movement and painting. Pinned by
+  `EditorTest.theBlockCursorOnATabCoversTheColumnsTheTextViewPaints` (with and without a prompt)
+  and mirrored in the cluster-by-cluster reference of `EditorRenderCostTest`.
+- The harness composer always paints a `"> "` prompt, so a tab after `"> a"` is only one column
+  wide there; a discriminating packaged-harness pyte check needs a draft such as `"ab\tc"` whose
+  tab starts on a stop boundary (four columns at visual column 4).

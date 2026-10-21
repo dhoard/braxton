@@ -47,6 +47,15 @@ class EditorTest {
         return Editor.update(state, OPTIONS, action).state();
     }
 
+    /** The first row a viewport paints for {@code state}, through the real layout path. */
+    private static String painted(EditorState state, EditorOptions options, boolean focused) {
+        java.util.List<String> lines = new io.github.dhoard.braxton.view.ScreenRenderer().plainLines(
+                Editor.view(io.github.dhoard.braxton.view.ElementId.of("composer"), state, options,
+                        focused, (EditorAction action) -> action),
+                new io.github.dhoard.braxton.layout.Viewport(2, 24));
+        return lines.get(0);
+    }
+
     @Test
     void insertionHappensAtTheCaretAndMovesIt() {
         EditorState state = EditorState.of("ab");
@@ -331,6 +340,22 @@ class EditorTest {
                 .isEqualTo(FAMILY + "x");
         assertThat(Editor.render(family, EditorOptions.defaults(), true).plainText())
                 .isEqualTo(Editor.CURSOR.repeat(2) + "x");
+    }
+
+    @Test
+    void theBlockCursorOnATabCoversTheColumnsTheTextViewPaints() {
+        // A tab paints the gap to the next four-column stop, exactly as the caret's own navigation
+        // counts it. A one-cell block over it leaves the line short and slides everything after the
+        // caret left, the same way a one-cell block over a wide grapheme would.
+        EditorState onTab = EditorState.of("a\tb").withCaret(1);
+        assertThat(painted(onTab, EditorOptions.defaults(), false)).isEqualTo("a   b");
+        assertThat(painted(onTab, EditorOptions.defaults(), true))
+                .isEqualTo("a" + Editor.CURSOR.repeat(3) + "b");
+        // The prompt is painted on the same line, so a tab after it reaches the next stop from
+        // there: the block covers the one cell that is left, not the three it covers at column 0.
+        EditorOptions prompted = EditorOptions.defaults().withPrompt("> ", Style.NONE);
+        assertThat(painted(onTab, prompted, false)).isEqualTo("> a b");
+        assertThat(painted(onTab, prompted, true)).isEqualTo("> a" + Editor.CURSOR + "b");
     }
 
     @Test
