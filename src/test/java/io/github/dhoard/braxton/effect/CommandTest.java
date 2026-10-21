@@ -26,11 +26,53 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
 /** Command values reject input the runtime cannot honour. */
 class CommandTest {
+
+    @Test
+    void batchesSnapshotCallerListsAndExposeUnmodifiableCommands() {
+        Command<String> first = Command.delay(EffectId.of("first"), Duration.ZERO, "first", "rejected");
+        Command<String> second = Command.delay(EffectId.of("second"), Duration.ZERO, "second", "rejected");
+        List<Command<String>> source = new ArrayList<>(List.of(first, second));
+        Command.Batch<String> direct = new Command.Batch<>(source);
+        Command.Batch<String> factory = (Command.Batch<String>) Command.batch(source);
+        source.clear();
+        assertThat(direct.commands()).containsExactly(first, second);
+        assertThat(factory.commands()).containsExactly(first, second);
+        assertThatThrownBy(() -> direct.commands().clear()).isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> factory.commands().add(Command.none()))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThat(direct.map(String::length)).isInstanceOf(Command.Batch.class);
+        assertThat(direct.commands()).containsExactly(first, second);
+    }
+
+    @Test
+    void constructingAndMappingABatchNeverRunsItsTaskOrMessageMapper() throws Exception {
+        AtomicInteger work = new AtomicInteger();
+        AtomicInteger mappings = new AtomicInteger();
+        Command<String> task = Command.task(EffectId.of("task"), work::incrementAndGet,
+                value -> "v" + value, failure -> "failed");
+        Command.Batch<String> batch = new Command.Batch<>(List.of(task));
+        Command.Batch<Integer> mapped = (Command.Batch<Integer>) batch.map(value -> {
+            mappings.incrementAndGet();
+            return value.length();
+        });
+        assertThat(work.get()).isZero();
+        assertThat(mappings.get()).isZero();
+        Command.Task<Integer> mappedTask = (Command.Task<Integer>) mapped.commands().get(0);
+        Object result = mappedTask.work().call();
+        assertThat(work.get()).isEqualTo(1);
+        assertThat(mappings.get()).isZero();
+        assertThat(mappedTask.onSuccess().apply(result)).isEqualTo(2);
+        assertThat(mappings.get()).isEqualTo(1);
+        assertThat(batch.commands()).containsExactly(task);
+    }
 
     @Test
     void aDelayLongerThanItsNanosecondScheduleIsRejectedAtConstruction() {

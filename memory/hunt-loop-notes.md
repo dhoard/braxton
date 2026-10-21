@@ -104,3 +104,17 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
 - When appending to `HUNT_TRACKING.txt` with a shell here-document, quote the delimiter (`<<'EOF'`)
   and substitute the commit hash afterwards: backticks in an unquoted heredoc are command
   substitutions and silently corrupt the record.
+
+## Additional boundary regressions (2026-10-20)
+
+- Paste burst capacity must include the pending end-marker prefix from the previous burst, even
+  though those bytes are not yet in the payload. A mismatch can flush that prefix and consume the
+  new burst immediately. `PasteDecodeCostTest.aRejectedMarkerPrefixAcrossBurstsCannotExhaustThePayloadBuffer`
+  places the split at the initial buffer capacity; small window-only tests missed this defect
+  (fixed in f44a7f7). Keep the extra-byte calculation in long arithmetic.
+- Sanitizing content can leave an empty styled span. Such a tail must not hide earlier newline
+  content from `stripTrailingNewlines`; when no trimming is needed, structural empty tails remain
+  intact (`StyledTextTest.emptySanitizedSpansCannotHideTrailingNewlines`, d0f1d07).
+- Hyperlink metadata has its own control boundary: span content sanitization does not validate a
+  URL, and direct Screen callers bypass Span entirely. Both typed link validation and the encoder's
+  defensive `safeLink` path now exclude C1 as well as C0 controls (fe526d2).
