@@ -44,7 +44,10 @@ import io.github.dhoard.braxton.view.View;
  *
  * <p>The first consumer ends routing, so a consumed shortcut never also inserts text. Precedence is
  * a property of the view tree, not of registration order: there is nothing to register. When no
- * element is focused, only the scope's own bindings can consume an event.</p>
+ * element is focused, only the scope's own bindings can consume an event: a focusable element that
+ * does not own focus contributes neither its local bindings nor its input handler, even when that
+ * element is the scope itself (a single-widget view used as the root, or as the topmost modal
+ * layer).</p>
  */
 public final class InputRouter {
 
@@ -139,10 +142,20 @@ public final class InputRouter {
         return null;
     }
 
+    /**
+     * The path's focused element, or null when nothing on the path owns focus. The no-focus path is
+     * the scope alone, and a focusable element can <em>be</em> the scope: a widget view used as the
+     * root, or as the topmost layer of a modal, declares itself through {@code Views.focus}. Being
+     * the scope does not make it the focused element - {@code focused} is model data, and the widget
+     * paints its active style only while that flag is set - so its bindings and handler run only
+     * when it says it owns focus.
+     */
     @SuppressWarnings("unchecked")
     private static <Msg> View.Focused<Msg> focusedNode(List<View<Msg>> path) {
         View<Msg> last = path.get(path.size() - 1);
-        return last instanceof View.Focused<?> focused ? (View.Focused<Msg>) focused : null;
+        return last instanceof View.Focused<?> focused && focused.focused()
+                ? (View.Focused<Msg>) focused
+                : null;
     }
 
     private static <Msg> Optional<Msg> matchCapture(List<View<Msg>> path, Key key) {

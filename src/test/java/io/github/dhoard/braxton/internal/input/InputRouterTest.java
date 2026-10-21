@@ -161,6 +161,50 @@ class InputRouterTest {
         assertThat(InputRouter.route(view, key("z"))).isEmpty();
     }
 
+    /**
+     * The focused phases name the element that owns focus, so a focusable element that does not own
+     * it is not a consumer even when it is the routing scope - the root of a single-widget program,
+     * or the topmost layer of a modal. {@link io.github.dhoard.braxton.widget.Selector} and the
+     * other widget views pass the application's focus flag straight to {@code Views.focus}, so a
+     * blurred widget's bindings and input handler must stay silent; only the scope's own capture and
+     * bubble bindings still run.
+     */
+    @Test
+    void anUnfocusedElementConsumesNothingEvenWhenItIsTheScope() {
+        View<String> blurred = Views.focus(ElementId.of("field"), false,
+                List.of(Binding.of("x", "local")), event -> Optional.of("handler"), Views.text("f"));
+        assertThat(InputRouter.route(blurred, key("x")))
+                .as("local binding of an unfocused root").isEmpty();
+        assertThat(InputRouter.route(blurred, key("z")))
+                .as("input handler of an unfocused root").isEmpty();
+        assertThat(InputRouter.route(blurred, new InputEvent.PasteInput("hi")))
+                .as("input handler of an unfocused root").isEmpty();
+
+        View<String> underBindings = Views.onKeys(List.of(Binding.of("q", "quit")), blurred);
+        assertThat(InputRouter.route(underBindings, key("q")))
+                .as("the scope's own bubble binding still fires").contains("quit");
+
+        View<String> base = Views.focus(ElementId.of("base"), true,
+                List.of(Binding.of("x", "base")), event -> Optional.empty(), Views.text("b"));
+        assertThat(InputRouter.route(Views.modal(base, blurred), key("x")))
+                .as("a modal whose top layer is unfocused").isEmpty();
+
+        // The same element does consume once it owns focus, so this is about focus and not about
+        // which node happens to be the scope.
+        View<String> focused = Views.focus(ElementId.of("field"), true,
+                List.of(Binding.of("x", "local")), event -> Optional.of("handler"), Views.text("f"));
+        assertThat(InputRouter.route(focused, key("x"))).contains("local");
+        assertThat(InputRouter.route(focused, key("z"))).contains("handler");
+
+        // An unfocused ancestor of the focused element was never a consumer either: the focused
+        // target below it still receives the event.
+        View<String> nested = Views.focus(ElementId.of("outer"), false,
+                List.of(Binding.of("x", "outer")), event -> Optional.of("outer handler"),
+                Views.focus(ElementId.of("inner"), true, List.of(),
+                        event -> Optional.of("inner"), Views.text("i")));
+        assertThat(InputRouter.route(nested, key("x"))).contains("inner");
+    }
+
     @Test
     void pasteGoesToTheFocusedHandlerAndNeverToBindings() {
         View<String> view = Views.focus(ElementId.of("f"), true,
