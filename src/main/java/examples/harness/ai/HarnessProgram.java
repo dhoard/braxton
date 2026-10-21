@@ -63,6 +63,8 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
     static final int MAX_OUTSTANDING = 64;
     static final int DRAFT_LIMIT = 4_096;
     static final int MAX_ENTRIES = HarnessState.MAX_ENTRIES;
+    /** The status-rule text that describes an armed Ctrl+C confirmation. */
+    static final String QUIT_CONFIRMATION_HINT = "Press Ctrl+C again within 2 s to exit.";
 
     private static final EffectId TRANSCRIPT_ID = EffectId.of("harness/transcript");
     private static final EffectId RESPONSE_ID = EffectId.of("harness/response");
@@ -151,7 +153,20 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
         if (model.quitArmedUntilNanos() == 0L) {
             return model;
         }
-        return isUserAction(message) ? model.disarmQuit() : model;
+        return isUserAction(message) ? endQuitConfirmation(model) : model;
+    }
+
+    /**
+     * Ends an armed confirmation together with the hint that describes it. The hint is transient
+     * feedback for exactly the window it announces, so a confirmation that is abandoned or has
+     * expired must not leave the status rule claiming that a second Ctrl+C exits: the top rule
+     * already drops its own hint, and the promise would be false. A status message some later
+     * event put in its place is left alone.
+     */
+    private static HarnessState endQuitConfirmation(HarnessState model) {
+        HarnessState disarmed = model.disarmQuit();
+        return QUIT_CONFIRMATION_HINT.equals(disarmed.statusMessage())
+                ? disarmed.withStatusMessage("") : disarmed;
     }
 
     private static boolean isUserAction(HarnessMsg message) {
@@ -183,7 +198,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
             next = next.withEscArmed(0L);
         }
         if (next.quitArmedUntilNanos() > 0L && nowNanos > next.quitArmedUntilNanos()) {
-            next = next.withQuitArmed(0L);
+            next = endQuitConfirmation(next);
         }
         return Transition.stay(next);
     }
@@ -197,7 +212,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
             return Transition.next(model.withQuitArmed(0L), Command.quit());
         }
         return Transition.stay(model.withQuitArmed(atNanos + QUIT_WINDOW_NANOS)
-                .withStatusMessage("Press Ctrl+C again within 2 s to exit."));
+                .withStatusMessage(QUIT_CONFIRMATION_HINT));
     }
 
     // ── loading ──────────────────────────────────────────────────────────────

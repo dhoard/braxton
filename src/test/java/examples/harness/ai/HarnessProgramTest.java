@@ -426,6 +426,45 @@ class HarnessProgramTest {
         assertThat(expired.quitArmedUntilNanos()).isZero();
     }
 
+    /**
+     * The README says the Ctrl+C confirmation is transient feedback on the rule above the footer
+     * and that another key cancels the pending confirmation. The hint is a status message, so once
+     * the confirmation is abandoned or has expired the rule must stop claiming that a second
+     * Ctrl+C exits; otherwise the bottom rule disagrees with the top rule (which drops its own
+     * hint) and keeps a false promise on screen indefinitely.
+     */
+    @Test
+    void anAbandonedCtrlCConfirmationTakesItsHintOffTheStatusRule() {
+        Transition<HarnessState, HarnessMsg> armed = update(ready(),
+                new HarnessMsg.QuitRequest(1_000_000_000L));
+        assertThat(painted(armed.model())).contains("Press Ctrl+C again");
+
+        HarnessState abandoned = update(armed.model(), new HarnessMsg.UnhandledKey()).model();
+        assertThat(abandoned.quitArmedUntilNanos()).isZero();
+        assertThat(painted(abandoned)).as("an abandoned confirmation must not keep its hint")
+                .doesNotContain("Press Ctrl+C again");
+
+        HarnessState expired = update(armed.model(), new HarnessMsg.Tick(3_000_000_001L)).model();
+        assertThat(expired.quitArmedUntilNanos()).isZero();
+        assertThat(painted(expired)).as("an expired confirmation must not keep its hint")
+                .doesNotContain("Press Ctrl+C again");
+
+        // Only the confirmation's own hint goes: feedback a background event put on the rule after
+        // the confirmation was armed still belongs to that event.
+        HarnessState reported = update(armed.model(),
+                new HarnessMsg.Notice("Queue full (64); prompt not submitted.")).model();
+        assertThat(reported.quitArmedUntilNanos()).isEqualTo(3_000_000_000L);
+        HarnessState disarmed = update(reported, new HarnessMsg.UnhandledKey()).model();
+        assertThat(disarmed.quitArmedUntilNanos()).isZero();
+        assertThat(painted(disarmed)).contains("Queue full (64)")
+                .doesNotContain("Press Ctrl+C again");
+    }
+
+    /** Every painted row of the production view, joined, so assertions read the real screen. */
+    private static String painted(HarnessState state) {
+        return String.join("\n", HarnessView.renderLines(state));
+    }
+
     @Test
     void anArmedConfirmationKeepsTheTickSubscriptionAlive() {
         HarnessState armed = update(ready(),

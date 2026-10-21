@@ -403,7 +403,8 @@ owner is the caller's thread; `Application.run` does not start or hijack it.
 
 Any other key cancels a pending Ctrl+C confirmation; a later Ctrl+C becomes the new first press.
 Transient feedback (clipboard outcomes, a full queue, the Ctrl+C confirmation) appears on the rule
-above the footer until the next action replaces it.
+above the footer until the next action replaces it; the Ctrl+C hint leaves the rule with the
+confirmation it announces, so cancelling it or missing the window also clears it.
 The harness is fully offline: it replays a sanitized bundled transcript and deterministic fallback
 responses, with no model, provider, network, or user-session access.
 

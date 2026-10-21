@@ -12,8 +12,9 @@ not an authoritative source of requirements; verify details against `PROJECT.md`
   options, the subscription null-emission rule, the table-selector cell one-line rule, the
   intrinsic-height saturation rule, the harness composer's unhandled-key fallback, the border
   character content boundary (an edge character is sanitized like text, and a wide edge character
-  is still an open lead), the runtime cleanup's session-close containment, and coverage-hunting
-  observations.
+  is still an open lead), the runtime cleanup's session-close containment, the harness status-rule
+  hint pairing (a confirmation's hint must leave the rule with the confirmation), and
+  coverage-hunting observations.
 - [JMH benchmark harness](memory/jmh-benchmarks.md) - how to run the offline benchmark suite, the
   JDK 23+ annotation-processor and `-Xlint:processing` build traps, the evidence discipline for
   benchmark numbers, and the measured performance gaps recorded as hunt candidates.

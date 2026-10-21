@@ -341,3 +341,20 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   `cleanupFailures()` carry "session restore failed", and the second close still ran).
 - A cleanup step that is added later must be contained the same way; the session close was the one
   step whose failure could escape `run()`.
+
+## Harness status-rule hint boundary (2026-10-21)
+
+- The README promises the Ctrl+C confirmation is transient feedback on the rule above the footer and
+  that any other key cancels the pending confirmation. The hint was a `statusMessage` written by
+  `HarnessProgram.quitRequest`, and neither the disarm (`disarmQuitOnUserAction`) nor the window's
+  expiry (`tick`) cleared it: an abandoned (F1) or expired confirmation left
+  "Press Ctrl+C again within 2 s to exit." painted on the bottom rule while `topRule` had already
+  dropped its own `ctrl+c again to exit` hint, so the screen kept a false promise indefinitely (a
+  later Ctrl+C only rearms). `endQuitConfirmation` now ends the deadline and the hint together, at
+  both the disarm and the expiry sites, and clears only that exact text: feedback a background event
+  put on the rule after arming still belongs to that event. Pinned by
+  `HarnessProgramTest.anAbandonedCtrlCConfirmationTakesItsHintOffTheStatusRule`, which asserts the
+  production view's painted rows (`HarnessView.renderLines`), not just the model field.
+- Any future confirmation hint painted from `statusMessage` needs the same pairing: clear it in
+  every transition that ends the confirmation, not only where it is set. The Esc window needs none
+  today because `topRule` derives its hint from `escArmedUntilNanos` on every paint.
