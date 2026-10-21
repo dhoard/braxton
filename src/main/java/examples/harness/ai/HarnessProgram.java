@@ -136,6 +136,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
                     Command.copy(HarnessProjection.visiblePlainText(model), HarnessMsg.Copied::new));
             case HarnessMsg.CopyLastReply copy -> copyLastReply(model);
             case HarnessMsg.FocusComposer focus -> Transition.stay(model);
+            case HarnessMsg.UnhandledKey ignored -> Transition.stay(model);
             case HarnessMsg.Notice notice -> Transition.stay(model.withStatusMessage(notice.text()));
             case HarnessMsg.QuitRequest request -> quitRequest(model, request.atNanos());
             case HarnessMsg.Quit quit -> Transition.next(model, Command.quit());
@@ -155,6 +156,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
 
     private static boolean isUserAction(HarnessMsg message) {
         return message instanceof HarnessMsg.Editor
+                || message instanceof HarnessMsg.UnhandledKey
                 || message instanceof HarnessMsg.Submit
                 || message instanceof HarnessMsg.ScrollUp
                 || message instanceof HarnessMsg.ScrollDown

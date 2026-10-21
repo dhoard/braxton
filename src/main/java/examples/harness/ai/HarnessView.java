@@ -37,6 +37,7 @@ import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorAction;
 import io.github.dhoard.braxton.widget.EditorOptions;
 
 /**
@@ -80,9 +81,7 @@ final class HarnessView {
             // than this allocation gives it; otherwise the caret's line is clipped away.
             EditorOptions composerOptions = HarnessProgram.editorOptions()
                     .withVisibleLines(Math.max(1, allocation.composer()));
-            parts.add(Views.fixed(allocation.composer(),
-                    Editor.view(COMPOSER, state.draft(), composerOptions, true,
-                            HarnessMsg.Editor::new)));
+            parts.add(Views.fixed(allocation.composer(), composer(state, composerOptions)));
         }
         if (allocation.bottomRule() > 0) {
             parts.add(Views.fixed(allocation.bottomRule(),
@@ -104,6 +103,25 @@ final class HarnessView {
         View<HarnessMsg> root = Views.overlay(List.of(
                 Views.fill(HarnessTheme.BACKGROUND), body), false);
         return Views.keyed(bindings(), HarnessView::intercept, root, List.of());
+    }
+
+    /**
+     * The composer wires the same public render and action API as {@link Editor#view}, plus a
+     * message for a key the editor does not consume. Routing can change state only through a
+     * message, and the README promises that any other key cancels a pending Ctrl+C confirmation:
+     * without this fallback a key the editor ignores never reached the harness at all.
+     */
+    private static View<HarnessMsg> composer(HarnessState state, EditorOptions options) {
+        View.InputHandler<HarnessMsg> handler = event -> {
+            Optional<EditorAction> action = Editor.actionFor(event, options);
+            if (action.isPresent()) {
+                return Optional.of(new HarnessMsg.Editor(action.get()));
+            }
+            return event instanceof InputEvent.KeyInput
+                    ? Optional.of(new HarnessMsg.UnhandledKey()) : Optional.empty();
+        };
+        return Views.focus(COMPOSER, true, List.of(), handler,
+                Views.text(Editor.render(state.draft(), options, true)));
     }
 
     /** Root capture bindings. These intentionally override the focused editor. */

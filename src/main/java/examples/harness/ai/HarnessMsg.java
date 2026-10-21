@@ -99,6 +99,13 @@ public sealed interface HarnessMsg {
     public record FocusComposer() implements HarnessMsg {
     }
 
+    /**
+     * A key the composer did not consume. Routing changes state only through messages, so this is
+     * what lets any other key cancel a pending time-based confirmation.
+     */
+    public record UnhandledKey() implements HarnessMsg {
+    }
+
     /** A non-fatal notice, such as an overload rejection. */
     public record Notice(String text) implements HarnessMsg {
     }

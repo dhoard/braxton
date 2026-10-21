@@ -287,3 +287,20 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   `RuntimeException`s are all `Rect.inset` origin overflow (see "Geometry arithmetic"), reached
   through `LayoutEngine.paint`'s padding inset, not the measurement path. The width side needed no
   change: every width case already caps at `maxCols`.
+
+## Harness key observation boundary (2026-10-21)
+
+- The README promises "Any other key cancels a pending Ctrl+C confirmation", but a view can change
+  model state only by producing a message. `Editor.view` maps only the gestures in its own table,
+  so a key it does not map (F1, Insert, an unmapped Ctrl chord) produced no message at all: the
+  harness never saw it and `quitArmedUntilNanos` stayed set. `HarnessView` now builds the composer
+  from the same public `Editor.render`/`Editor.actionFor` API and emits
+  `HarnessMsg.UnhandledKey` for any `KeyInput` the editor did not consume. The program treats it as
+  a user action and its update is a no-op, so the fallback disarms without repainting when nothing
+  else changed.
+- If the core editor ever needs to expose "unhandled input" generally, prefer a fallback hook in
+  `Editor.view` over copying this wiring; today the duplication is two lines and keeps the public
+  API unchanged.
+- Pinned by `HarnessProgramTest.aKeyTheComposerIgnoresStillCancelsThePendingCtrlC` (routes F1
+  through the production view, then updates) and a pyte probe: F1 removes the top-rule hint, a
+  later Ctrl+C rearms instead of exiting, and the third exits 0.

@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
@@ -33,9 +34,13 @@ import io.github.dhoard.braxton.app.InitContext;
 import io.github.dhoard.braxton.app.Transition;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.input.InputEvent;
+import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.terminal.TerminalCapabilities;
+import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.widget.EditorAction;
 import io.github.dhoard.braxton.widget.EditorState;
 
@@ -380,6 +385,26 @@ class HarnessProgramTest {
         Transition<HarnessState, HarnessMsg> after =
                 update(typed, new HarnessMsg.QuitRequest(1_500_000_000L));
         assertThat(after.command()).isInstanceOf(Command.None.class);
+    }
+
+    /**
+     * The README says any other key cancels the pending confirmation, but the composer only ever
+     * produced a message for the gestures it maps: a key it ignores produced nothing, so the
+     * harness never saw the key and the confirmation stayed armed.
+     */
+    @Test
+    void aKeyTheComposerIgnoresStillCancelsThePendingCtrlC() {
+        HarnessState armed = ready().withQuitArmed(3_000_000_000L);
+        View<HarnessMsg> view = HarnessView.view(armed);
+        Optional<HarnessMsg> routed = InputRouter.route(view,
+                InputEvent.KeyInput.of(Key.of("f1")));
+        assertThat(routed).as("any other key must reach the harness").isPresent();
+        HarnessMsg message = routed.orElseThrow();
+        assertThat(message).isInstanceOf(HarnessMsg.UnhandledKey.class);
+        HarnessState after = update(armed, message).model();
+        assertThat(after.quitArmedUntilNanos()).isZero();
+        assertThat(update(after, new HarnessMsg.QuitRequest(1_500_000_000L)).command())
+                .isInstanceOf(Command.None.class);
     }
 
     @Test
