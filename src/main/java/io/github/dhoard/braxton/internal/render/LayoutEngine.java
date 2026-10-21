@@ -445,22 +445,25 @@ public final class LayoutEngine {
             return;
         }
         Style style = box.style();
-        screen.put(bounds.row(), bounds.col(), String.valueOf(border.topLeft()), style, null, 1);
-        screen.put(bounds.row(), bounds.col() + bounds.cols() - 1,
-                String.valueOf(border.topRight()), style, null, 1);
-        screen.put(bounds.row() + bounds.rows() - 1, bounds.col(),
-                String.valueOf(border.bottomLeft()), style, null, 1);
+        // One sanitized value per edge character, so the perimeter loop does not rebuild it per cell.
+        String topLeft = borderGlyph(border.topLeft());
+        String topRight = borderGlyph(border.topRight());
+        String bottomLeft = borderGlyph(border.bottomLeft());
+        String bottomRight = borderGlyph(border.bottomRight());
+        String horizontal = borderGlyph(border.horizontal());
+        String vertical = borderGlyph(border.vertical());
+        screen.put(bounds.row(), bounds.col(), topLeft, style, null, 1);
+        screen.put(bounds.row(), bounds.col() + bounds.cols() - 1, topRight, style, null, 1);
+        screen.put(bounds.row() + bounds.rows() - 1, bounds.col(), bottomLeft, style, null, 1);
         screen.put(bounds.row() + bounds.rows() - 1, bounds.col() + bounds.cols() - 1,
-                String.valueOf(border.bottomRight()), style, null, 1);
+                bottomRight, style, null, 1);
         for (int col = bounds.col() + 1; col < bounds.col() + bounds.cols() - 1; col++) {
-            putIfInside(screen, bounds.row(), col, String.valueOf(border.horizontal()), style, 1);
-            putIfInside(screen, bounds.row() + bounds.rows() - 1, col,
-                    String.valueOf(border.horizontal()), style, 1);
+            putIfInside(screen, bounds.row(), col, horizontal, style, 1);
+            putIfInside(screen, bounds.row() + bounds.rows() - 1, col, horizontal, style, 1);
         }
         for (int row = bounds.row() + 1; row < bounds.row() + bounds.rows() - 1; row++) {
-            putIfInside(screen, row, bounds.col(), String.valueOf(border.vertical()), style, 1);
-            putIfInside(screen, row, bounds.col() + bounds.cols() - 1,
-                    String.valueOf(border.vertical()), style, 1);
+            putIfInside(screen, row, bounds.col(), vertical, style, 1);
+            putIfInside(screen, row, bounds.col() + bounds.cols() - 1, vertical, style, 1);
         }
         if (!box.title().isEmpty() && bounds.cols() > 4) {
             StyledText title = box.title();
@@ -474,6 +477,17 @@ public final class LayoutEngine {
         Rect inner = new Rect(bounds.row() + 1, bounds.col() + 1,
                 Math.max(0, bounds.rows() - 2), Math.max(0, bounds.cols() - 2));
         paint(box.child(), screen, inner, regions);
+    }
+
+    /**
+     * One border character as content. A border holds raw characters, so unlike text it never passed
+     * the span boundary that makes content safe: a control character or an unpaired surrogate would
+     * reach a cell and then the terminal unchanged, letting a custom border emit an escape sequence
+     * (and letting UTF-8 replace the surrogate with {@code '?'}). Construction is the same one every
+     * other painted string uses, and an unrepresentable character becomes an empty cell.
+     */
+    private static String borderGlyph(char value) {
+        return StyledText.plain(String.valueOf(value)).plainText();
     }
 
     private static void putIfInside(Screen screen, int row, int col, String grapheme, Style style, int width) {

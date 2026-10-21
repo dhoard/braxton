@@ -24,6 +24,10 @@ package io.github.dhoard.braxton.layout;
 
 /**
  * Characters used to draw a box. {@code NONE} draws no border and adds no inset.
+ *
+ * <p>Each character is painted as content, so it passes the same sanitization as text: a control
+ * character or an unpaired surrogate occupies its cell as a blank rather than reaching the terminal,
+ * and a custom border can therefore never emit an escape sequence or an unencodable unit.</p>
  */
 public record Border(char topLeft, char topRight, char bottomLeft, char bottomRight,
         char horizontal, char vertical) {

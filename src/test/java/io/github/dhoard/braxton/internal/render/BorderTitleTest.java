@@ -72,6 +72,29 @@ class BorderTitleTest {
     }
 
     @Test
+    void aCustomBorderCannotCompleteAnEscapeSequenceFromItsOwnCharacters() {
+        // A Border holds raw characters, but the frame paints them as content. The paint path
+        // wrote them straight into cells, so a border whose vertical edge is ESC, around child
+        // text "[2K", spelled ESC [ 2 K: a complete CSI that erases the row after the encoder had
+        // painted it. Every other content path - StyledText.Span, and therefore Box and Table -
+        // drops a control character or an unpaired surrogate before it can reach a cell.
+        Border crafted = new Border('+', '+', '+', '+', '-', '\u001b');
+        Screen screen = new LayoutEngine()
+                .layout(Views.border(crafted, Views.text("[2K")), new Rect(0, 0, 3, 6)).screen();
+        assertThat(screen.cell(1, 0).text()).as("the edge is not a control character").isEmpty();
+        assertThat(screen.plainLines()).containsExactly("+----+", " [2K", "+----+");
+        String frame = AnsiEncoder.frame(screen);
+        // The encoder clears each row exactly once; a fourth clear could only come from content.
+        assertThat(frame.split("\u001b\\[2K", -1)).as("line clears in the frame").hasSize(4);
+        // The same boundary owns an unpaired surrogate: UTF-8 would replace it with '?', so the
+        // cell would display a character the border never held.
+        Border surrogate = new Border('\ud800', '+', '+', '+', '-', '|');
+        Screen surrogateScreen = new LayoutEngine()
+                .layout(Views.border(surrogate, Views.text("[2K")), new Rect(0, 0, 3, 6)).screen();
+        assertThat(surrogateScreen.cell(0, 0).text()).isEmpty();
+    }
+
+    @Test
     void aWideTitleNeverWidensTheFrame() {
         for (int width = 2; width <= 12; width++) {
             for (String title : new String[] {"", "ab", "\u65E5", "\u65E5\u672C", "abcdefghij"}) {
