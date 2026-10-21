@@ -55,8 +55,9 @@ public final class FocusState {
         return Optional.ofNullable(current);
     }
 
+    /** Whether the non-null target identity is currently focused. */
     public boolean isFocused(ElementId id) {
-        return Objects.equals(current, id);
+        return id != null && Objects.equals(current, id);
     }
 
     public FocusState focus(ElementId id) {

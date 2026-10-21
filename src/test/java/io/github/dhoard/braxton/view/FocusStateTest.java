@@ -58,6 +58,16 @@ class FocusStateTest {
     }
 
     @Test
+    void noFocusCannotMatchANullTargetIdentity() {
+        assertThat(FocusState.NONE.current()).isEmpty();
+        assertThat(FocusState.NONE.isFocused(null)).isFalse();
+        assertThat(FocusState.of(ElementId.of("a")).clear().isFocused(null)).isFalse();
+        assertThat(FocusState.of(null).isFocused(null)).isFalse();
+        assertThat(FocusState.of(ElementId.of("a")).isFocused(ElementId.of("a"))).isTrue();
+        assertThat(FocusState.of(ElementId.of("a")).isFocused(ElementId.of("b"))).isFalse();
+    }
+
+    @Test
     void equalityAndIdentityFollowTheFocusedId() {
         assertThat(FocusState.of(null)).isSameAs(FocusState.NONE);
         assertThat(FocusState.of(ElementId.of("a"))).isEqualTo(FocusState.of(ElementId.of("a")));
