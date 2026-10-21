@@ -80,6 +80,13 @@ class RuntimeLoopTest {
                         .withNanoTime(() -> 1_000L));
     }
 
+    /** A sealed message type with no null case, so a null message fails the run. */
+    private sealed interface ResizeMessage permits SizeChanged {
+    }
+
+    private record SizeChanged(Size size) implements ResizeMessage {
+    }
+
     /** Renders the viewport it was given, so a resize is visible in the output. */
     private record Measured() implements Program<Integer, String> {
 
@@ -126,6 +133,56 @@ class RuntimeLoopTest {
         run.join(5_000L);
         assertThat(run.isAlive()).isFalse();
         assertThat(terminal.output()).contains("size: 4x10");
+    }
+
+    @Test
+    @Timeout(15)
+    void aResizeMapperThatDeclinesASizeDoesNotEndTheRun() throws Exception {
+        // The mapper declines the smaller size; a declined emission is not a message, so nothing
+        // reaches update and the run keeps going. Delivering it as a null message instead makes a
+        // sealed-message dispatch throw and ends the run with a failure.
+        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        RuntimeOptions options = options(new FakeTerminal.ManualTimers());
+        Program<Integer, ResizeMessage> program = new Program<>() {
+            @Override
+            public Transition<Integer, ResizeMessage> init(InitContext context) {
+                return Transition.stay(0);
+            }
+
+            @Override
+            public Transition<Integer, ResizeMessage> update(Integer model, ResizeMessage message) {
+                return switch (message) {
+                    case SizeChanged changed -> Transition.stay(changed.size().rows());
+                };
+            }
+
+            @Override
+            public View<ResizeMessage> view(Integer model, Viewport viewport) {
+                return Views.text("size: " + viewport.rows() + "x" + viewport.cols());
+            }
+
+            @Override
+            public Subscription<ResizeMessage> subscriptions(Integer model) {
+                return Subscription.resize(SubscriptionId.of("resize"),
+                        size -> size.rows() > 4 ? new SizeChanged(size) : null);
+            }
+        };
+        java.util.concurrent.atomic.AtomicReference<ExitResult> result =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        Thread run = Thread.ofVirtual().name("declining-resize")
+                .start(() -> result.set(Application.run(program, options, terminal)));
+        await(() -> terminal.output().contains("size: 6x20"));
+
+        terminal.resize(new Size(4, 10));
+
+        await(() -> terminal.output().contains("size: 4x10"));
+        terminal.endInput();
+        run.join(5_000L);
+        assertThat(run.isAlive()).isFalse();
+        assertThat(result.get().kind())
+                .as("a mapper that declines a size must not fail the run: %s",
+                        result.get().failure())
+                .isEqualTo(ExitResult.Kind.INPUT_CLOSED);
     }
 
     @Test

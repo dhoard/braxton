@@ -245,6 +245,19 @@ class SubscriptionManagerTest {
     }
 
     @Test
+    void aResizeMapperThatReturnsNullEmitsNoMessage() throws Exception {
+        // A mapper may decline a size it does not care about, exactly like an interval or source
+        // mapper: null is not a message value, so nothing is enqueued for the owner. Enqueuing it
+        // would hand Program.update a null instead of a value from the application's message type.
+        manager.reconcile(Subscription.resize(SubscriptionId.of("resize"),
+                size -> size.rows() > 2 ? "big:" + size.rows() : null));
+        manager.notifyResize(new Size(1, 4));
+        assertThat(mailbox.poll(0)).as("a null mapper result is not a message").isNull();
+        manager.notifyResize(new Size(3, 4));
+        assertThat(next()).isEqualTo("big:3");
+    }
+
+    @Test
     @org.junit.jupiter.api.Timeout(10)
     void anIntervalMapperRunsOnTheTimerWorkerNotTheOwner() throws Exception {
         // The documented threading model: mapping happens where the value is emitted, so a mapper

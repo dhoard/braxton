@@ -220,3 +220,21 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
 - The bar's tabs are not expanded at the builder boundary: like `Selector`, the quote never
   measures the bar (it is the same prefix on every row), and the layout engine expands it from the
   line start.
+
+## Subscription emission boundary (2026-10-21)
+
+- Every emission path treats a `null` mapper result as "no message": `SubscriptionManager.enqueue`
+  returns early for null (interval ticks and external sources), `EffectRunner.deliver` does the
+  same for effect results, and `Binding` rejects a null message outright. The resize fan-out was the one path that wrapped `mapper.apply(size)` in an
+  `AppMessage` unconditionally, so a resize mapper that declined a size handed `Program.update` a
+  null: a sealed-message dispatch threw `NullPointerException` and `Application.run` ended with
+  `FAILURE` instead of continuing. `notifyResize` now drops the null result like every other path,
+  and `Subscription`'s javadoc states the rule once. Pinned by
+  `SubscriptionManagerTest.aResizeMapperThatReturnsNullEmitsNoMessage` (owning boundary: the
+  mailbox stays empty and a later non-null result still arrives) and
+  `RuntimeLoopTest.aResizeMapperThatDeclinesASizeDoesNotEndTheRun` (end-to-end: the run ends with
+  `INPUT_CLOSED`, not `FAILURE`, after the declined resize).
+- Separate, still-unfixed lead: a resize mapper that *throws* propagates on the owner thread and
+  ends the run, while a throwing interval mapper is reported through diagnostics and keeps ticking
+  (`anIntervalMapperThatThrowsIsReportedAndTheIntervalKeepsTicking`). Deciding whether resize
+  failures should be contained needs a policy decision.

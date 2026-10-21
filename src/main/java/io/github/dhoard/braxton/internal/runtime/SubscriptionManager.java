@@ -312,7 +312,13 @@ public final class SubscriptionManager<Msg> {
             if (source instanceof ResizeLive<?> resize) {
                 Function<Size, Msg> mapper = resizeMapper(resize);
                 if (mapper != null) {
-                    mailbox.enqueueFromOwner(new Mailbox.AppMessage(mapper.apply(size)));
+                    Msg message = mapper.apply(size);
+                    // A null result declines this size, exactly as it does on the interval and
+                    // source paths (enqueue drops it): a null is not a message, and enqueuing one
+                    // would hand the owner's update a value outside the application's message type.
+                    if (message != null) {
+                        mailbox.enqueueFromOwner(new Mailbox.AppMessage(message));
+                    }
                 }
             }
         }

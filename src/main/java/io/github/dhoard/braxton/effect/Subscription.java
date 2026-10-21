@@ -37,7 +37,8 @@ import io.github.dhoard.braxton.layout.Size;
  * <p>The runtime reconciles subscriptions after every model commit. A descriptor's identity and
  * configuration decide whether the live resource is kept; the mapping function is always replaced
  * with the current one, so closures over stale models cannot be retained. Removing a subscription
- * closes it exactly once and ignores later emissions.</p>
+ * closes it exactly once and ignores later emissions. A mapper that returns {@code null} declines
+ * an emission: nothing is delivered to the owner.</p>
  */
 public sealed interface Subscription<Msg> {
 
