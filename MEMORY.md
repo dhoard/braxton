@@ -5,20 +5,6 @@ not an authoritative source of requirements; verify details against `PROJECT.md`
 
 ## Index
 
-- [HUNT_LOOP working notes](memory/hunt-loop-notes.md) - the producer hand-off retry policy, the
-  pyte harness probe recipe, the content/surrogate and border-visibility rules pinned in cycles
-  187-196, the markup/editor/widget documentation rules and the two reproducibility oracles added
-  in cycles 197-216, the one-line prefix rules for markup/selector/quote/progress-bar/editor
-  options, the subscription null-emission rule, the table-selector cell one-line rule, the
-  intrinsic-height saturation rule, the harness composer's unhandled-key fallback, the border
-  character content boundary (Border.glyph blanks a control or surrogate edge in the layout, Box and
-  Table paths, and a wide edge character is still an open lead), the runtime cleanup's
-  session-close containment, the harness status-rule
-  hint pairing (a confirmation's hint must leave the rule with the confirmation), the shutdown
-  wait's harmless wrapped deadline (a difference-comparison rule, not an overflow defect), the
-  identity separator rule (an element-id, effect-id, or subscription-id child name may not forge
-  another parent's path), the editor masked-display CR/LF rule (a CR/LF pair masks as one glyph and
-  a line break, matching the painted editor), and coverage-hunting observations.
 - [JMH benchmark harness](memory/jmh-benchmarks.md) - how to run the offline benchmark suite, the
   JDK 23+ annotation-processor and `-Xlint:processing` build traps, the evidence discipline for
   benchmark numbers, and the measured performance gaps recorded as hunt candidates.

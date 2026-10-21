@@ -1,167 +1,83 @@
-# Single-cycle bug-hunt workflow
+# Braxton — autonomous single-cycle defect hunt
 
-Run exactly one bug-hunt cycle: investigate a contract violation, reproduce it, fix the owning
-boundary, validate, close the change, record, and report. Then stop. Retain and validate tests
-that invalidate a suspected defect as separate coverage changes.
+You are operating inside the **Braxton** repository (`https://github.com/dhoard/braxton`), a Java 25, zero-core-runtime-dependency, Model–Update–View terminal UI framework. Your mission is to find **real, previously unaddressed correctness defects** and fix them with reproducible evidence. Think deeply, inspect widely, and use as much reasoning and local testing as useful. **This invocation completes exactly ONE defect cycle and exits.** An external shell loop performs subsequent cycles and runs `./mvnw clean package` after your process exits successfully.
 
-Read applicable [AGENTS.md](AGENTS.md) files, root [PROJECT.md](PROJECT.md), and this document
-before acting, including direct invocation of this document. Resolve them from the intended
-project root, not an assumed VCS root or current invocation directory. Discover actual project
-contracts and tools; do not assume a language, framework, layout, build system, CI, or VCS.
+## Non-negotiable operating rules
 
-An explicit request to run this workflow authorizes the scoped implementation and validated
-commits described below, subject to the user's restrictions and `PROJECT.md`. Merely reading,
-copying, reviewing, or editing this file does not start the hunt. This workflow alone does not
-authorize pushes, installation, deployment, real-user-state tests, or external-service operations.
+1. Read `AGENTS.md`, `PROJECT.md`, `MEMORY.md` (and relevant linked memory), existing `HUNT.md` / `HUNT_LOOP.md` for useful conventions, current source/tests, and any path-specific `AGENTS.md`. Respect higher-priority project instructions. Existing hunt documents provide background; **this file defines this invocation's one-cycle behavior**.
+2. Work autonomously: investigate, implement, test, and complete a verified change without seeking permission for ordinary in-scope local engineering decisions. Never invent requirements, bugs, passing tests, or performed work. If correctness is ambiguous, establish the intended contract from current source, tests, and public documentation before editing.
+3. **Exactly one independently meaningful bug per invocation.** Do not fix unrelated issues, perform cosmetic refactors, optimize without a correctness defect, or add speculative APIs. Spend effort finding a substantial bug rather than merely selecting the easiest change.
+4. Preserve existing edits and untracked files. Check `git status --short` at start and before closing. No `git reset --hard`, `git clean`, force pushes, or overwriting user work. Do not push, deploy, publish, or modify external systems.
+5. Do not edit the caller's autonomous shell script. Do not create or delete the `STOP` sentinel; it is the user's control. Do not modify the workflow prompt as a way to make an iteration pass.
+6. Treat the wrapper's `./mvnw clean package` as an **additional external gate**, not a replacement for your own focused regression tests, formatter, and quality checks. Exit successfully **only** after your local changes have been validated. If you cannot establish a safe, verified outcome, report the blocker and return a nonzero exit status when possible so the outer loop does not continue under a false success signal.
+7. You have a generous reasoning and test budget, **not** permission for unbounded real-time loops. Do not sleep, wait for future cycles, or recurse into Amanda or this workflow. Exhaust useful lines of inquiry during the current invocation, then close it.
 
-## Constraints and authority
+## What to hunt: Braxton-specific correctness targets
 
-- **One defect per cycle.** Select one candidate and fix one owning boundary. Do not bundle
-  unrelated defects, refactors, or cleanups into the same cycle.
-- **Evidence over assumption.** Treat notes, commit messages, and earlier records as leads and
-  baselines, not as proof of current behavior. Re-read source and re-run checks.
-- **Preserve user work.** Never discard uncommitted edits, untracked files, runtime history, or
-  test artifacts you do not own. Never use destructive reset/clean operations.
-- **Smallest coherent change.** Follow repository conventions and preserve public compatibility,
-  schemas, protocols, persistence, and user-visible behavior unless the defect requires a
-  deliberate contract change; make such changes explicit and update all affected consumers.
-- **Do not weaken oracles.** Do not delete, skip, or loosen tests, assertions, lint rules, or
-  gates to manufacture success. A compile error, skipped test, or invalid expectation is not
-  evidence.
-- **Owned state only.** Do not modify real user data, production services, global caches,
-  credentials, or external accounts. Tests must use owned temporary state.
-- **No expanded side effects.** Do not push, publish, deploy, install, or change external
-  infrastructure. This workflow authorizes local implementation, local checks, and scoped commits
-  only.
-- **Serialized writers.** Do not run concurrent code-changing hunts or other writers in the same
-  workspace or history. Do not begin a cycle over unresolved owned edits that would contaminate
-  its baseline. No locking mechanism is provided; coordinate explicitly.
-- **Honest reporting.** Never claim a check, commit, or closure happened when it did not. Report
-  unrun or failing gates as gaps.
+Systematically rotate through these areas instead of repeatedly picking the same obvious test. Prioritize externally observable failures, state corruption, deadlocks, race conditions, resource leaks, invalid rendering, and safety/security boundary violations:
 
-## Tracking
+- **MVU ownership and update/effect order:** single-owner invariant; stale message delivery; `init`/`update`/`view` purity assumptions; queue backpressure and termination; effect cancellation and namespace collisions; epoch guarding; close-once subscriptions; stale source callbacks.
+- **Terminal lifecycle and concurrency:** partial initialization, exceptions during setup, raw-mode restoration, shutdown hook races, blocked reads, end-of-input, resize/read cancellation, output serialization, screen/presentation pacing, interrupt behavior, virtual-thread cleanup.
+- **Input parsing and focus:** fragmented CSI/ESC sequences, timeouts, malformed or oversized inputs, bracketed paste boundaries, modifier interpretation, focus identity, modal capture/bubble order, duplicate bindings, key handling versus printable text insertion, mouse/resize paths.
+- **Unicode/text/editor:** grapheme clusters, ZWJ sequences, combining marks, surrogate pairs, East Asian width, zero-width characters, UTF-16 caret offsets, editing selection boundaries, multiline paste, truncation, invalid strings, masking and copy restrictions.
+- **Layout and rendering:** zero/tiny viewports, width/height overflows, negative space, clipping wide glyphs, nested rows/columns, overlay occlusion, cell diff stability, style reset and terminal escape encoding, excessive dimensions and integer overflow.
+- **Widgets, markup, clipboard:** malformed markup, escaping, parser security, OSC 52 truncation and transport boundaries, per-session buffers, copy deduplication, stateful builder misuse, image sizing and asset edge cases.
+- **Bundled AI Harness example:** transcript races, generation/ordinal invalidation, task completion after cancellation, delayed updates, clipboard interaction, animation subscription disposal.
 
-Use exactly one fixed file, `<project root>/HUNT_TRACKING.txt`, recording `Workflow: HUNT` in each
-entry. Read it before selecting or resuming a candidate. Create it if it does not exist. It is
-append-only: preserve existing records, candidate identifiers, queue entries, inspected areas, and
-pending work; never rewrite or delete prior history.
+These are **candidate areas, not assertions that defects exist**. Inspect implementation paths and build a falsifiable hypothesis before declaring a bug.
 
-Each closed, invalidated, or blocked cycle appends a record containing:
+## Cycle protocol
 
-- date/time and the `Workflow:` name;
-- candidate identifier, area inspected, and prior leads considered;
-- suspected defect and the executed evidence (oracle/test and observed result) produced before any
-  production change;
-- owning boundary and a summary of the production change and retained tests;
-- focused and broader validation commands with observed results;
-- closure: commit/checkpoint identifier, or an explicit statement that none was possible;
-- status (`CLOSED`, `INVALIDATED`, or `BLOCKED`) and the next queue/pending items.
+### 1. Discover state and history
 
-On stop, pause, or interruption, append the exact stage, outstanding changes and checks, and
-concrete resume instructions instead of leaving the file silent.
+- Confirm you are operating in the intended checkout. Read project guidance and relevant contracts.
+- Capture the starting revision, `git status --short`, and any preexisting test failures. Do not take ownership of dirty files without a safe way to isolate your changes.
+- Read `HUNT_TRACKING.txt` if present. It may contain entries from other hunt workflows. Preserve the complete history; identify previously closed hypotheses, pending candidates, and uninspected areas. Append records tagged `Workflow: HUNT2`, never rewrite old ones. If missing, create it without erasing other files.
+- Inspect the current build configuration and CI, particularly the project's exact verification commands. `PROJECT.md` currently requires `./mvnw spotless:apply` after source changes and terminal checks using **pyte** after TUI code changes; re-read it for latest instructions. A referenced final gate `./mvw clean package` may be a typo: check actual executables rather than silently assuming; the outer wrapper separately uses `./mvnw clean package`.
 
-## 1. Establish the baseline
+### 2. Explore until you have one credible hypothesis
 
-1. Re-read applicable `AGENTS.md`, `PROJECT.md`, this workflow, and the tracking file.
-2. Determine workspace/VCS state: current revision, pre-existing modified and untracked files, and
-   any runtime history or artifacts you must not disturb. Preserve them.
-3. Discover the actual build, test, lint/format, and platform gates from project configuration,
-   `PROJECT.md`, and CI definitions. Do not invent commands.
-4. Run the baseline gate (or the narrowest applicable subset) before changing production code and
-   record the result, including pre-existing failures.
-5. Confirm the baseline is isolated enough to attribute new results to this cycle. If unresolved
-   owned edits would contaminate it, stop and record the blocker rather than guessing.
+- Pick an unexamined or unresolved subsystem from the rotating target list above. Read callers, callees, invariants, contracts, edge cases, and nearby test coverage.
+- Challenge implicit assumptions with boundary values, adversarial but locally safe inputs, repeated lifecycle operations, malformed sequences, and controllable interleavings.
+- Search for **behavioral mismatches**, not just suspicious-looking code. Ask: what should happen, what actually happens, and what observation distinguishes them?
+- If a hypothesis is disproved, record the evidence as an invalidated candidate and continue investigating **within the same invocation** until you find one confirmed defect or reach a genuine blocker. Avoid redundant exploration of previously dismissed leads unless the code changed.
 
-## 2. Select a candidate
+### 3. Prove the defect before repairing it
 
-Choose one specific, testable suspected contract violation:
+- Create the smallest deterministic JUnit regression (or appropriate project-native test) using owned temporary resources. Prefer a unit/headless test over a flaky live terminal test; use a real/pyte terminal-emulation test when the behavior genuinely requires it.
+- Run the new test against unmodified production code; confirm that it fails for the **intended behavioral reason**. Capture the exact command and key failure evidence. A compilation error, flaky timing failure, environmental issue, or misinterpreted contract does not prove a bug.
+- For concurrency problems, use controlled barriers/latches/fake clocks or deterministic scheduling seams where possible instead of arbitrary sleeps. Use time bounds so tests cannot hang.
+- If the suspected issue is not reproducible, do not patch production code on speculation.
 
-- resume a pending candidate from `HUNT_TRACKING.txt`, or inspect an area not yet settled there;
-- state the violated contract, the owning boundary, and the observable oracle that would
-  distinguish correct from incorrect behavior;
-- prefer a candidate whose baseline and fix remain within one component and can be validated with
-  deterministic, offline tests;
-- do not repeat a settled lead without new evidence, and do not invent a defect to keep busy.
+### 4. Repair the ownership boundary
 
-If inspection finds no testable candidate, record the inspected areas, broaden the search within
-the authorized scope, and stop if the scope or budget ends without one.
+- Apply the smallest complete fix at the component responsible for the invariant. Avoid masking failure in a caller if the underlying invariant belongs in a lower layer.
+- Cover the confirmed failure plus adjacent negative/boundary scenarios and ensure the original contract remains intact.
+- Do not add new runtime dependencies, weaken tests, introduce debug switches, or change public behavior except as necessary to correct the defect. Update documentation if the observable contract truly changes.
 
-## 3. Reproduce and confirm
+### 5. Verify without shortcuts
 
-Before changing production code, add the most focused deterministic test that demonstrates the
-suspected defect, and run it. Record the actual failing output in the tracking file.
+Run and record the results of:
 
-- Use owned temporary fixtures and avoid network access or real external state.
-- A failure caused by a compile error, a skipped/disabled test, an invalid expectation, or an
-  unrelated pre-existing defect does not confirm the candidate; correct the test or discard the
-  candidate.
-- If the evidence invalidates the suspicion, do not change production code. If the test asserts
-  intended existing behavior, keep it as a retained coverage change, record the invalidation
-  evidence, and close the cycle as `INVALIDATED`.
-- Never weaken the oracle to obtain a fix.
+1. The focused failing-before regression test, now passing.
+2. Relevant adjacent tests for the touched component.
+3. `./mvnw spotless:apply` after changes, followed by an explicit diff inspection for formatter-caused changes.
+4. The applicable full Maven build/test gate derived from current project configuration; at minimum run `./mvnw clean package` unless it is clearly impossible. If formatting modifies source, rerun relevant tests.
+5. For terminal/TUI code changes, a meaningful **pyte** terminal-emulator validation as required by `PROJECT.md`; verify both rendered output and terminal lifecycle/escape behavior as relevant. Follow its environment instructions without altering global packages unnecessarily.
+6. `git diff --check`, `git status --short`, and an exact review of all changed files. Check tests weren't skipped and no broad changes slipped in.
 
-## 4. Fix the owning boundary
+If a required gate fails, distinguish baseline/preexisting failures from newly introduced defects. Resolve new failures before declaring success; never skip tests to make the loop proceed.
 
-Implement the smallest coherent production change at the boundary that owns the contract:
+### 6. Persist verified progress and exit
 
-- follow repository conventions for naming, architecture, error handling, resource cleanup, and
-  state transitions;
-- preserve compatibility and data integrity, and update every affected consumer if a contract
-  genuinely changes;
-- update generated sources through their generator rather than editing generated output;
-- avoid unrelated refactoring, speculative abstractions, dead scaffolding, debug code, and new
-  TODOs;
-- update authoritative documentation and fixtures when behavior or contracts change.
+- Append a concise entry to `HUNT_TRACKING.txt` with date/time, `Workflow: HUNT2`, candidate ID, subsystem, hypothesis and observed failing-before proof, root cause, production/test files changed, exact validation commands/results, disposition (`CLOSED`, `INVALIDATED`, `BLOCKED`), and **next uninspected areas** for future invocations. Preserve previous entries.
+- If the repository's active instructions and this invocation authorize local commits, commit **only verified, owned code/tests/docs**, with a descriptive message; do not stage unrelated changes. Do not commit the tracking file unless project policy explicitly tracks it. Otherwise leave verified changes available for the wrapper's build and report their paths. Never push.
+- Print a compact completion report with one of:
+  - `CLOSED`: confirmed defect, failing-before evidence, fix, passing checks, changed files, and commit ID if any.
+  - `INVALIDATED`: no production bug fixed; useful validated regression coverage retained, evidence, and checks. Only use when substantive new coverage was added and verified.
+  - `BLOCKED`: explicit reason and uncompleted work/checks, with no claim of success.
+- **Stop after one closed defect or one substantive coverage-only invalidation.** Do not start another fix, even if much time or context remains. The outer script will launch a fresh process for the next cycle.
 
-## 5. Validate
+## Success criteria
 
-Run, at minimum:
-
-1. the focused regression test(s) from step 3, now passing;
-2. the project's full test gate discovered in step 1;
-3. formatter/linter/static-analysis and packaging gates required by `PROJECT.md` or CI;
-4. any component-specific check the project requires (for example, a terminal-emulation check for
-   TUI changes);
-5. `git diff --check` and a full review of the diff when Git is present; otherwise an explicit
-   inventory of every modified path.
-
-Do not claim success while a required gate fails or remains unrun. Distinguish new failures from
-the recorded baseline and report remaining risks.
-
-## 6. Close the change
-
-When the implementation is validated:
-
-- stage only the files owned by this cycle; do not stage unrelated user edits;
-- commit with a descriptive message following project conventions (including any required
-  sign-off), if the workflow invocation authorized commits and a usable VCS exists;
-- leave `HUNT_TRACKING.txt` as the untracked running record unless the project explicitly tracks
-  it;
-- if no VCS exists, do not initialize one; report the change inventory and the missing commit
-  capability;
-- never push, publish, deploy, or install.
-
-If validation cannot be completed, leave the work uncommitted, preserve the useful tests, and
-record the cycle as `BLOCKED`.
-
-## 7. Record and report
-
-Append the record described in [Tracking](#tracking), then report to the user:
-
-- the candidate and the observed evidence;
-- the owning boundary and files changed;
-- the exact checks run and their observed results, distinguishing new failures from baseline;
-- the commit or checkpoint, or why none was possible;
-- remaining gaps, risks, and anything the user must authorize.
-
-## 8. Stop rule
-
-This workflow performs exactly one cycle. After the cycle is `CLOSED` or `INVALIDATED`, report and
-stop; do not select another candidate in the same invocation.
-
-If the candidate is `BLOCKED`, record the reason, preserve useful tests and work, and stop. Do not
-switch to another candidate in this invocation.
-
-On stop, pause, or interruption by the user, stop starting new work, clean up owned resources when
-possible, leave incomplete work uncommitted, and append the exact stage, outstanding
-changes/checks, and resume instructions to `HUNT_TRACKING.txt`.
+A successful hunt cycle produces a **provable correctness improvement**: a regression that failed before the fix, passes after the fix, and remains in the suite, together with clean required validation and no unrelated changes. Finding no defect is acceptable; inventing one, silently changing contracts, or returning success after failed gates is not.
