@@ -71,6 +71,27 @@ class GeometryTest {
     }
 
     @Test
+    void rectangleEndpointsMayExtendPastTheLargestIntCoordinate() {
+        int edge = Integer.MAX_VALUE;
+        Rect rect = new Rect(edge - 2, edge - 3, 8, 9);
+        assertThat(rect.contains(edge - 2, edge - 3)).isTrue();
+        assertThat(rect.contains(edge, edge)).isTrue();
+        assertThat(rect.contains(edge - 3, edge)).isFalse();
+        assertThat(rect.contains(edge, edge - 4)).isFalse();
+    }
+
+    @Test
+    void intersectionsKeepValidDimensionsWhenEndpointsOverflowInt() {
+        int edge = Integer.MAX_VALUE;
+        Rect rect = new Rect(edge - 2, edge - 3, 8, 9);
+        assertThat(rect.clip(rect)).isEqualTo(rect);
+        Rect inner = new Rect(edge - 1, edge - 1, 2, 2);
+        assertThat(rect.clip(inner)).isEqualTo(inner);
+        assertThat(inner.clip(rect)).isEqualTo(inner);
+        assertThat(rect.clip(new Rect(0, 0, 1, 1)).isEmpty()).isTrue();
+    }
+
+    @Test
     void viewportConvertsToItsSizeAndBounds() {
         Viewport viewport = Viewport.of(new Size(4, 7));
         assertThat(viewport).isEqualTo(new Viewport(4, 7));

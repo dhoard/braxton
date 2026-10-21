@@ -36,8 +36,8 @@ public record Rect(int row, int col, int rows, int cols) {
     }
 
     public boolean contains(int targetRow, int targetCol) {
-        return targetRow >= row && targetRow < row + rows
-                && targetCol >= col && targetCol < col + cols;
+        return targetRow >= row && targetRow < (long) row + rows
+                && targetCol >= col && targetCol < (long) col + cols;
     }
 
     /** Shrinks this rectangle by insets; never produces negative dimensions. */
@@ -52,8 +52,9 @@ public record Rect(int row, int col, int rows, int cols) {
     public Rect clip(Rect bounds) {
         int top = Math.max(row, bounds.row);
         int left = Math.max(col, bounds.col);
-        int bottom = Math.min(row + rows, bounds.row + bounds.rows);
-        int right = Math.min(col + cols, bounds.col + bounds.cols);
-        return new Rect(top, left, Math.max(0, bottom - top), Math.max(0, right - left));
+        long bottom = Math.min((long) row + rows, (long) bounds.row + bounds.rows);
+        long right = Math.min((long) col + cols, (long) bounds.col + bounds.cols);
+        // An intersection is at most as large as either input, so its dimensions still fit int.
+        return new Rect(top, left, (int) Math.max(0L, bottom - top), (int) Math.max(0L, right - left));
     }
 }
