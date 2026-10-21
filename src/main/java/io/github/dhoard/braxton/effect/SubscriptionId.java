@@ -41,12 +41,18 @@ public record SubscriptionId(String value) {
     /**
      * An id inside this namespace.
      *
-     * @throws IllegalArgumentException when {@code name} is null or blank; joining either would
-     *     forge an id ("parent/null", "parent/   ") that collides with a real child name
+     * @throws IllegalArgumentException when {@code name} is null, blank, or contains the {@code /}
+     *     namespace separator; joining any of them would forge an id ("parent/null", "parent/",
+     *     "parent/child/grandchild") that collides with a real child name or with another parent's
+     *     child, so one feature's source would displace another's
      */
     public SubscriptionId child(String name) {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("child name must not be blank");
+        }
+        if (name.indexOf('/') >= 0) {
+            throw new IllegalArgumentException(
+                    "child name must not contain the '/' namespace separator");
         }
         return new SubscriptionId(value + "/" + name);
     }

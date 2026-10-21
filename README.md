@@ -278,7 +278,9 @@ Subscription.source(id, configuration, emitter -> closeable, mapper);
 
 After every commit the runtime reconciles the description against the live set: unchanged
 identity/configuration keeps the resource and replaces only the message mapper, changed or removed
-sources are closed exactly once, and duplicate ids are rejected.
+sources are closed exactly once, and duplicate ids are rejected. Subscription ids are namespaced the
+same way as effect ids, and a child name must not contain the `/` separator: joining one would make
+two declared paths one id, which the duplicate check then rejects.
 
 ## The editor
 

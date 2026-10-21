@@ -74,4 +74,22 @@ class EffectIdTest {
         assertThat(EffectId.of("a/b").child("c").value()).isEqualTo("a/b/c");
         assertThat(EffectId.of("a/b").child("c").namespace()).isEqualTo("a");
     }
+
+    @Test
+    void aSubscriptionChildIdMustNotForgeAnotherNamespace() {
+        // The source identity carries the same join as the effect id: "a" + "b/c" and
+        // "a/b" + "c" would both be "a/b/c", so the runtime sees one subscription where the
+        // application declared two paths and rejects the set as a duplicate.
+        assertThatThrownBy(() -> SubscriptionId.of("a").child("b/c"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("child name");
+        assertThatThrownBy(() -> SubscriptionId.of("a").child("b/"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("child name");
+        assertThatThrownBy(() -> SubscriptionId.of("a").child("/b"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("child name");
+        // A parent may itself be namespaced: only the child name is a single path segment.
+        assertThat(SubscriptionId.of("a/b").child("c").value()).isEqualTo("a/b/c");
+    }
 }

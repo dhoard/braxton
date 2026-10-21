@@ -392,7 +392,12 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   cancelled the first entry and its message was never delivered (`delivered=[second]`). Pinned by
   `EffectIdTest.aChildIdMustNotForgeAnotherNamespace`. Rejection is again the whole remedy: an id
   whose parent is already namespaced (`EffectId.of("a/b").child("c")`) keeps working.
-- `SubscriptionId.child` still joins without that check. It carries the same documented rule and the
-  same forging defect: two subscriptions can be rejected as `duplicate subscription id` even though
-  the application declared distinct paths. It is a separate owner and remains the next queue item
-  rather than being bundled into this cycle.
+- `SubscriptionId.child` applies the same rule. The consequence is at the declaration, not a
+  running resource: `Subscription.leaves` rejects a batch whose ids repeat, so
+  `SubscriptionId.of("a").child("b/c")` and `SubscriptionId.of("a/b").child("c")` joined to one
+  id and two distinct declared paths were reported as `duplicate subscription id: a/b/c` (probed).
+  Pinned by `EffectIdTest.aSubscriptionChildIdMustNotForgeAnotherNamespace`; rejection preserves
+  every legitimate namespaced parent (`SubscriptionId.of("a/b").child("c")` is still `a/b/c`).
+- All three identity types now validate a child name (`ElementId`, `EffectId`, `SubscriptionId`). A
+  fourth join site added later must apply the same rule; a raw value built directly can still be
+  opaque and contain `/`.
