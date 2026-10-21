@@ -44,6 +44,24 @@ class KeyTest {
     }
 
     @Test
+    void keyIdentitiesCannotCarryC0OrC1Controls() {
+        for (int code = 0; code <= 0x9f; code++) {
+            if (!Character.isISOControl(code)) {
+                continue;
+            }
+            String name = "x" + (char) code;
+            assertThatThrownBy(() -> Key.of(name))
+                    .as("control U+%04X in a key identity", code)
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> Key.parse("ctrl+" + name))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThat(Key.of("漢").name()).isEqualTo("漢");
+        assertThat(Key.of("\uD83D\uDE00").name()).isEqualTo("\uD83D\uDE00");
+        assertThat(Key.parse("ctrl++")).isEqualTo(Key.of("+", Modifiers.CTRL));
+    }
+
+    @Test
     void parseReadsModifierAliasesAndRejectsUnknownOnes() {
         assertThat(Key.parse("ctrl+alt+x")).isEqualTo(Key.of("x",
                 new Modifiers(true, true, false)));

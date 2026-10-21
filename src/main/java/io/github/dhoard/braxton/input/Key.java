@@ -54,6 +54,11 @@ public record Key(String name, Modifiers modifiers) implements Comparable<Key> {
         Objects.requireNonNull(name, "name");
         name = name.toLowerCase(Locale.ROOT);
         modifiers = modifiers == null ? Modifiers.NONE : modifiers;
+        for (int i = 0; i < name.length(); i++) {
+            if (Character.isISOControl(name.charAt(i))) {
+                throw new IllegalArgumentException("key name must not contain control characters");
+            }
+        }
         if (name.isBlank()) {
             throw new IllegalArgumentException("key name must not be blank (use \"space\" for the space key)");
         }
