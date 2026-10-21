@@ -207,6 +207,10 @@ public final class FakeTerminal implements TerminalBackend, TerminalSession {
 
         @Override
         public synchronized int read(byte[] buffer, int offset, int length) {
+            java.util.Objects.checkFromIndexSize(offset, length, buffer.length);
+            if (length == 0) {
+                return 0;
+            }
             recordThread();
             int first = read();
             if (first < 0) {

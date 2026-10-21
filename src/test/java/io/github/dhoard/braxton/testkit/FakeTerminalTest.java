@@ -23,6 +23,7 @@
 package io.github.dhoard.braxton.testkit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 
@@ -74,6 +75,28 @@ class FakeTerminalTest {
         assertThat(terminal.size()).isEqualTo(new Size(24, 80));
         terminal.resize(new Size(0, 0));
         assertThat(terminal.size()).isEqualTo(new Size(24, 80));
+    }
+
+    @Test
+    void bulkReadsHonorZeroLengthAndValidateBeforeConsuming() throws IOException {
+        FakeTerminal terminal = new FakeTerminal();
+        terminal.feed("abc");
+        byte[] buffer = {9, 9, 9, 9};
+        assertThat(terminal.input().read(buffer, buffer.length, 0)).isZero();
+        assertThat(terminal.input().available()).isEqualTo(3);
+        assertThatThrownBy(() -> terminal.input().read(buffer, 3, 2))
+                .isInstanceOf(IndexOutOfBoundsException.class);
+        assertThatThrownBy(() -> terminal.input().read(buffer, Integer.MAX_VALUE, Integer.MAX_VALUE))
+                .isInstanceOf(IndexOutOfBoundsException.class);
+        assertThatThrownBy(() -> terminal.input().read(null, 0, 1))
+                .isInstanceOf(NullPointerException.class);
+        assertThat(terminal.input().available()).isEqualTo(3);
+        assertThat(terminal.input().read(buffer, 1, 2)).isEqualTo(2);
+        assertThat(buffer).containsExactly((byte) 9, (byte) 'a', (byte) 'b', (byte) 9);
+        assertThat(terminal.input().read()).isEqualTo('c');
+        terminal.endInput();
+        assertThat(terminal.input().read(buffer, 0, 0)).isZero();
+        assertThat(terminal.input().read(buffer, 0, 1)).isEqualTo(-1);
     }
 
     @Test
