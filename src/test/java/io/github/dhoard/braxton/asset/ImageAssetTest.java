@@ -59,6 +59,33 @@ class ImageAssetTest {
     }
 
     @Test
+    void aLoadedAssetDoesNotRereadAReplacedOrDeletedFile(@TempDir Path directory) throws IOException {
+        Path path = directory.resolve("snapshot.png");
+        BufferedImage source = new BufferedImage(2, 1, BufferedImage.TYPE_INT_ARGB);
+        source.setRGB(0, 0, 0x80FF0000);
+        source.setRGB(1, 0, 0xFF0000FF);
+        assertThat(ImageIO.write(source, "png", path.toFile())).isTrue();
+        ImageAsset snapshot = ImageAsset.load(path);
+        assertThat(snapshot.pixels()).containsExactly(0x80FF0000, 0xFF0000FF);
+
+        BufferedImage replacement = new BufferedImage(1, 2, BufferedImage.TYPE_INT_ARGB);
+        replacement.setRGB(0, 0, 0xFF00FF00);
+        assertThat(ImageIO.write(replacement, "png", path.toFile())).isTrue();
+        ImageAsset next = ImageAsset.load(path);
+        Files.delete(path);
+        int[] copy = snapshot.pixels();
+        copy[0] = 0;
+
+        assertThat(snapshot.width()).isEqualTo(2);
+        assertThat(snapshot.height()).isEqualTo(1);
+        assertThat(snapshot.argb(0, 0)).isEqualTo(0x80FF0000);
+        assertThat(snapshot.argb(1, 0)).isEqualTo(0xFF0000FF);
+        assertThat(next.width()).isEqualTo(1);
+        assertThat(next.height()).isEqualTo(2);
+        assertThat(next.argb(0, 0)).isEqualTo(0xFF00FF00);
+    }
+
+    @Test
     void loadingRejectsMissingAndUnsupportedFiles(@TempDir Path directory) throws IOException {
         assertThatThrownBy(() -> ImageAsset.load(null)).isInstanceOf(IOException.class);
         assertThatThrownBy(() -> ImageAsset.load(directory.resolve("absent.png")))
