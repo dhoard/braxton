@@ -176,7 +176,9 @@ public final class LayoutEngine {
     private int[] rowWidths(List<? extends View<?>> items, int cols) {
         int[] widths = new int[items.size()];
         int used = 0;
-        int flexWeight = 0;
+        // Weights are any non-negative int, so the sum and the per-child product are widened:
+        // int overflow would leave flex children with no cells at all.
+        long flexWeight = 0;
         for (int i = 0; i < items.size(); i++) {
             View<?> child = items.get(i);
             if (child instanceof View.Grow<?> grow) {
@@ -195,7 +197,7 @@ public final class LayoutEngine {
             int distributed = 0;
             for (int i = 0; i < items.size(); i++) {
                 if (items.get(i) instanceof View.Grow<?> grow) {
-                    widths[i] = remaining * grow.weight() / flexWeight;
+                    widths[i] = (int) (remaining * (long) grow.weight() / flexWeight);
                     distributed += widths[i];
                 }
             }
@@ -292,7 +294,8 @@ public final class LayoutEngine {
         }
         int[] heights = new int[items.size()];
         int used = 0;
-        int flexWeight = 0;
+        // Same widened weight sum and product as rowWidths: a weight can be any non-negative int.
+        long flexWeight = 0;
         for (int i = 0; i < items.size(); i++) {
             View<?> child = items.get(i);
             if (child instanceof View.Grow<?> grow) {
@@ -311,7 +314,7 @@ public final class LayoutEngine {
             int distributed = 0;
             for (int i = 0; i < items.size(); i++) {
                 if (items.get(i) instanceof View.Grow<?> grow) {
-                    heights[i] = remaining * grow.weight() / flexWeight;
+                    heights[i] = (int) (remaining * (long) grow.weight() / flexWeight);
                     distributed += heights[i];
                 }
             }

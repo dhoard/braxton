@@ -94,6 +94,37 @@ class LayoutEngineTest {
     }
 
     @Test
+    void flexWeightsTooLargeForAnIntStillDivideTheRemainingSpace() {
+        // A weight is any non-negative int and the documented rule is that remaining cells are
+        // divided by weight, so neither the weight sum nor the per-child product may overflow.
+        // Two Integer.MAX_VALUE weights summed negative (no child got a cell) and one large weight
+        // multiplied by the remaining columns wrapped (children overlapped or vanished).
+        View<?> lopsidedRow = Views.row(Views.grow(Integer.MAX_VALUE, Views.text("a")),
+                Views.grow(1, Views.text("b")));
+        assertThat(paint(lopsidedRow, 1, 10).plainLine(0)).isEqualTo("a");
+
+        View<?> evenRow = Views.row(Views.grow(Integer.MAX_VALUE, Views.text("a")),
+                Views.grow(Integer.MAX_VALUE, Views.text("b")));
+        assertThat(paint(evenRow, 1, 10).plainLine(0)).isEqualTo("a    b");
+
+        View<?> wrappedRow = Views.row(Views.grow(1_000_000_000, Views.text("a")),
+                Views.grow(1, Views.text("b")));
+        assertThat(paint(wrappedRow, 1, 10).plainLine(0)).isEqualTo("a");
+
+        View<?> evenColumn = Views.column(Views.grow(Integer.MAX_VALUE, Views.text("a")),
+                Views.grow(Integer.MAX_VALUE, Views.text("b")));
+        Screen even = paint(evenColumn, 10, 3);
+        assertThat(even.plainLine(0)).isEqualTo("a");
+        assertThat(even.plainLine(5)).isEqualTo("b");
+
+        View<?> wrappedColumn = Views.column(Views.grow(1_000_000_000, Views.text("a")),
+                Views.grow(1, Views.text("b")));
+        Screen lopsided = paint(wrappedColumn, 10, 3);
+        assertThat(lopsided.plainLine(0)).isEqualTo("a");
+        assertThat(lopsided.plainLines()).doesNotContain("b");
+    }
+
+    @Test
     void anEndAlignedColumnKeepsAGrowChildsContentWidth() {
         View<?> view = Views.column(Alignment.END, List.of(Views.grow(Views.text("mid"))));
         Screen screen = paint(view, 1, 10);

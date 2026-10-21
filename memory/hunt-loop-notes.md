@@ -238,3 +238,18 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   ends the run, while a throwing interval mapper is reported through diagnostics and keeps ticking
   (`anIntervalMapperThatThrowsIsReportedAndTheIntervalKeepsTicking`). Deciding whether resize
   failures should be contained needs a policy decision.
+
+## Flex weight boundary (2026-10-21)
+
+- `View.Grow(weight, child)` accepts any non-negative `int`, and the README says the remaining
+  main-axis cells are "divided by weight in declaration order". `LayoutEngine.rowWidths` and
+  `paintColumn` summed the weights and multiplied `remaining * weight` in `int`, so a weight sum
+  past `Integer.MAX_VALUE` went negative (no flex child got a cell: a row of `MAX`/`MAX` painted
+  blank) and a large weight wrapped the product (children were squeezed to a couple of cells or
+  misplaced). Both sites now accumulate the weight in `long` and multiply in `long`; the allocation
+  stays `<= remaining`, so the remainder still reaches the earliest children.
+  Pinned by `LayoutEngineTest.flexWeightsTooLargeForAnIntStillDivideTheRemainingSpace` (rows and
+  columns, sum overflow and product overflow).
+- The harness uses no `Grow` view, so the pyte probe only proves the packaged application still
+  starts, paints, submits, stops, and exits 0; the arithmetic path's oracle is `ScreenRenderer`
+  through `LayoutEngineTest`.
