@@ -261,9 +261,12 @@ shortcut.
 | `Command.quit()` | End the program |
 
 Effects are epoch-guarded: replacing or canceling an id means a late completion can never reach the
-model. Task results, timer ticks, and clipboard reports arrive as ordinary messages, so `update` is
-never re-entered. `Command.task` bodies are the documented impure boundary — they must not touch the
-terminal, mutate captured state, or call `update`.
+model. Effect ids are namespaced too, and, like a focus target, a child name must not contain the
+`/` separator: joining one would forge an id another parent already owns, so the two features would
+register as one effect and the later would replace and cancel the earlier. Task results, timer
+ticks, and clipboard reports arrive as ordinary messages, so `update` is never re-entered.
+`Command.task` bodies are the documented impure boundary — they must not touch the terminal,
+mutate captured state, or call `update`.
 
 `Subscription` describes ongoing sources:
 

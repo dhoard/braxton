@@ -385,8 +385,14 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   smallest remedy (an escape scheme would change every value). Direct construction still accepts an
   opaque value containing `/`; only the join validates a child name. Pinned by
   `ElementIdTest.aChildNameMustNotCarryTheNamespaceSeparator`.
-- `EffectId.child` and `SubscriptionId.child` still join without that check. They carry the same
-  documented rule and the same forging defect: two effects can land on one id (the later replaces
-  and cancels the earlier entry), and two subscriptions can be rejected as `duplicate subscription
-  id` even though the application declared distinct paths. They are separate owners and were left
-  as the next queue item rather than bundled into this cycle.
+- `EffectId.child` now applies the same rule (`EffectId` javadoc: "Ids are namespaced so composed
+  features cannot cancel each other's work accidentally"). The consequence was proven at the runner,
+  not just at the id: a delay under `EffectId.of("a").child("b/c")` and one under
+  `EffectId.of("a/b").child("c")` are the same key in `EffectRunner.entries`, so `replaceLocked`
+  cancelled the first entry and its message was never delivered (`delivered=[second]`). Pinned by
+  `EffectIdTest.aChildIdMustNotForgeAnotherNamespace`. Rejection is again the whole remedy: an id
+  whose parent is already namespaced (`EffectId.of("a/b").child("c")`) keeps working.
+- `SubscriptionId.child` still joins without that check. It carries the same documented rule and the
+  same forging defect: two subscriptions can be rejected as `duplicate subscription id` even though
+  the application declared distinct paths. It is a separate owner and remains the next queue item
+  rather than being bundled into this cycle.

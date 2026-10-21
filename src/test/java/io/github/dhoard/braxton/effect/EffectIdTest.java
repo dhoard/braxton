@@ -54,4 +54,24 @@ class EffectIdTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("child name");
     }
+
+    @Test
+    void aChildIdMustNotForgeAnotherNamespace() {
+        // The join is a namespace separator, not part of the name: "a" + "b/c" and "a/b" + "c"
+        // would both be "a/b/c", which the runner registers as one effect, so one feature's work
+        // replaces and cancels the other's. The rule that rejects null and blank rejects a name
+        // that forges a path through another namespace too.
+        assertThatThrownBy(() -> EffectId.of("a").child("b/c"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("child name");
+        assertThatThrownBy(() -> EffectId.of("a").child("b/"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("child name");
+        assertThatThrownBy(() -> EffectId.of("a").child("/b"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("child name");
+        // A parent may itself be namespaced: only the child name is a single path segment.
+        assertThat(EffectId.of("a/b").child("c").value()).isEqualTo("a/b/c");
+        assertThat(EffectId.of("a/b").child("c").namespace()).isEqualTo("a");
+    }
 }
