@@ -58,6 +58,25 @@ class FakeTerminalTest {
     }
 
     @Test
+    void aClosedSessionUsesTheRealSessionsFallbackSize() {
+        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        terminal.open(new Size(6, 20), TerminalOptions.DEFAULT);
+        assertThat(terminal.size()).isEqualTo(new Size(6, 20));
+        terminal.close();
+        terminal.resize(new Size(3, 4));
+        assertThat(terminal.size()).isEqualTo(new Size(24, 80));
+    }
+
+    @Test
+    void invalidSizeProbesUseTheRealSessionsFallback() {
+        FakeTerminal terminal = new FakeTerminal();
+        terminal.resize(null);
+        assertThat(terminal.size()).isEqualTo(new Size(24, 80));
+        terminal.resize(new Size(0, 0));
+        assertThat(terminal.size()).isEqualTo(new Size(24, 80));
+    }
+
+    @Test
     void anOpenedSessionKeepsEveryWriteInOrder() throws IOException {
         FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
         terminal.open(new Size(6, 20), TerminalOptions.DEFAULT);

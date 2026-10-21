@@ -118,7 +118,8 @@ public final class FakeTerminal implements TerminalBackend, TerminalSession {
     @Override
     public Size size() {
         virtualSize.compareAndSet(false, Thread.currentThread().isVirtual());
-        return size;
+        Size measured = size;
+        return closed || measured == null || measured.isEmpty() ? new Size(24, 80) : measured;
     }
 
     /** Whether a read was first observed on a virtual thread. */
