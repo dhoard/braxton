@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.github.dhoard.braxton.style.Color;
+import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
@@ -107,29 +108,30 @@ public final class ProgressBar {
                 showPercentage, prepend, singleRow(value));
     }
 
-    /** A bar occupies one row, so line breaks and tabs become spaces, keeping each span's style. */
+    /**
+     * A bar occupies one row, so surviving line breaks and tabs become spaces, keeping each span's
+     * style and link. A span cannot hold a bare CR: that boundary has already dropped it, so only
+     * the raw icon path can preserve a separator from the caller's original string.
+     */
     private static StyledText singleRow(StyledText text) {
         if (text == null) {
             return StyledText.empty();
         }
         StyledText result = StyledText.empty();
         for (StyledText.Span span : text.spans()) {
-            result = result.append(StyledText.of(flatten(span.text()), span.style(), span.link()));
+            result = result.append(StyledText.of(
+                    LineBreaks.singleRowAndTabs(span.text()), span.style(), span.link()));
         }
         return result;
     }
 
-    private static String singleRow(String text) {
-        return text == null ? "" : flatten(text);
-    }
-
     /**
-     * Every break form is one space. CRLF and LF were already spaces, but a bare CR was left to the
-     * styled-text boundary, which drops it as an unrepresentable control character: an icon
-     * {@code "a\rb"} painted {@code "ab"} and lost the break between the two words.
+     * An icon is painted in one cell, so LF, CRLF, lone CR, and tab each become one space before
+     * the span boundary. A bare CR left to that boundary was deleted, joining the words on either
+     * side.
      */
-    private static String flatten(String text) {
-        return text.replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ').replace('\t', ' ');
+    private static String singleRow(String text) {
+        return LineBreaks.singleRowAndTabs(text);
     }
 
     /** Renders a fraction of {@code value / max}; invalid bounds render an empty bar. */

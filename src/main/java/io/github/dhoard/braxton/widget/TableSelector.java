@@ -29,6 +29,7 @@ import java.util.function.Function;
 
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
@@ -212,7 +213,7 @@ public final class TableSelector {
      * per character turned CRLF into two spaces and widened the shared column.
      */
     private static String singleRow(String value) {
-        return value.replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ');
+        return LineBreaks.singleRow(value);
     }
 
     private static String pad(String text, int width) {

@@ -32,6 +32,7 @@ import java.util.function.Function;
 import io.github.dhoard.braxton.clipboard.PasteSanitizer;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
@@ -111,7 +112,7 @@ public final class Editor {
         int start = state.hasSelection() ? state.selectionStart() : state.caret();
         int end = state.hasSelection() ? state.selectionEnd() : state.caret();
         int lengthAfterRemoval = state.text().length() - (end - start);
-        String insert = raw.replace("\r\n", "\n").replace('\r', '\n');
+        String insert = LineBreaks.normalize(raw);
         OptionalInt limit = options.maxLength();
         if (limit.isPresent()) {
             int room = Math.max(0, limit.getAsInt() - lengthAfterRemoval);

@@ -40,6 +40,7 @@ import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 
 import io.github.dhoard.braxton.style.Color;
+import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
@@ -245,7 +246,7 @@ public final class Markup {
 
     /** A list bullet prefixes one line, so CRLF, CR and LF each become one space. */
     private static String singleLine(String value) {
-        return value.replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ');
+        return LineBreaks.singleRow(value);
     }
 
     /** Aligns every line after the first under the first line's text, keeping span styling. */

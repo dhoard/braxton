@@ -31,6 +31,7 @@ import java.util.Random;
 import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.style.Color;
+import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
@@ -64,6 +65,37 @@ class BadgeTest {
         assertThat(rendered).doesNotContain("\n").doesNotContain("\t");
         assertThat(rendered).isEqualTo(" a b c  d ");
         assertThat(badge.render().lines()).hasSize(1);
+    }
+
+    /**
+     * A styled label has already crossed the span boundary, so a bare CR was deleted before the
+     * pill saw it; no separator can be guessed. A caller that wants that break prepares the raw
+     * text before constructing the span, and the one-row pill then flattens the surviving LF.
+     */
+    @Test
+    void aPreparedBareCarriageReturnKeepsItsSeparatorButStyledInputCannotRecoverIt() {
+        assertThat(Badge.of().append(StyledText.plain("a\rb")).render().plainText())
+                .as("the span boundary deleted the CR")
+                .isEqualTo(" ab ");
+        for (String raw : List.of("a\nb", "a\r\nb", "a\rb")) {
+            StyledText prepared = StyledText.plain(LineBreaks.normalize(raw));
+            assertThat(Badge.of().append(prepared).render().plainText())
+                    .as("prepared %s", raw.replace("\n", "\\n").replace("\r", "\\r"))
+                    .isEqualTo(" a b ");
+        }
+        assertThat(Badge.of().append(StyledText.plain(LineBreaks.singleRow("a\rb")))
+                .render().plainText()).isEqualTo(" a b ");
+    }
+
+    @Test
+    void flatteningAStyledLabelKeepsItsStyleAndLink() {
+        Style bold = Style.NONE.withBold();
+        StyledText label = StyledText.of("a\tb", bold, "https://example.test/info");
+        assertThat(Badge.of().append(label).render().spans()).anySatisfy(span -> {
+            assertThat(span.text()).isEqualTo("a b");
+            assertThat(span.style().bold()).isTrue();
+            assertThat(span.link()).isEqualTo("https://example.test/info");
+        });
     }
 
     @Test

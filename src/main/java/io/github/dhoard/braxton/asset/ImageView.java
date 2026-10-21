@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import io.github.dhoard.braxton.style.Color;
+import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
@@ -79,9 +80,9 @@ public final class ImageView {
         }
         // Span construction is the authority on what survives the terminal boundary: it drops
         // unpaired surrogates and C0/C1 controls but keeps newline and tab, which are flattened
-        // here so one pixel stays one line of one measurable width.
-        String flattened = value.replace("\r\n", " ").replace('\r', ' ')
-                .replace('\n', ' ').replace('\t', ' ');
+        // here so one pixel stays one line of one measurable width. Preparing the raw string
+        // first keeps a bare CR a break instead of a control the span would silently delete.
+        String flattened = LineBreaks.singleRowAndTabs(value);
         return StyledText.plain(flattened).plainText();
     }
 

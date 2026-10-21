@@ -44,14 +44,15 @@ final class HarnessRender {
 
     /**
      * Makes untrusted transcript text inert: strips escapes and control characters, normalizes line
-     * endings, and expands tabs.
+     * endings, and expands tabs. Line-break conversion belongs to {@link PasteSanitizer}, which
+     * prepares the complete input before filtering; repeating it here would be a second policy to
+     * keep in sync.
      */
     static String sanitize(String text) {
         if (text == null || text.isEmpty()) {
             return "";
         }
-        String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
-        return PasteSanitizer.plainText(normalized).replace("\t", "    ");
+        return PasteSanitizer.plainText(text).replace("\t", "    ");
     }
 
     /** Wraps plain text to {@code width} visible cells, preserving words and leading indentation. */

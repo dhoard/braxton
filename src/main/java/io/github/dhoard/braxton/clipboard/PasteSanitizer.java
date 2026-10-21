@@ -25,6 +25,8 @@ package io.github.dhoard.braxton.clipboard;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.github.dhoard.braxton.style.LineBreaks;
+
 /**
  * Centralized, deterministic normalization for pasted text.
  *
@@ -147,20 +149,19 @@ public final class PasteSanitizer {
     }
 
     /**
-     * Removes terminal escape sequences, C0/C1 controls, line-ending artifacts, nonbreaking spaces,
-     * unpaired surrogates, and the invisible formatting characters that are safe to drop without
-     * damaging emoji or combining sequences.
+     * Normalizes line endings to LF, then removes terminal escape sequences, C0/C1 controls,
+     * nonbreaking spaces, unpaired surrogates, and the invisible formatting characters that are
+     * safe to drop without damaging emoji or combining sequences.
      */
     private static String stripArtifacts(String text, boolean aggressive) {
+        // Convert every break form on the complete original input before filtering. A CR and LF
+        // separated by a removed escape sequence were two breaks in the source; converting after
+        // filtering could pair them into one.
+        text = LineBreaks.normalize(text);
         StringBuilder out = new StringBuilder(text.length());
         int index = 0;
         while (index < text.length()) {
             char c = text.charAt(index);
-            if (c == '\r') {
-                index += index + 1 < text.length() && text.charAt(index + 1) == '\n' ? 2 : 1;
-                out.append('\n');
-                continue;
-            }
             if (c == ESC) {
                 index = skipEscape(text, index);
                 continue;

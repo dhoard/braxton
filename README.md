@@ -334,6 +334,19 @@ state you own - `Selector.State`, `EditorState` - is a value in your model:
 root element and explicitly closed empty elements (`<br/>`, not `<br>`). It disables DTDs and
 external entities, so untrusted text cannot fetch a file or URL.
 
+**Line endings.** `LineBreaks` is the one preparation policy for raw text: `normalize` turns LF,
+CRLF, and lone CR into one LF per logical break, `singleRow` turns them into one space, and
+`singleRowAndTabs` also turns a tab into one space. Prepare the *complete* raw string before
+constructing `StyledText`, because `Span` deletes a bare CR as an unrepresentable control
+character: `StyledText.plain("a\rb")` is `"ab"`, and no widget can recover a separator that is
+already gone. Pass `StyledText.plain(LineBreaks.normalize(raw))` to a styled-input surface such
+as `Badge`, or flatten the raw text when a one-row value is intended. The helpers are stateless:
+a CR at the end of one call and the LF at the start of the next are two independent breaks, so
+assemble the value first. `PasteSanitizer` and editor insertion normalize before their own
+filtering and truncation. `Box.title(String)` flattens its raw title before the span boundary;
+its `StyledText` overload still receives already-sanitized content. Lower-level `View.BorderBox`
+titles keep their existing first-row clipping and do not flatten.
+
 **Clipboard and paste.** `PasteSanitizer` offers `NORMAL` (preserves indentation) and `AGGRESSIVE`
 (trims and can collapse blank lines) modes. `ClipboardConfig` snapshots `braxton.clipboard.*`
 properties per session. The in-process buffer is always the dependable destination; OSC 52 is
@@ -423,7 +436,7 @@ responses, with no model, provider, network, or user-session access.
 | `io.github.dhoard.braxton.input` | Value keys, modifiers, normalized events, bindings |
 | `io.github.dhoard.braxton.view` | Immutable views, `Views`, `ElementId`, `FocusState`, `ScreenRenderer` |
 | `io.github.dhoard.braxton.layout` | `Size`, `Viewport`, `Rect`, `Insets`, `Alignment`, `Border` |
-| `io.github.dhoard.braxton.style` | `Color`, `Colors`, `Style`, `StyledText`, `TextMeasure`, `WidthPolicy` |
+| `io.github.dhoard.braxton.style` | `Color`, `Colors`, `LineBreaks`, `Style`, `StyledText`, `TextMeasure`, `WidthPolicy` |
 | `io.github.dhoard.braxton.widget` | Editor, markup, tables, boxes, badges, bars, quotes, gradients, selectors, animation |
 | `io.github.dhoard.braxton.asset` | FIGlet fonts, logos, image assets and views |
 | `io.github.dhoard.braxton.clipboard` | Configuration, sanitization, modes, results |
@@ -443,7 +456,7 @@ API surface.
 - **Routing is structural.** Modal → capture → interceptor → focused → bubble, with duplicate
   bindings rejected at build time.
 - **Rendering is safe by construction.** Content is control-character sanitized; only the encoder
-  emits SGR/OSC 8 sequences.
+  emits SGR/OSC 8 sequences. `LineBreaks` prepares raw line endings before that boundary.
 - **Measurement is explicit.** Grapheme segmentation and terminal-column width are separate
   policies; the pinned Unicode 16.0.0 table is reproducible offline, and invisible format
   characters (joiners, bidi marks, a byte-order mark) contribute no column.

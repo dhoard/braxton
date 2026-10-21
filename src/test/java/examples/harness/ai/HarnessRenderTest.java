@@ -32,6 +32,20 @@ import org.junit.jupiter.api.Test;
 class HarnessRenderTest {
 
     @Test
+    void sanitizingUsesOneLineBreakPolicyAndExpandsTabs() {
+        // The harness used to normalize before PasteSanitizer; delegating keeps one policy for the
+        // three break forms and still preserves blank lines and expands tabs.
+        for (String raw : List.of("a\nb", "a\r\nb", "a\rb")) {
+            assertThat(HarnessRender.sanitize(raw))
+                    .as("sanitize %s", raw.replace("\n", "\\n").replace("\r", "\\r"))
+                    .isEqualTo("a\nb");
+        }
+        assertThat(HarnessRender.sanitize("a\tb")).isEqualTo("a    b");
+        assertThat(HarnessRender.sanitize("a\r\u001B[31m\nb")).isEqualTo("a\n\nb");
+        assertThat(HarnessRender.sanitize("a\rb")).doesNotContain("\r");
+    }
+
+    @Test
     void wrappingKeepsLeadingIndentationWithTheFirstWord() {
         List<String> lines = HarnessRender.wrap("  indented", 6);
         assertThat(lines).containsExactly("  inde", "nted");

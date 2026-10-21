@@ -143,6 +143,19 @@ class ProgressBarTest {
     }
 
     @Test
+    void aStyledLabelCannotRecoverABareCarriageReturnTheSpanAlreadyDeleted() {
+        // Prepended/appended labels arrive as StyledText, so Span has already deleted a bare CR;
+        // only the raw icon path can repair the caller's original string. Pin the styled-input
+        // result so the Box.title(String) correction does not silently spread to every surface.
+        String withCr = ProgressBar.of(1).prepend(StyledText.plain("a\rb"))
+                .render(1.0, 1.0).plainText();
+        String withLf = ProgressBar.of(1).prepend(StyledText.plain("a\nb"))
+                .render(1.0, 1.0).plainText();
+        assertThat(withCr).isEqualTo("ab" + ACTIVE);
+        assertThat(withLf).isEqualTo("a b" + ACTIVE);
+    }
+
+    @Test
     void aWideIconSpansItsOwnColumnsRatherThanBeingSqueezed() {
         // The bar owns cells, not columns: a two-column icon is the caller's choice and is drawn
         // whole, exactly as the widget documents.

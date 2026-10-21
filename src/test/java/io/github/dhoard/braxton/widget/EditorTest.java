@@ -410,6 +410,26 @@ class EditorTest {
     }
 
     @Test
+    void equivalentBreakFormsInsertIdenticallyUnderALengthLimit() {
+        // Conversion happens before truncation and offset math, so LF, CRLF, and lone CR from the
+        // same logical value leave the same text, caret, anchor, and line count. A length limit
+        // that falls inside the break sequence is where the order is observable.
+        EditorOptions limited = EditorOptions.defaults().withMaxLength(4);
+        EditorState base = new EditorState("ab", 1, 1, 0);
+        EditorState lf = Editor.update(base, limited, new EditorAction.Insert("x\nyz")).state();
+        for (String raw : java.util.List.of("x\r\nyz", "x\ryz")) {
+            EditorState inserted = Editor.update(base, limited, new EditorAction.Insert(raw)).state();
+            assertThat(inserted.text()).as("text for %s", raw.replace("\r", "\\r"))
+                    .isEqualTo(lf.text());
+            assertThat(inserted.caret()).isEqualTo(lf.caret());
+            assertThat(inserted.anchor()).isEqualTo(lf.anchor());
+            assertThat(inserted.lineCount()).isEqualTo(lf.lineCount());
+        }
+        assertThat(lf.text()).isEqualTo("ax\nb");
+        assertThat(lf.caret()).isEqualTo(3);
+    }
+
+    @Test
     void aPromptWithATabKeepsContinuationLinesAligned() {
         // The prompt is painted by the text view, which expands its tab to the next four-column
         // stop, so the blank stand-in on later lines must be the painted width.

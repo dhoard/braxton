@@ -153,6 +153,30 @@ class CatalogTest {
         assertThat(TextMeasure.columns(lines.get(0))).isEqualTo(12);
     }
 
+    /**
+     * A raw title is flattened before it becomes a span. Constructing the span first deleted a
+     * bare CR as a control character, so "one\rtwo" painted "onetwo" while LF and CRLF painted
+     * "one two". The styled overload is different by contract: it receives content that has
+     * already crossed the span boundary, where the CR is no longer recoverable.
+     */
+    @Test
+    void aStringBoxTitleFlattensEveryBreakFormBeforeSanitization() {
+        for (String title : List.of("one\ntwo", "one\r\ntwo", "one\rtwo")) {
+            String shown = title.replace("\n", "\\n").replace("\r", "\\r");
+            StyledText rendered = Box.of("x").width(16).title(title).render(40);
+            List<String> lines = List.of(rendered.plainText().split("\n", -1));
+            assertThat(lines.get(0)).as("top edge for title %s", shown)
+                    .startsWith("\u250C").contains("one two").endsWith("\u2510");
+            assertThat(TextMeasure.columns(lines.get(0))).isEqualTo(16);
+        }
+        // Already-sanitized styled input has lost the CR before Box sees it; no separator can be
+        // guessed, so this pinned result must not change with the raw-string correction.
+        StyledText rendered = Box.of("x").width(16)
+                .title(StyledText.plain("one\rtwo")).render(40);
+        assertThat(rendered.plainText().split("\n", -1)[0]).contains("onetwo")
+                .doesNotContain("one two");
+    }
+
     @Test
     void aBorderedBoxKeepsEachContentSpanStyleAndLink() {
         StyledText content = StyledText.of("a", Style.NONE.withBold())

@@ -29,6 +29,7 @@ import java.util.function.Function;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.layout.Alignment;
+import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.view.ElementId;
@@ -123,7 +124,7 @@ public final class Selector {
      * words on either side of it.
      */
     private static String singleLine(String value) {
-        return value.replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ');
+        return LineBreaks.singleRow(value);
     }
 
     public static <Msg> View<Msg> view(ElementId id, State state, boolean focused,

@@ -42,6 +42,22 @@ class ArchitectureTest {
     private static final List<String> LEGACY_ROOTS = List.of(
             "utils/", "inputForm/", "Keyhandle/", "Text/", "automation/", "clipboard/");
 
+    /**
+     * The nine implementation owners of the one-row policy in the cross-platform line-ending
+     * design. Each must delegate conversion to {@code LineBreaks}; this list is explicit because a
+     * test cannot discover an arbitrary future surface that reintroduces its own chain.
+     */
+    private static final List<String> LINE_BREAK_OWNERS = List.of(
+            "io/github/dhoard/braxton/asset/ImageView.java",
+            "io/github/dhoard/braxton/widget/ProgressBar.java",
+            "io/github/dhoard/braxton/widget/Quote.java",
+            "io/github/dhoard/braxton/widget/Markup.java",
+            "io/github/dhoard/braxton/widget/TableSelector.java",
+            "io/github/dhoard/braxton/widget/EditorOptions.java",
+            "io/github/dhoard/braxton/widget/Selector.java",
+            "io/github/dhoard/braxton/widget/Badge.java",
+            "io/github/dhoard/braxton/widget/Box.java");
+
     private static List<Path> sources() throws IOException {
         try (var paths = Files.walk(MAIN)) {
             return paths.filter(path -> path.toString().endsWith(".java")).toList();
@@ -69,6 +85,26 @@ class ArchitectureTest {
                         .doesNotContain("utils.Container")
                         .doesNotContain("OnClick");
             }
+        }
+    }
+
+    @Test
+    void lineBreakConversionHasOneOwnerAndEveryInventoryOwnerDelegates() throws IOException {
+        // Duplicating the CRLF/CR chain per site is what let Box flatten after the span boundary
+        // and lose a bare CR; conversion now lives only in LineBreaks.
+        for (Path source : sources()) {
+            String content = Files.readString(source);
+            assertThat(content)
+                    .as("duplicate CRLF replacement chain in %s", source)
+                    .doesNotContain(".replace(\"\\r\\n\"")
+                    .as("duplicate CR replacement chain in %s", source)
+                    .doesNotContain(".replace('\\r'");
+        }
+        for (String owner : LINE_BREAK_OWNERS) {
+            Path source = MAIN.resolve(owner);
+            assertThat(source).as("inventory owner %s", owner).exists();
+            assertThat(Files.readString(source)).as("LineBreaks delegation in %s", owner)
+                    .contains("LineBreaks.");
         }
     }
 

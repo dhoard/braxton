@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.github.dhoard.braxton.layout.Border;
+import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
@@ -71,7 +72,11 @@ public final class Box {
     }
 
     public Box title(String value) {
-        title = value == null || value.isEmpty() ? StyledText.empty() : singleLine(StyledText.plain(value));
+        // Prepare the raw title before the span boundary: Span deletes a bare CR as a control, so
+        // flattening afterwards painted "one\rtwo" as "onetwo" while LF and CRLF kept a space.
+        title = value == null || value.isEmpty()
+                ? StyledText.empty()
+                : StyledText.plain(LineBreaks.singleRowAndTabs(value));
         return this;
     }
 
@@ -80,12 +85,15 @@ public final class Box {
         return this;
     }
 
-    /** The title sits in a one-line top edge, so line breaks and tabs become spaces. */
+    /**
+     * The title sits in a one-line top edge, so surviving line breaks and tabs become spaces. A
+     * span cannot hold a bare CR, so only the raw String overload can preserve that separator.
+     */
     private static StyledText singleLine(StyledText value) {
         StyledText result = StyledText.empty();
         for (StyledText.Span span : value.spans()) {
             result = result.append(StyledText.of(
-                    span.text().replace('\n', ' ').replace('\t', ' '), span.style(), span.link()));
+                    LineBreaks.singleRowAndTabs(span.text()), span.style(), span.link()));
         }
         return result;
     }

@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.github.dhoard.braxton.style.Color;
+import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
@@ -83,7 +84,7 @@ public final class Quote {
     }
 
     private static String singleLine(String value) {
-        return value.replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ');
+        return LineBreaks.singleRow(value);
     }
 
     public StyledText render() {

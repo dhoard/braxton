@@ -26,6 +26,7 @@ import java.util.OptionalInt;
 
 import io.github.dhoard.braxton.clipboard.PasteMode;
 import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 
 /**
@@ -79,10 +80,7 @@ public record EditorOptions(OptionalInt maxLength, PasteMode pasteMode,
 
     /** A prompt prefixes one line, so CR/LF, CR and LF each become one space. */
     private static String singleLine(String value) {
-        if (value == null || value.isEmpty()) {
-            return "";
-        }
-        return value.replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ');
+        return LineBreaks.singleRow(value);
     }
 
     public static EditorOptions defaults() {

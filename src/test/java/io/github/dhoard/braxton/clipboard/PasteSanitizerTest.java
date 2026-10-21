@@ -72,4 +72,36 @@ class PasteSanitizerTest {
         assertThat(PasteSanitizer.sanitize("a\u001B")).isEqualTo("a");
         assertThat(PasteSanitizer.plainText("a\u001B ")).isEqualTo("a");
     }
+
+    /**
+     * Line endings are normalized on the complete original input, before escape sequences are
+     * removed. Filtering first could pair a CR and an LF that were separate breaks in the source
+     * and silently turn two lines into one.
+     */
+    @Test
+    void aCrAndLfSeparatedByARemovedSequenceStayTwoBreaks() {
+        assertThat(PasteSanitizer.plainText("a\r\u001B[31m\nb")).isEqualTo("a\n\nb");
+        assertThat(PasteSanitizer.sanitize("a\r\u001B[31m\nb"))
+                .isEqualTo("a\n\nb");
+        // The same input without the intervening sequence is one break, as before.
+        assertThat(PasteSanitizer.plainText("a\r\nb")).isEqualTo("a\nb");
+    }
+
+    /** A CR inside a discarded OSC/DCS payload must not become a visible line. */
+    @Test
+    void aCrInsideADiscardedControlStringStaysDiscarded() {
+        assertThat(PasteSanitizer.plainText("a\u001B]0;title\r\nstill-title\u0007b"))
+                .isEqualTo("ab");
+        assertThat(PasteSanitizer.plainText("a\u001B]0;unterminated\rb"))
+                .isEqualTo("a");
+        assertThat(PasteSanitizer.plainText("a\u0090payload\rb\u009Cb"))
+                .isEqualTo("ab");
+    }
+
+    @Test
+    void plainTextLeavesNoCarriageReturnAndKeepsOneLfPerLogicalBreak() {
+        assertThat(PasteSanitizer.plainText("a\r\nb\rc\r\r\nd"))
+                .isEqualTo("a\nb\nc\n\nd");
+        assertThat(PasteSanitizer.plainText("a\r\nb\rc")).doesNotContain("\r");
+    }
 }

@@ -60,6 +60,33 @@ class StyledTextTest {
         assertThat(StyledText.of("a\nb\tc", Style.NONE).plainText()).isEqualTo("a\nb\tc");
     }
 
+    /**
+     * A bare CR is deleted at the span boundary, so it is not a separator a widget can recover.
+     * LineBreaks prepares raw text before this boundary; Span itself is deliberately unchanged.
+     */
+    @Test
+    void aBareCarriageReturnIsDeletedAtTheSpanBoundary() {
+        assertThat(StyledText.plain("a\rb").plainText()).isEqualTo("ab");
+    }
+
+    /**
+     * Composing sanitized spans is not the same as preparing raw text: a CRLF split across two
+     * appends still yields one LF, because each half is sanitized before composition and the CR
+     * half simply disappears. Every split of the same raw value must equal the unsplit value.
+     */
+    @Test
+    void appendsSplitAnywhereInACrLfSequenceEqualUnsplitConstruction() {
+        String raw = "a\r\nb";
+        StyledText unsplit = StyledText.plain(raw);
+        assertThat(unsplit.plainText()).isEqualTo("a\nb");
+        for (int split = 0; split <= raw.length(); split++) {
+            StyledText composed = StyledText.plain(raw.substring(0, split))
+                    .append(StyledText.plain(raw.substring(split)));
+            assertThat(composed).as("split at %d", split).isEqualTo(unsplit);
+            assertThat(composed.plainText()).as("split at %d", split).isEqualTo("a\nb");
+        }
+    }
+
     @Test
     void anUnpairedSurrogateIsDroppedInsteadOfReachingTheTerminalAsAReplacement() {
         // A Java string can hold half of a surrogate pair (a substring, a CESU-8 or mis-decoded
