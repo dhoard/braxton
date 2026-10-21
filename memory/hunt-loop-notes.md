@@ -323,3 +323,21 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   a `Border('日', …)` over a 6-column allocation paints rows of 12 and 8 columns (probed). Deciding
   whether to reject a wide border character, replace it, or paint it two columns wide (and widen the
   reserved edge to match) needs a user/design decision.
+
+## Runtime cleanup containment (2026-10-21)
+
+- `RuntimeLoop.cleanup` contained a throwing `subscriptions.closeAll()` and a throwing effect
+  cancellation, but called `session.close()` unguarded. A `TerminalSession.close()` that throws (a
+  custom embedding session, a `SecurityException` from `removeShutdownHook`, or a throwing
+  `onClosed` callback in `BaseTerminalSession`) aborted the rest of cleanup: the mailbox stayed
+  open, so producers (including the input reader) kept retrying an owner that was gone; sources and
+  effects were not cancelled; the reader threads were not joined; and `Application.run` threw
+  instead of returning the `ExitResult` that the API says "carries any cleanup failures".
+  `closeSession()` now records a `RuntimeException` in `cleanupFailures` and continues, at both
+  close sites, exactly like the other cleanup steps. An `Error` still propagates, matching them.
+  Pinned by
+  `RuntimeLoopTest.aFailingSessionRestoreIsCarriedAsACleanupFailureInsteadOfEscapingTheRun`
+  (quit-at-init program, a session whose restore throws once: kind FAILURE, `failure()` and
+  `cleanupFailures()` carry "session restore failed", and the second close still ran).
+- A cleanup step that is added later must be contained the same way; the session close was the one
+  step whose failure could escape `run()`.

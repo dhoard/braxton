@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,9 @@ import io.github.dhoard.braxton.effect.SubscriptionId;
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.terminal.TerminalBackend;
+import io.github.dhoard.braxton.terminal.TerminalCapabilities;
+import io.github.dhoard.braxton.terminal.TerminalSession;
 import io.github.dhoard.braxton.testkit.FakeTerminal;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
@@ -859,6 +863,96 @@ class RuntimeLoopTest {
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
         assertThat(result.failure()).hasMessageContaining("boom");
         assertThat(terminal.isOpen()).isFalse();
+    }
+
+    /** Quits as soon as it starts, so the only failure in the run is a cleanup failure. */
+    private record Quitting() implements Program<Integer, String> {
+
+        @Override
+        public Transition<Integer, String> init(InitContext context) {
+            return Transition.next(0, Command.quit());
+        }
+
+        @Override
+        public Transition<Integer, String> update(Integer model, String message) {
+            return Transition.stay(model);
+        }
+
+        @Override
+        public View<String> view(Integer model, Viewport viewport) {
+            return Views.text("quit");
+        }
+    }
+
+    /**
+     * A session whose restore fails once. It marks the restore attempted first, like the real
+     * session, so the second, idempotent close completes the underlying session instead of failing
+     * again.
+     */
+    private static final class FailingRestoreSession implements TerminalSession {
+
+        private final FakeTerminal terminal;
+        private final AtomicBoolean restoreAttempted = new AtomicBoolean();
+
+        FailingRestoreSession(FakeTerminal terminal) {
+            this.terminal = terminal;
+        }
+
+        @Override
+        public TerminalCapabilities capabilities() {
+            return terminal.capabilities();
+        }
+
+        @Override
+        public Size size() {
+            return terminal.size();
+        }
+
+        @Override
+        public java.io.InputStream input() {
+            return terminal.input();
+        }
+
+        @Override
+        public void write(String data) {
+            terminal.write(data);
+        }
+
+        @Override
+        public boolean isOpen() {
+            return terminal.isOpen();
+        }
+
+        @Override
+        public void close() {
+            if (!restoreAttempted.getAndSet(true)) {
+                throw new IllegalStateException("session restore failed");
+            }
+            terminal.close();
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aFailingSessionRestoreIsCarriedAsACleanupFailureInsteadOfEscapingTheRun() {
+        // Application.run's contract is to return how the run ended and to carry cleanup failures.
+        // A session whose restore throws must not abort the rest of cleanup (the mailbox close and
+        // the thread joins) or escape the runtime as an exception.
+        FakeTerminal terminal = new FakeTerminal(new Size(3, 10));
+        FailingRestoreSession session = new FailingRestoreSession(terminal);
+        TerminalBackend backend = (size, requested) -> {
+            terminal.open(size, requested);
+            return session;
+        };
+
+        ExitResult result = Application.run(new Quitting(),
+                options(new FakeTerminal.ManualTimers()), backend);
+
+        assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
+        assertThat(result.failure()).hasMessage("session restore failed");
+        assertThat(result.cleanupFailures())
+                .anySatisfy(failure -> assertThat(failure).hasMessage("session restore failed"));
+        assertThat(session.isOpen()).as("the second, idempotent close still ran").isFalse();
     }
 
     @Test

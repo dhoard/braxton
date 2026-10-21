@@ -341,9 +341,11 @@ public final class RuntimeLoop<M, Msg> {
     // ── cleanup ──────────────────────────────────────────────────────────────
 
     private ExitResult cleanup(ExitResult result) {
-        if (session != null) {
-            session.close();
-        }
+        // Every step is contained: a failing terminal restore is a cleanup failure like a failing
+        // source or effect cancellation, not the end of cleanup. Stopping here would leave the
+        // mailbox open (its producers, including the input reader, keep retrying an owner that has
+        // already gone away) and skip the thread joins.
+        closeSession();
         if (mailbox != null) {
             mailbox.close();
         }
@@ -366,9 +368,7 @@ public final class RuntimeLoop<M, Msg> {
                 cleanupFailures.add(failure);
             }
         }
-        if (session != null) {
-            session.close();
-        }
+        closeSession();
         join(inputThread);
         join(resizeThread);
         if (failed && result.failure() == null) {
@@ -383,6 +383,18 @@ public final class RuntimeLoop<M, Msg> {
             return new ExitResult(result.kind(), result.status(), result.failure(), all);
         }
         return new ExitResult(result.kind(), result.status(), result.failure(), cleanupFailures);
+    }
+
+    /** Restores and releases the terminal; a failing restore is recorded and cleanup continues. */
+    private void closeSession() {
+        if (session == null) {
+            return;
+        }
+        try {
+            session.close();
+        } catch (RuntimeException failure) {
+            cleanupFailures.add(failure);
+        }
     }
 
     private static void join(Thread thread) {
