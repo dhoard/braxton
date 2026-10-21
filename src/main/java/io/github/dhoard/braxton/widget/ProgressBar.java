@@ -137,21 +137,23 @@ public final class ProgressBar {
         }
         double clamped = Math.max(0, Math.min(1, value / max));
         int filled = (int) Math.round(clamped * cells);
-        StyledText bar = prepend;
+        List<StyledText> parts = new ArrayList<>();
+        parts.add(prepend);
         for (int i = 0; i < cells; i++) {
             if (i > 0 && buffer > 0) {
-                bar = bar.append(StyledText.plain(" ".repeat(buffer)));
+                parts.add(StyledText.plain(" ".repeat(buffer)));
             }
             boolean on = i < filled;
-            bar = bar.append(StyledText.of(on ? activeIcon : inactiveIcon,
+            parts.add(StyledText.of(on ? activeIcon : inactiveIcon,
                     on ? activeStyle : inactiveStyle));
         }
         if (showPercentage) {
-            bar = bar.append(StyledText.of(
+            parts.add(StyledText.of(
                     String.format(java.util.Locale.ROOT, " %d%%", Math.round(clamped * 100)),
                     Style.NONE));
         }
-        return bar.append(append);
+        parts.add(append);
+        return StyledText.concat(parts.toArray(StyledText[]::new));
     }
 
     /** A single-line view of the bar. */
