@@ -121,11 +121,10 @@ public final class InputRouter {
 
     /** Path from the scope to the focused element, or null when nothing is focused. */
     private static <Msg> List<View<Msg>> focusPath(View<Msg> scope) {
-        return findFocus(scope, List.of());
+        return findFocus(scope, new ArrayList<>());
     }
 
-    private static <Msg> List<View<Msg>> findFocus(View<Msg> view, List<View<Msg>> ancestors) {
-        List<View<Msg>> path = new ArrayList<>(ancestors);
+    private static <Msg> List<View<Msg>> findFocus(View<Msg> view, List<View<Msg>> path) {
         path.add(view);
         if (view instanceof View.Focused<Msg> focused && focused.focused()) {
             return path;
@@ -136,6 +135,7 @@ public final class InputRouter {
                 return found;
             }
         }
+        path.remove(path.size() - 1);
         return null;
     }
 

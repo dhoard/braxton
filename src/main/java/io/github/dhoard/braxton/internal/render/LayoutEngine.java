@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import io.github.dhoard.braxton.internal.text.Graphemes;
 import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Insets;
@@ -76,27 +77,33 @@ public final class LayoutEngine {
 
     /** Intrinsic height at {@code cols} columns; flex children measure as zero main-axis size. */
     public int intrinsicHeight(View<?> view, int cols) {
-        if (cols <= 0) {
+        return intrinsicHeight(view, cols, Integer.MAX_VALUE);
+    }
+
+    private int intrinsicHeight(View<?> view, int cols, int maxRows) {
+        if (cols <= 0 || maxRows <= 0) {
             return 0;
         }
         return switch (view) {
-            case View.Text<?> text -> wrapLines(text.text(), cols).size();
+            case View.Text<?> text -> wrapLines(text.text(), cols, maxRows).size();
             case View.Blank<?> blank -> 0;
             case View.Fill<?> fill -> 1;
-            case View.Column<?> column -> columnHeight(column, cols);
-            case View.Row<?> row -> rowHeight(row, cols);
+            case View.Column<?> column -> columnHeight(column, cols, maxRows);
+            case View.Row<?> row -> rowHeight(row, cols, maxRows);
             // The child is painted inside the horizontal insets, so it must be measured at that
             // width; measuring at the full width can wrap into fewer rows than it paints.
             case View.Padding<?> padding -> padding.insets().vertical()
                     + intrinsicHeight(padding.child(),
-                            Math.max(0, cols - padding.insets().horizontal()));
+                            Math.max(0, cols - padding.insets().horizontal()),
+                            Math.max(0, maxRows - padding.insets().vertical()));
             case View.BorderBox<?> box -> (box.border().isVisible() ? 2 : 0)
-                    + intrinsicHeight(box.child(), Math.max(0, cols - (box.border().isVisible() ? 2 : 0)));
+                    + intrinsicHeight(box.child(), Math.max(0, cols - (box.border().isVisible() ? 2 : 0)),
+                            Math.max(0, maxRows - (box.border().isVisible() ? 2 : 0)));
             case View.Fixed<?> fixed -> fixed.size();
             case View.Grow<?> grow -> 0;
-            case View.Overlay<?> overlay -> overlayHeight(overlay, cols);
-            case View.Keyed<?> keyed -> intrinsicHeight(keyed.child(), cols);
-            case View.Focused<?> focused -> intrinsicHeight(focused.child(), cols);
+            case View.Overlay<?> overlay -> overlayHeight(overlay, cols, maxRows);
+            case View.Keyed<?> keyed -> intrinsicHeight(keyed.child(), cols, maxRows);
+            case View.Focused<?> focused -> intrinsicHeight(focused.child(), cols, maxRows);
         };
     }
 
@@ -106,7 +113,7 @@ public final class LayoutEngine {
             return 0;
         }
         return switch (view) {
-            case View.Text<?> text -> Math.min(maxCols, textWidth(text.text()));
+            case View.Text<?> text -> textWidth(text.text(), maxCols);
             case View.Blank<?> blank -> 0;
             case View.Fill<?> fill -> maxCols;
             case View.Column<?> column -> columnWidth(column, maxCols);
@@ -124,10 +131,13 @@ public final class LayoutEngine {
         };
     }
 
-    private int columnHeight(View.Column<?> column, int cols) {
+    private int columnHeight(View.Column<?> column, int cols, int maxRows) {
         int total = 0;
         for (int i = 0; i < column.items().size(); i++) {
-            total += intrinsicHeight(column.items().get(i), cols);
+            total += intrinsicHeight(column.items().get(i), cols, maxRows - total);
+            if (total >= maxRows) {
+                return maxRows;
+            }
         }
         return total;
     }
@@ -140,7 +150,7 @@ public final class LayoutEngine {
         return widest;
     }
 
-    private int rowHeight(View.Row<?> row, int cols) {
+    private int rowHeight(View.Row<?> row, int cols, int maxRows) {
         List<? extends View<?>> items = row.items();
         if (items.isEmpty()) {
             return 0;
@@ -154,7 +164,10 @@ public final class LayoutEngine {
             if (widths[i] <= 0) {
                 continue;
             }
-            tallest = Math.max(tallest, intrinsicHeight(crossAxis(items.get(i)), widths[i]));
+            tallest = Math.max(tallest, intrinsicHeight(crossAxis(items.get(i)), widths[i], maxRows));
+            if (tallest >= maxRows) {
+                return maxRows;
+            }
         }
         return tallest;
     }
@@ -205,10 +218,13 @@ public final class LayoutEngine {
         return Math.min(maxCols, used);
     }
 
-    private int overlayHeight(View.Overlay<?> overlay, int cols) {
+    private int overlayHeight(View.Overlay<?> overlay, int cols, int maxRows) {
         int tallest = 0;
         for (int i = 0; i < overlay.layers().size(); i++) {
-            tallest = Math.max(tallest, intrinsicHeight(crossAxis(overlay.layers().get(i)), cols));
+            tallest = Math.max(tallest, intrinsicHeight(crossAxis(overlay.layers().get(i)), cols, maxRows));
+            if (tallest >= maxRows) {
+                return maxRows;
+            }
         }
         return tallest;
     }
@@ -221,23 +237,22 @@ public final class LayoutEngine {
         return widest;
     }
 
-    private int textWidth(StyledText text) {
+    private int textWidth(StyledText text, int maxCols) {
         int widest = 0;
-        for (String line : text.plainText().split("\n", -1)) {
-            widest = Math.max(widest, expandedColumns(line));
-        }
-        return widest;
-    }
-
-    /** Columns of one line with tabs expanded to the same four-column stops the wrapper uses. */
-    private int expandedColumns(String line) {
         int used = 0;
-        for (String cluster : TextMeasure.graphemes(line)) {
-            used += "\t".equals(cluster)
-                    ? 4 - (used % 4)
+        for (String cluster : Graphemes.iterate(text.plainText())) {
+            if ("\n".equals(cluster)) {
+                widest = Math.max(widest, used);
+                used = 0;
+                continue;
+            }
+            used += "\t".equals(cluster) ? 4 - (used % 4)
                     : TextMeasure.clusterColumns(cluster, policy);
+            if (used >= maxCols) {
+                return maxCols;
+            }
         }
-        return used;
+        return Math.max(widest, used);
     }
 
     // ── painting ─────────────────────────────────────────────────────────────
@@ -286,7 +301,7 @@ public final class LayoutEngine {
                 heights[i] = Math.min(fixed.size(), Math.max(0, bounds.rows() - used));
                 used += heights[i];
             } else {
-                heights[i] = Math.min(intrinsicHeight(child, bounds.cols()),
+                heights[i] = Math.min(intrinsicHeight(child, bounds.cols(), Math.max(0, bounds.rows() - used)),
                         Math.max(0, bounds.rows() - used));
                 used += heights[i];
             }
@@ -315,7 +330,10 @@ public final class LayoutEngine {
                 continue;
             }
             View<?> child = items.get(i);
-            int width = childWidth(child, bounds.cols());
+            // Start alignment always gives the child the full width, so no cross-axis
+            // measurement is needed (especially for text whose tail is offscreen).
+            int width = column.align() == Alignment.START
+                    ? bounds.cols() : childWidth(child, bounds.cols());
             int col = bounds.col();
             int childCols = bounds.cols();
             if (width < bounds.cols() && !(child instanceof View.Fill<?>)) {
@@ -357,7 +375,7 @@ public final class LayoutEngine {
             // its main-axis measurement reserves in a column.
             int height = child instanceof View.Fill<?>
                     ? bounds.rows()
-                    : Math.min(intrinsicHeight(crossAxis(child), width), bounds.rows());
+                    : Math.min(intrinsicHeight(crossAxis(child), width, bounds.rows()), bounds.rows());
             int offset = 0;
             if (height < bounds.rows()) {
                 offset = switch (row.align()) {
@@ -423,7 +441,7 @@ public final class LayoutEngine {
         }
         if (!box.title().isEmpty() && bounds.cols() > 4) {
             StyledText title = box.title();
-            List<StyledText> lines = wrapLines(title, Math.max(0, bounds.cols() - 4));
+            List<StyledText> lines = wrapLines(title, Math.max(0, bounds.cols() - 4), 1);
             if (!lines.isEmpty()) {
                 paintText(lines.get(0),
                         new Rect(bounds.row(), bounds.col() + 2, 1, Math.max(0, bounds.cols() - 4)),
@@ -446,7 +464,7 @@ public final class LayoutEngine {
     }
 
     private void paintText(StyledText text, Rect bounds, Screen screen) {
-        List<StyledText> lines = wrapLines(text, bounds.cols());
+        List<StyledText> lines = wrapLines(text, bounds.cols(), bounds.rows());
         int limit = Math.min(bounds.rows(), lines.size());
         for (int i = 0; i < limit; i++) {
             paintLine(lines.get(i), screen, bounds.row() + i, bounds.col(), bounds.cols());
@@ -461,8 +479,9 @@ public final class LayoutEngine {
         Style lastStyle = Style.NONE;
         String lastLink = null;
         int lastWidth = 0;
+        StringBuilder suffix = null;
         for (StyledText.Span span : line.spans()) {
-            List<String> graphemes = TextMeasure.graphemes(span.text());
+            Iterable<String> graphemes = Graphemes.iterate(span.text());
             for (String grapheme : graphemes) {
                 String rendered = withBase(grapheme);
                 int width = TextMeasure.clusterColumns(rendered, policy);
@@ -471,10 +490,16 @@ public final class LayoutEngine {
                     // painted instead of starting one of their own; a leading one has no cell to
                     // join and is dropped.
                     if (lastText != null) {
-                        lastText += rendered;
-                        screen.put(row, lastCol, lastText, lastStyle, lastLink, lastWidth);
+                        if (suffix == null) {
+                            suffix = new StringBuilder(lastText);
+                        }
+                        suffix.append(rendered);
                     }
                     continue;
+                }
+                if (suffix != null) {
+                    screen.put(row, lastCol, suffix.toString(), lastStyle, lastLink, lastWidth);
+                    suffix = null;
                 }
                 if (col + width > limit) {
                     return;
@@ -487,6 +512,9 @@ public final class LayoutEngine {
                 screen.put(row, col, rendered, span.style(), span.link(), width);
                 col += width;
             }
+        }
+        if (suffix != null) {
+            screen.put(row, lastCol, suffix.toString(), lastStyle, lastLink, lastWidth);
         }
     }
 
@@ -509,20 +537,27 @@ public final class LayoutEngine {
      * empty, otherwise it is clipped (never half-painted).
      */
     public List<StyledText> wrapLines(StyledText text, int cols) {
+        return wrapLines(text, cols, Integer.MAX_VALUE);
+    }
+
+    private List<StyledText> wrapLines(StyledText text, int cols, int maxLines) {
         List<StyledText> lines = new ArrayList<>();
         if (text == null) {
             return lines;
         }
-        if (cols <= 0) {
+        if (cols <= 0 || maxLines <= 0) {
             return lines;
         }
         LineBuilder current = new LineBuilder();
         int used = 0;
         boolean softWrapped = false;
         for (StyledText.Span span : text.spans()) {
-            for (String raw : TextMeasure.graphemes(span.text())) {
+            for (String raw : Graphemes.iterate(span.text())) {
                 if ("\n".equals(raw)) {
                     lines.add(current.build());
+                    if (lines.size() >= maxLines) {
+                        return lines;
+                    }
                     current = new LineBuilder();
                     used = 0;
                     softWrapped = false;
@@ -535,6 +570,9 @@ public final class LayoutEngine {
                     int stop = 4 - (used % 4);
                     if (used + stop > cols && used > 0) {
                         lines.add(current.build());
+                        if (lines.size() >= maxLines) {
+                            return lines;
+                        }
                         current = new LineBuilder();
                         used = 0;
                         stop = 4;
@@ -551,6 +589,9 @@ public final class LayoutEngine {
                 if (used + width > cols) {
                     if (used > 0) {
                         lines.add(current.build());
+                        if (lines.size() >= maxLines) {
+                            return lines;
+                        }
                         current = new LineBuilder();
                         used = 0;
                         softWrapped = true;

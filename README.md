@@ -365,8 +365,12 @@ from the latest committed model before routing. Orderly quit/end-of-input flushe
 An unchanged model does not request a frame. Pacing adds no rendering thread or recurring idle timer.
 
 Text wrapping and concatenation assemble whole styled runs rather than copying an immutable
-prefix for each grapheme. Printable ASCII uses the same one-column semantics without Unicode
-iterator/code-point allocation; other text retains the pinned Unicode and width-policy behavior.
+prefix for each grapheme. Immutable append chains normalize their spans on first read and release
+their intermediate operands afterward. Painting stops wrapping at the visible row limit, while
+public intrinsic measurements still describe the full content. Unicode cursor movement segments
+each target line once, and transcript projection styles only the visible window. Printable ASCII
+uses the same one-column semantics without Unicode iterator/code-point allocation; other text
+retains the pinned Unicode and width-policy behavior.
 
 The runtime runs on Java 25 virtual threads: the input reader, the resize poller, the timer worker,
 the effect executor's tasks, and the terminal-restore shutdown hook are all virtual threads, so a

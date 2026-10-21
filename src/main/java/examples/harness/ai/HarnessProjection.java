@@ -24,6 +24,7 @@ package examples.harness.ai;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntFunction;
 
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
@@ -80,7 +81,8 @@ final class HarnessProjection {
         if (allocation.transcript() <= 0) {
             return 0;
         }
-        int rows = allRows(state, state.viewport().cols()).size();
+        int rows = projectedRows(state, state.viewport().cols()).stream()
+                .mapToInt(ProjectedRows::size).sum();
         return Math.max(0, rows - allocation.transcript());
     }
 
@@ -94,16 +96,27 @@ final class HarnessProjection {
         if (rows <= 0 || width <= 0) {
             return new Slice(List.of(), 0, 0);
         }
-        List<StyledText> all = allRows(state, width);
-        int maxScroll = Math.max(0, all.size() - rows);
+        List<ProjectedRows> groups = projectedRows(state, width);
+        int total = groups.stream().mapToInt(ProjectedRows::size).sum();
+        int maxScroll = Math.max(0, total - rows);
         int scroll = Math.min(Math.max(0, state.scrollBack()), maxScroll);
-        int end = all.size() - scroll;
+        int end = total - scroll;
         int start = Math.max(0, end - rows);
-        List<StyledText> window = new ArrayList<>(all.subList(start, end));
+        List<StyledText> window = new ArrayList<>(rows);
+        int offset = 0;
+        for (ProjectedRows group : groups) {
+            for (int i = Math.max(0, start - offset); i < Math.min(group.size(), end - offset); i++) {
+                window.add(group.row().apply(i));
+            }
+            offset += group.size();
+            if (offset >= end) {
+                break;
+            }
+        }
         while (window.size() < rows) {
             window.add(row(width, HarnessTheme.BACKGROUND_COLOR));
         }
-        return new Slice(List.copyOf(window), start, all.size());
+        return new Slice(List.copyOf(window), start, total);
     }
 
     /** The visible transcript window, padded and with a scrollbar when content overflows. */
@@ -147,13 +160,27 @@ final class HarnessProjection {
 
     // ── content ──────────────────────────────────────────────────────────────
 
-    static List<StyledText> allRows(HarnessState state, int width) {
-        List<StyledText> rows = new ArrayList<>();
-        rows.add(row(width, HarnessTheme.BACKGROUND_COLOR,
-                new Segment(" AI Harness", HarnessTheme.ACCENT.withBold()),
-                new Segment("  \u00b7  mock transcript", HarnessTheme.DIM)));
-        rows.add(row(width, HarnessTheme.BACKGROUND_COLOR));
+    /** Wrapped content and a pure row factory, deferring styled output until a row is requested. */
+    private record ProjectedRows(int size, IntFunction<StyledText> row) {
+    }
 
+    static List<StyledText> allRows(HarnessState state, int width) {
+        List<StyledText> result = new ArrayList<>();
+        for (ProjectedRows group : projectedRows(state, width)) {
+            for (int i = 0; i < group.size(); i++) {
+                result.add(group.row().apply(i));
+            }
+        }
+        return result;
+    }
+
+    private static List<ProjectedRows> projectedRows(HarnessState state, int width) {
+        List<ProjectedRows> rows = new ArrayList<>();
+        rows.add(new ProjectedRows(2, i -> i == 0
+                ? row(width, HarnessTheme.BACKGROUND_COLOR,
+                        new Segment(" AI Harness", HarnessTheme.ACCENT.withBold()),
+                        new Segment("  \u00b7  mock transcript", HarnessTheme.DIM))
+                : row(width, HarnessTheme.BACKGROUND_COLOR)));
         List<HarnessEntry> entries = state.entries();
         if (entries.isEmpty()) {
             entries = List.of(new HarnessEntry.Notice(
@@ -161,14 +188,14 @@ final class HarnessProjection {
         }
         for (int i = 0; i < entries.size(); i++) {
             if (i > 0) {
-                rows.add(row(width, HarnessTheme.BACKGROUND_COLOR));
+                rows.add(new ProjectedRows(1, ignored -> row(width, HarnessTheme.BACKGROUND_COLOR)));
             }
-            rows.addAll(entryRows(width, entries.get(i)));
+            rows.add(entryRows(width, entries.get(i)));
         }
         return rows;
     }
 
-    private static List<StyledText> entryRows(int width, HarnessEntry entry) {
+    private static ProjectedRows entryRows(int width, HarnessEntry entry) {
         return switch (entry) {
             case HarnessEntry.User user -> userRows(width, user.text());
             case HarnessEntry.Assistant assistant -> plainRows(width, assistant.text(),
@@ -183,64 +210,50 @@ final class HarnessProjection {
         };
     }
 
-    private static List<StyledText> userRows(int width, String text) {
+    private static ProjectedRows userRows(int width, String text) {
         int inner = Math.max(1, width - 2);
-        List<StyledText> rows = new ArrayList<>();
-        rows.add(row(width, HarnessTheme.USER_MESSAGE_BG_COLOR));
-        for (String line : HarnessRender.wrap(text, inner)) {
-            rows.add(row(width, HarnessTheme.USER_MESSAGE_BG_COLOR,
-                    new Segment(" " + HarnessRender.pad(line, inner) + " ", HarnessTheme.TEXT)));
-        }
-        rows.add(row(width, HarnessTheme.USER_MESSAGE_BG_COLOR));
-        return rows;
+        List<String> lines = HarnessRender.wrap(text, inner);
+        return new ProjectedRows(lines.size() + 2, i -> i == 0 || i == lines.size() + 1
+                ? row(width, HarnessTheme.USER_MESSAGE_BG_COLOR)
+                : row(width, HarnessTheme.USER_MESSAGE_BG_COLOR,
+                        new Segment(" " + HarnessRender.pad(lines.get(i - 1), inner) + " ", HarnessTheme.TEXT)));
     }
 
-    private static List<StyledText> plainRows(int width, String text, Style style) {
-        List<StyledText> rows = new ArrayList<>();
-        for (String line : HarnessRender.wrap(text, Math.max(1, width - 1))) {
-            rows.add(row(width, HarnessTheme.BACKGROUND_COLOR,
-                    new Segment(" " + line, style)));
-        }
-        return rows;
+    private static ProjectedRows plainRows(int width, String text, Style style) {
+        List<String> lines = HarnessRender.wrap(text, Math.max(1, width - 1));
+        return new ProjectedRows(lines.size(), i -> row(width, HarnessTheme.BACKGROUND_COLOR,
+                new Segment(" " + lines.get(i), style)));
     }
 
-    private static List<StyledText> toolRows(int width, HarnessEntry.Tool tool) {
+    private static ProjectedRows toolRows(int width, HarnessEntry.Tool tool) {
         Color background = switch (tool.status()) {
             case PENDING -> HarnessTheme.TOOL_PENDING_BG_COLOR;
             case SUCCESS -> HarnessTheme.TOOL_SUCCESS_BG_COLOR;
             case ERROR -> HarnessTheme.TOOL_ERROR_BG_COLOR;
         };
         int inner = Math.max(1, width - 2);
-        List<StyledText> rows = new ArrayList<>();
-        rows.add(row(width, background));
-        rows.add(row(width, background,
-                new Segment(" " + HarnessRender.truncate(tool.call(), inner) + " ",
-                        HarnessTheme.TEXT.withBold())));
-
-        HarnessRender.Preview preview = HarnessRender.toolPreview(
-                tool.result(), TOOL_PREVIEW_LINES);
+        List<Segment[]> rows = new ArrayList<>();
+        rows.add(new Segment[0]);
+        rows.add(new Segment[]{new Segment(" " + HarnessRender.truncate(tool.call(), inner) + " ",
+                HarnessTheme.TEXT.withBold())});
+        HarnessRender.Preview preview = HarnessRender.toolPreview(tool.result(), TOOL_PREVIEW_LINES);
         if (!preview.lines().isEmpty()) {
-            rows.add(row(width, background));
+            rows.add(new Segment[0]);
             for (String line : preview.lines()) {
                 for (String wrapped : HarnessRender.wrap(line, inner)) {
-                    rows.add(row(width, background,
-                            new Segment(" " + HarnessRender.pad(wrapped, inner) + " ",
-                                    HarnessTheme.DIM)));
+                    rows.add(new Segment[]{new Segment(" " + HarnessRender.pad(wrapped, inner) + " ",
+                            HarnessTheme.DIM)});
                 }
             }
             if (preview.truncated()) {
-                String note = "... (" + preview.hidden() + " more lines, "
-                        + preview.totalLines() + " total)";
-                rows.add(row(width, background,
-                        new Segment(" " + HarnessRender.truncate(note, inner) + " ",
-                                HarnessTheme.DIM)));
+                String note = "... (" + preview.hidden() + " more lines, " + preview.totalLines() + " total)";
+                rows.add(new Segment[]{new Segment(" " + HarnessRender.truncate(note, inner) + " ", HarnessTheme.DIM)});
             }
         } else if (tool.status() == HarnessEntry.ToolStatus.PENDING) {
-            rows.add(row(width, background,
-                    new Segment(" waiting for output...", HarnessTheme.DIM)));
+            rows.add(new Segment[]{new Segment(" waiting for output...", HarnessTheme.DIM)});
         }
-        rows.add(row(width, background));
-        return rows;
+        rows.add(new Segment[0]);
+        return new ProjectedRows(rows.size(), i -> row(width, background, rows.get(i)));
     }
 
     // ── chrome ───────────────────────────────────────────────────────────────

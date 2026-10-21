@@ -341,15 +341,15 @@ class SubscriptionManagerTest {
         // without changing the id or the configuration that decides whether the live resource is
         // kept.
         java.util.concurrent.atomic.AtomicInteger starts = new java.util.concurrent.atomic.AtomicInteger();
-        java.util.function.Consumer<Object>[] emitter = new java.util.function.Consumer[1];
+        var emitter = new java.util.concurrent.atomic.AtomicReference<java.util.function.Consumer<Object>>();
         Subscription<String> source = Subscription.<String>source(SubscriptionId.of("child"), "cfg",
                 sink -> {
                     starts.incrementAndGet();
-                    emitter[0] = sink;
+                    emitter.set(sink);
                     return () -> { };
                 }, Object::toString).map(value -> "parent-" + value);
         manager.reconcile(source);
-        emitter[0].accept("a");
+        emitter.get().accept("a");
         assertThat(next()).isEqualTo("parent-a");
         manager.reconcile(Subscription.<String>interval(SubscriptionId.of("tick"),
                 Duration.ofMillis(100), time -> "tick").map(value -> "parent-" + value));

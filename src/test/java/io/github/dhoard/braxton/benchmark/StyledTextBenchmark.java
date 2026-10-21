@@ -76,11 +76,11 @@ public class StyledTextBenchmark {
         for (StyledText part : fragments) {
             accumulator = accumulator.append(part);
         }
-        sink.consume(accumulator);
+        sink.consume(accumulator.spans());
     }
 
     @Benchmark
     public void concatAll(Blackhole sink) {
-        sink.consume(StyledText.concat(fragments));
+        sink.consume(StyledText.concat(fragments).spans());
     }
 }

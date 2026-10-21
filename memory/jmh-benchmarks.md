@@ -90,11 +90,14 @@ java -cp "$(cat target/bench-cp.txt):target/classes:target/test-classes" \
   **Durable fact**: render allocation scales with how the line is *accumulated*, not with how it is
   segmented - `TextMeasure.graphemes` of the same 4096-char line costs 51 KB, so an 8.6 MB render was
   never a segmentation cost. Measure the two separately before chasing a render cost.
-- `StyledText.append` chains are still quadratic in allocation: 1024 appends 301 µs / 733 KB against
-  `concat` 6.6 µs / 3.8 KB. The quadratic part is `Span.text()` being a `String` - each same-style
-  append rebuilds the accumulated text - so a fix means changing the public record
-  `StyledText.Span` or adding a builder: a contract change that needs a user decision.
-- One 40x120 frame through `ScreenRenderer`: 206 µs and 739 KB before encoding.
+- **Fixed (2026-10-21, user-authorized performance work)**: append chains keep private immutable
+  operands and normalize on first span access, then release the operands. The public `Span` record
+  and public signatures are unchanged. The earlier assumption that a public builder/record change
+  was necessary was incorrect. Preserve the first operand's existing internal span boundaries
+  (e.g. after `withStyle`), and normalize only subsequent appended spans; eager-reference and
+  concurrent-read tests cover this. See `plans/performance-fixes.impl.md` for measured results.
+- **Historical pre-fix baseline**: one 40x120 frame through `ScreenRenderer` cost 206 µs and 739 KB
+  before encoding; do not treat this as a measurement of the current implementation.
 - **Fixed (cycle 225, commit fa6f81a)**: a 64 KiB bracketed paste through `PasteDecoder.read` cost
   2.37 ms / 793 KB because `readByte` called `available()`, `read()` and `System.nanoTime()` once per
   byte (101,952 of each) and a `ByteArrayOutputStream` doubled and was then copied again. The stream
@@ -108,3 +111,23 @@ java -cp "$(cat target/bench-cp.txt):target/classes:target/test-classes" \
   **Durable fact**: `new String(bytes, 0, len, UTF_8)` is itself ~437 KB for a 102 KB non-Latin-1
   payload (the JDK copies the input and then builds a UTF-16 array), so an allocation bound on a
   decode path should be stated relative to that String's own cost, not as an absolute number.
+
+## Performance fixes preserving public behavior (2026-10-21)
+
+- `Editor.indexAtColumn` still called whole-draft `boundaryAfter` once per non-ASCII target
+  cluster even after renderLine was fixed. Segment the target line once. `EditorNavigationCostTest`
+  compares vertical movement with a whole-draft BreakIterator reference, including CR/LF and tabs.
+- Bounded paint needs streaming grapheme iteration **and** a row-limited wrapper; taking a sublist
+  after full wrapping does not bound allocation. Public intrinsic measurements remain complete.
+  START-aligned columns do not use intrinsic cross-axis widths, so skip that measurement.
+- Repeated zero-width format clusters append to the last cell without advancing its column.
+  Accumulate that suffix and update the cell once; rebuilding a String per format cluster is
+  quadratic. Iterate code points directly when measuring widths, rather than allocating streams
+  and arrays per cluster.
+- Pure harness projection can wrap entries and count rows first, then style/pad only the selected
+  window. This avoids introducing mutable caches into the model or projection. Word wrapping can
+  append ordinary ASCII runs by source range without allocating each word as a substring.
+- Focus search can push/pop one owner-local ancestor path instead of copying every prefix.
+- Validation included 669 passing tests, public javap parity for 151 existing class listings,
+  2,000 generated layout comparisons, 200 transcript comparisons, and eight identical pyte
+  snapshots from baseline/fixed packaged sessions. Full benchmark numbers remain machine-specific.

@@ -225,9 +225,9 @@ public final class Editor {
     private static int indexAtColumn(String text, int lineStart, int lineEnd, int column) {
         int position = lineStart;
         int used = 0;
-        while (position < lineEnd) {
-            int next = Math.min(TextMeasure.boundaryAfter(text, position), lineEnd);
-            int width = visualWidth(text.substring(position, next), used);
+        for (String cluster : TextMeasure.graphemes(text.substring(lineStart, lineEnd))) {
+            int next = position + cluster.length();
+            int width = visualWidth(cluster, used);
             if (used + width > column) {
                 break;
             }
@@ -282,27 +282,30 @@ public final class Editor {
         int promptWidth = TextMeasure.columns(
                 TabStops.expand(StyledText.plain(opts.prompt())).plainText());
         StyledText result = StyledText.empty();
+        int start = state.lineStart(first);
         for (int line = first; line < first + visible; line++) {
             if (line > first) {
                 result = result.append("\n");
             }
-            result = result.append(renderLine(state, opts, focused, line, first, promptWidth));
+            int newline = state.text().indexOf('\n', start);
+            int end = newline < 0 ? state.text().length() : newline;
+            result = result.append(renderLine(state, opts, focused, start, end,
+                    line == first, promptWidth));
+            start = end + 1;
         }
         return result;
     }
 
     private static StyledText renderLine(EditorState state, EditorOptions opts, boolean focused,
-            int line, int firstLine, int promptWidth) {
+            int start, int end, boolean firstLine, int promptWidth) {
         StyledText out = StyledText.empty();
         if (!opts.prompt().isEmpty()) {
-            if (line == firstLine) {
+            if (firstLine) {
                 out = out.append(StyledText.of(opts.prompt(), opts.promptStyle()));
             } else {
                 out = out.append(StyledText.of(" ".repeat(promptWidth), opts.promptStyle()));
             }
         }
-        int start = state.lineStart(line);
-        int end = state.lineEnd(line);
         String text = state.text().substring(start, end);
         boolean masking = opts.masking() != EditorOptions.Masking.NONE;
         int selectionStart = state.hasSelection() ? state.selectionStart() : -1;
@@ -408,9 +411,13 @@ public final class Editor {
     /** All logical lines of a draft, used by projections that need the line count. */
     public static List<String> lines(EditorState state) {
         List<String> lines = new ArrayList<>(state.lineCount());
-        for (int i = 0; i < state.lineCount(); i++) {
-            lines.add(state.text().substring(state.lineStart(i), state.lineEnd(i)));
+        int start = 0;
+        int newline;
+        while ((newline = state.text().indexOf('\n', start)) >= 0) {
+            lines.add(state.text().substring(start, newline));
+            start = newline + 1;
         }
+        lines.add(state.text().substring(start));
         return lines;
     }
 

@@ -159,7 +159,7 @@ class FigletFontTest {
         FigletFont term = FontLoader.load(FontLoader.Family.TERM);
         StringBuilder printable = new StringBuilder();
         for (char code = 32; code <= 126; code++) {
-            printable.append((char) code);
+            printable.append(code);
         }
         assertThat(term.render("@")).containsExactly("@");
         assertThat(term.render(printable.toString()))

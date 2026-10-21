@@ -22,7 +22,9 @@
 
 package io.github.dhoard.braxton.style;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
 
@@ -103,10 +105,29 @@ public final class StyledText {
 
     private static final StyledText EMPTY = new StyledText(List.of());
 
-    private final List<Span> spans;
+    // Append nodes retain immutable operands; their normalized spans are published on first read.
+    private volatile List<Span> spans;
+    private record Operands(StyledText left, StyledText right) {
+    }
+
+    private volatile Operands operands;
+    private final boolean hasSpans;
+    private final boolean empty;
 
     private StyledText(List<Span> spans) {
         this.spans = spans;
+        this.hasSpans = !spans.isEmpty();
+        boolean blank = true;
+        for (Span span : spans) {
+            blank &= span.text().isEmpty();
+        }
+        this.empty = blank;
+    }
+
+    private StyledText(StyledText left, StyledText right) {
+        this.operands = new Operands(left, right);
+        this.hasSpans = true;
+        this.empty = left.empty && right.empty;
     }
 
     public static StyledText empty() {
@@ -135,7 +156,7 @@ public final class StyledText {
         StringBuilder run = null;
         for (StyledText part : parts) {
             Objects.requireNonNull(part, "part");
-            for (Span span : part.spans) {
+            for (Span span : part.spans()) {
                 if (last != null && last.style().equals(span.style())
                         && Objects.equals(last.link(), span.link())) {
                     if (run == null) {
@@ -158,20 +179,70 @@ public final class StyledText {
     }
 
     public List<Span> spans() {
-        return spans;
+        List<Span> cached = spans;
+        return cached != null ? cached : materialize();
+    }
+
+    private List<Span> materialize() {
+        List<Span> result = new ArrayList<>();
+        Deque<StyledText> pending = new ArrayDeque<>();
+        pending.push(this);
+        Span last = null;
+        StringBuilder run = null;
+        while (!pending.isEmpty()) {
+            StyledText part = pending.pop();
+            List<Span> leaf = part.spans;
+            if (leaf == null) {
+                Operands children = part.operands;
+                if (children != null) {
+                    pending.push(children.right());
+                    pending.push(children.left());
+                    continue;
+                }
+                // A concurrent reader may have published spans and released the operands after
+                // our first read. Reading that volatile release makes the spans visible here.
+                leaf = part.spans;
+            }
+            if (last == null) {
+                // Eager append preserves the left operand's internal span boundaries, including
+                // adjacent equal spans produced by withStyle/withLink. Only its tail can merge.
+                result.addAll(leaf);
+                last = result.remove(result.size() - 1);
+                continue;
+            }
+            for (Span span : leaf) {
+                if (last.style().equals(span.style()) && Objects.equals(last.link(), span.link())) {
+                    if (run == null) {
+                        run = new StringBuilder(last.text());
+                    }
+                    run.append(span.text());
+                } else {
+                    result.add(run == null ? last : new Span(run.toString(), last.style(), last.link()));
+                    last = span;
+                    run = null;
+                }
+            }
+        }
+        result.add(run == null ? last : new Span(run.toString(), last.style(), last.link()));
+        List<Span> cached = List.copyOf(result);
+        spans = cached;
+        // A materialized value must not retain all the old prefixes when a caller reads after
+        // each append. Publish the immutable result before releasing the composition tree.
+        operands = null;
+        return cached;
     }
 
     public boolean isEmpty() {
-        return plainText().isEmpty();
+        return empty;
     }
 
     /** The concatenated content with all styling removed. */
     public String plainText() {
-        if (spans.size() == 1) {
-            return spans.get(0).text();
+        if (spans().size() == 1) {
+            return spans().get(0).text();
         }
         StringBuilder text = new StringBuilder();
-        for (Span span : spans) {
+        for (Span span : spans()) {
             text.append(span.text());
         }
         return text.toString();
@@ -179,7 +250,11 @@ public final class StyledText {
 
     /** UTF-16 length of the content. */
     public int length() {
-        return plainText().length();
+        int length = 0;
+        for (Span span : spans()) {
+            length += span.text().length();
+        }
+        return length;
     }
 
     /** Terminal columns of the widest line under {@link WidthPolicy#PINNED}. */
@@ -198,28 +273,18 @@ public final class StyledText {
 
     /** The style of the first span, or {@link Style#NONE}. */
     public Style style() {
-        return spans.isEmpty() ? Style.NONE : spans.get(0).style();
+        return spans().isEmpty() ? Style.NONE : spans().get(0).style();
     }
 
     public StyledText append(StyledText other) {
         Objects.requireNonNull(other, "other");
-        if (other.spans.isEmpty()) {
+        if (!other.hasSpans) {
             return this;
         }
-        if (spans.isEmpty()) {
+        if (!hasSpans) {
             return other;
         }
-        List<Span> merged = new ArrayList<>(spans.size() + other.spans.size());
-        merged.addAll(spans);
-        for (Span span : other.spans) {
-            Span last = merged.get(merged.size() - 1);
-            if (last.style().equals(span.style()) && Objects.equals(last.link(), span.link())) {
-                merged.set(merged.size() - 1, new Span(last.text() + span.text(), last.style(), last.link()));
-            } else {
-                merged.add(span);
-            }
-        }
-        return new StyledText(List.copyOf(merged));
+        return new StyledText(this, other);
     }
 
     public StyledText append(String text) {
@@ -228,11 +293,11 @@ public final class StyledText {
 
     /** Returns the same content with every span restyled, keeping links. */
     public StyledText withStyle(Style style) {
-        if (spans.isEmpty()) {
+        if (!hasSpans) {
             return this;
         }
-        List<Span> restyled = new ArrayList<>(spans.size());
-        for (Span span : spans) {
+        List<Span> restyled = new ArrayList<>(spans().size());
+        for (Span span : spans()) {
             restyled.add(new Span(span.text(), style, span.link()));
         }
         return new StyledText(List.copyOf(restyled));
@@ -240,11 +305,11 @@ public final class StyledText {
 
     /** Returns the same content with every span linked to {@code target}. */
     public StyledText withLink(String target) {
-        if (spans.isEmpty()) {
+        if (!hasSpans) {
             return this;
         }
-        List<Span> linked = new ArrayList<>(spans.size());
-        for (Span span : spans) {
+        List<Span> linked = new ArrayList<>(spans().size());
+        for (Span span : spans()) {
             linked.add(new Span(span.text(), span.style(), target));
         }
         return new StyledText(List.copyOf(linked));
@@ -252,7 +317,7 @@ public final class StyledText {
 
     /** Removes trailing newline characters without disturbing styling. */
     public StyledText stripTrailingNewlines() {
-        List<Span> trimmed = new ArrayList<>(spans);
+        List<Span> trimmed = new ArrayList<>(spans());
         int index = trimmed.size() - 1;
         while (index >= 0) {
             Span last = trimmed.get(index);
@@ -282,7 +347,7 @@ public final class StyledText {
     public List<StyledText> lines() {
         List<StyledText> lines = new ArrayList<>();
         StyledText current = EMPTY;
-        for (Span span : spans) {
+        for (Span span : spans()) {
             String text = span.text();
             int start = 0;
             while (true) {
@@ -305,12 +370,12 @@ public final class StyledText {
 
     @Override
     public boolean equals(Object other) {
-        return other instanceof StyledText text && spans.equals(text.spans);
+        return other instanceof StyledText text && spans().equals(text.spans());
     }
 
     @Override
     public int hashCode() {
-        return spans.hashCode();
+        return spans().hashCode();
     }
 
     /** Bounded diagnostic form; never contains escape sequences and never includes links. */

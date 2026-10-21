@@ -26,6 +26,7 @@ import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.github.dhoard.braxton.internal.text.Graphemes;
 import io.github.dhoard.braxton.internal.text.Unicode16Width;
 
 /**
@@ -36,14 +37,6 @@ import io.github.dhoard.braxton.internal.text.Unicode16Width;
  * plain text; styled values measure their own plain text.</p>
  */
 public final class TextMeasure {
-
-    private static final String[] ASCII = new String[95];
-
-    static {
-        for (int i = 0; i < ASCII.length; i++) {
-            ASCII[i] = String.valueOf((char) (i + 0x20));
-        }
-    }
 
     /** Rendered in front of a cluster that has no base character to occupy a cell. */
     public static final String DOTTED_CIRCLE = "\u25CC";
@@ -57,24 +50,19 @@ public final class TextMeasure {
             return List.of();
         }
         List<String> clusters = new ArrayList<>();
-        if (ascii(text)) {
-            for (int i = 0; i < text.length(); i++) {
-                clusters.add(ASCII[text.charAt(i) - 0x20]);
-            }
-            return clusters;
-        }
-        BreakIterator iterator = BreakIterator.getCharacterInstance(java.util.Locale.ROOT);
-        iterator.setText(text);
-        int start = iterator.first();
-        for (int end = iterator.next(); end != BreakIterator.DONE; start = end, end = iterator.next()) {
-            clusters.add(text.substring(start, end));
+        for (String cluster : Graphemes.iterate(text)) {
+            clusters.add(cluster);
         }
         return clusters;
     }
 
     /** Number of grapheme clusters in {@code text}. Newlines count as one cluster. */
     public static int graphemeCount(String text) {
-        return graphemes(text).size();
+        int count = 0;
+        for (String ignored : Graphemes.iterate(text)) {
+            count++;
+        }
+        return count;
     }
 
     /** Terminal columns used by a single line of {@code text} under {@link WidthPolicy#PINNED}. */
@@ -88,7 +76,7 @@ public final class TextMeasure {
             return text.length();
         }
         int total = 0;
-        for (String cluster : graphemes(text)) {
+        for (String cluster : Graphemes.iterate(text)) {
             total += clusterColumns(cluster, policy);
         }
         return total;
@@ -103,11 +91,12 @@ public final class TextMeasure {
                 && cluster.charAt(0) >= 0x20 && cluster.charAt(0) <= 0x7E) {
             return 1;
         }
-        int[] codePoints = cluster.codePoints().toArray();
         boolean base = false;
         boolean mark = false;
         boolean wide = false;
-        for (int codePoint : codePoints) {
+        for (int offset = 0; offset < cluster.length();) {
+            int codePoint = cluster.codePointAt(offset);
+            offset += Character.charCount(codePoint);
             if (codePoint == 0xFE0E) {
                 return 1;
             }
@@ -164,7 +153,7 @@ public final class TextMeasure {
         }
         StringBuilder result = new StringBuilder();
         int used = 0;
-        for (String cluster : graphemes(text)) {
+        for (String cluster : Graphemes.iterate(text)) {
             int width = clusterColumns(cluster, policy);
             if (used + width > maxColumns) {
                 break;

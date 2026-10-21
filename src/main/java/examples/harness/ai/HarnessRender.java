@@ -85,8 +85,7 @@ final class HarnessRender {
             while (index < line.length() && (line.charAt(index) == ' ') == spaces) {
                 index++;
             }
-            String run = line.substring(start, index);
-            int runWidth = visibleLength(run);
+            int runWidth = runColumns(line, start, index);
             if (spaces) {
                 if (currentWidth == 0) {
                     // The run is whitespace, so clip it instead of truncating it: truncate marks a
@@ -95,7 +94,7 @@ final class HarnessRender {
                     current.append(leading);
                     currentWidth = visibleLength(leading);
                 } else if (currentWidth + runWidth <= limit) {
-                    current.append(run);
+                    current.append(line, start, index);
                     currentWidth += runWidth;
                 } else {
                     flush(current, out);
@@ -108,7 +107,7 @@ final class HarnessRender {
                     flush(current, out);
                     currentWidth = 0;
                 }
-                for (String cluster : TextMeasure.graphemes(run)) {
+                for (String cluster : TextMeasure.graphemes(line.substring(start, index))) {
                     int clusterWidth = TextMeasure.columns(cluster);
                     if (currentWidth > 0 && currentWidth + clusterWidth > limit) {
                         if (hasContent) {
@@ -122,11 +121,11 @@ final class HarnessRender {
                     hasContent = true;
                 }
             } else if (currentWidth == 0) {
-                current.append(run);
+                current.append(line, start, index);
                 currentWidth = runWidth;
                 hasContent = true;
             } else if (currentWidth + runWidth <= limit) {
-                current.append(run);
+                current.append(line, start, index);
                 currentWidth += runWidth;
                 hasContent = true;
             } else {
@@ -137,12 +136,23 @@ final class HarnessRender {
                 } else {
                     current.setLength(0);
                 }
-                current.append(run);
+                current.append(line, start, index);
                 currentWidth = runWidth;
                 hasContent = true;
             }
         }
         flush(current, out);
+    }
+
+    /** Measure ordinary word/space runs without allocating one substring for every word. */
+    private static int runColumns(String line, int start, int end) {
+        for (int i = start; i < end; i++) {
+            char c = line.charAt(i);
+            if (c < 0x20 || c > 0x7e) {
+                return visibleLength(line.substring(start, end));
+            }
+        }
+        return end - start;
     }
 
     private static void flush(StringBuilder current, List<String> out) {
