@@ -29,8 +29,11 @@ import java.util.Random;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.dhoard.braxton.internal.render.LayoutEngine;
+import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.view.ScreenRenderer;
 
 /** The bar clamps its fill, renders nothing unusable, and never draws past its width. */
 class ProgressBarTest {
@@ -104,6 +107,39 @@ class ProgressBarTest {
                 + "a b" + " post");
         assertThat(multi.render(0.5, 1.0).plainText().lines()).hasSize(1);
         assertThat(multi.render(1.0, 1.0).plainText()).doesNotContain("a b");
+    }
+
+    /**
+     * An icon is painted in one cell per row, so every line-break form inside it is one space in
+     * that cell. A bare CR is a break in the caller's string; leaving it to the styled-text
+     * boundary dropped it and joined the words on either side ("a\rb" painted "ab"), while LF and
+     * CRLF already painted "a b".
+     *
+     * <p>Only the icon strings can carry a bare CR this far: prepended and appended labels arrive
+     * as {@link StyledText}, whose span boundary already drops a bare CR as an unrepresentable
+     * control character, so that boundary is not changed here.</p>
+     */
+    @Test
+    void anIconBreakCannotJoinTheWordsOnEitherSide() {
+        for (String icon : List.of("a\nb", "a\rb", "a\r\nb")) {
+            String shown = icon.replace("\n", "\\n").replace("\r", "\\r");
+            ProgressBar active = ProgressBar.of(1).icons(icon, "x");
+            assertThat(active.render(1.0, 1.0).plainText())
+                    .as("painted active icon for %s", shown)
+                    .isEqualTo("a b");
+            ProgressBar inactive = ProgressBar.of(1).icons("x", icon);
+            assertThat(inactive.render(0.0, 1.0).plainText())
+                    .as("painted inactive icon for %s", shown)
+                    .isEqualTo("a b");
+            // The painted grid and the measured height are the oracle: one bar is one row, and the
+            // icon keeps its characters on it.
+            assertThat(new ScreenRenderer().plainLines(active.view(1.0, 1.0), new Viewport(1, 20)))
+                    .as("painted rows for icon %s", shown)
+                    .containsExactly("a b");
+            assertThat(new LayoutEngine().intrinsicHeight(active.view(1.0, 1.0), 20))
+                    .as("measured rows for icon %s", shown)
+                    .isEqualTo(1);
+        }
     }
 
     @Test

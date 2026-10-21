@@ -142,6 +142,23 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   `ImageViewTest.aSymbolThatCannotPaintOnOneLineCannotSplitOrShortenAnImageRow`; the editor prompt
   uses the same break-to-space rule at `EditorOptions`.
 
+## Progress bar icon boundary (2026-10-21)
+
+- `ProgressBar.icons(active, inactive)` is the only bar input that can still carry a bare CR:
+  prepended and appended labels arrive as `StyledText`, whose `Span` boundary drops a bare CR as
+  an unrepresentable control character before the widget is called. `flatten` now maps CRLF, CR,
+  LF and tab each to one space, so an icon `"a\rb"` paints `"a b"` instead of the merged `"ab"` it
+  painted when the CR reached the span boundary. Pinned by
+  `ProgressBarTest.anIconBreakCannotJoinTheWordsOnEitherSide`, which asserts both icons, the
+  painted rows through `ScreenRenderer`, and the measured height.
+- Still open, same rule, not fixed: `Badge.singleRow` and `Box.singleLine` flatten only LF and tab.
+  They take `StyledText`, so a bare CR is already gone; only a CRLF split across two spans yields
+  two spaces there. Treat them as coverage/decision leads rather than defects unless the rule is
+  moved to a shared helper.
+- Consequence for `ProgressBar`: the icon is painted one cell per row, so a wide icon is the
+  caller's choice (`aWideIconSpansItsOwnColumnsRatherThanBeingSqueezed`); flattening must not
+  change the bar's cell count.
+
 ## Editor caret width boundary (2026-10-21)
 
 - `Editor.renderLine` measures every cluster where it is painted: the caret's block covers that
@@ -177,9 +194,10 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
 
 - `Selector.view` builds `marker + option` as one text row, so an option is one painted row and the
   marker always names a whole option. `Selector.singleLine` flattens CRLF/CR/LF to one space, the
-  same rule `Markup`, `EditorOptions`, `Box`, `Badge` and `ProgressBar` apply: raw text split the
-  option across rows ("❯ a" / "b" for option `a\nb`) and pushed every later option down, and a
-  bare CR was dropped by the styled-text boundary (`c\rd` painted `cd`). Pinned by
+  same rule `Markup` and `EditorOptions` apply to their raw prefix strings (and `ProgressBar` to
+  its icon strings): raw text split the option across rows ("❯ a" / "b" for option `a\nb`) and
+  pushed every later option down, and a bare CR was dropped by the styled-text boundary (`c\rd`
+  painted `cd`). Pinned by
   `SelectorTest.anOptionCannotSplitItsRowAcrossLineBreaks`, which asserts the painted rows and that
   the list measures one row per option (`LayoutEngine.intrinsicHeight`).
 - `Selector` does not expand tabs itself: it never measures the option, and the layout engine
@@ -190,9 +208,11 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
 ## Quote bar boundary (2026-10-21)
 
 - `Quote.bar` is a one-line prefix painted at the start of every quoted line, so the builder
-  flattens CRLF/CR/LF to one space (the same rule `Markup`, `Selector`, `EditorOptions`, `Box`,
-  `Badge` and `ProgressBar` apply). A raw break split one quoted line into extra rows
-  (`a\nb` rendered `a` / `b x`), and a bare CR was dropped by the styled-text boundary
+  flattens CRLF/CR/LF to one space (the same rule `Markup`, `Selector`, `EditorOptions` and, for
+  its raw icon strings, `ProgressBar` apply; `Box` and `Badge` still flatten only LF and tab -
+  they take `StyledText`, whose span boundary drops a bare CR before the widget sees it). A raw
+  break split one quoted line into extra rows (`a\nb` rendered `a` / `b x`), and a bare CR was
+  dropped by the styled-text boundary
   (`a\rb` merged to `ab x`). The null/empty fallback to a space is unchanged, and a
   whitespace-only bar remains a bar of spaces. Pinned by
   `QuoteTest.aBarCannotSplitAQuotedLineAcrossRows`, which asserts the rendered rows, the painted

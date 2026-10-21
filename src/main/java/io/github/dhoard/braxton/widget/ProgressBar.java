@@ -123,8 +123,13 @@ public final class ProgressBar {
         return text == null ? "" : flatten(text);
     }
 
+    /**
+     * Every break form is one space. CRLF and LF were already spaces, but a bare CR was left to the
+     * styled-text boundary, which drops it as an unrepresentable control character: an icon
+     * {@code "a\rb"} painted {@code "ab"} and lost the break between the two words.
+     */
     private static String flatten(String text) {
-        return text.replace('\n', ' ').replace('\t', ' ');
+        return text.replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ').replace('\t', ' ');
     }
 
     /** Renders a fraction of {@code value / max}; invalid bounds render an empty bar. */
