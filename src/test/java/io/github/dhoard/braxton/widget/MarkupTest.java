@@ -170,6 +170,38 @@ class MarkupTest {
                 .as("only li children become bullets").isEqualTo("  \u2022 bullet");
     }
 
+    /**
+     * A list icon is a one-line prefix, so it is painted as one: a tab advances to the text view's
+     * four-column stop and a line break becomes a space. Measuring the raw icon with
+     * {@code TextMeasure.columns} (which counts a tab or a break as one column) calculated a
+     * continuation indent under a column the painted prefix never reaches.
+     */
+    @Test
+    void aListIconIsMeasuredAsThePaintedOneLinePrefix() {
+        String tabbed = "<root><ul gap=\"0\" icon=\"&gt;&#9;\"><li>a<br/>b</li></ul></root>";
+        assertThat(Markup.parse(tabbed).plainText()).isEqualTo(">    a\n     b");
+        assertPaintedContinuationAlignsUnderTheItemText(tabbed, 'a', 'b');
+
+        String broken = "<root><ul gap=\"0\" icon=\"a&#10;b\"><li>c<br/>d</li></ul></root>";
+        assertThat(Markup.parse(broken).plainText()).isEqualTo("a b c\n    d");
+        assertPaintedContinuationAlignsUnderTheItemText(broken, 'c', 'd');
+
+        String carriageReturn = "<root><ul gap=\"0\" icon=\"e&#13;f\"><li>g<br/>h</li></ul></root>";
+        assertThat(Markup.parse(carriageReturn).plainText()).isEqualTo("e f g\n    h");
+        assertPaintedContinuationAlignsUnderTheItemText(carriageReturn, 'g', 'h');
+    }
+
+    /** The painted first-line item text and the painted continuation text share one column. */
+    private static void assertPaintedContinuationAlignsUnderTheItemText(String xml, char item,
+            char continuation) {
+        List<String> painted = new io.github.dhoard.braxton.view.ScreenRenderer()
+                .plainLines(Markup.view(xml), new io.github.dhoard.braxton.layout.Viewport(4, 24));
+        assertThat(painted.get(1).indexOf(continuation))
+                .as("continuation column in %s", painted)
+                .isEqualTo(painted.get(0).indexOf(item))
+                .isNotEqualTo(-1);
+    }
+
     @Test
     void paragraphsAndBreaksEndTheirLines() {
         assertThat(Markup.parse("<root><p>one</p><p>two</p></root>").plainText())

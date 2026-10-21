@@ -155,3 +155,21 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
 - The harness composer always paints a `"> "` prompt, so a tab after `"> a"` is only one column
   wide there; a discriminating packaged-harness pyte check needs a draft such as `"ab\tc"` whose
   tab starts on a stop boundary (four columns at visual column 4).
+
+## Markup list prefix boundary (2026-10-21)
+
+- A Markup list `icon` is a one-line prefix. `Markup.renderList` flattens CRLF/CR/LF to one space
+  and expands tabs with `TabStops.expand` over `indent + icon + " "` (tabs count from the line
+  start, i.e. after the `gap` indent), then hangs continuation lines under
+  `TextMeasure.columns(prefix)`. Measuring the raw icon instead put them under columns the prefix
+  never paints: with `icon=">&#9;"` the prefix paints 5 columns but the continuation was indented
+  3, and `icon="a&#10;b"` split the item across rows (CR was silently dropped, merging words).
+  Pinned by `MarkupTest.aListIconIsMeasuredAsThePaintedOneLinePrefix`, which also asserts the
+  painted columns through `ScreenRenderer`; a whitespace-only icon still falls back to the default
+  bullet (`CatalogTest.aWhitespaceListIconFallsBackToTheDefaultBullet`).
+- Consequence to remember: `TextMeasure.columns` counts a tab and a line break as one column, so
+  every widget that measures a tab-bearing prefix must expand it first (`TabStops`).
+- Unfixed leads (no decision yet): `Selector` options and `Quote.bar` are inserted raw, so a line
+  break there splits a one-row element, and `ScreenRenderer.columns`/`TextMeasure.columns` report
+  a tab as one column while the layout engine paints 1-4, which cannot be fixed inside
+  `columns()` alone because `truncate`/`fit` need the positional stop rule.

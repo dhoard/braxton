@@ -58,6 +58,10 @@ import io.github.dhoard.braxton.view.Views;
  * <p>The input is a well-formed XML document, not HTML: it has exactly one root element and an
  * element that encloses no content is closed explicitly, so a line break is written {@code <br/>}
  * and a bare {@code <br>} is rejected like any other malformed document.</p>
+ *
+ * <p>A list {@code icon} is a one-line prefix, so a line break in it becomes a space and a tab
+ * advances to the same four-column stops the text view paints; continuation lines therefore stay
+ * under the first line's item text.</p>
  */
 public final class Markup {
 
@@ -213,6 +217,14 @@ public final class Markup {
         String bullet = list.hasAttribute("icon") && !list.getAttribute("icon").isBlank()
                 ? list.getAttribute("icon") : DEFAULT_BULLET;
         int gap = parseInt(list.getAttribute("gap"), DEFAULT_GAP);
+        // The bullet prefixes one line, so it is normalized the way every other one-line
+        // decoration is: a line break becomes a space and a tab advances to the same four-column
+        // stops the text view paints. Measuring the raw icon instead (a tab and a break are one
+        // column to TextMeasure.columns) hung continuation lines under a column the painted
+        // prefix never reaches, or split the item across rows.
+        StyledText prefix = TabStops.expand(StyledText.of(
+                " ".repeat(Math.max(0, gap)) + singleLine(bullet) + " ", style, link));
+        String continuation = " ".repeat(TextMeasure.columns(prefix.plainText()));
         StyledText out = StyledText.empty();
         NodeList children = list.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
@@ -220,10 +232,8 @@ public final class Markup {
                     || !"li".equalsIgnoreCase(item.getTagName())) {
                 continue;
             }
-            String indent = " ".repeat(Math.max(0, gap));
-            String continuation = " ".repeat(Math.max(0, gap) + TextMeasure.columns(bullet) + 1);
             StyledText content = renderChildren(item, style, link);
-            StyledText rendered = StyledText.of(indent + bullet + " ", style, link)
+            StyledText rendered = prefix
                     .append(indentAfterFirstLine(content, continuation, style, link));
             out = out.append(rendered);
             if (!rendered.plainText().endsWith("\n")) {
@@ -231,6 +241,11 @@ public final class Markup {
             }
         }
         return out;
+    }
+
+    /** A list bullet prefixes one line, so CRLF, CR and LF each become one space. */
+    private static String singleLine(String value) {
+        return value.replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ');
     }
 
     /** Aligns every line after the first under the first line's text, keeping span styling. */
