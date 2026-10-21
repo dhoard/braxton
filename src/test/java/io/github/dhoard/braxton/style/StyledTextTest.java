@@ -125,6 +125,23 @@ class StyledTextTest {
     }
 
     @Test
+    void emptySanitizedSpansCannotHideTrailingNewlines() {
+        Style bold = Style.NONE.withBold();
+        StyledText emptyTail = StyledText.of("\u001b", bold);
+        StyledText untrimmed = StyledText.plain("kept").append(emptyTail);
+        assertThat(untrimmed.stripTrailingNewlines()).isEqualTo(untrimmed);
+        StyledText content = StyledText.of("kept\n\n", Style.NONE, "https://example.com");
+        assertThat(content.append(emptyTail).stripTrailingNewlines())
+                .isEqualTo(StyledText.of("kept", Style.NONE, "https://example.com"));
+        StyledText split = StyledText.plain("kept\n").append(emptyTail)
+                .append(StyledText.of("\n", bold)).append(emptyTail);
+        assertThat(split.stripTrailingNewlines().plainText()).isEqualTo("kept");
+        assertThat(StyledText.plain("\n").append(emptyTail).stripTrailingNewlines())
+                .isEqualTo(StyledText.empty());
+        assertThat(StyledText.plain("a\nb").stripTrailingNewlines().plainText()).isEqualTo("a\nb");
+    }
+
+    @Test
     void columnsIsTheWidestLineRatherThanTheWholeValue() {
         assertThat(StyledText.plain("ab\ncd").columns()).isEqualTo(2);
         assertThat(StyledText.plain("a\nbbb").columns()).isEqualTo(3);

@@ -253,9 +253,14 @@ public final class StyledText {
     /** Removes trailing newline characters without disturbing styling. */
     public StyledText stripTrailingNewlines() {
         List<Span> trimmed = new ArrayList<>(spans);
-        while (!trimmed.isEmpty()) {
-            Span last = trimmed.get(trimmed.size() - 1);
+        int index = trimmed.size() - 1;
+        while (index >= 0) {
+            Span last = trimmed.get(index);
             String text = last.text();
+            if (text.isEmpty()) {
+                index--;
+                continue;
+            }
             int end = text.length();
             while (end > 0 && text.charAt(end - 1) == '\n') {
                 end--;
@@ -263,10 +268,12 @@ public final class StyledText {
             if (end == text.length()) {
                 break;
             }
-            trimmed.remove(trimmed.size() - 1);
+            trimmed.subList(index, trimmed.size()).clear();
             if (end > 0) {
                 trimmed.add(new Span(text.substring(0, end), last.style(), last.link()));
+                break;
             }
+            index--;
         }
         return trimmed.isEmpty() ? EMPTY : new StyledText(List.copyOf(trimmed));
     }
