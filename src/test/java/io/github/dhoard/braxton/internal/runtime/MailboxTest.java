@@ -78,6 +78,9 @@ class MailboxTest {
         Mailbox mailbox = new Mailbox(2);
         mailbox.enqueueFromOwner(new Mailbox.AppMessage("pending"));
         mailbox.close();
+        assertThat(mailbox.size()).as("closed mailboxes release undeliverable payloads").isZero();
+        mailbox.close();
+        assertThat(mailbox.size()).isZero();
         assertThat(mailbox.enqueue(new Mailbox.AppMessage("late"), 0L)).isFalse();
         assertThatThrownBy(() -> mailbox.enqueueFromOwner(new Mailbox.AppMessage("late")))
                 .isInstanceOf(IllegalStateException.class);

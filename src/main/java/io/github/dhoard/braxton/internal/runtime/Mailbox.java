@@ -163,11 +163,12 @@ public final class Mailbox {
         }
     }
 
-    /** Wakes every blocked producer and consumer. Idempotent. */
+    /** Discards undeliverable envelopes and wakes every blocked producer and consumer. Idempotent. */
     public void close() {
         lock.lock();
         try {
             closed = true;
+            queue.clear();
             notEmpty.signalAll();
             notFull.signalAll();
         } finally {
