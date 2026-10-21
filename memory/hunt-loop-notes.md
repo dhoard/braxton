@@ -118,3 +118,17 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
 - Hyperlink metadata has its own control boundary: span content sanitization does not validate a
   URL, and direct Screen callers bypass Span entirely. Both typed link validation and the encoder's
   defensive `safeLink` path now exclude C1 as well as C0 controls (fe526d2).
+
+## Geometry arithmetic (2026-10-21)
+
+- `Insets.horizontal()`/`vertical()` add two non-negative ints, so a valid `Insets` (constructor only
+  rejects negatives) can sum past `Integer.MAX_VALUE` and wrap negative. `Rect.inset` then *grows*
+  the rectangle: a 5x5 rect with `Insets.uniform(1_200_000_000)` became 1,894,967,301 cells.
+  Both accessors now saturate at `Integer.MAX_VALUE` (widened long sum), pinned by
+  `GeometryTest.insetSpacingThatOverflowsIntCannotGrowTheRectangle`. `LayoutEngine` padding
+  measurement consumes the same accessors.
+- Unfixed lead: `Rect.inset` still adds the insets to the origin in `int`, so a valid rect near
+  `Integer.MAX_VALUE` (`new Rect(Integer.MAX_VALUE - 2, 0, 8, 9).inset(Insets.uniform(5))`) throws
+  `IllegalArgumentException: rect must be non-negative` instead of clamping. `Rect.contains` and
+  `Rect.clip` already widen to long; `inset`'s origin arithmetic does not. Needs a decision on what
+  a shifted origin beyond `Integer.MAX_VALUE` should be (clamp vs reject).

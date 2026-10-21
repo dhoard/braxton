@@ -59,6 +59,29 @@ class GeometryTest {
     }
 
     @Test
+    void insetSpacingThatOverflowsIntCannotGrowTheRectangle() {
+        // Two non-negative insets can sum past Integer.MAX_VALUE. The aggregate spacing must
+        // saturate there instead of wrapping negative, because insetting can only shrink.
+        Insets huge = Insets.symmetric(Integer.MAX_VALUE, Integer.MAX_VALUE);
+        assertThat(huge.vertical()).isEqualTo(Integer.MAX_VALUE);
+        assertThat(huge.horizontal()).isEqualTo(Integer.MAX_VALUE);
+
+        Rect rect = new Rect(0, 0, 5, 5);
+        Rect shrunk = rect.inset(huge);
+        assertThat(shrunk.rows()).isZero();
+        assertThat(shrunk.cols()).isZero();
+
+        Insets large = Insets.uniform(1_200_000_000);
+        assertThat(large.vertical()).isEqualTo(Integer.MAX_VALUE);
+        assertThat(large.horizontal()).isEqualTo(Integer.MAX_VALUE);
+        assertThat(rect.inset(large).isEmpty()).isTrue();
+
+        // A sum that still fits in an int stays exact.
+        assertThat(Insets.uniform(1_000_000_000).horizontal()).isEqualTo(2_000_000_000);
+        assertThat(Insets.uniform(1_000_000_000).vertical()).isEqualTo(2_000_000_000);
+    }
+
+    @Test
     void clipIntersectsAndContainsUsesHalfOpenBounds() {
         Rect bounds = new Rect(0, 0, 10, 10);
         Rect clipped = new Rect(5, 5, 20, 20).clip(bounds);

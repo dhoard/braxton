@@ -41,11 +41,23 @@ public record Insets(int top, int right, int bottom, int left) {
         return new Insets(vertical, horizontal, vertical, horizontal);
     }
 
+    /**
+     * Total horizontal spacing, saturating at {@link Integer#MAX_VALUE}.
+     *
+     * <p>Both halves are non-negative but their sum need not fit in an {@code int}; a wrapped
+     * negative total would make {@link Rect#inset(Insets)} grow a rectangle instead of shrinking
+     * it.</p>
+     */
     public int horizontal() {
-        return left + right;
+        return saturatedSum(left, right);
     }
 
+    /** Total vertical spacing, saturating at {@link Integer#MAX_VALUE} like {@link #horizontal()}. */
     public int vertical() {
-        return top + bottom;
+        return saturatedSum(top, bottom);
+    }
+
+    private static int saturatedSum(int first, int second) {
+        return (int) Math.min(Integer.MAX_VALUE, (long) first + second);
     }
 }
