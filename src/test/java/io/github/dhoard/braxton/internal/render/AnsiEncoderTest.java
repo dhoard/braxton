@@ -90,6 +90,17 @@ class AnsiEncoderTest {
     }
 
     @Test
+    void rawScreenHyperlinksCannotCarryC1ControlsIntoOsc8() {
+        for (char control = 0x80; control <= 0x9f; control++) {
+            Screen screen = new Screen(1, 2);
+            screen.put(0, 0, "x", Style.NONE, "https://example.com/a" + control + "b", 1);
+            String encoded = AnsiEncoder.encodeRow(screen, 0);
+            assertThat(encoded).doesNotContain(String.valueOf(control));
+            assertThat(encoded).contains("https://example.com/ab");
+        }
+    }
+
+    @Test
     void dataCannotInjectEscapesBecauseContentIsSanitizedBeforeEncoding() {
         var content = StyledText.of("x\u001B[31my", Style.NONE);
         var screen = new io.github.dhoard.braxton.internal.render.LayoutEngine()

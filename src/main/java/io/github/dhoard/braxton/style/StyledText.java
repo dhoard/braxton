@@ -36,7 +36,7 @@ import java.util.Objects;
  */
 public final class StyledText {
 
-    /** One styled run of text. {@code link} may be null. */
+    /** One styled run of text. {@code link} may be null but cannot contain C0/C1 controls. */
     public record Span(String text, Style style, String link) {
 
         public Span {
@@ -97,7 +97,7 @@ public final class StyledText {
         }
 
         private static boolean containsControl(String value) {
-            return value.codePoints().anyMatch(code -> code < 0x20 || code == 0x7F);
+            return value.codePoints().anyMatch(Character::isISOControl);
         }
     }
 

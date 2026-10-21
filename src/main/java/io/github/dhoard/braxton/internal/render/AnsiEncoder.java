@@ -161,7 +161,7 @@ public final class AnsiEncoder {
         StringBuilder safe = new StringBuilder(link.length());
         for (int i = 0; i < link.length(); i++) {
             char c = link.charAt(i);
-            if (c >= 0x20 && c != 0x7F) {
+            if (!Character.isISOControl(c)) {
                 safe.append(c);
             }
         }

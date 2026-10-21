@@ -94,6 +94,19 @@ class StyledTextTest {
     }
 
     @Test
+    void hyperlinkTargetsRejectEveryC1Control() {
+        for (char control = 0x80; control <= 0x9f; control++) {
+            String target = "https://example.com/a" + control + "b";
+            org.assertj.core.api.Assertions.assertThatThrownBy(
+                    () -> StyledText.of("link", Style.NONE, target))
+                    .as("C1 control U+%04X in link", (int) control)
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThat(StyledText.of("link", Style.NONE, "https://example.com/漢字").spans().get(0).link())
+                .isEqualTo("https://example.com/漢字");
+    }
+
+    @Test
     void restylingAndLinkingDoNotChangeContent() {
         StyledText text = StyledText.plain("abc").withStyle(Style.NONE.withBold())
                 .withLink("https://example.com");
