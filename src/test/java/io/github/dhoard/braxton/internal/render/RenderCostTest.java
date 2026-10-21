@@ -29,6 +29,7 @@ import java.lang.management.ManagementFactory;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
+import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
@@ -46,6 +47,40 @@ class RenderCostTest {
         long before = bean.getThreadAllocatedBytes(Thread.currentThread().threadId());
         action.run();
         return bean.getThreadAllocatedBytes(Thread.currentThread().threadId()) - before;
+    }
+
+    @Test
+    void aUniformFillDoesNotAllocateAnIdenticalImmutableCellForEveryPosition() {
+        Style background = Style.bg(Colors.BLACK);
+        Rect bounds = new Rect(0, 0, 40, 120);
+        long bytes = allocated(() -> {
+            Screen screen = new Screen(40, 120);
+            screen.fill(bounds, background);
+            sink = screen;
+        });
+        assertThat(bytes).as("grid storage plus one immutable fill value").isLessThan(60_000L);
+    }
+
+    @Test
+    void cellsFromTheSameFillRemainIndependentWhenRepainted() {
+        Style background = Style.bg(Colors.BLACK);
+        Screen actual = new Screen(2, 4);
+        actual.fill(new Rect(0, 0, 2, 4), background);
+        Screen expected = new Screen(2, 4);
+        for (int row = 0; row < 2; row++) {
+            for (int col = 0; col < 4; col++) {
+                expected.put(row, col, " ", background, null, 1);
+            }
+        }
+        assertThat(actual).isEqualTo(expected);
+        actual.put(0, 1, "漢", Style.NONE, null, 2);
+        expected.put(0, 1, "漢", Style.NONE, null, 2);
+        actual.clear(1, 2);
+        expected.clear(1, 2);
+        assertThat(actual).isEqualTo(expected);
+        assertThat(actual.cell(1, 1).style()).isEqualTo(background);
+        actual.fill(new Rect(0, 0, 1, 1), Style.bg(Colors.WHITE));
+        assertThat(actual.cell(1, 1).style()).isEqualTo(background);
     }
 
     @Test

@@ -194,9 +194,10 @@ public final class Screen {
         if (style == null || style.isPlain()) {
             return;
         }
+        Cell fill = new Cell(" ", style, null);
         for (int row = clipped.row(); row < clipped.row() + clipped.rows(); row++) {
             for (int col = clipped.col(); col < clipped.col() + clipped.cols(); col++) {
-                cells[index(row, col)] = new Cell(" ", style, null);
+                cells[index(row, col)] = fill;
             }
         }
     }
