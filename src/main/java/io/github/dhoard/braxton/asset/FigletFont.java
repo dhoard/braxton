@@ -145,9 +145,9 @@ public final class FigletFont {
         String value = text == null ? "" : text;
         List<String> result = new ArrayList<>();
         for (String line : value.split("\n", -1)) {
-            List<String> rows = new ArrayList<>();
+            List<StringBuilder> rows = new ArrayList<>();
             for (int row = 0; row < height; row++) {
-                rows.add("");
+                rows.add(new StringBuilder());
             }
             for (int i = 0; i < line.length(); i++) {
                 List<String> glyph = glyphs.get(line.charAt(i));
@@ -155,11 +155,11 @@ public final class FigletFont {
                     continue;
                 }
                 for (int row = 0; row < height; row++) {
-                    rows.set(row, rows.get(row) + glyph.get(row));
+                    rows.get(row).append(glyph.get(row));
                 }
             }
-            for (String row : rows) {
-                result.add(row.replace(hardBlank, ' ').stripTrailing());
+            for (StringBuilder row : rows) {
+                result.add(row.toString().replace(hardBlank, ' ').stripTrailing());
             }
         }
         return List.copyOf(result);
