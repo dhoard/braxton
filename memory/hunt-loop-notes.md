@@ -401,3 +401,21 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
 - All three identity types now validate a child name (`ElementId`, `EffectId`, `SubscriptionId`). A
   fourth join site added later must apply the same rule; a raw value built directly can still be
   opaque and contain `/`.
+
+## Editor mask boundary (2026-10-21)
+
+- `EditorState.displayText` in PASSWORD mode is documented as "one mask glyph per cluster, line
+  breaks kept, exactly as `Editor.render` draws them", and `Editor.render` masks the CR cell of a
+  CR/LF pair and breaks the line at the LF. `masked()` had mapped the whole CR/LF cluster (one
+  grapheme cluster) to a single glyph, so a draft containing CRLF collapsed two painted lines into
+  one: `displayText` returned "•••" where `render` painted "••\n•" (probed: 112 of 500 random
+  drafts over `{a,b,\n,\r,\r\n,\t,mark,wide}` mismatched before the change, 0 after). A CR/LF
+  cluster now masks as one glyph **plus** the line break; a lone LF stays a bare break. Pinned by
+  `EditorMaskingTest.aCrLfPairMasksAsOneGlyphAndKeepsItsLineBreak` (five drafts, equality with
+  `Editor.render`, line count, and the exact masked form of "a\r\nb").
+- Reachability: the reducer normalizes what it inserts (`insert` replaces CRLF/CR with LF) and the
+  paste sanitizer does the same, so only a draft built directly from raw text
+  (`new EditorState(...)`, `EditorState.of`, `withText`) can hold CRLF. That is the path the
+  masked display must still describe correctly; the public record constructor accepts it.
+- A bare CR is its own cluster and stays one mask glyph (it is invisible in NONE mode, but masking
+  shows one cell per non-break cluster). `Editor.render` masks it the same way, so the two agree.

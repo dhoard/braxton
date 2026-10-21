@@ -49,6 +49,29 @@ class EditorMaskingTest {
     }
 
     @Test
+    void aCrLfPairMasksAsOneGlyphAndKeepsItsLineBreak() {
+        // A CR/LF pair is one grapheme cluster, but it is also one line break. The painted editor
+        // masks the CR cell and breaks the line at the LF, so the masked display must do both:
+        // collapsing the pair into a single glyph loses the break, and dropping the glyph would
+        // disagree with render. A draft can carry a CR/LF pair whenever an application constructs
+        // EditorState from raw text; the reducer normalizes what it inserts, not what it is given.
+        for (String draft : new String[] {"a\r\nb", "\r\n", "a\n\r\nb", "a\r", "\r\n\r\n"}) {
+            EditorState state = EditorState.of(draft).withCaret(0);
+            String display = state.displayText(PASSWORD);
+            assertThat(display).as("masked display of [%s]", visible(draft))
+                    .isEqualTo(Editor.render(state, PASSWORD, false).plainText());
+            assertThat(display.split("\n", -1)).as("masked lines of [%s]", visible(draft))
+                    .hasSize(state.lineCount());
+        }
+        assertThat(EditorState.of("a\r\nb").displayText(PASSWORD))
+                .isEqualTo("\u2022\u2022\n\u2022");
+    }
+
+    private static String visible(String text) {
+        return text.replace("\r", "\\r").replace("\n", "\\n");
+    }
+
+    @Test
     void aHiddenDraftRendersNoContentAndNeverCopies() {
         EditorState state = EditorState.of("secret");
         assertThat(Editor.render(state, HIDDEN, false).plainText()).isEmpty();

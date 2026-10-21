@@ -16,7 +16,8 @@ not an authoritative source of requirements; verify details against `PROJECT.md`
   hint pairing (a confirmation's hint must leave the rule with the confirmation), the shutdown
   wait's harmless wrapped deadline (a difference-comparison rule, not an overflow defect), the
   identity separator rule (an element-id, effect-id, or subscription-id child name may not forge
-  another parent's path), and coverage-hunting observations.
+  another parent's path), the editor masked-display CR/LF rule (a CR/LF pair masks as one glyph and
+  a line break, matching the painted editor), and coverage-hunting observations.
 - [JMH benchmark harness](memory/jmh-benchmarks.md) - how to run the offline benchmark suite, the
   JDK 23+ annotation-processor and `-Xlint:processing` build traps, the evidence discipline for
   benchmark numbers, and the measured performance gaps recorded as hunt candidates.

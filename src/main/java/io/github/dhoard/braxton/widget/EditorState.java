@@ -144,11 +144,23 @@ public record EditorState(String text, int caret, int anchor, int preferredColum
         };
     }
 
-    /** One mask glyph per cluster, line breaks kept, exactly as {@link Editor#render} draws them. */
+    /**
+     * One mask glyph per cluster, line breaks kept, exactly as {@link Editor#render} draws them.
+     *
+     * <p>A CR/LF pair is one cluster but also one line break: {@link Editor#render} masks the CR
+     * cell and breaks the line at the LF, so the pair masks as one glyph followed by a newline.
+     * Masking it as only a glyph would collapse two lines into one.</p>
+     */
     private String masked() {
         StringBuilder masked = new StringBuilder(text.length());
         for (String cluster : TextMeasure.graphemes(text)) {
-            masked.append("\n".equals(cluster) ? "\n" : "\u2022");
+            if ("\n".equals(cluster)) {
+                masked.append('\n');
+            } else if (cluster.indexOf('\n') >= 0) {
+                masked.append("\u2022").append('\n');
+            } else {
+                masked.append("\u2022");
+            }
         }
         return masked.toString();
     }
