@@ -105,6 +105,36 @@ class TableSelectorTest {
     }
 
     @Test
+    void aCellBreakCannotWidenTheSharedGrid() {
+        // TableSelector prepares every cell with the same one-line rule the sibling widgets apply
+        // (Selector, Markup, Quote, ImageView, ProgressBar, EditorOptions): CRLF, CR and LF each
+        // become one space. Flattening per character instead turned CRLF into two spaces, so a
+        // Windows line ending widened the shared column and pushed every later column right.
+        List<String> lineBreak = painted(List.of("id", "n"), List.of(List.of("1", "a\r\nb")));
+        List<String> bareLf = painted(List.of("id", "n"), List.of(List.of("1", "a\nb")));
+        List<String> bareCr = painted(List.of("id", "n"), List.of(List.of("1", "a\rb")));
+        assertThat(lineBreak).as("CRLF is one break, so it paints as one space").isEqualTo(bareLf);
+        assertThat(bareCr).as("CR is one break, so it paints as one space").isEqualTo(bareLf);
+        assertThat(bareLf).containsExactly("id  n", "1   a b");
+
+        // The widened cell also shifted the next column: with the one-space rule every row of the
+        // grid puts the third column at the same painted column.
+        List<String> threeColumns =
+                painted(List.of("id", "n", "x"), List.of(List.of("1", "a\r\nb", "z")));
+        List<String> control =
+                painted(List.of("id", "n", "x"), List.of(List.of("1", "a\nb", "z")));
+        assertThat(threeColumns).isEqualTo(control);
+        assertThat(control).containsExactly("id  n    x", "1   a b  z");
+    }
+
+    private static List<String> painted(List<String> header, List<List<String>> rows) {
+        return new ScreenRenderer()
+                .plainLines(TableSelector.view(ElementId.of("table"),
+                        TableSelector.State.of(header, rows), true, Style.NONE.withInvert(),
+                        Style.NONE, Style.NONE.withBold(), action -> action), new Viewport(2, 40));
+    }
+
+    @Test
     void onlyTheSelectedCellIsInvertedAndOnlyWhileFocused() {
         var screen = new ScreenRenderer().screen(TableSelector.view(ElementId.of("table"), state(),
                 true, Style.NONE.withInvert(), Style.NONE, Style.NONE.withBold(),

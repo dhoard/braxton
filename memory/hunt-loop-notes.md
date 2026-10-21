@@ -253,3 +253,16 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
 - The harness uses no `Grow` view, so the pyte probe only proves the packaged application still
   starts, paints, submits, stops, and exits 0; the arithmetic path's oracle is `ScreenRenderer`
   through `LayoutEngineTest`.
+
+## Table selector cell boundary (2026-10-21)
+
+- Every raw-string cell in `TableSelector.State` is normalized by `TableSelector.expanded` before it
+  is measured, and each cell is one painted row. The rule is now the same one `Selector`, `Markup`,
+  `Quote`, `ImageView`, `ProgressBar` and `EditorOptions` apply: CRLF, CR and LF each become one
+  space. Flattening per character (`replace('\n', ' ')` then `replace('\r', ' ')`) turned a CRLF into
+  two spaces, so a Windows line ending widened the shared column and shifted every later column:
+  cells `"a\r\nb"` painted `"a  b"` where `"a\nb"` painted `"a b"`. Pinned by
+  `TableSelectorTest.aCellBreakCannotWidenTheSharedGrid` (CRLF/CR/LF paint identically, and a third
+  column lands on the same painted column), which asserts the painted grid through `ScreenRenderer`.
+- Tabs are still expanded after the break flattening, from the cell's own start, because the cell is
+  painted as a unit; the stored state and `selectedValue()` remain the caller's raw text.

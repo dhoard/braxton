@@ -194,17 +194,25 @@ public final class TableSelector {
     }
 
     /**
-     * Prepares every cell the way the text view paints it: line breaks become spaces, and tab stops
-     * are expanded to the shared four-column boundaries, so a measured column and a displayed
-     * column agree and each row stays a single line.
+     * Prepares every cell the way the text view paints it: CRLF, CR and LF each become one space,
+     * and tab stops are expanded to the shared four-column boundaries, so a measured column and a
+     * displayed column agree and each row stays a single line.
      */
     private static List<String> expanded(List<String> values) {
         List<String> out = new ArrayList<>(values.size());
         for (String value : values) {
-            String singleRow = value.replace('\n', ' ').replace('\r', ' ');
-            out.add(TabStops.expand(StyledText.plain(singleRow)).plainText());
+            out.add(TabStops.expand(StyledText.plain(singleRow(value))).plainText());
         }
         return out;
+    }
+
+    /**
+     * A cell is one painted row, so every break form is one space - the rule {@link Selector},
+     * {@link Markup}, {@link Quote}, {@link ImageView} and {@link ProgressBar} apply. Flattening
+     * per character turned CRLF into two spaces and widened the shared column.
+     */
+    private static String singleRow(String value) {
+        return value.replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ');
     }
 
     private static String pad(String text, int width) {
