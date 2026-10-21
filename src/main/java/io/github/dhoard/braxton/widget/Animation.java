@@ -57,12 +57,12 @@ public final class Animation {
         java.util.List<String> clusters = io.github.dhoard.braxton.style.TextMeasure.graphemes(value);
         int period = clusters.size() + 12;
         int position = Math.floorMod(nowNanos / 70_000_000L, Math.max(1, period));
-        StyledText out = StyledText.empty();
+        StyledText[] parts = new StyledText[clusters.size()];
         for (int i = 0; i < clusters.size(); i++) {
             boolean lit = i >= position - 3 && i <= position;
-            out = out.append(StyledText.of(clusters.get(i), lit ? highlightStyle : baseStyle));
+            parts[i] = StyledText.of(clusters.get(i), lit ? highlightStyle : baseStyle);
         }
-        return out;
+        return StyledText.concat(parts);
     }
 
     /** The number of frames in a full spinner cycle. */
