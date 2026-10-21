@@ -188,16 +188,16 @@ public final class FakeTerminal implements TerminalBackend, TerminalSession {
         @Override
         public synchronized int read() {
             recordThread();
-            if (failure != null) {
-                throw failure;
-            }
-            while (bytes.isEmpty() && !ended && !closed) {
+            while (bytes.isEmpty() && !ended && !closed && failure == null) {
                 try {
                     wait(1_000L);
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                     return -1;
                 }
+            }
+            if (failure != null) {
+                throw failure;
             }
             if (bytes.isEmpty()) {
                 return -1;

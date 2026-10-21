@@ -100,6 +100,30 @@ class FakeTerminalTest {
     }
 
     @Test
+    void failingInputWakesAnAlreadyBlockedReader() throws Exception {
+        FakeTerminal terminal = new FakeTerminal();
+        java.util.concurrent.FutureTask<Integer> result = new java.util.concurrent.FutureTask<>(
+                () -> terminal.input().read());
+        Thread reader = Thread.ofVirtual().start(result);
+        try {
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            while (reader.getState() != Thread.State.TIMED_WAITING && System.nanoTime() < deadline) {
+                Thread.sleep(1);
+            }
+            assertThat(reader.getState()).as("reader reached the scripted input wait")
+                    .isEqualTo(Thread.State.TIMED_WAITING);
+            IllegalStateException failure = new IllegalStateException("broken input");
+            terminal.failInput(failure);
+            assertThatThrownBy(() -> result.get(1, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class).hasCause(failure);
+        } finally {
+            terminal.close();
+            reader.join(5_000);
+        }
+        assertThat(reader.isAlive()).isFalse();
+    }
+
+    @Test
     void anOpenedSessionKeepsEveryWriteInOrder() throws IOException {
         FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
         terminal.open(new Size(6, 20), TerminalOptions.DEFAULT);
