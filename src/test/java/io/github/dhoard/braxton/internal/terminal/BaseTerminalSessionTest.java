@@ -138,6 +138,24 @@ class BaseTerminalSessionTest {
     }
 
     @Test
+    void bulkReadRejectsOverflowingRangesEvenAfterClose() throws Exception {
+        ScriptedSession session = new ScriptedSession();
+        session.close();
+        byte[] buffer = new byte[4];
+        int[][] ranges = {{Integer.MAX_VALUE, Integer.MAX_VALUE}, {1, Integer.MAX_VALUE},
+                {-1, 1}, {0, -1}, {3, 2}, {5, 0}};
+        for (int[] range : ranges) {
+            assertThatThrownBy(() -> session.input().read(buffer, range[0], range[1]))
+                    .as("offset %d, length %d", range[0], range[1])
+                    .isInstanceOf(IndexOutOfBoundsException.class);
+        }
+        assertThatThrownBy(() -> session.input().read(null, 0, 0))
+                .isInstanceOf(NullPointerException.class);
+        assertThat(session.input().read(buffer, 4, 0)).isZero();
+        assertThat(session.input().read(buffer, 0, 1)).isEqualTo(-1);
+    }
+
+    @Test
     void closingAnEnteredSessionRestoresModesExactlyOnce() {
         ScriptedSession session = new ScriptedSession();
         session.startSession();

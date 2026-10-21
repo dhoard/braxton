@@ -196,7 +196,7 @@ abstract class BaseTerminalSession implements TerminalSession {
             if (buffer == null) {
                 throw new NullPointerException("buffer");
             }
-            if (offset < 0 || length < 0 || offset + length > buffer.length) {
+            if (offset < 0 || length < 0 || offset > buffer.length - length) {
                 throw new IndexOutOfBoundsException("offset/length outside buffer");
             }
             if (length == 0) {
