@@ -89,7 +89,8 @@ public final class PasteDecoder {
                 }
                 deadline = addSaturated(System.nanoTime(), idleNanos);
                 if (size < limit) {
-                    payload = reserve(payload, size, burst, limit);
+                    // A rejected marker prefix from the previous burst also becomes payload.
+                    payload = reserve(payload, size, (long) burst + matched, limit);
                 }
             }
             int value = in.read();
@@ -181,7 +182,7 @@ public final class PasteDecoder {
      * Grows the buffer to hold {@code extra} more bytes, never past the payload limit. A burst is
      * known up front, so an empty buffer is sized to it directly; later growth doubles.
      */
-    private static byte[] reserve(byte[] payload, int size, int extra, int limit) {
+    private static byte[] reserve(byte[] payload, int size, long extra, int limit) {
         long wanted = (long) size + extra;
         int needed = wanted > limit ? limit : (int) wanted;
         if (needed <= payload.length) {

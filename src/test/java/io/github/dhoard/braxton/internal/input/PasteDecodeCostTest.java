@@ -150,6 +150,27 @@ class PasteDecodeCostTest {
     }
 
     @Test
+    void aRejectedMarkerPrefixAcrossBurstsCannotExhaustThePayloadBuffer() throws IOException {
+        for (int matched = 1; matched < END.length(); matched++) {
+            String body = "x".repeat(8191) + END.substring(0, matched) + "X";
+            int split = body.length() - 1;
+            for (int limit : new int[] {8192, 20_000}) {
+                ByteArrayInputStream in = new ByteArrayInputStream(bytes(body + END + "Z")) {
+                    @Override
+                    public int available() {
+                        return pos < split ? split - pos : Math.min(1, super.available());
+                    }
+                };
+                PasteDecoder.Result result = PasteDecoder.read(in, limit, 250L);
+                assertThat(result.text()).isEqualTo(body.substring(0, Math.min(body.length(), limit)));
+                assertThat(result.terminated()).isTrue();
+                assertThat(result.truncated()).isEqualTo(body.length() > limit);
+                assertThat(in.read()).as("input after the true end marker remains unread").isEqualTo('Z');
+            }
+        }
+    }
+
+    @Test
     void nothingAfterTheEndMarkerIsTakenFromTheStream() throws IOException {
         byte[] payload = ("abc" + END + "\u001B[A").getBytes(StandardCharsets.UTF_8);
         CountingStream in = new CountingStream(payload);
