@@ -169,6 +169,48 @@ class EffectRunnerTest {
     }
 
     @Test
+    void aGraceTooLargeForTheClockAdditionStillWaitsForARunningTask() throws Exception {
+        // RuntimeOptions accepts every grace that fits in nanoseconds, Long.MAX_VALUE included,
+        // and the deadline addition then wraps. The wait is still correct because it compares clock
+        // differences: the wrapped deadline subtracts back to exactly the grace that is left, so a
+        // running task body is waited for instead of the wait ending immediately. The task is
+        // released well inside the grace period, so the wait must return zero.
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            RuntimeEnvironment async = new RuntimeEnvironment(() -> 0L, executor, timers,
+                    message -> { });
+            EffectRunner<String> asyncRunner = new EffectRunner<>(mailbox, async, clipboard, 4);
+            asyncRunner.bindOwner(Thread.currentThread());
+            asyncRunner.interpret(Command.task(EffectId.of("work"), () -> {
+                entered.countDown();
+                release.await();
+                return "done";
+            }, value -> "success:" + value, failure -> "failure"));
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+            Thread releaser = Thread.ofVirtual().start(() -> {
+                try {
+                    Thread.sleep(100L);
+                } catch (InterruptedException stop) {
+                    Thread.currentThread().interrupt();
+                }
+                release.countDown();
+            });
+            try {
+                assertThat(asyncRunner.awaitIdle(Duration.ofNanos(Long.MAX_VALUE)))
+                        .as("the wait must cover a running task body")
+                        .isZero();
+            } finally {
+                release.countDown();
+                releaser.join();
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void cancellingARunningTaskInterruptsItsBodyAndDropsItsLateResult() throws Exception {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch interrupted = new CountDownLatch(1);

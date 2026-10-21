@@ -358,3 +358,19 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
 - Any future confirmation hint painted from `statusMessage` needs the same pairing: clear it in
   every transition that ends the confirmation, not only where it is set. The Esc window needs none
   today because `topRule` derives its hint from `escArmedUntilNanos` on every paint.
+
+## Shutdown wait arithmetic (2026-10-21)
+
+- `EffectRunner.awaitIdle` computes `deadline = System.nanoTime() + grace.toNanos()` and then only
+  compares clock differences. That addition wraps for a grace near `Long.MAX_VALUE` (which
+  `RuntimeOptions` deliberately accepts when it fits in nanoseconds), but the wrapped deadline
+  subtracts back to exactly `grace - elapsed`, so the wait is still correct: the modular result fits
+  in a long for every elapsed time below ~292 years. Do not re-open this as an overflow defect
+  without evidence of a comparison that uses the absolute deadline. Pinned as coverage by
+  `EffectRunnerTest.aGraceTooLargeForTheClockAdditionStillWaitsForARunningTask` (a blocking task
+  body and `Duration.ofNanos(Long.MAX_VALUE)`; the test fails if `awaitIdle` returns without
+  waiting).
+- By contrast, `PasteDecoder.addSaturated` needs a saturated deadline because a paste idle timeout
+  is compared as `System.nanoTime() - deadline >= 0` against an absolute value, and `SystemTimers`
+  rounds its milliseconds with a subtract-first form for the same reason. The difference is what the
+  comparison does with the absolute deadline, not whether the addition wraps.
