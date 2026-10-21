@@ -238,8 +238,9 @@ The first consumer wins, so a consumed shortcut never also inserts text. Duplica
 phase are rejected when the view is built.
 
 Focus is model data: `FocusState` holds an `ElementId`, and `ElementId.child("name")` namespaces a
-child feature. Focus survives view rebuilds and sibling reordering; a target that disappears simply
-receives nothing.
+child feature. A child name must not contain the `/` separator, because joining one would forge an
+identity that another parent already owns. Focus survives view rebuilds and sibling reordering; a
+target that disappears simply receives nothing.
 
 Normalized input is one of `KeyInput`, `PasteInput`, or `ResizeInput`. Printable keys carry their
 text exactly once, and bracketed paste arrives as one atomic event that never triggers Enter or a

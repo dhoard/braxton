@@ -14,7 +14,8 @@ not an authoritative source of requirements; verify details against `PROJECT.md`
   character content boundary (an edge character is sanitized like text, and a wide edge character
   is still an open lead), the runtime cleanup's session-close containment, the harness status-rule
   hint pairing (a confirmation's hint must leave the rule with the confirmation), the shutdown
-  wait's harmless wrapped deadline (a difference-comparison rule, not an overflow defect), and
+  wait's harmless wrapped deadline (a difference-comparison rule, not an overflow defect), the
+  element-id separator rule (a child name may not forge another parent's path), and
   coverage-hunting observations.
 - [JMH benchmark harness](memory/jmh-benchmarks.md) - how to run the offline benchmark suite, the
   JDK 23+ annotation-processor and `-Xlint:processing` build traps, the evidence discipline for

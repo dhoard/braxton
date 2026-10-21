@@ -50,6 +50,23 @@ class ElementIdTest {
     }
 
     @Test
+    void aChildNameMustNotCarryTheNamespaceSeparator() {
+        // The join is a namespace separator, not part of the name: "a" + "b/c" and "a/b" + "c"
+        // would both be "a/b/c", so two parents would own one focus target. The same rule that
+        // rejects null and blank rejects a name that forges a path through another namespace.
+        assertThatThrownBy(() -> ElementId.of("a").child("b/c"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("child name");
+        assertThatThrownBy(() -> ElementId.of("a").child("b/"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("child name");
+        assertThatThrownBy(() -> ElementId.of("a").child("/b"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("child name");
+        assertThat(ElementId.of("a/b").child("c").value()).isEqualTo("a/b/c");
+    }
+
+    @Test
     void asOptionalIsAlwaysPresent() {
         assertThat(ElementId.of("composer").asOptional()).contains(ElementId.of("composer"));
     }

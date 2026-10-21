@@ -374,3 +374,19 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   is compared as `System.nanoTime() - deadline >= 0` against an absolute value, and `SystemTimers`
   rounds its milliseconds with a subtract-first form for the same reason. The difference is what the
   comparison does with the absolute deadline, not whether the addition wraps.
+
+## Element identity boundary (2026-10-21)
+
+- `ElementId.child(name)` joins `value + "/" + name`, so a `name` that contains the separator forges
+  another parent's path: `ElementId.of("a").child("b/c")` and `ElementId.of("a/b").child("c")` were
+  both `a/b/c` (equal, same hash), which is exactly the collision the class says namespaces prevent.
+  The same rationale that already rejected null/blank (`"parent/null"`, `"parent/"`) now rejects a
+  name carrying `/`; every identity a caller could have meant is unchanged, so rejection is the
+  smallest remedy (an escape scheme would change every value). Direct construction still accepts an
+  opaque value containing `/`; only the join validates a child name. Pinned by
+  `ElementIdTest.aChildNameMustNotCarryTheNamespaceSeparator`.
+- `EffectId.child` and `SubscriptionId.child` still join without that check. They carry the same
+  documented rule and the same forging defect: two effects can land on one id (the later replaces
+  and cancels the earlier entry), and two subscriptions can be rejected as `duplicate subscription
+  id` even though the application declared distinct paths. They are separate owners and were left
+  as the next queue item rather than bundled into this cycle.
