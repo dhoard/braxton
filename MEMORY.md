@@ -11,8 +11,9 @@ not an authoritative source of requirements; verify details against `PROJECT.md`
   in cycles 197-216, the one-line prefix rules for markup/selector/quote/progress-bar/editor
   options, the subscription null-emission rule, the table-selector cell one-line rule, the
   intrinsic-height saturation rule, the harness composer's unhandled-key fallback, the border
-  character content boundary (an edge character is sanitized like text, and a wide edge character
-  is still an open lead), the runtime cleanup's session-close containment, the harness status-rule
+  character content boundary (Border.glyph blanks a control or surrogate edge in the layout, Box and
+  Table paths, and a wide edge character is still an open lead), the runtime cleanup's
+  session-close containment, the harness status-rule
   hint pairing (a confirmation's hint must leave the rule with the confirmation), the shutdown
   wait's harmless wrapped deadline (a difference-comparison rule, not an overflow defect), the
   identity separator rule (an element-id, effect-id, or subscription-id child name may not forge

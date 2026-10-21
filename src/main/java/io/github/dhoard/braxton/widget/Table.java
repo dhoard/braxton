@@ -181,19 +181,22 @@ public final class Table {
         for (StyledText line : lines) {
             width = Math.max(width, TextMeasure.columns(line.plainText()));
         }
+        String topLeft = Border.glyph(border.topLeft());
+        String topRight = Border.glyph(border.topRight());
+        String bottomLeft = Border.glyph(border.bottomLeft());
+        String bottomRight = Border.glyph(border.bottomRight());
+        String horizontal = Border.glyph(border.horizontal());
+        String vertical = Border.glyph(border.vertical());
         List<StyledText> framed = new ArrayList<>();
-        framed.add(StyledText.of(
-                border.topLeft() + String.valueOf(border.horizontal()).repeat(width) + border.topRight(),
-                borderStyle));
+        framed.add(StyledText.of(topLeft + horizontal.repeat(width) + topRight, borderStyle));
         for (StyledText line : lines) {
             int pad = Math.max(0, width - TextMeasure.columns(line.plainText()));
             framed.add(StyledText.concat(
-                    StyledText.of(String.valueOf(border.vertical()), borderStyle), line,
-                    StyledText.of(" ".repeat(pad) + border.vertical(), borderStyle)));
+                    StyledText.of(vertical, borderStyle), line,
+                    StyledText.of(" ".repeat(pad) + vertical, borderStyle)));
         }
         framed.add(StyledText.of(
-                border.bottomLeft() + String.valueOf(border.horizontal()).repeat(width) + border.bottomRight(),
-                borderStyle));
+                bottomLeft + horizontal.repeat(width) + bottomRight, borderStyle));
         StyledText out = StyledText.empty();
         for (int i = 0; i < framed.size(); i++) {
             if (i > 0) {

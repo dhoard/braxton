@@ -210,6 +210,44 @@ class CatalogTest {
     }
 
     @Test
+    void aControlCharacterBorderKeepsTheFrameGeometry() {
+        // Border documents that a control character or an unpaired surrogate occupies its cell as
+        // a blank. Box and Table build their frame as content, so an unpaintable edge was dropped
+        // and the row it framed shifted left; a line break added rows and a tab added tab stops,
+        // both of which the frame's one-cell-per-character geometry cannot hold.
+        for (char edge : new char[] {'\u001b', '\ud800', '\n', '\t'}) {
+            Border vertical = new Border('+', '+', '+', '+', '-', edge);
+            List<String> box = List.of(
+                    Box.of("ab").border(vertical).render(8).plainText().split("\n", -1));
+            assertThat(box).as("box vertical edge 0x%04x", (int) edge)
+                    .containsExactly("+------+", " ab     ", "+------+");
+            assertThat(box).allSatisfy(line ->
+                    assertThat(TextMeasure.columns(line)).as("box line [%s]", line).isEqualTo(8));
+            Table table = Table.of().buffer(0).border(vertical);
+            table.row(StyledText.plain("ab"));
+            assertThat(List.of(table.render().plainText().split("\n", -1)))
+                    .as("table vertical edge 0x%04x", (int) edge)
+                    .containsExactly("+--+", " ab ", "+--+");
+            Border horizontal = new Border('+', '+', '+', '+', edge, '|');
+            List<String> across = List.of(
+                    Box.of("ab").border(horizontal).render(8).plainText().split("\n", -1));
+            assertThat(across).as("box horizontal edge 0x%04x", (int) edge).hasSize(3);
+            assertThat(across.get(1)).as("box horizontal edge 0x%04x", (int) edge)
+                    .isEqualTo("|ab    |");
+            assertThat(across).allSatisfy(line ->
+                    assertThat(TextMeasure.columns(line)).as("box line [%s]", line).isEqualTo(8));
+            Table acrossTable = Table.of().buffer(0).border(horizontal);
+            acrossTable.row(StyledText.plain("ab"));
+            List<String> acrossRows = List.of(acrossTable.render().plainText().split("\n", -1));
+            assertThat(acrossRows).as("table horizontal edge 0x%04x", (int) edge).hasSize(3);
+            assertThat(acrossRows.get(1)).as("table horizontal edge 0x%04x", (int) edge)
+                    .isEqualTo("|ab|");
+            assertThat(acrossRows).allSatisfy(line ->
+                    assertThat(TextMeasure.columns(line)).as("table line [%s]", line).isEqualTo(4));
+        }
+    }
+
+    @Test
     void aBorderedTableClosesItsFrameAroundTheRows() {
         Table table = Table.of().buffer(1).border(Border.SINGLE);
         table.row(StyledText.plain("a"), StyledText.plain("bb"));

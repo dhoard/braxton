@@ -81,7 +81,8 @@ class BorderTitleTest {
         Border crafted = new Border('+', '+', '+', '+', '-', '\u001b');
         Screen screen = new LayoutEngine()
                 .layout(Views.border(crafted, Views.text("[2K")), new Rect(0, 0, 3, 6)).screen();
-        assertThat(screen.cell(1, 0).text()).as("the edge is not a control character").isEmpty();
+        assertThat(screen.cell(1, 0).text()).as("the edge is a blank cell, not a control character")
+                .isEqualTo(" ");
         assertThat(screen.plainLines()).containsExactly("+----+", " [2K", "+----+");
         String frame = AnsiEncoder.frame(screen);
         // The encoder clears each row exactly once; a fourth clear could only come from content.
@@ -91,7 +92,7 @@ class BorderTitleTest {
         Border surrogate = new Border('\ud800', '+', '+', '+', '-', '|');
         Screen surrogateScreen = new LayoutEngine()
                 .layout(Views.border(surrogate, Views.text("[2K")), new Rect(0, 0, 3, 6)).screen();
-        assertThat(surrogateScreen.cell(0, 0).text()).isEmpty();
+        assertThat(surrogateScreen.cell(0, 0).text()).isEqualTo(" ");
     }
 
     @Test
@@ -107,6 +108,39 @@ class BorderTitleTest {
                             .isLessThanOrEqualTo(Math.max(2, width));
                 }
             }
+        }
+    }
+
+    @Test
+    void aBorderBreakOrTabOccupiesItsCellAsABlank() {
+        // Border says each character is painted as content, so a control character occupies its
+        // cell as a blank rather than reaching the terminal. A line break and a tab are control
+        // characters the span boundary keeps for text, but a frame row has no line structure to
+        // break and no tab stop to advance: the raw byte would split the row or move the cursor.
+        for (char edge : new char[] {'\n', '\t', '\r', '\u0007'}) {
+            Border horizontal = new Border('+', '+', '+', '+', edge, '|');
+            Screen screen = new LayoutEngine()
+                    .layout(Views.border(horizontal, Views.text("ab")), new Rect(0, 0, 3, 4))
+                    .screen();
+            assertThat(screen.plainLines()).as("horizontal edge 0x%04x", (int) edge)
+                    .containsExactly("+  +", "|ab|", "+  +");
+            assertThat(screen.cell(0, 1).text()).as("horizontal edge 0x%04x", (int) edge)
+                    .isEqualTo(" ");
+            assertThat(AnsiEncoder.frame(screen)).as("horizontal edge 0x%04x", (int) edge)
+                    .doesNotContain("\n").doesNotContain("\t");
+            Border vertical = new Border('+', '+', '+', '+', '-', edge);
+            Screen side = new LayoutEngine()
+                    .layout(Views.border(vertical, Views.text("ab")), new Rect(0, 0, 3, 4))
+                    .screen();
+            // plainLines trims trailing blanks, so the right edge is checked on the cell.
+            assertThat(side.plainLines()).as("vertical edge 0x%04x", (int) edge)
+                    .containsExactly("+--+", " ab", "+--+");
+            assertThat(side.cell(1, 0).text()).as("vertical edge 0x%04x", (int) edge)
+                    .isEqualTo(" ");
+            assertThat(side.cell(1, 3).text()).as("trailing edge 0x%04x", (int) edge)
+                    .isEqualTo(" ");
+            assertThat(AnsiEncoder.frame(side)).as("vertical edge 0x%04x", (int) edge)
+                    .doesNotContain("\n").doesNotContain("\t");
         }
     }
 }

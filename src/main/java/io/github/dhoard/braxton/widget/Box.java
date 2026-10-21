@@ -133,46 +133,49 @@ public final class Box {
         }
         StyledText out = StyledText.empty();
         out = out.append(top(limit));
+        String vertical = Border.glyph(border.vertical());
         for (StyledText line : clipped) {
             out = out.append("\n")
-                    .append(StyledText.of(String.valueOf(border.vertical()), style))
+                    .append(StyledText.of(vertical, style))
                     .append(line)
                     .append(StyledText.of(" ".repeat(Math.max(0,
                             limit - 2 - TextMeasure.columns(line.plainText())))
-                            + border.vertical(), style));
+                            + vertical, style));
         }
         out = out.append("\n").append(StyledText.of(
-                border.bottomLeft() + String.valueOf(border.horizontal()).repeat(limit - 2)
-                        + border.bottomRight(), style));
+                Border.glyph(border.bottomLeft())
+                        + Border.glyph(border.horizontal()).repeat(limit - 2)
+                        + Border.glyph(border.bottomRight()), style));
         return out;
     }
 
     private StyledText top(int width) {
         int inner = Math.max(0, width - 2);
         String label = title.plainText();
-        StyledText out = StyledText.of(String.valueOf(border.topLeft()), style);
+        String topLeft = Border.glyph(border.topLeft());
+        String topRight = Border.glyph(border.topRight());
+        String horizontal = Border.glyph(border.horizontal());
+        StyledText out = StyledText.of(topLeft, style);
         // A label needs a dash, a space either side of it, so an inner width below three has no
         // room; drawing the decorations anyway would push the top edge past the box width.
         if (label.isEmpty() || inner < 3) {
-            out = out.append(StyledText.of(
-                    String.valueOf(border.horizontal()).repeat(inner), style));
+            out = out.append(StyledText.of(horizontal.repeat(inner), style));
         } else {
             StyledText fitted = truncate(title, Math.max(0, inner - 3));
             if (fitted.plainText().isEmpty()) {
                 // No cluster fits the label budget (a wide glyph needs two columns). Keeping the
                 // decorations would leave a hole in the edge where the title is not drawn, so the
                 // narrow box gets a plain edge instead.
-                out = out.append(StyledText.of(
-                        String.valueOf(border.horizontal()).repeat(inner), style));
-                return out.append(StyledText.of(String.valueOf(border.topRight()), style));
+                out = out.append(StyledText.of(horizontal.repeat(inner), style));
+                return out.append(StyledText.of(topRight, style));
             }
             int used = TextMeasure.columns(fitted.plainText());
             int trailing = Math.max(0, inner - used - 3);
-            out = out.append(StyledText.of(String.valueOf(border.horizontal()) + " ", style))
+            out = out.append(StyledText.of(horizontal + " ", style))
                     .append(restyle(fitted, style))
-                    .append(StyledText.of(" " + String.valueOf(border.horizontal()).repeat(trailing), style));
+                    .append(StyledText.of(" " + horizontal.repeat(trailing), style));
         }
-        return out.append(StyledText.of(String.valueOf(border.topRight()), style));
+        return out.append(StyledText.of(topRight, style));
     }
 
     /** Applies the frame style to every span, keeping each span's own styling and link. */

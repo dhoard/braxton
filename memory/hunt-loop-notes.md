@@ -307,18 +307,22 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
 
 ## Border character content boundary (2026-10-21)
 
-- A `Border` holds raw characters, and `LayoutEngine.paintBorder` wrote them straight into cells. It
-  was the one content path that bypassed `StyledText.Span` sanitization: with `vertical = ESC` and
-  the legitimate child text `[2K`, the frame spelled `ESC [ 2 K` after the encoder's own line clear,
-  so a real terminal erased the painted row (pyte: row `""` instead of `" [2K"`), and `ESC A` can
-  likewise be spelled from a corner plus an `A` edge. `borderGlyph` now builds each edge character
-  through `StyledText.plain(...)` once per painted border, so a control character or an unpaired
-  surrogate occupies its cell as a blank and never reaches the terminal. Pinned by
-  `BorderTitleTest.aCustomBorderCannotCompleteAnEscapeSequenceFromItsOwnCharacters` (the cell text,
-  the painted rows, exactly one encoder line clear per row, and a surrogate edge).
-- `Box` and `Table` already sanitized their border characters because they build `StyledText`; the
-  layout path was the outlier. A new paint path that writes a value type's characters straight to
-  `Screen` must pass the span boundary first.
+- A `Border` holds raw characters, so it is a content path that can bypass `StyledText.Span`
+  sanitization. `Border.glyph(char)` owns the cell rule: the character itself, or a blank (`" "`)
+  for a control character or an unpaired surrogate. `LayoutEngine.paintBorder`, `Box.render` and
+  `Table.frame` all route every edge character through it, so an edge never reaches the terminal and
+  always occupies its one column. The original defect: with `vertical = ESC` and the legitimate
+  child text `[2K`, the frame spelled `ESC [ 2 K` after the encoder's line clear, so a real terminal
+  erased the painted row (pyte: row `""` instead of `" [2K"`). Cycle 268 found the rest of the
+  family: the layout path still passed `\n`/`\t` edges into cells (raw bytes in the encoded frame),
+  and `Box`/`Table` dropped an unpaintable edge at the span boundary, shortening the row, while a
+  break or tab edge added rows or tab stops. Pinned by
+  `BorderTitleTest.aCustomBorderCannotCompleteAnEscapeSequenceFromItsOwnCharacters` (exactly one
+  encoder line clear per row, a surrogate edge, and a blank cell), the cycle-268
+  `BorderTitleTest.aBorderBreakOrTabOccupiesItsCellAsABlank` and
+  `CatalogTest.aControlCharacterBorderKeepsTheFrameGeometry`.
+- A new paint path that writes a value type's characters straight into `Screen` or `StyledText`
+  must route them through `Border.glyph` (or the span boundary) first.
 - Still open, same value: a wide border character is painted with width 1 into a one-column edge, so
   a `Border('日', …)` over a 6-column allocation paints rows of 12 and 8 columns (probed). Deciding
   whether to reject a wide border character, replace it, or paint it two columns wide (and widen the

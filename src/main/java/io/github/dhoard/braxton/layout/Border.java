@@ -27,7 +27,9 @@ package io.github.dhoard.braxton.layout;
  *
  * <p>Each character is painted as content, so it passes the same sanitization as text: a control
  * character or an unpaired surrogate occupies its cell as a blank rather than reaching the terminal,
- * and a custom border can therefore never emit an escape sequence or an unencodable unit.</p>
+ * and a custom border can therefore never emit an escape sequence or an unencodable unit. A line
+ * break or tab is a control character too: a frame row has no line structure to break and no tab
+ * stop to advance, so both are blank cells as well instead of moving the cursor.</p>
  */
 public record Border(char topLeft, char topRight, char bottomLeft, char bottomRight,
         char horizontal, char vertical) {
@@ -36,6 +38,19 @@ public record Border(char topLeft, char topRight, char bottomLeft, char bottomRi
     public static final Border SINGLE = new Border('\u250C', '\u2510', '\u2514', '\u2518', '\u2500', '\u2502');
     public static final Border ROUNDED = new Border('\u256D', '\u256E', '\u2570', '\u256F', '\u2500', '\u2502');
     public static final Border DOUBLE = new Border('\u2554', '\u2557', '\u255A', '\u255D', '\u2550', '\u2551');
+
+    /**
+     * The character painted in one cell of a frame: {@code character} itself, or a blank when it is
+     * a control character or an unpaired surrogate.
+     *
+     * <p>A cell cannot hold a line break or a tab, and neither may reach the terminal: the first
+     * would split a frame row and the second would move the cursor to a tab stop. Both are control
+     * characters, so they take the same blank cell as {@code ESC} or a lone surrogate.</p>
+     */
+    public static String glyph(char character) {
+        return Character.isISOControl(character) || Character.isSurrogate(character)
+                ? " " : String.valueOf(character);
+    }
 
     public boolean isVisible() {
         return this != NONE && vertical != ' ';
