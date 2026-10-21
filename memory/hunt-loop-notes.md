@@ -169,10 +169,9 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   bullet (`CatalogTest.aWhitespaceListIconFallsBackToTheDefaultBullet`).
 - Consequence to remember: `TextMeasure.columns` counts a tab and a line break as one column, so
   every widget that measures a tab-bearing prefix must expand it first (`TabStops`).
-- Unfixed leads (no decision yet): `Quote.bar` is inserted raw, so a line break there splits a
-  one-row element, and `ScreenRenderer.columns`/`TextMeasure.columns` report a tab as one column
-  while the layout engine paints 1-4, which cannot be fixed inside `columns()` alone because
-  `truncate`/`fit` need the positional stop rule.
+- Unfixed leads (no decision yet): `ScreenRenderer.columns`/`TextMeasure.columns` report a tab as
+  one column while the layout engine paints 1-4, which cannot be fixed inside `columns()` alone
+  because `truncate`/`fit` need the positional stop rule.
 
 ## Selector option boundary (2026-10-21)
 
@@ -187,3 +186,17 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   expands a tab from the line start, which already includes the two-cell marker. A tab therefore
   paints as the engine paints it; measuring a selector row is still subject to the `columns()` tab
   lead below.
+
+## Quote bar boundary (2026-10-21)
+
+- `Quote.bar` is a one-line prefix painted at the start of every quoted line, so the builder
+  flattens CRLF/CR/LF to one space (the same rule `Markup`, `Selector`, `EditorOptions`, `Box`,
+  `Badge` and `ProgressBar` apply). A raw break split one quoted line into extra rows
+  (`a\nb` rendered `a` / `b x`), and a bare CR was dropped by the styled-text boundary
+  (`a\rb` merged to `ab x`). The null/empty fallback to a space is unchanged, and a
+  whitespace-only bar remains a bar of spaces. Pinned by
+  `QuoteTest.aBarCannotSplitAQuotedLineAcrossRows`, which asserts the rendered rows, the painted
+  rows through `ScreenRenderer`, and the measured height.
+- The bar's tabs are not expanded at the builder boundary: like `Selector`, the quote never
+  measures the bar (it is the same prefix on every row), and the layout engine expands it from the
+  line start.

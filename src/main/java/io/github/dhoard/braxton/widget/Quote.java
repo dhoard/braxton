@@ -35,6 +35,9 @@ import io.github.dhoard.braxton.view.Views;
 /**
  * A block quote: a coloured bar, the quoted content, and an optional background.
  *
+ * <p>The bar is a one-line prefix on every quoted line, so a line break in it becomes a single
+ * space instead of splitting the line into extra rows.</p>
+ *
  * <p>Tabs are expanded to the same four-column stops the text view uses, so the block keeps one
  * width instead of padding to a tab that paint expands wider.</p>
  */
@@ -70,9 +73,17 @@ public final class Quote {
         return this;
     }
 
+    /**
+     * Sets the bar painted at the start of every quoted line. The bar is a one-line prefix, so
+     * CRLF, CR, and LF each become one space; a null or empty value falls back to a space.
+     */
     public Quote bar(String value) {
-        bar = value == null || value.isEmpty() ? " " : value;
+        bar = value == null || value.isEmpty() ? " " : singleLine(value);
         return this;
+    }
+
+    private static String singleLine(String value) {
+        return value.replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ');
     }
 
     public StyledText render() {

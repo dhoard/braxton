@@ -30,10 +30,13 @@ import java.util.Random;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.dhoard.braxton.internal.render.LayoutEngine;
+import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.view.ScreenRenderer;
 
 /** A quote keeps one width: a bar, a space, the expanded line, and padding to the widest line. */
 class QuoteTest {
@@ -57,6 +60,33 @@ class QuoteTest {
         assertThat(rows.get(0)).isEqualTo(BAR + " a   b");
         assertThat(rows.get(1)).isEqualTo(BAR + " c    ");
         assertThat(rows).allSatisfy(row -> assertThat(row).doesNotContain("\t"));
+    }
+
+    /**
+     * The bar is a one-line prefix on every quoted line, so a break in it cannot split that line
+     * into extra rows or merge its own characters into the content.
+     */
+    @Test
+    void aBarCannotSplitAQuotedLineAcrossRows() {
+        for (String bar : List.of("a\nb", "a\rb", "a\r\nb")) {
+            Quote quote = Quote.of().bar(bar).append("x");
+            assertThat(List.of(quote.render().plainText().split("\n", -1)))
+                    .as("rendered rows for bar %s", bar.replace("\n", "\\n").replace("\r", "\\r"))
+                    .containsExactly("a b x");
+            // The painted grid and the measured height are the oracle: one appended line is one
+            // row, and the bar's characters stay in the bar.
+            assertThat(new ScreenRenderer().plainLines(quote.view(), new Viewport(1, 40)))
+                    .as("painted rows for bar %s", bar.replace("\n", "\\n").replace("\r", "\\r"))
+                    .containsExactly("a b x");
+            assertThat(new LayoutEngine().intrinsicHeight(quote.view(), 40))
+                    .as("measured rows for bar %s", bar.replace("\n", "\\n").replace("\r", "\\r"))
+                    .isEqualTo(1);
+        }
+        // The flattened bar is still one prefix on each of several quoted lines, and the block
+        // keeps its single width.
+        assertThat(List.of(Quote.of().bar(">\n>").append("ab").append("c")
+                .render().plainText().split("\n", -1)))
+                .containsExactly("> > ab", "> > c ");
     }
 
     @Test
