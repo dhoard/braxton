@@ -269,7 +269,8 @@ public final class Editor {
      * <p>The prompt marks the input area once, at the first visible line, and every other line is
      * indented by its painted width. It deliberately does not follow the caret: doing so repeats
      * the prompt whenever a new line is added to a multi-line draft, which reads as a second caret
-     * beside the block cursor.</p>
+     * beside the block cursor. The prompt itself is one line: {@link EditorOptions} turns a break
+     * in it into a space, so the painted rows stay the window's rows.</p>
      */
     public static StyledText render(EditorState state, EditorOptions options, boolean focused) {
         EditorOptions opts = options == null ? EditorOptions.defaults() : options;

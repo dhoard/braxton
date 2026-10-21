@@ -400,6 +400,28 @@ class EditorTest {
     }
 
     @Test
+    void aPromptLineBreakBecomesASpaceSoItCannotSplitTheInputLine() {
+        // The prompt prefixes every visible input line, so it must stay on one line: a break inside
+        // it paints a line the window (Editor.visibleLineCount) never budgeted and pushes the draft
+        // after it off the editor's rows. CR/LF, CR and LF all become one space, exactly like the
+        // other one-line decorations (Box.title, ProgressBar icons, Badge segments).
+        EditorOptions options = EditorOptions.defaults().withPrompt("a\nb", Style.NONE);
+        assertThat(options.prompt()).isEqualTo("a b");
+        assertThat(EditorOptions.defaults().withPrompt("a\r\nb", Style.NONE).prompt())
+                .isEqualTo("a b");
+        assertThat(EditorOptions.defaults().withPrompt("a\rb", Style.NONE).prompt())
+                .isEqualTo("a b");
+        EditorState state = new EditorState("x\ny", 0, 0, 0);
+        assertThat(Editor.render(state, options, true).lines())
+                .hasSize(Editor.visibleLineCount(state, options));
+        java.util.List<String> lines = new io.github.dhoard.braxton.view.ScreenRenderer().plainLines(
+                Editor.view(io.github.dhoard.braxton.view.ElementId.of("composer"), state, options,
+                        false, (EditorAction action) -> action),
+                new io.github.dhoard.braxton.layout.Viewport(2, 20));
+        assertThat(lines).containsExactly("a bx", "   y");
+    }
+
+    @Test
     void editorViewDeclaresFocusAndHandlesPaste() {
         View<String> view = Editor.view(io.github.dhoard.braxton.view.ElementId.of("editor"), EditorState.empty(),
                 OPTIONS, true, action -> action.getClass().getSimpleName());

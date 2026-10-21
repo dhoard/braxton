@@ -28,7 +28,13 @@ import io.github.dhoard.braxton.clipboard.PasteMode;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.style.Style;
 
-/** Rendering and behaviour options for an {@link Editor}. Immutable; derive changes with withers. */
+/**
+ * Rendering and behaviour options for an {@link Editor}. Immutable; derive changes with withers.
+ *
+ * <p>The prompt is the one-line prefix of every visible input line, so a supplied line break is
+ * normalized to a space here instead of splitting the painted line. Tabs stay: the text view
+ * expands them to its four-column stops.</p>
+ */
 public record EditorOptions(OptionalInt maxLength, PasteMode pasteMode,
         boolean collapsePasteBlankLines, Masking masking, Key copyKey, Key pasteKey,
         String prompt, Style promptStyle, Style textStyle, Style selectionStyle,
@@ -62,13 +68,21 @@ public record EditorOptions(OptionalInt maxLength, PasteMode pasteMode,
         masking = masking == null ? Masking.NONE : masking;
         copyKey = copyKey == null ? DEFAULT_COPY_KEY : copyKey;
         pasteKey = pasteKey == null ? DEFAULT_PASTE_KEY : pasteKey;
-        prompt = prompt == null ? "" : prompt;
+        prompt = singleLine(prompt);
         promptStyle = promptStyle == null ? Style.NONE : promptStyle;
         textStyle = textStyle == null ? Style.NONE : textStyle;
         selectionStyle = selectionStyle == null ? Style.NONE.withInvert() : selectionStyle;
         if (maxVisibleLines < 1) {
             throw new IllegalArgumentException("maxVisibleLines must be positive");
         }
+    }
+
+    /** A prompt prefixes one line, so CR/LF, CR and LF each become one space. */
+    private static String singleLine(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        return value.replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ');
     }
 
     public static EditorOptions defaults() {
