@@ -132,3 +132,12 @@ two Ctrl+C presses exit with status 0. Probe scripts are owned temporary state u
   `IllegalArgumentException: rect must be non-negative` instead of clamping. `Rect.contains` and
   `Rect.clip` already widen to long; `inset`'s origin arithmetic does not. Needs a decision on what
   a shifted origin beyond `Integer.MAX_VALUE` should be (clamp vs reject).
+
+## Asset symbol boundary (2026-10-21)
+
+- `ImageView.symbol` paints one pixel per grid cell, so it flattens a symbol to one line at the
+  builder boundary: CRLF/CR/LF and tab each become one space, and text the `StyledText.Span`
+  boundary would drop (unpaired surrogates, C0/C1 controls other than newline/tab) is removed
+  before measuring. A value with no measured column still falls back to the block. Pinned by
+  `ImageViewTest.aSymbolThatCannotPaintOnOneLineCannotSplitOrShortenAnImageRow`; the editor prompt
+  uses the same break-to-space rule at `EditorOptions`.

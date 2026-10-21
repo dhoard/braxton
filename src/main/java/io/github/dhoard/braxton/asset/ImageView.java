@@ -58,12 +58,31 @@ public final class ImageView {
         return new ImageView(image);
     }
 
+    /**
+     * Paints one pixel with {@code value}. The symbol is painted on one line: CR/LF, CR and LF each
+     * become one space, and so does a tab, whose painted width would otherwise depend on where the
+     * pixel sits. Text the styled-text boundary cannot carry is dropped before measurement, so the
+     * measured grid and the painted grid agree. A value that occupies no column falls back to the
+     * block.
+     */
     public ImageView symbol(String value) {
+        String single = singleLine(value);
         // A symbol that occupies no column would paint nothing and leave the pixel grid short, so
         // it is treated like no symbol at all and falls back to the block.
-        symbol = value == null || value.isEmpty() || TextMeasure.columns(value) == 0
-                ? "\u2588" : value;
+        symbol = single.isEmpty() || TextMeasure.columns(single) == 0 ? "\u2588" : single;
         return this;
+    }
+
+    private static String singleLine(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        // Span construction is the authority on what survives the terminal boundary: it drops
+        // unpaired surrogates and C0/C1 controls but keeps newline and tab, which are flattened
+        // here so one pixel stays one line of one measurable width.
+        String flattened = value.replace("\r\n", " ").replace('\r', ' ')
+                .replace('\n', ' ').replace('\t', ' ');
+        return StyledText.plain(flattened).plainText();
     }
 
     /** Horizontal repetition of each pixel; values below one are treated as one. */

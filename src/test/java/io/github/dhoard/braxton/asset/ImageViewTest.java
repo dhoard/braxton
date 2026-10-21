@@ -119,6 +119,21 @@ class ImageViewTest {
     }
 
     @Test
+    void aSymbolThatCannotPaintOnOneLineCannotSplitOrShortenAnImageRow() {
+        // One grid cell per pixel whatever symbol the caller asks for: a break would split an
+        // image row into extra lines, a tab would widen one pixel by an amount that depends on
+        // where the pixel sits, and a control the styled-text boundary drops would shrink a
+        // painted pixel while its transparent neighbour still reserves the measured width.
+        for (String symbol : java.util.List.of("a\nb", "a\rb", "a\r\nb", "a\tb")) {
+            assertThat(ImageView.of(ImageAsset.of(diagonalPixels())).symbol(symbol).render()
+                    .plainText()).as("symbol %s", symbol).isEqualTo("a b   \n   a b");
+        }
+        assertThat(ImageView.of(ImageAsset.of(diagonalPixels())).symbol("a\u001Bb").render()
+                .plainText()).as("an unpaintable control is dropped before measuring")
+                .isEqualTo("ab  \n  ab");
+    }
+
+    @Test
     void aCombiningMarkAttachesToThePixelBeforeItByTheUnicodeClusterRule() {
         // TextMeasure segments Extend onto the preceding base, so a bare combining mark merges
         // with the blank cell to its left instead of occupying a cell of its own. That is the
