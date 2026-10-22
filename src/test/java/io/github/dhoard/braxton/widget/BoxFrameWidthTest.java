@@ -89,6 +89,30 @@ class BoxFrameWidthTest {
     private static final List<String> BASELESS_SHAPES = Stream.concat(
             BASELESS.stream(), CONTROL_THEN_BASELESS.stream()).toList();
 
+    /**
+     * Contents built from concatenated runs - how coloured text is assembled - whose run boundary
+     * falls inside one cluster. A variation selector that opens a span measures no column of its
+     * own, being a cluster with no base, but joined with the base before it it forces that cell to
+     * emoji presentation: the joined cluster is two columns where the parts measure one. A budget
+     * charged to each span in isolation under-counts the row by exactly the columns the join gains,
+     * and the row leaves the frame one or two columns past the width it was rendered at.
+     */
+    private static final List<StyledText> SPLIT_PRESENTATION_SELECTOR = List.of(
+            // The reported content: "\u2764\uFE0F a \u2764\uFE0F b", nine columns, four runs.
+            StyledText.of("\u2764", Style.NONE.withBold())
+                    .append("\uFE0F a ")
+                    .append(StyledText.of("\u2764", Style.NONE.withBold()))
+                    .append("\uFE0F b"),
+            // A single join, which the frame's left cell has to absorb as well.
+            StyledText.of("\u2764", Style.NONE.withBold()).append("\uFE0F a b"),
+            // A selector that opens the content joins the left frame cell and widens it.
+            StyledText.of("\uFE0F ", Style.NONE.withBold()).append("\uFE0F "),
+            StyledText.of("\uFE0F", Style.NONE.withBold()).append("a b c"),
+            // Joins in the safe direction, kept so the fix does not over-truncate: a joiner claims
+            // no column and a combining mark measures its own, split or not.
+            StyledText.of("\uD83D\uDC69", Style.NONE.withBold()).append("\u200D\uD83D\uDCBB"),
+            StyledText.of("e", Style.NONE.withBold()).append("\u0301 a b"));
+
     private static String show(String value) {
         if (value == null) {
             return "<none>";
@@ -288,6 +312,90 @@ class BoxFrameWidthTest {
                         Box.of(content).border(FRAME).width(width), width);
             }
         }
+    }
+
+    /**
+     * The columns a row may use are the columns of the joined content, so a run boundary inside one
+     * cluster must not let the content claim columns the frame never reserved. Both the fixed-width
+     * and the responsive frame are checked: the box width is the same promise either way.
+     */
+    @Test
+    void contentWhosePresentationSelectorIsSplitFromItsBaseKeepsEveryFrameRowAtTheFrameWidth() {
+        for (StyledText content : SPLIT_PRESENTATION_SELECTOR) {
+            for (int width = 4; width <= 14; width++) {
+                List<String> framed = List.of(Box.of(content).border(FRAME).width(width)
+                        .render(width).plainText().split("\n", -1));
+                assertThat(framed).as("content %s width %d", show(content.plainText()), width)
+                        .hasSize(3);
+                for (String row : framed) {
+                    assertThat(TextMeasure.columns(row))
+                            .as("content %s width %d row [%s]",
+                                    show(content.plainText()), width, show(row))
+                            .isEqualTo(width);
+                }
+                for (String row : List.of(Box.of(content).border(FRAME).render(width).plainText()
+                        .split("\n", -1))) {
+                    assertThat(TextMeasure.columns(row))
+                            .as("responsive content %s width %d row [%s]",
+                                    show(content.plainText()), width, show(row))
+                            .isEqualTo(Math.max(2, width));
+                }
+            }
+        }
+    }
+
+    /**
+     * The same rows through the layout engine. A row the frame measured one column too narrow loses
+     * its right edge cell and spends another wrapped row on the remainder, which replaces the box's
+     * whole bottom edge with a stray frame character.
+     */
+    @Test
+    void contentWhosePresentationSelectorIsSplitFromItsBaseKeepsTheFrameWidthThroughPaint() {
+        for (StyledText content : SPLIT_PRESENTATION_SELECTOR) {
+            for (int width = 6; width <= 14; width++) {
+                assertFrameIsPaintedColumnByColumn(
+                        Box.of(content).border(FRAME).width(width), width);
+            }
+        }
+    }
+
+    /** A frame with room for every joined cluster drops none of the content it was given. */
+    @Test
+    void aFrameWideEnoughForASplitPresentationSelectorKeepsAllItsContent() {
+        // Nine columns of content, so an eleven-column frame keeps a column for each edge and pads
+        // nothing: fitting the row is not a licence to clip the content.
+        assertThat(List.of(Box.of(SPLIT_PRESENTATION_SELECTOR.getFirst()).border(FRAME).width(11)
+                .render(11).plainText().split("\n", -1)))
+                .containsExactly("+---------+",
+                        "|\u2764\uFE0F a \u2764\uFE0F b|", "+---------+");
+    }
+
+    /**
+     * Without a frame the fixed width still bounds the content it would have framed, measured from
+     * the same joined clusters. No frame cell sits beside the content here, but its own run boundary
+     * still splits the cluster the measurement and the paint path read as one.
+     */
+    @Test
+    void anUnframedFixedWidthBoundsContentWhosePresentationSelectorIsSplitFromItsBase() {
+        for (StyledText content : SPLIT_PRESENTATION_SELECTOR) {
+            for (int width = 3; width <= 14; width++) {
+                List<String> rows = List.of(Box.of(content).border(Border.NONE).width(width)
+                        .render(width).plainText().split("\n", -1));
+                assertThat(rows).as("content %s width %d", show(content.plainText()), width)
+                        .hasSize(content.lines().size());
+                for (String row : rows) {
+                    assertThat(TextMeasure.columns(row))
+                            .as("content %s width %d row [%s]",
+                                    show(content.plainText()), width, show(row))
+                            .isLessThanOrEqualTo(width);
+                }
+            }
+        }
+        // The reported second symptom: six columns of content in a five-column box keeps the five
+        // columns that fit instead of every column it was given.
+        assertThat(List.of(Box.of(StyledText.of("\u2764", Style.NONE.withBold())
+                .append("\uFE0F a b")).border(Border.NONE).width(5).render(5).plainText()
+                .split("\n", -1))).containsExactly("\u2764\uFE0F a ");
     }
 
     /**

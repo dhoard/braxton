@@ -30,6 +30,7 @@ import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.style.WidthPolicy;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 
@@ -45,7 +46,9 @@ import io.github.dhoard.braxton.view.Views;
  * width. The content and the title are therefore measured inside the frame: a row is painted as one
  * grapheme-cluster sequence, and a cluster with no base character of its own - a combining mark, a
  * variation selector, a joiner - joins the frame cell beside it instead of occupying a cell, which
- * is a different number of columns from measuring that content on its own.</p>
+ * is a different number of columns from measuring that content on its own. That joined sequence is
+ * also what a clip is measured against: a style boundary inside one cluster does not change the
+ * columns the row occupies, so splitting a run never buys the content an extra column.</p>
  */
 public final class Box {
 
@@ -128,13 +131,12 @@ public final class Box {
         String vertical = Border.glyph(border.vertical());
         List<StyledText> clipped = new ArrayList<>();
         for (StyledText line : lines) {
-            StyledText fitted = truncate(line, Math.max(0, limit - 2));
-            if (TextMeasure.columns(vertical + fitted.plainText()) > limit - 2) {
-                // The left frame cell took a column the content claimed for itself, so one fewer
-                // content column keeps the row inside the frame instead of past its right edge.
-                fitted = truncate(line, Math.max(0, limit - 3));
-            }
-            clipped.add(fitted);
+            // One column of the row belongs to the right frame cell, and the content shares the rest
+            // with the left one: the row is painted as a single cluster sequence, so a cluster with
+            // no base of its own at the head of the content joins the left cell and can widen it.
+            // Charging the joined sequence leaves the row no wider than the frame, which is what
+            // keeps the padding below non-negative.
+            clipped.add(truncate(vertical, line, Math.max(0, limit - 1)));
         }
         if (!border.isVisible()) {
             // Border is a value type, so ask the border itself whether it draws a frame instead of
@@ -163,6 +165,9 @@ public final class Box {
             out = out.append("\n")
                     .append(StyledText.of(vertical, style))
                     .append(line)
+                    // The clip above charges this same joined sequence, so the pad cannot go
+                    // negative; the guard only keeps a row that somehow overran from asking for a
+                    // negative count of spaces.
                     .append(StyledText.of(" ".repeat(Math.max(0, limit - 1 - painted))
                             + vertical, style));
         }
@@ -221,21 +226,67 @@ public final class Box {
 
     /** Truncates to {@code maxColumns} without splitting a cluster, preserving span styling. */
     private static StyledText truncate(StyledText text, int maxColumns) {
+        return truncate("", text, maxColumns);
+    }
+
+    /**
+     * Truncates to {@code maxColumns} without splitting a cluster, preserving span styling.
+     * {@code edge} is the text painted immediately before {@code text} - a frame cell or an edge
+     * decoration - and shares the budget.
+     *
+     * <p>The columns are charged to the clusters of the joined plain text rather than to each span
+     * measured on its own. A style boundary can split one cluster, and the joined cluster is what
+     * the frame measures and the paint path draws: a variation selector that opens a span claims no
+     * column by itself, yet forces the base before it to a two-column cell once joined. A per-span
+     * budget under-counts the row by exactly the columns the join gains, and the row paints past
+     * the frame's right edge.</p>
+     */
+    private static StyledText truncate(String edge, StyledText text, int maxColumns) {
+        int chars = fittedChars(edge, text.plainText(), maxColumns);
+        return chars <= 0 ? StyledText.empty() : prefix(text, chars);
+    }
+
+    /**
+     * UTF-16 units of {@code plain} that fit {@code maxColumns} columns once appended to
+     * {@code edge}, cut at a cluster boundary of the joined sequence. As in
+     * {@link TextMeasure#truncate}, a cluster that does not fit is dropped along with everything
+     * after it; only the part of it belonging to the content is dropped, never the edge beside it.
+     */
+    private static int fittedChars(String edge, String plain, int maxColumns) {
+        if (plain.isEmpty() || maxColumns <= 0) {
+            return 0;
+        }
+        int used = 0;
+        int offset = 0;
+        int taken = 0;
+        for (String cluster : TextMeasure.graphemes(edge + plain)) {
+            int width = TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED);
+            if (used + width > maxColumns) {
+                break;
+            }
+            used += width;
+            offset += cluster.length();
+            taken = Math.max(taken, offset - edge.length());
+        }
+        return taken;
+    }
+
+    /**
+     * The leading {@code chars} UTF-16 units of {@code text}, keeping each span's own style and
+     * link. {@code chars} is a boundary of the line's joined cluster sequence, so a cluster the
+     * styling splits survives as the pieces the paint path rejoins.
+     */
+    private static StyledText prefix(StyledText text, int chars) {
         StyledText result = StyledText.empty();
-        int remaining = Math.max(0, maxColumns);
+        int remaining = chars;
         for (StyledText.Span span : text.spans()) {
             if (remaining <= 0) {
                 break;
             }
-            if (span.text().isEmpty()) {
-                continue;
-            }
-            String fitted = TextMeasure.truncate(span.text(), remaining);
-            if (fitted.isEmpty()) {
-                break;
-            }
-            result = result.append(StyledText.of(fitted, span.style(), span.link()));
-            remaining -= TextMeasure.columns(fitted);
+            int taken = Math.min(remaining, span.text().length());
+            result = result.append(StyledText.of(
+                    span.text().substring(0, taken), span.style(), span.link()));
+            remaining -= taken;
         }
         return result;
     }
