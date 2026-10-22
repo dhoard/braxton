@@ -65,9 +65,9 @@ public final class InputDecoder {
     /**
      * Reads one event.
      *
-     * <p>Sequences that map to nothing (most mouse reports, unknown escapes) are skipped inside this
-     * call: returning empty is reserved for real end-of-input, so an ignored click can never be
-     * mistaken for the end of the session.</p>
+     * <p>Sequences and scalars that map to nothing (most mouse reports, unknown escapes, a control
+     * character outside ASCII) are skipped inside this call: returning empty is reserved for real
+     * end-of-input, so an ignored click can never be mistaken for the end of the session.</p>
      *
      * @return the event, or empty at end-of-input or when the session closed the stream
      */
@@ -126,7 +126,11 @@ public final class InputDecoder {
             return InputEvent.KeyInput.of(keyForText(String.valueOf(c)), String.valueOf(c));
         }
         String text = decodeUtf8(value);
-        if (text.isEmpty()) {
+        // A C1 control (U+0080-U+009F) arrives as a two-byte UTF-8 scalar, so it reaches here as
+        // printable-looking text. It is no more printable than a C0 control: it names no gesture and
+        // must not be carried as text, exactly as the Alt-modified path already decides. A key named
+        // after a control character is rejected outright, which would end the run.
+        if (text.isEmpty() || !isPrintable(text)) {
             return null;
         }
         return InputEvent.KeyInput.of(keyForText(text), text);

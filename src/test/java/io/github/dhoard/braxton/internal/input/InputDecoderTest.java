@@ -218,6 +218,31 @@ class InputDecoderTest {
     }
 
     /**
+     * A C1 control (U+0080-U+009F) reaches the decoder as the two-byte UTF-8 scalar {@code C2 80} to
+     * {@code C2 9F}. It is no more printable than a C0 control, so it names no gesture and carries no
+     * text: like an unknown escape it is skipped inside the call. Naming a key after it is rejected by
+     * {@link Key}, and the input thread reports any decoder failure as the end of the run.
+     */
+    @Test
+    void aC1ControlScalarIsSkippedRatherThanBecomingAKey() throws IOException {
+        for (int control = 0x80; control <= 0x9F; control++) {
+            InputEvent event = read(new byte[] {(byte) 0xC2, (byte) control, 'x'}).orElseThrow();
+            assertThat(event).isInstanceOf(InputEvent.KeyInput.class);
+            assertThat(((InputEvent.KeyInput) event).key()).isEqualTo(Key.of("x"));
+        }
+    }
+
+    /** Skipping a C1 scalar must not end the stream or swallow the keystroke after it. */
+    @Test
+    void aC1ControlScalarDoesNotEndTheStream() throws IOException {
+        InputDecoder decoder = new InputDecoder(new ByteAtATime(
+                new byte[] {'a', (byte) 0xC2, (byte) 0x85, 'b'}));
+        assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("a");
+        assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("b");
+        assertThat(decoder.read()).isEmpty();
+    }
+
+    /**
      * A well-formed lead can still start an ill-formed sequence: an overlong form, a surrogate, or a
      * code point past U+10FFFF. The JDK decoder turns those into replacement characters, which would
      * reach the application as printable text and be inserted into a draft; the decoder drops them
