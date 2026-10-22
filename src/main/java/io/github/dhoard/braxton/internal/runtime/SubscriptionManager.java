@@ -88,7 +88,10 @@ public final class SubscriptionManager<Msg> {
                 }
                 try {
                     Msg message = current.apply(System.nanoTime());
-                    if (message != null) {
+                    // Mapping runs on the source thread and can outlive removal. Recheck the
+                    // source's lifetime before publishing the mapped value, not only before
+                    // invoking application code. A mapper refresh alone keeps this source live.
+                    if (message != null && mapper.get() != null) {
                         emitter.accept(message);
                     }
                 } catch (RuntimeException failure) {
@@ -292,7 +295,12 @@ public final class SubscriptionManager<Msg> {
             Consumer<Object> emitter = value -> {
                 Function<Object, Msg> current = mapper.get();
                 if (current != null) {
-                    enqueue(current.apply(value));
+                    Msg message = current.apply(value);
+                    // Removal/failed startup may have invalidated this callback while its
+                    // application mapper was running. A captured function is not liveness.
+                    if (mapper.get() != null) {
+                        enqueue(message);
+                    }
                 }
             };
             try {
