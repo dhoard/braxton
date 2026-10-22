@@ -24,14 +24,17 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.internal.render.Screen;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Style;
+import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.ScreenRenderer;
 
@@ -132,6 +135,187 @@ class TableSelectorTest {
                 .plainLines(TableSelector.view(ElementId.of("table"),
                         TableSelector.State.of(header, rows), true, Style.NONE.withInvert(),
                         Style.NONE, Style.NONE.withBold(), action -> action), new Viewport(2, 40));
+    }
+
+    /**
+     * Cells whose first cluster has no base of its own, so it joins the pad of the cell before it
+     * when the row is painted as one cluster sequence. {@code "x\u0301"} is the control: the accent
+     * has its own base, so it already occupied a cell of its own.
+     */
+    private static final List<String> BASELESS = List.of(
+            "\u0301",              // combining acute accent
+            "\u0301x",             // accent with nothing before it
+            "x\u0301",             // accent that has its own base
+            "\u200D",              // zero-width joiner
+            "\u200D\u0301a\u200D",
+            "\uFE0F",              // variation selector 16 (wide presentation)
+            "\uFE0Fx",
+            "\uFE0E",              // variation selector 15 (text presentation)
+            "\uFE0Ex",
+            "\u200B",              // zero-width space
+            "\uFEFFx",             // byte-order mark
+            "\u00ADx");            // soft hyphen
+
+    /** The grid painted through a viewport wider than it, cell (1, 1) selected. */
+    private static Screen grid(List<String> header, List<List<String>> rows) {
+        return new ScreenRenderer().screen(TableSelector.view(ElementId.of("table"),
+                new TableSelector.State(header, rows, 1, 1), true, Style.NONE.withInvert(),
+                Style.NONE, Style.NONE.withBold(), action -> action.getClass().getSimpleName()),
+                new Viewport(rows.size() + 1, 40));
+    }
+
+    /** The cells a row was painted with; a wide cluster's second half is a continuation. */
+    private static List<String> paintedCells(Screen screen, int row) {
+        List<String> cells = new ArrayList<>();
+        for (int col = 0; col < screen.cols(); col++) {
+            cells.add(screen.isContinuation(row, col)
+                    ? "<continuation>" : show(screen.cell(row, col).text()));
+        }
+        return cells;
+    }
+
+    /**
+     * The columns a row really occupies. Re-measuring the row's own plain text hides a column the
+     * paint path gave back to the cell before it, so the cells are the oracle.
+     */
+    private static int paintedColumns(Screen screen, int row) {
+        int columns = 0;
+        for (int col = 0; col < screen.cols(); col++) {
+            if (screen.isContinuation(row, col)) {
+                continue;
+            }
+            columns += TextMeasure.columns(screen.cell(row, col).text());
+        }
+        return columns;
+    }
+
+    /** The last column a row paints in, so the grid's right edge has to land in one column. */
+    private static int lastPaintedColumn(Screen screen, int row) {
+        for (int col = screen.cols() - 1; col >= 0; col--) {
+            if (!screen.isContinuation(row, col) && !screen.cell(row, col).isEmpty()) {
+                return col;
+            }
+        }
+        return -1;
+    }
+
+    /** The column {@code needle} was painted in on {@code row}, or -1 when it is not painted. */
+    private static int paintedColumn(Screen screen, int row, char needle) {
+        for (int column = 0; column < screen.cols(); column++) {
+            if (!screen.isContinuation(row, column)
+                    && screen.cell(row, column).text().indexOf(needle) >= 0) {
+                return column;
+            }
+        }
+        return -1;
+    }
+
+    /** The columns the inversion of the selected cell covers. */
+    private static int invertedColumns(Screen screen, int row) {
+        int columns = 0;
+        for (int col = 0; col < screen.cols(); col++) {
+            if (!screen.isContinuation(row, col) && screen.cell(row, col).style().invert()) {
+                columns += TextMeasure.columns(screen.cell(row, col).text());
+            }
+        }
+        return columns;
+    }
+
+    private static String show(String value) {
+        if (value == null) {
+            return "<none>";
+        }
+        StringBuilder text = new StringBuilder("\"");
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            text.append(c >= 0x20 && c < 0x7F
+                    ? String.valueOf(c) : String.format("\\u%04x", (int) c));
+        }
+        return text.append('"').toString();
+    }
+
+    /**
+     * A row is painted as one grapheme-cluster sequence, so a cell that opens with a cluster that
+     * has no base of its own joins the pad of the cell before it: the mark claims no column of its
+     * own there and a variation selector widens that pad by a column. Charging every cell the
+     * columns it measures on its own made the mark row seven painted columns and the selector row
+     * nine, and the inversion drawn for the selected cell missed a column of that cell.
+     */
+    @Test
+    void aCellOpeningWithABaselessClusterKeepsTheGridRectangular() {
+        // Column widths are [2, 2], so every row occupies (2 + 2) + (2 + 2) = 8 painted columns.
+        Screen screen = grid(List.of("h1", "h2"),
+                List.of(List.of("a", "b"), List.of("p", "\u0301x"), List.of("q", "\uFE0Fz")));
+        assertThat(screen.rows()).isEqualTo(4);
+        for (int row = 0; row < screen.rows(); row++) {
+            List<String> cells = paintedCells(screen, row);
+            assertThat(paintedColumns(screen, row))
+                    .as("painted columns of row %d, painted as %s", row, cells).isEqualTo(8);
+            assertThat(lastPaintedColumn(screen, row))
+                    .as("right edge of row %d, painted as %s", row, cells).isEqualTo(7);
+        }
+        // The mark shares the pad cell of the column before it, so the selected cell's own text and
+        // its pad still cover the four columns the ASCII row's cell covers.
+        assertThat(invertedColumns(screen, 2))
+                .as("inverted columns of the mark cell, painted as %s", paintedCells(screen, 2))
+                .isEqualTo(4);
+    }
+
+    /** Every baseless cell form keeps the grid rectangular, in either column. */
+    @Test
+    void everyRowKeepsOneGridWhenACellOpensWithABaselessCluster() {
+        for (String cell : BASELESS) {
+            for (int column = 0; column < 2; column++) {
+                List<List<String>> rows = column == 0
+                        ? List.of(List.of(cell, "b"), List.of("bb", "c"))
+                        : List.of(List.of("a", cell), List.of("bb", "c"));
+                Screen screen = grid(List.of("h1", "h2"), rows);
+                assertThat(screen.rows()).as("cell %s column %d", show(cell), column).isEqualTo(3);
+                for (int row = 1; row < screen.rows(); row++) {
+                    List<String> cells = paintedCells(screen, row);
+                    assertThat(paintedColumns(screen, row))
+                            .as("painted columns of row %d for cell %s in column %d, painted as %s",
+                                    row, show(cell), column, cells)
+                            .isEqualTo(paintedColumns(screen, 0));
+                    assertThat(lastPaintedColumn(screen, row))
+                            .as("right edge of row %d for cell %s in column %d, painted as %s",
+                                    row, show(cell), column, cells)
+                            .isEqualTo(lastPaintedColumn(screen, 0));
+                }
+            }
+        }
+    }
+
+    /**
+     * The column after a baseless cell has to stay where the grid put it, and the selected cell has
+     * to be inverted across the columns it occupies. {@link #aCellBreakCannotWidenTheSharedGrid} is
+     * the same invariant for a cell break: the mark left the row a column short, so the third
+     * column was painted one column left of the other rows and the inversion missed a column.
+     */
+    @Test
+    void aCellOpeningWithABaselessClusterKeepsLaterColumnsAndItsWholeInversion() {
+        // Column widths are [2, 5, 1], so every row occupies 4 + 7 + 3 = 14 columns and the third
+        // column's text is painted in column 11 on every row.
+        for (String cell : List.of("\u0301beta", "beta")) {
+            Screen screen = grid(List.of("id", "name", "x"),
+                    List.of(List.of("1", "alpha", "z"), List.of("22", cell, "z")));
+            for (int row = 0; row < screen.rows(); row++) {
+                assertThat(paintedColumns(screen, row))
+                        .as("painted columns of row %d for cell %s, painted as %s",
+                                row, show(cell), paintedCells(screen, row))
+                        .isEqualTo(14);
+            }
+            for (int row = 1; row < screen.rows(); row++) {
+                assertThat(paintedColumn(screen, row, 'z'))
+                        .as("third column of row %d for cell %s, painted as %s",
+                                row, show(cell), paintedCells(screen, row))
+                        .isEqualTo(11);
+            }
+            assertThat(invertedColumns(screen, 2))
+                    .as("inverted columns of the selected cell %s, painted as %s",
+                            show(cell), paintedCells(screen, 2))
+                    .isEqualTo(7);
+        }
     }
 
     @Test

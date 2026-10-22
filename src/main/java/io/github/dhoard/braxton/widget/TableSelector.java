@@ -46,7 +46,10 @@ import io.github.dhoard.braxton.view.Views;
  * given are never mutated.</p>
  *
  * <p>Every row is one painted line: tab stops are expanded to the shared four-column boundaries and
- * line breaks become spaces, so a cell can never split the selection grid across rows.</p>
+ * line breaks become spaces, so a cell can never split the selection grid across rows. Each cell is
+ * padded inside the row it is painted in, the rule {@link Table}, {@link Markup} and {@link Quote}
+ * share, so a cell that opens with a cluster that has no base of its own cannot make one row of the
+ * grid a different width from another.</p>
  */
 public final class TableSelector {
 
@@ -159,19 +162,31 @@ public final class TableSelector {
         }
         List<View<Msg>> lines = new ArrayList<>();
         StyledText headerLine = StyledText.empty();
+        // A rendered row is one cluster sequence, so each cell is charged inside the row rather than
+        // measured on its own: a cluster with no base of its own at the head of a cell joins the pad
+        // of the cell before it and takes no column of its own there, while a variation selector
+        // there widens that pad by a column. Padding each cell from its own measurement charged
+        // columns the row never spent, so the rows of one grid came out different widths, every
+        // cell after the shifted one moved, and the selected cell's inversion missed a column.
+        String headerPainted = "";
         for (int i = 0; i < columns; i++) {
-            headerLine = headerLine.append(StyledText.of(
-                    pad(header.get(i), widths[i] + 2), headerStyle));
+            String value = header.get(i);
+            int pad = GridRows.pad(headerPainted, value, widths[i] + 2);
+            headerPainted = headerPainted + value + " ".repeat(pad);
+            headerLine = headerLine.append(StyledText.of(value + " ".repeat(pad), headerStyle));
         }
         lines.add(Views.text(headerLine));
         for (int r = 0; r < rows.size(); r++) {
             List<String> values = rows.get(r);
             StyledText line = StyledText.empty();
+            String rowPainted = "";
             for (int c = 0; c < columns; c++) {
                 String value = c < values.size() ? values.get(c) : "";
                 Style style = focused && r == state.row() && c == state.column()
                         ? activeStyle : inactiveStyle;
-                line = line.append(StyledText.of(pad(value, widths[c] + 2), style));
+                int pad = GridRows.pad(rowPainted, value, widths[c] + 2);
+                rowPainted = rowPainted + value + " ".repeat(pad);
+                line = line.append(StyledText.of(value + " ".repeat(pad), style));
             }
             lines.add(Views.text(line));
         }
@@ -214,11 +229,5 @@ public final class TableSelector {
      */
     private static String singleRow(String value) {
         return LineBreaks.singleRow(value);
-    }
-
-    private static String pad(String text, int width) {
-        String fitted = TextMeasure.truncate(text, width);
-        int missing = width - TextMeasure.columns(fitted);
-        return missing <= 0 ? fitted : fitted + " ".repeat(missing);
     }
 }
