@@ -264,14 +264,42 @@ public final class LayoutEngine {
     private int textWidth(StyledText text, int maxCols) {
         int widest = 0;
         int used = 0;
+        // The cell the last cluster of the line was charged into, spelled the way the wrapped row's
+        // own plain text will hold it: a tab is expanded to the spaces of its stop here, and a
+        // cluster with no base of its own carries the dotted circle wrapLines writes in front of it.
+        // Reading the cell that way keeps the columns charged for a row equal to the columns the
+        // same text occupies once it is painted.
+        String cell = null;
+        int cellColumns = 0;
         for (String cluster : Graphemes.iterate(text.plainText())) {
             if ("\n".equals(cluster)) {
                 widest = Math.max(widest, used);
                 used = 0;
+                cell = null;
                 continue;
             }
-            used += "\t".equals(cluster) ? 4 - (used % 4)
-                    : TextMeasure.clusterColumns(cluster, policy);
+            if ("\t".equals(cluster)) {
+                used += 4 - (used % 4);
+                cell = " ";
+                cellColumns = 1;
+            } else if (TextMeasure.clusterColumns(cluster, policy) > 0) {
+                cell = hasNoBase(cluster) ? TextMeasure.DOTTED_CIRCLE + cluster : cluster;
+                cellColumns = TextMeasure.clusterColumns(cell, policy);
+                used += cellColumns;
+            } else if (cell != null) {
+                // A cluster claiming no column joins the text of the cell before it. It claims
+                // nothing itself but can widen that cell - the selector after a tab's last space
+                // makes the cell two columns - and one that joins nothing closes the cell, since it
+                // stays between that cell and whatever follows it.
+                if (!continuesCluster(cell, cluster)) {
+                    cell = null;
+                } else {
+                    int joined = TextMeasure.clusterColumns(cell + cluster, policy);
+                    used += joined - cellColumns;
+                    cell = cell + cluster;
+                    cellColumns = joined;
+                }
+            }
             if (used >= maxCols) {
                 return maxCols;
             }
@@ -643,8 +671,18 @@ public final class LayoutEngine {
                 continue;
             }
             if ("\t".equals(raw)) {
+                // The stop reaches the line as spaces, so that row's own plain text re-segments
+                // them together with the clusters that follow the tab: the last space of the stop
+                // is a cell those clusters continue, exactly as a typed space would be. A cluster
+                // that claims no column of its own - a variation selector, a joiner - is appended
+                // below, and a selector makes the cell it joins two columns wide. That column has
+                // to be reserved with the stop: charging the stop alone left the row a column
+                // wider than the width it wrapped to, and paint dropped the row's tail. A cluster
+                // with columns of its own - a bare combining mark - starts its own cell with the
+                // dotted circle in front of it, which keeps it clear of the stop's last space.
+                int widened = widenedByNextCluster(" ", cursor.peek());
                 int stop = 4 - (used % 4);
-                if (used + stop > cols && used > 0) {
+                if (used + stop + widened > cols && used > 0) {
                     lines.add(current.build());
                     if (lines.size() >= maxLines) {
                         return lines;
@@ -654,10 +692,14 @@ public final class LayoutEngine {
                     stop = 4;
                 }
                 // A stop wider than an empty line has nowhere to wrap to, so it is clamped to
-                // the columns it can occupy; the painted line clips the same cells.
-                stop = Math.min(stop, cols - used);
-                current.append(" ".repeat(stop), style, link);
-                used += stop;
+                // the columns it can occupy; the painted line clips the same cells. The column a
+                // selector after the tab adds is part of that clamp, and a stop left with no room
+                // for the cell it ends with is clipped whole, selector included.
+                stop = Math.min(stop, cols - used - widened);
+                if (stop > 0) {
+                    current.append(" ".repeat(stop), style, link);
+                    used += stop + widened;
+                }
                 continue;
             }
             int width = TextMeasure.clusterColumns(raw, policy);
@@ -665,7 +707,8 @@ public final class LayoutEngine {
                 // Invisible format characters claim no column: the cell before them keeps the
                 // columns it measured, and a leading one has no cell to join. A selector that does
                 // widen the character it follows was already placed with that cell, which looked at
-                // the clusters continuing it before it committed them to a line.
+                // the clusters continuing it before it committed them to a line - a tab stop's last
+                // space being the one cell not placed by the loop below, and charged here.
                 current.append(raw, style, link);
                 softWrapped = false;
                 continue;
@@ -674,18 +717,21 @@ public final class LayoutEngine {
             // that continue this one belong to the same cell. Its columns - and whether it fits the
             // row at all - are only known once it is whole, and it has to move to the next line as
             // a unit: a selector that widens the base cannot be dropped at the edge, and leaving it
-            // behind would change the content a style boundary must not touch.
+            // behind would change the content a style boundary must not touch. The cell is measured
+            // as the text the row will hold, not as the cluster it started from: a cluster with no
+            // base of its own is written with the dotted circle that stands in for that base, and
+            // that circle is part of the cell's columns.
             boolean baseless = hasNoBase(raw);
-            String cellPlain = raw;
-            int cellWidth = width;
+            String cellStart = baseless ? TextMeasure.DOTTED_CIRCLE + raw : raw;
+            String cellPlain = cellStart;
+            int cellWidth = baseless ? TextMeasure.clusterColumns(cellPlain, policy) : width;
             List<Piece> pieces = null;
             for (String following = cursor.peek(); following != null
                     && continuesCluster(cellPlain, following); following = cursor.peek()) {
                 cursor.next();
                 if (pieces == null) {
                     pieces = new ArrayList<>(2);
-                    pieces.add(new Piece(baseless ? TextMeasure.DOTTED_CIRCLE + raw : raw, style,
-                            link));
+                    pieces.add(new Piece(cellStart, style, link));
                 }
                 pieces.add(new Piece(following, cursor.style(), cursor.link()));
                 cellPlain = cellPlain + following;
@@ -712,7 +758,7 @@ public final class LayoutEngine {
                 }
             }
             if (pieces == null) {
-                current.append(baseless ? TextMeasure.DOTTED_CIRCLE + raw : raw, style, link);
+                current.append(cellPlain, style, link);
             } else {
                 for (Piece piece : pieces) {
                     current.append(piece.text(), piece.style(), piece.link());
@@ -727,6 +773,22 @@ public final class LayoutEngine {
 
     /** One span-sized piece of a cell that a style boundary split into several pieces. */
     private record Piece(String text, Style style, String link) {
+    }
+
+    /**
+     * The columns the cluster after a cell adds to that cell while claiming no column of its own -
+     * a variation selector widens the base it joins, a joiner does not. Only one cluster needs to
+     * be looked at: a single cluster occupies at most two columns, so the cluster after it can add
+     * nothing more. A cluster that claims columns of its own starts a cell of its own, and one the
+     * cell does not continue keeps its own columns, so neither is counted here.
+     */
+    private int widenedByNextCluster(String cell, String following) {
+        if (following == null || TextMeasure.clusterColumns(following, policy) > 0
+                || !continuesCluster(cell, following)) {
+            return 0;
+        }
+        return Math.max(0, TextMeasure.clusterColumns(cell + following, policy)
+                - TextMeasure.clusterColumns(cell, policy));
     }
 
     /**

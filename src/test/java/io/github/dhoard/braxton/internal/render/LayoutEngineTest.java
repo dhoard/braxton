@@ -257,6 +257,69 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aSelectorAfterATabStopKeepsTheColumnsTheRowMeasures() {
+        // A tab reaches the row as the spaces of its stop, so that row's own plain text reads the
+        // selector after the tab as part of the last of those spaces: a cell two columns wide. The
+        // stop has to reserve that column the way every other widening cell does. Charged as one
+        // column, the row came back a column wider than the width it wrapped to, and paint dropped
+        // the tail of the row - the "x" here.
+        String text = "a\t\uFE0Fx";
+        for (int cols = 1; cols <= 8; cols++) {
+            for (StyledText line : engine.wrapLines(StyledText.plain(text), cols)) {
+                assertThat(TextMeasure.columns(line.plainText()))
+                        .as("row at %d columns", cols)
+                        .isLessThanOrEqualTo(cols);
+            }
+        }
+        // Six columns: the four of the stop, the column its last space gains, and the "x".
+        assertThat(engine.intrinsicWidth(Views.text(text), 8)).isEqualTo(6);
+        int rows = engine.intrinsicHeight(Views.text(text), 5);
+        assertThat(rows).isEqualTo(2);
+        Screen screen = paint(Views.text(text), rows, 5);
+        assertThat(screen.cell(0, 3).text()).isEqualTo(" \uFE0F");
+        assertThat(screen.isContinuation(0, 4)).isTrue();
+        assertThat(screen.cell(1, 0).text()).isEqualTo("x");
+        // A value that spells the same stop with spaces is the reference: the tab has to keep the
+        // same cells, including the character that follows the widened one.
+        assertThat(paintedCells(screen)).isEqualTo(paintedCells(
+                paint(Views.text(StyledText.plain("a   \uFE0Fx")), rows, 5)));
+    }
+
+    @Test
+    void aSelectorInsideABaselessClusterKeepsTheColumnsItsDottedCircleMeasures() {
+        // The dotted circle stands in for the base a cluster does not have, and the row holds it, so
+        // the selector in that cluster widens the circle the way it widens any other base: two
+        // columns, not the one the bare cluster measures. Charged as one, the row measured wider
+        // than the width it wrapped to and paint dropped the "a" that followed it.
+        String text = "\uFE0F\u0301a";
+        for (int cols = 1; cols <= 4; cols++) {
+            for (StyledText line : engine.wrapLines(StyledText.plain(text), cols)) {
+                assertThat(TextMeasure.columns(line.plainText()))
+                        .as("row at %d columns", cols)
+                        .isLessThanOrEqualTo(cols);
+            }
+        }
+        assertThat(engine.intrinsicWidth(Views.text(text), 4)).isEqualTo(3);
+        assertThat(engine.intrinsicHeight(Views.text(text), 2)).isEqualTo(2);
+        Screen screen = paint(Views.text(text), 2, 2);
+        assertThat(screen.cell(0, 0).text()).isEqualTo(TextMeasure.DOTTED_CIRCLE + "\uFE0F\u0301");
+        assertThat(screen.isContinuation(0, 1)).isTrue();
+        assertThat(screen.plainLine(1)).isEqualTo("a");
+    }
+
+    @Test
+    void aSelectorAfterATabStopKeepsTheColumnsItsFrameMeasures() {
+        // A frame is measured from the columns its content's rows occupy. A tab stop that never
+        // charged the selector after it measured the value one column narrower than it painted, so
+        // the frame drew its right edge over the content and the last character was dropped.
+        View<?> framed = Views.border(Border.SINGLE, Views.text("name\t\uFE0Fvalue"));
+        assertThat(engine.intrinsicWidth(framed, 16)).isEqualTo(16);
+        assertThat(engine.intrinsicHeight(framed, 16)).isEqualTo(3);
+        assertThat(paint(framed, 3, 16).plainLine(1))
+                .isEqualTo("\u2502name    \uFE0Fvalue\u2502");
+    }
+
+    @Test
     void aLeadingFormatCharacterInItsOwnSpanStaysWithTheClusterItBelongsTo() {
         // The plain text keeps a zero-width space in front of the mark it precedes, so the row it
         // is painted on has to keep it too: a span boundary that separated them dropped it, and the
@@ -288,6 +351,8 @@ class LayoutEngineTest {
                 StyledText.concat(StyledText.of("\uD83D\uDE00", Style.NONE),
                         StyledText.of("\u00AD\u0301", bold)),
                 StyledText.concat(StyledText.of("\t", Style.NONE), StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("a\t", Style.NONE),
+                        StyledText.of("\uFE0Fx", bold)),
                 StyledText.concat(StyledText.of("\u0301", Style.NONE), StyledText.of("x", bold)),
                 StyledText.concat(StyledText.of("ab\n", Style.NONE),
                         StyledText.of("\u0301x", bold)),
