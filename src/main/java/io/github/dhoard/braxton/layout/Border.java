@@ -29,7 +29,11 @@ package io.github.dhoard.braxton.layout;
  * character or an unpaired surrogate occupies its cell as a blank rather than reaching the terminal,
  * and a custom border can therefore never emit an escape sequence or an unencodable unit. A line
  * break or tab is a control character too: a frame row has no line structure to break and no tab
- * stop to advance, so both are blank cells as well instead of moving the cursor.</p>
+ * stop to advance, so both are blank cells as well instead of moving the cursor. A format character
+ * (a zero-width space or joiner, a byte-order mark, a soft hyphen) is the opposite failure: it is
+ * encodable and invisible, occupying no column at all, so it too takes a blank cell - a frame
+ * reserves one cell per edge character, and an edge that claims none leaves its row short by a
+ * column and shifts every cell after it left.</p>
  */
 public record Border(char topLeft, char topRight, char bottomLeft, char bottomRight,
         char horizontal, char vertical) {
@@ -41,14 +45,17 @@ public record Border(char topLeft, char topRight, char bottomLeft, char bottomRi
 
     /**
      * The character painted in one cell of a frame: {@code character} itself, or a blank when it is
-     * a control character or an unpaired surrogate.
+     * a control character, an unpaired surrogate, or a format character that occupies no column.
      *
      * <p>A cell cannot hold a line break or a tab, and neither may reach the terminal: the first
      * would split a frame row and the second would move the cursor to a tab stop. Both are control
-     * characters, so they take the same blank cell as {@code ESC} or a lone surrogate.</p>
+     * characters, so they take the same blank cell as {@code ESC} or a lone surrogate. A format
+     * character is measured as no column, so keeping it would leave the frame row a column short of
+     * the geometry its own perimeter reserved.</p>
      */
     public static String glyph(char character) {
         return Character.isISOControl(character) || Character.isSurrogate(character)
+                || Character.getType(character) == Character.FORMAT
                 ? " " : String.valueOf(character);
     }
 

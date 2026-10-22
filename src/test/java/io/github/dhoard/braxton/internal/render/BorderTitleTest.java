@@ -143,4 +143,40 @@ class BorderTitleTest {
                     .doesNotContain("\n").doesNotContain("\t");
         }
     }
+
+    @Test
+    void aBorderFormatCharacterOccupiesItsCellAsABlank() {
+        // A frame reserves exactly one cell per edge character. A format character is neither a
+        // control character nor a surrogate, so the rule above let a zero-width space, joiner,
+        // byte-order mark or soft hyphen into a cell, and measurement counts it as no column at
+        // all: the row the frame reserved a cell for came back a column short and the cells after
+        // it landed left of where the frame put them.
+        for (char edge : new char[] {'\u200B', '\u200D', '\uFEFF', '\u00AD'}) {
+            Border horizontal = new Border('+', '+', '+', '+', edge, '|');
+            Screen screen = new LayoutEngine()
+                    .layout(Views.border(horizontal, Views.text("ab")), new Rect(0, 0, 3, 4))
+                    .screen();
+            assertThat(screen.plainLines()).as("horizontal edge 0x%04x", (int) edge)
+                    .containsExactly("+  +", "|ab|", "+  +");
+            assertThat(TextMeasure.columns(screen.plainLines().get(0)))
+                    .as("horizontal edge 0x%04x top row", (int) edge).isEqualTo(4);
+            assertThat(screen.cell(0, 1).text()).as("horizontal edge 0x%04x", (int) edge)
+                    .isEqualTo(" ");
+            assertThat(AnsiEncoder.frame(screen)).as("horizontal edge 0x%04x", (int) edge)
+                    .doesNotContain(String.valueOf(edge));
+            Border vertical = new Border('+', '+', '+', '+', '-', edge);
+            Screen side = new LayoutEngine()
+                    .layout(Views.border(vertical, Views.text("ab")), new Rect(0, 0, 3, 4))
+                    .screen();
+            // plainLines trims trailing blanks, so the right edge is checked on the cell.
+            assertThat(side.plainLines()).as("vertical edge 0x%04x", (int) edge)
+                    .containsExactly("+--+", " ab", "+--+");
+            assertThat(side.cell(1, 0).text()).as("vertical edge 0x%04x", (int) edge)
+                    .isEqualTo(" ");
+            assertThat(side.cell(1, 3).text()).as("trailing edge 0x%04x", (int) edge)
+                    .isEqualTo(" ");
+            assertThat(AnsiEncoder.frame(side)).as("vertical edge 0x%04x", (int) edge)
+                    .doesNotContain(String.valueOf(edge));
+        }
+    }
 }
