@@ -310,6 +310,53 @@ class CatalogTest {
     }
 
     @Test
+    void aTwoColumnBorderEdgeKeepsTheFrameGeometry() {
+        // The opposite failure to the format character above: a fullwidth vertical bar, a CJK corner
+        // bracket, a fullwidth hyphen or a wide emoji is encodable and legal to ask for, and the
+        // pinned width policy measures it as two columns. The frame still spent one cell on it, so
+        // the row it framed measured a column past the edges above and below it, and a wide edge
+        // repeated across the top and bottom pushed those edges past the box's own width.
+        for (char edge : new char[] {'\uFF5C', '\u300C', '\uFF0D', '\u2B50'}) {
+            Border vertical = new Border('+', '+', '+', '+', '-', edge);
+            List<String> box = List.of(
+                    Box.of("ab").border(vertical).render(8).plainText().split("\n", -1));
+            assertThat(box).as("box vertical edge 0x%04x", (int) edge)
+                    .containsExactly("+------+", " ab     ", "+------+");
+            assertThat(box).allSatisfy(line ->
+                    assertThat(TextMeasure.columns(line)).as("box line [%s]", line).isEqualTo(8));
+            // Content wider than the inner width is clipped by the same one-cell budget, so the
+            // row keeps its width instead of trailing a column past the frame.
+            assertThat(List.of(Box.of("abcdefghij").border(vertical).width(8).render(8).plainText()
+                    .split("\n", -1)))
+                    .as("box vertical edge 0x%04x with clipped content", (int) edge)
+                    .containsExactly("+------+", " abcdef ", "+------+");
+            Table table = Table.of().buffer(0).border(vertical);
+            table.row(StyledText.plain("ab"));
+            assertThat(List.of(table.render().plainText().split("\n", -1)))
+                    .as("table vertical edge 0x%04x", (int) edge)
+                    .containsExactly("+--+", " ab ", "+--+");
+            Border horizontal = new Border('+', '+', '+', '+', edge, '|');
+            List<String> across = List.of(
+                    Box.of("ab").border(horizontal).render(8).plainText().split("\n", -1));
+            assertThat(across).as("box horizontal edge 0x%04x", (int) edge).hasSize(3);
+            assertThat(across.get(0)).as("box horizontal edge 0x%04x", (int) edge)
+                    .isEqualTo("+      +");
+            assertThat(across.get(2)).as("box horizontal edge 0x%04x", (int) edge)
+                    .isEqualTo("+      +");
+            assertThat(across).allSatisfy(line ->
+                    assertThat(TextMeasure.columns(line)).as("box line [%s]", line).isEqualTo(8));
+            Table acrossTable = Table.of().buffer(0).border(horizontal);
+            acrossTable.row(StyledText.plain("ab"));
+            List<String> acrossRows = List.of(acrossTable.render().plainText().split("\n", -1));
+            assertThat(acrossRows).as("table horizontal edge 0x%04x", (int) edge).hasSize(3);
+            assertThat(acrossRows.get(0)).as("table horizontal edge 0x%04x", (int) edge)
+                    .isEqualTo("+  +");
+            assertThat(acrossRows).allSatisfy(line ->
+                    assertThat(TextMeasure.columns(line)).as("table line [%s]", line).isEqualTo(4));
+        }
+    }
+
+    @Test
     void aBorderedTableClosesItsFrameAroundTheRows() {
         Table table = Table.of().buffer(1).border(Border.SINGLE);
         table.row(StyledText.plain("a"), StyledText.plain("bb"));

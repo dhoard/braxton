@@ -179,4 +179,54 @@ class BorderTitleTest {
                     .doesNotContain(String.valueOf(edge));
         }
     }
+
+    @Test
+    void aTwoColumnBorderEdgeNeverWidensTheFrame() {
+        // The perimeter is written cell by cell with a declared span of one column, so an edge
+        // character the width policy measures as two - a fullwidth bar, a CJK corner bracket, a
+        // fullwidth hyphen, a wide emoji - was painted into a cell that had not reserved its second
+        // column. The encoder positions the row once and then writes cells in order, skipping only
+        // continuation cells, and none was marked: every cell after the left edge landed a column
+        // right of where the frame put it and the right edge was written past the last column.
+        for (char edge : new char[] {'\uFF5C', '\u300C', '\uFF0D', '\u2B50'}) {
+            java.util.List<Border> borders = java.util.List.of(
+                    new Border('+', '+', '+', '+', '-', edge),
+                    new Border('+', '+', '+', '+', edge, '|'),
+                    new Border(edge, edge, edge, edge, '\u2500', '|'));
+            assertThat(borders).allSatisfy(border -> {
+                for (int width = 2; width <= 10; width++) {
+                    Screen screen = new LayoutEngine()
+                            .layout(Views.border(border, Views.text("ab")), new Rect(0, 0, 3, width))
+                            .screen();
+                    for (String line : screen.plainLines()) {
+                        assertThat(TextMeasure.columns(line))
+                                .as("edge 0x%04x width %d line [%s]", (int) edge, width, line)
+                                .isLessThanOrEqualTo(Math.max(2, width));
+                    }
+                    // Every painted cell occupies at most the column the perimeter reserved for it,
+                    // which is what keeps the cells after it in the columns the frame measured.
+                    for (int row = 0; row < screen.rows(); row++) {
+                        for (int col = 0; col < screen.cols(); col++) {
+                            assertThat(TextMeasure.columns(screen.cell(row, col).text()))
+                                    .as("edge 0x%04x width %d cell (%d,%d)",
+                                            (int) edge, width, row, col)
+                                    .isLessThanOrEqualTo(1);
+                        }
+                    }
+                    assertThat(AnsiEncoder.frame(screen))
+                            .as("edge 0x%04x width %d never reaches the terminal", (int) edge, width)
+                            .doesNotContain(String.valueOf(edge));
+                }
+            });
+            // The edge keeps its cell as a blank, so the frame still insets the child by one column
+            // on each side and its corners line up with the rows they frame.
+            Screen side = new LayoutEngine()
+                    .layout(Views.border(new Border('+', '+', '+', '+', '-', edge),
+                            Views.text("ab")), new Rect(0, 0, 3, 4)).screen();
+            assertThat(side.cell(1, 0).text()).as("vertical edge 0x%04x", (int) edge).isEqualTo(" ");
+            assertThat(side.cell(1, 3).text()).as("trailing edge 0x%04x", (int) edge).isEqualTo(" ");
+            assertThat(side.plainLines()).as("vertical edge 0x%04x", (int) edge)
+                    .containsExactly("+--+", " ab", "+--+");
+        }
+    }
 }
