@@ -183,6 +183,84 @@ class InputDecoderTest {
         assertThat(key.text()).isEmpty();
     }
 
+    /**
+     * A control byte after ESC is a terminal's Alt-modified gesture: ESC DEL is Alt+Backspace, and an
+     * xterm-family terminal whose Meta key sends ESC encodes Alt+Enter and Alt+Tab as ESC CR and ESC
+     * TAB. The pair used to be consumed and reported as a bare Escape, so the key the user pressed
+     * never arrived and a key they never pressed did; in an application that binds Escape, two
+     * Alt+Enter submissions became a two-Escape cancel.
+     */
+    @Test
+    void aControlAfterEscapeIsThatKeyWithAlt() throws IOException {
+        InputEvent.KeyInput altEnter = (InputEvent.KeyInput) read("\u001B\r").orElseThrow();
+        assertThat(altEnter.key()).isEqualTo(Key.parse("alt+enter"));
+        assertThat(altEnter.text()).isEmpty();
+
+        assertThat(((InputEvent.KeyInput) read("\u001B\t").orElseThrow()).key())
+                .isEqualTo(Key.parse("alt+tab"));
+        assertThat(read("\u001B\u0008").orElseThrow())
+                .as("ESC BS names the same gesture as the ESC DEL pair")
+                .isEqualTo(read("\u001B\u007F").orElseThrow());
+        // A control byte that already names a Ctrl gesture keeps it: ESC ETX is Alt plus Ctrl+C, not
+        // the plain Alt+C the ESC c pair reports.
+        assertThat(((InputEvent.KeyInput) read("\u001B\u0003").orElseThrow()).key())
+                .isEqualTo(Key.parse("alt+ctrl+c"));
+    }
+
+    /**
+     * The rule covers every C0 control, not only the common three: each ESC pair names the key the
+     * bare control byte names and adds ALT to it, never a control character as a name or as text, and
+     * the keystroke typed after the pair is still decoded.
+     */
+    @Test
+    void everyControlAfterEscapeKeepsItsGestureAndTheKeyAfterIt() throws IOException {
+        for (int control = 0x00; control <= 0x1F; control++) {
+            if (control == 0x1B) {
+                continue; // two Escape presses stay two separate gestures
+            }
+            InputDecoder decoder = new InputDecoder(
+                    new ByteAtATime(new byte[] {0x1B, (byte) control, 'x'}));
+            InputEvent.KeyInput gesture = (InputEvent.KeyInput) decoder.read().orElseThrow();
+
+            assertThat(gesture.key()).as("ESC plus 0x%02X is not a bare Escape", control)
+                    .isNotEqualTo(Key.ESCAPE);
+            assertThat(gesture.key().name().chars().allMatch(c -> !Character.isISOControl(c)))
+                    .as("ESC plus 0x%02X names no control character", control).isTrue();
+            assertThat(gesture.text()).as("ESC plus 0x%02X carries no control text", control)
+                    .isEmpty();
+            InputEvent.KeyInput bare =
+                    (InputEvent.KeyInput) read(new byte[] {(byte) control}).orElseThrow();
+            assertThat(gesture.key().name())
+                    .as("ESC plus 0x%02X names the key the bare byte names", control)
+                    .isEqualTo(bare.key().name());
+            assertThat(gesture.key().modifiers().alt())
+                    .as("ESC plus 0x%02X is Alt-modified", control).isTrue();
+            assertThat(gesture.key().modifiers().ctrl())
+                    .as("ESC plus 0x%02X keeps the Ctrl the bare byte names", control)
+                    .isEqualTo(bare.key().modifiers().ctrl());
+
+            assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text())
+                    .as("the key after ESC plus 0x%02X", control).isEqualTo("x");
+            assertThat(decoder.read()).as("nothing is left after ESC plus 0x%02X", control)
+                    .isEmpty();
+        }
+    }
+
+    /**
+     * Two Alt+Enter presses are two Enter presses, never the two Escape presses that a running turn's
+     * cancel window counts.
+     */
+    @Test
+    void twoAltEnterPressesAreNeverTwoEscapePresses() throws IOException {
+        InputDecoder decoder = new InputDecoder(
+                new ByteAtATime(new byte[] {0x1B, 0x0D, 0x1B, 0x0D}));
+        for (int press = 0; press < 2; press++) {
+            assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).key())
+                    .as("press %d", press).isEqualTo(Key.parse("alt+enter"));
+        }
+        assertThat(decoder.read()).isEmpty();
+    }
+
     @Test
     void aLoneEscapeIsEscape() throws IOException {
         assertThat(((InputEvent.KeyInput) read("\u001B").orElseThrow()).key()).isEqualTo(Key.ESCAPE);

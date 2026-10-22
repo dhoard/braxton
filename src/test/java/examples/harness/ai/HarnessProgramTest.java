@@ -24,6 +24,8 @@ package examples.harness.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -36,6 +38,7 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.internal.input.InputDecoder;
 import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
@@ -284,6 +287,37 @@ class HarnessProgramTest {
         assertThat(stopped.model().pending()).isEmpty();
         assertThat(stopped.model().draft().text()).isEmpty();
         assertThat(stopped.command()).isInstanceOf(Command.CancelNamespace.class);
+    }
+
+    /**
+     * A terminal that sends ESC for the Alt key encodes Alt+Enter as the byte pair ESC CR, so two
+     * Alt+Enter submissions used to arrive as two bare Escapes: neither Enter reached the composer
+     * (the README promises "Type / Enter") and the second fabricated Escape landed inside the 2 s
+     * window documented for Esc, stopping the running turn and discarding the queued prompts.
+     */
+    @Test
+    void altEnterSubmissionsReachTheComposerAndNeverArmTheEscapeWindow() throws IOException {
+        HarnessState running = update(ready(), new HarnessMsg.Submit("hello")).model();
+        assertThat(running.working()).isTrue();
+
+        InputDecoder decoder = new InputDecoder(new ByteArrayInputStream(
+                new byte[] {0x1B, 0x0D, 0x1B, 0x0D}));
+        HarnessState state = running;
+        for (int press = 0; press < 2; press++) {
+            state = state.withDraft(EditorState.of("press " + press));
+            InputEvent event = decoder.read().orElseThrow();
+            HarnessMsg message = InputRouter.route(HarnessView.view(state), event).orElseThrow();
+            assertThat(message).as("press %d reaches the composer", press)
+                    .isEqualTo(new HarnessMsg.Editor(new EditorAction.Submit()));
+            state = update(state, message).model();
+        }
+
+        assertThat(state.working()).as("a key the user never pressed must not stop the turn")
+                .isTrue();
+        assertThat(state.pending()).containsExactly("press 0", "press 1");
+        assertThat(state.entries()).doesNotContain(new HarnessEntry.Notice("Stopped."));
+        assertThat(state.escArmedUntilNanos()).isZero();
+        assertThat(decoder.read()).as("both keystroke pairs were consumed").isEmpty();
     }
 
     @Test

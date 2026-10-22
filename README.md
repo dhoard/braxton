@@ -246,6 +246,12 @@ Normalized input is one of `KeyInput`, `PasteInput`, or `ResizeInput`. Printable
 text exactly once, and bracketed paste arrives as one atomic event that never triggers Enter or a
 shortcut.
 
+An ESC byte followed by a key inside the escape timeout is that key with `alt` added to the
+modifiers the byte already names, which is how xterm-family terminals report the Alt/Meta key:
+`ESC CR` is `alt+enter`, `ESC TAB` is `alt+tab`, `ESC DEL` is `alt+backspace`, and `ESC` plus the
+Ctrl+C byte is `ctrl+alt+c`. A control byte never disappears into a bare Escape and never becomes a
+key name or text. ESC followed by ESC is two Escape gestures, and a lone ESC is one.
+
 ## Commands and subscriptions
 
 `Command` values are inert descriptions:

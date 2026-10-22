@@ -87,53 +87,64 @@ public final class InputDecoder {
     }
 
     private InputEvent decodeSingleByte(int value) throws IOException {
-        if (value == 0x0D) {
-            return InputEvent.KeyInput.of(Key.ENTER);
-        }
-        if (value == 0x0A) {
-            return InputEvent.KeyInput.of(Key.of("j", Modifiers.CTRL));
-        }
-        if (value == 0x09) {
-            return InputEvent.KeyInput.of(Key.TAB);
-        }
-        if (value == 0x7F || value == 0x08) {
-            return InputEvent.KeyInput.of(Key.BACKSPACE);
-        }
-        if (value == 0x00) {
-            return InputEvent.KeyInput.of(Key.of("space", Modifiers.CTRL));
-        }
-        if (value == 0x1C) {
-            return InputEvent.KeyInput.of(Key.of("\\", Modifiers.CTRL));
-        }
-        if (value == 0x1D) {
-            return InputEvent.KeyInput.of(Key.of("]", Modifiers.CTRL));
-        }
-        if (value == 0x1E) {
-            return InputEvent.KeyInput.of(Key.of("^", Modifiers.CTRL));
-        }
-        if (value == 0x1F) {
-            return InputEvent.KeyInput.of(Key.of("_", Modifiers.CTRL));
-        }
-        if (value < 0x20) {
-            char letter = (char) ('a' + value - 1);
-            return InputEvent.KeyInput.of(Key.of(String.valueOf(letter), Modifiers.CTRL));
+        if (value < 0x20 || value == 0x7F) {
+            return InputEvent.KeyInput.of(keyForControlByte(value));
         }
         if (value < 0x80) {
             char c = (char) value;
-            if (value < 0x20) {
-                return null;
-            }
             return InputEvent.KeyInput.of(keyForText(String.valueOf(c)), String.valueOf(c));
         }
         String text = decodeUtf8(value);
         // A C1 control (U+0080-U+009F) arrives as a two-byte UTF-8 scalar, so it reaches here as
         // printable-looking text. It is no more printable than a C0 control: it names no gesture and
-        // must not be carried as text, exactly as the Alt-modified path already decides. A key named
-        // after a control character is rejected outright, which would end the run.
+        // must not be carried as text, exactly as the Alt-modified path already decides for a C1
+        // scalar. A key named after a control character is rejected outright, which would end the
+        // run.
         if (text.isEmpty() || !isPrintable(text)) {
             return null;
         }
         return InputEvent.KeyInput.of(keyForText(text), text);
+    }
+
+    /**
+     * The key a control byte names on its own: every C0 control and DEL names a gesture here.
+     * ESC plus one of them is that gesture with ALT (see {@link #readEscape()}), so the pair and the
+     * bare byte agree on the key and only differ by the modifier. A control byte is never used as a
+     * key name or text, because {@link Key} rejects control characters in a name.
+     *
+     * @param value a C0 control byte or DEL
+     */
+    private static Key keyForControlByte(int value) {
+        if (value == 0x0D) {
+            return Key.ENTER;
+        }
+        if (value == 0x0A) {
+            return Key.of("j", Modifiers.CTRL);
+        }
+        if (value == 0x09) {
+            return Key.TAB;
+        }
+        if (value == 0x7F || value == 0x08) {
+            return Key.BACKSPACE;
+        }
+        if (value == 0x00) {
+            return Key.of("space", Modifiers.CTRL);
+        }
+        if (value == 0x1C) {
+            return Key.of("\\", Modifiers.CTRL);
+        }
+        if (value == 0x1D) {
+            return Key.of("]", Modifiers.CTRL);
+        }
+        if (value == 0x1E) {
+            return Key.of("^", Modifiers.CTRL);
+        }
+        if (value == 0x1F) {
+            return Key.of("_", Modifiers.CTRL);
+        }
+        // Remaining C0 controls are Ctrl+letter.
+        char letter = (char) ('a' + value - 1);
+        return Key.of(String.valueOf(letter), Modifiers.CTRL);
     }
 
     /**
@@ -220,21 +231,27 @@ public final class InputDecoder {
             in.unread(second);
             return Optional.of(InputEvent.KeyInput.of(Key.ESCAPE));
         }
-        if (second < 0x20) {
-            return Optional.of(InputEvent.KeyInput.of(Key.ESCAPE));
-        }
-        if (second == 0x7F) {
-            // ESC DEL is how a terminal reports Alt+Backspace. DEL is not printable, so it must not
-            // become the name and text of a printable gesture.
-            return Optional.of(InputEvent.KeyInput.of(Key.BACKSPACE.with(Modifiers.ALT)));
+        if (second < 0x20 || second == 0x7F) {
+            // ESC plus a control byte is how a terminal reports the Alt-modified key: ESC DEL is
+            // Alt+Backspace, and an xterm-family terminal with metaSendsEscape reports Alt+Enter and
+            // Alt+Tab as ESC CR and ESC TAB. Every control byte names a gesture of its own, so the
+            // pair keeps that gesture and adds ALT to the modifiers the byte already names - ESC ETX
+            // is Alt plus the Ctrl+C gesture, and stays distinct from the ESC c pair that reports a
+            // plain Alt+C. Consuming the pair as a bare Escape instead loses the keystroke the user
+            // pressed and delivers one they never pressed, and Escape and Ctrl+C are two-press
+            // gestures in real applications.
+            Key control = keyForControlByte(second);
+            return Optional.of(InputEvent.KeyInput.of(
+                    control.with(control.modifiers().withAlt(true))));
         }
         if (second >= 0x80) {
             // Alt plus a printable character outside ASCII: the following bytes belong to the same
             // UTF-8 scalar, so decode them together instead of naming the lead byte's Latin-1
             // character and leaving a stray continuation byte behind.
             String text = decodeUtf8(second);
-            // A C1 control (encoded as a multibyte scalar) is not printable either; ALT plus one
-            // is reported as the escape it started with, exactly like a C0 control.
+            // A C1 control (encoded as a multibyte scalar) is not printable either, and unlike a C0
+            // control it names no key of its own, so ALT plus one is reported as the escape it
+            // started with.
             if (text.isEmpty() || !isPrintable(text)) {
                 return Optional.of(InputEvent.KeyInput.of(Key.ESCAPE));
             }
