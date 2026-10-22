@@ -60,6 +60,19 @@ class LayoutEngineTest {
         return filled;
     }
 
+    /** Every painted cell of a screen, so a test can compare two layouts column by column. */
+    private static String paintedCells(Screen screen) {
+        StringBuilder cells = new StringBuilder();
+        for (int row = 0; row < screen.rows(); row++) {
+            for (int col = 0; col < screen.cols(); col++) {
+                cells.append(screen.isContinuation(row, col) ? ">" : screen.cell(row, col).text())
+                        .append('|');
+            }
+            cells.append('\n');
+        }
+        return cells.toString();
+    }
+
     @Test
     void aRootFixedOrGrowDefersToTheViewportBecauseNoParentAllocatesItsAxis() {
         // Fixed and Grow reserve space on a parent's main axis. A document whose root is one of
@@ -145,6 +158,168 @@ class LayoutEngineTest {
         Screen screen = paint(Views.text("abcdefgh"), 1, 4);
         assertThat(screen.plainLine(0)).isEqualTo("abcd");
         assertThat(screen.cell(0, 5).text()).isEmpty();
+    }
+
+    @Test
+    void aStyleBoundaryInsideAClusterDoesNotAddAColumn() {
+        // StyledText keeps a span boundary, but the value it measures is the concatenated plain
+        // text, where the mark and the letter before it are one cluster. Painting each span on its
+        // own gave the bare mark a dotted circle, so the painted row was a column wider than the
+        // width every measurement - and therefore every frame - computed from the same value.
+        StyledText split = StyledText.concat(StyledText.of("e", Style.NONE),
+                StyledText.of("\u0301", Style.NONE.withBold()));
+        assertThat(split.plainText()).isEqualTo("e\u0301");
+        assertThat(split.columns()).isEqualTo(1);
+        assertThat(engine.intrinsicWidth(Views.text(split), 4)).isEqualTo(1);
+        Screen screen = paint(Views.text(split), 1, 2);
+        assertThat(screen.cell(0, 0).text()).isEqualTo("e\u0301");
+        assertThat(screen.cell(0, 1).text()).isEmpty();
+        assertThat(screen.plainLine(0)).isEqualTo("e\u0301");
+    }
+
+    @Test
+    void aClusterContinuingTheLastCellDoesNotWrapAtTheLineEdge() {
+        // The mark continues the "b" cell, so it costs no column and stays on the row the
+        // measurement counted: moving it to a second line reserved a row that was never measured.
+        StyledText split = StyledText.concat(StyledText.of("ab", Style.NONE),
+                StyledText.of("\u0301", Style.NONE.withBold()));
+        assertThat(engine.wrapLines(split, 2)).hasSize(1);
+        assertThat(engine.intrinsicHeight(Views.text(split), 2)).isEqualTo(1);
+        Screen screen = paint(Views.text(split), 1, 2);
+        assertThat(screen.plainLine(0)).isEqualTo("ab\u0301");
+    }
+
+    @Test
+    void aVariationSelectorInItsOwnSpanStillTakesTheColumnsItMeasures() {
+        // A selector selects the wide form of the character before it, so the joined cluster is two
+        // columns even though the selector's own span starts without a base.
+        StyledText wide = StyledText.of("e", Style.NONE)
+                .append(StyledText.of("\uFE0F", Style.NONE.withBold()));
+        assertThat(wide.columns()).isEqualTo(2);
+        Screen screen = paint(Views.text(wide), 1, 2);
+        assertThat(screen.cell(0, 0).text()).isEqualTo("e\uFE0F");
+        assertThat(screen.isContinuation(0, 1)).isTrue();
+        assertThat(screen.plainLine(0)).isEqualTo("e\uFE0F");
+    }
+
+    @Test
+    void aSelectorSplitAtTheLineEdgeMovesTheWholeClusterToTheNextRow() {
+        // The selector widens the base it follows to two columns, so the pair cannot share the last
+        // column of the row. It has to start the next row as one cluster: dropping the selector when
+        // the widened cell no longer fitted painted different content for the same plain text.
+        StyledText split = StyledText.concat(StyledText.of("ab", Style.NONE),
+                StyledText.of("\uFE0F", Style.NONE.withBold()));
+        StyledText plain = StyledText.plain(split.plainText());
+        assertThat(split.columns()).isEqualTo(3);
+        assertThat(engine.wrapLines(split, 2)).hasSize(2);
+        assertThat(engine.wrapLines(plain, 2)).hasSize(2);
+        assertThat(engine.intrinsicHeight(Views.text(split), 2)).isEqualTo(2);
+        Screen screen = paint(Views.text(split), 2, 2);
+        assertThat(screen.plainLine(0)).isEqualTo("a");
+        assertThat(screen.cell(1, 0).text()).isEqualTo("b\uFE0F");
+        assertThat(screen.isContinuation(1, 1)).isTrue();
+    }
+
+    @Test
+    void aControlBeforeABaselessClusterKeepsTheColumnTheMarkMeasures() {
+        // The measurement breaks the cluster after a control character such as a zero-width space,
+        // so the mark that follows is a cluster of its own and its column is counted. Joining it
+        // into the cell before the control folded that column into the base and moved every cell
+        // after it - the right edge of a row included - one column to the left.
+        StyledText split = StyledText.concat(StyledText.of("\u65E5", Style.NONE),
+                StyledText.of("\u200B\u0301", Style.NONE.withBold()));
+        StyledText plain = StyledText.plain(split.plainText());
+        assertThat(TextMeasure.columns(split.plainText())).isEqualTo(3);
+        assertThat(engine.intrinsicWidth(Views.text(split), 8)).isEqualTo(3);
+        Screen screen = paint(Views.text(split), 1, 4);
+        assertThat(screen.cell(0, 0).text()).isEqualTo("\u65E5\u200B");
+        assertThat(screen.isContinuation(0, 1)).isTrue();
+        assertThat(screen.cell(0, 2).text()).isEqualTo(TextMeasure.DOTTED_CIRCLE + "\u0301");
+        assertThat(screen.cell(0, 3).text()).isEmpty();
+        assertThat(paintedCells(screen)).isEqualTo(paintedCells(paint(Views.text(plain), 1, 4)));
+    }
+
+    @Test
+    void aTabStopAndABaselessClusterKeepTheColumnsTheyMeasure() {
+        // The tab expands to the next four-column stop and ends the cluster there, so the mark
+        // after it is a cluster of its own: five columns, whether it arrives in the tab's span or in
+        // a span of its own.
+        StyledText split = StyledText.concat(StyledText.of("\t", Style.NONE),
+                StyledText.of("\u0301", Style.NONE.withBold()));
+        assertThat(engine.intrinsicWidth(Views.text(split), 8)).isEqualTo(5);
+        assertThat(engine.intrinsicHeight(Views.text(split), 8)).isEqualTo(1);
+        Screen screen = paint(Views.text(split), 1, 8);
+        assertThat(screen.cell(0, 3).text()).isEqualTo(" ");
+        assertThat(screen.cell(0, 4).text()).isEqualTo(TextMeasure.DOTTED_CIRCLE + "\u0301");
+        assertThat(screen.cell(0, 5).text()).isEmpty();
+        assertThat(paintedCells(screen)).isEqualTo(paintedCells(
+                paint(Views.text(StyledText.plain(split.plainText())), 1, 8)));
+    }
+
+    @Test
+    void aLeadingFormatCharacterInItsOwnSpanStaysWithTheClusterItBelongsTo() {
+        // The plain text keeps a zero-width space in front of the mark it precedes, so the row it
+        // is painted on has to keep it too: a span boundary that separated them dropped it, and the
+        // same value painted different content depending on how it was styled.
+        StyledText split = StyledText.concat(StyledText.of("ab\n", Style.NONE),
+                StyledText.of("\u200B\u0301", Style.NONE.withBold()));
+        Screen screen = paint(Views.text(split), 2, 3);
+        assertThat(screen.plainLine(1))
+                .isEqualTo("\u200B" + TextMeasure.DOTTED_CIRCLE + "\u0301");
+        assertThat(paintedCells(screen)).isEqualTo(paintedCells(
+                paint(Views.text(StyledText.plain(split.plainText())), 2, 3)));
+    }
+
+    @Test
+    void aStyleBoundaryNeverChangesTheLayout() {
+        // A span boundary is decoration. The same plain text lays out in the same cells, rows,
+        // intrinsic width and intrinsic height whether it arrives in one span or in several, so a
+        // frame measured from one of them cannot be painted from the other.
+        Style bold = Style.NONE.withBold();
+        List<StyledText> values = List.of(
+                StyledText.concat(StyledText.of("e", Style.NONE), StyledText.of("\u0301", bold)),
+                StyledText.of("ab", Style.NONE).append(StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("ab", Style.NONE), StyledText.of("\uFE0F", bold)),
+                StyledText.concat(StyledText.of("a ", Style.NONE), StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("a", Style.NONE),
+                        StyledText.of("\u200B\u0301", bold)),
+                StyledText.concat(StyledText.of("\u65E5", Style.NONE),
+                        StyledText.of("\u200B\u0301", bold)),
+                StyledText.concat(StyledText.of("\uD83D\uDE00", Style.NONE),
+                        StyledText.of("\u00AD\u0301", bold)),
+                StyledText.concat(StyledText.of("\t", Style.NONE), StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("\u0301", Style.NONE), StyledText.of("x", bold)),
+                StyledText.concat(StyledText.of("ab\n", Style.NONE),
+                        StyledText.of("\u0301x", bold)),
+                StyledText.concat(StyledText.of("\u200B", Style.NONE),
+                        StyledText.of("\u0301", bold)));
+        for (StyledText value : values) {
+            StyledText plain = StyledText.plain(value.plainText());
+            for (int cols = 1; cols <= 8; cols++) {
+                int rows = Math.max(1, engine.wrapLines(plain, cols).size());
+                assertThat(paintedCells(paint(Views.text(value), rows, cols)))
+                        .as("value \"%s\" at %d columns", value.plainText(), cols)
+                        .isEqualTo(paintedCells(paint(Views.text(plain), rows, cols)));
+                assertThat(engine.intrinsicWidth(Views.text(value), cols))
+                        .as("intrinsic width of \"%s\" at %d columns", value.plainText(), cols)
+                        .isEqualTo(engine.intrinsicWidth(Views.text(plain), cols));
+                assertThat(engine.intrinsicHeight(Views.text(value), cols))
+                        .as("intrinsic height of \"%s\" at %d columns", value.plainText(), cols)
+                        .isEqualTo(engine.intrinsicHeight(Views.text(plain), cols));
+            }
+        }
+    }
+
+    @Test
+    void aBaselessClusterAtTheStartOfARowStillGetsItsDottedCircle() {
+        // With no cell before it there is nothing for a bare mark to join, so the dotted circle
+        // stands in for its missing base exactly once, as the measurement of a mark counts it.
+        StyledText leading = StyledText.concat(StyledText.of("ab\n", Style.NONE),
+                StyledText.of("\u0301x", Style.NONE.withBold()));
+        assertThat(engine.intrinsicHeight(Views.text(leading), 3)).isEqualTo(2);
+        Screen screen = paint(Views.text(leading), 2, 3);
+        assertThat(screen.plainLine(0)).isEqualTo("ab");
+        assertThat(screen.plainLine(1)).isEqualTo(TextMeasure.DOTTED_CIRCLE + "\u0301x");
     }
 
     @Test

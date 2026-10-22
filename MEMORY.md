@@ -8,6 +8,10 @@ not an authoritative source of requirements; verify details against `PROJECT.md`
 - [JMH benchmark harness](memory/jmh-benchmarks.md) - how to run the offline benchmark suite, the
   JDK 23+ annotation-processor and `-Xlint:processing` build traps, the evidence discipline for
   benchmark numbers, and the measured performance gaps recorded as hunt candidates.
+- [Baseless-cluster painting in the layout engine](memory/render-cluster-attachment.md) - the
+  measure-equals-paint width invariant (one painted cell per cluster of the plain text), why plain
+  text contiguity - not "a cell was painted" - decides that, the known span-initial-extend
+  divergence, and the quadratic-copy trap `ClippedLayoutCostTest` guards.
 
 ## Maintenance
 

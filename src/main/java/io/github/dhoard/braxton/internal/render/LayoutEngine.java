@@ -23,6 +23,8 @@
 package io.github.dhoard.braxton.internal.render;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 
@@ -498,63 +500,108 @@ public final class LayoutEngine {
     }
 
     private void paintLine(StyledText line, Screen screen, int row, int startCol, int cols) {
-        int col = startCol;
+        int nextCol = startCol;
         int limit = startCol + cols;
-        String lastText = null;
-        int lastCol = -1;
-        Style lastStyle = Style.NONE;
-        String lastLink = null;
-        int lastWidth = 0;
-        StringBuilder suffix = null;
+        // The cell being assembled: the plain text it paints. A cell is only painted once no later
+        // cluster continues it, because a continuation can widen or narrow it.
+        StringBuilder cell = null;
+        StringBuilder leading = null;
+        int cellCol = startCol;
+        int cellWidth = 0;
+        Style cellStyle = Style.NONE;
+        String cellLink = null;
         for (StyledText.Span span : line.spans()) {
             Iterable<String> graphemes = Graphemes.iterate(span.text());
             for (String grapheme : graphemes) {
-                String rendered = withBase(grapheme);
-                int width = TextMeasure.clusterColumns(rendered, policy);
+                int width = TextMeasure.clusterColumns(grapheme, policy);
+                // A cluster that claims a column or holds a mark or selector is the only kind a cell
+                // can be continued by; a format character that claims no column cannot be, and a run
+                // of them must not re-segment the growing cell.
+                if ((width > 0 || hasNoBase(grapheme)) && cell != null
+                        && continuesCluster(cell, grapheme)) {
+                    // A span boundary can split one cluster the measurement read as one: the mark
+                    // or selector in its own span continues the cell painted before it instead of
+                    // claiming a cell of its own. Giving it one painted a column the plain text
+                    // never counted, which pushed the rest of the row - a frame's right edge
+                    // included - past the width the value was measured at.
+                    cell.append(grapheme);
+                    cellWidth = TextMeasure.clusterColumns(cell.toString(), policy);
+                    continue;
+                }
                 if (width == 0) {
-                    // Invisible format characters claim no column, so they join the cell already
-                    // painted instead of starting one of their own; a leading one has no cell to
-                    // join and is dropped.
-                    if (lastText != null) {
-                        if (suffix == null) {
-                            suffix = new StringBuilder(lastText);
+                    // Invisible format characters claim no column, so they stay inside the cell
+                    // already painted instead of starting one of their own. One that leads the row
+                    // is held for the cell that follows it: the plain text keeps it in that cluster,
+                    // and a style boundary must not paint different content from the same value.
+                    if (cell != null) {
+                        cell.append(grapheme);
+                    } else {
+                        if (leading == null) {
+                            leading = new StringBuilder();
                         }
-                        suffix.append(rendered);
+                        leading.append(grapheme);
                     }
                     continue;
                 }
-                if (suffix != null) {
-                    screen.put(row, lastCol, suffix.toString(), lastStyle, lastLink, lastWidth);
-                    suffix = null;
+                if (cell != null) {
+                    screen.put(row, cellCol, paintedText(cell, leading), cellStyle, cellLink,
+                            cellWidth);
+                    nextCol = cellCol + cellWidth;
+                    leading = null;
                 }
-                if (col + width > limit) {
+                if (nextCol + width > limit) {
                     return;
                 }
-                lastText = rendered;
-                lastCol = col;
-                lastStyle = span.style();
-                lastLink = span.link();
-                lastWidth = width;
-                screen.put(row, col, rendered, span.style(), span.link(), width);
-                col += width;
+                cellCol = nextCol;
+                cellWidth = width;
+                cellStyle = span.style();
+                cellLink = span.link();
+                cell = new StringBuilder(grapheme);
             }
         }
-        if (suffix != null) {
-            screen.put(row, lastCol, suffix.toString(), lastStyle, lastLink, lastWidth);
+        if (cell != null) {
+            screen.put(row, cellCol, paintedText(cell, leading), cellStyle, cellLink, cellWidth);
         }
     }
 
-    private static String withBase(String grapheme) {
-        if (grapheme.isEmpty()) {
-            return grapheme;
+    /**
+     * The text a cell paints. Zero-width clusters that led the row are kept in front of it; they
+     * take no columns, so the cell keeps the columns its own plain text measured.
+     */
+    private static String paintedText(CharSequence cell, CharSequence leading) {
+        return leading == null ? cell.toString() : leading.toString() + cell;
+    }
+
+    /**
+     * True when {@code cluster} is part of the same cluster as the plain text of {@code cell}. A
+     * style boundary can split one cluster - a base and its mark, a character and the selector that
+     * chooses its wide or text form - but the columns a value is measured at are the columns of its
+     * plain text, so only a cluster the measurement reads as one may join the cell before it.
+     */
+    private static boolean continuesCluster(CharSequence cell, String cluster) {
+        return TextMeasure.graphemeCount(cell.toString() + cluster) == 1;
+    }
+
+    /**
+     * True when a cluster holds no base character of its own - only combining marks and the format
+     * characters that join them. Such a cluster measures a column of its own, so where no cell
+     * before it continues it, {@link #wrapLines} draws the dotted circle in place of the missing
+     * base.
+     */
+    private static boolean hasNoBase(String grapheme) {
+        boolean mark = false;
+        for (int offset = 0; offset < grapheme.length();) {
+            int codePoint = grapheme.codePointAt(offset);
+            offset += Character.charCount(codePoint);
+            int type = Character.getType(codePoint);
+            if (type == Character.NON_SPACING_MARK || type == Character.ENCLOSING_MARK
+                    || type == Character.COMBINING_SPACING_MARK) {
+                mark = true;
+            } else if (type != Character.FORMAT) {
+                return false;
+            }
         }
-        int first = grapheme.codePointAt(0);
-        int type = Character.getType(first);
-        if (type == Character.NON_SPACING_MARK || type == Character.ENCLOSING_MARK
-                || type == Character.COMBINING_SPACING_MARK) {
-            return TextMeasure.DOTTED_CIRCLE + grapheme;
-        }
-        return grapheme;
+        return mark;
     }
 
     /**
@@ -577,65 +624,183 @@ public final class LayoutEngine {
         LineBuilder current = new LineBuilder();
         int used = 0;
         boolean softWrapped = false;
-        for (StyledText.Span span : text.spans()) {
-            for (String raw : Graphemes.iterate(span.text())) {
-                if ("\n".equals(raw)) {
+        ClusterCursor cursor = new ClusterCursor(text);
+        while (cursor.next()) {
+            String raw = cursor.text();
+            Style style = cursor.style();
+            String link = cursor.link();
+            if ("\n".equals(raw)) {
+                lines.add(current.build());
+                if (lines.size() >= maxLines) {
+                    return lines;
+                }
+                current = new LineBuilder();
+                used = 0;
+                softWrapped = false;
+                continue;
+            }
+            if (" ".equals(raw) && softWrapped) {
+                continue;
+            }
+            if ("\t".equals(raw)) {
+                int stop = 4 - (used % 4);
+                if (used + stop > cols && used > 0) {
                     lines.add(current.build());
                     if (lines.size() >= maxLines) {
                         return lines;
                     }
                     current = new LineBuilder();
                     used = 0;
-                    softWrapped = false;
-                    continue;
+                    stop = 4;
                 }
-                if (" ".equals(raw) && softWrapped) {
-                    continue;
+                // A stop wider than an empty line has nowhere to wrap to, so it is clamped to
+                // the columns it can occupy; the painted line clips the same cells.
+                stop = Math.min(stop, cols - used);
+                current.append(" ".repeat(stop), style, link);
+                used += stop;
+                continue;
+            }
+            int width = TextMeasure.clusterColumns(raw, policy);
+            if (width == 0) {
+                // Invisible format characters claim no column: the cell before them keeps the
+                // columns it measured, and a leading one has no cell to join. A selector that does
+                // widen the character it follows was already placed with that cell, which looked at
+                // the clusters continuing it before it committed them to a line.
+                current.append(raw, style, link);
+                softWrapped = false;
+                continue;
+            }
+            // One cell is one cluster of the plain text the value is measured by, so the clusters
+            // that continue this one belong to the same cell. Its columns - and whether it fits the
+            // row at all - are only known once it is whole, and it has to move to the next line as
+            // a unit: a selector that widens the base cannot be dropped at the edge, and leaving it
+            // behind would change the content a style boundary must not touch.
+            boolean baseless = hasNoBase(raw);
+            String cellPlain = raw;
+            int cellWidth = width;
+            List<Piece> pieces = null;
+            for (String following = cursor.peek(); following != null
+                    && continuesCluster(cellPlain, following); following = cursor.peek()) {
+                cursor.next();
+                if (pieces == null) {
+                    pieces = new ArrayList<>(2);
+                    pieces.add(new Piece(baseless ? TextMeasure.DOTTED_CIRCLE + raw : raw, style,
+                            link));
                 }
-                if ("\t".equals(raw)) {
-                    int stop = 4 - (used % 4);
-                    if (used + stop > cols && used > 0) {
-                        lines.add(current.build());
-                        if (lines.size() >= maxLines) {
-                            return lines;
-                        }
-                        current = new LineBuilder();
-                        used = 0;
-                        stop = 4;
+                pieces.add(new Piece(following, cursor.style(), cursor.link()));
+                cellPlain = cellPlain + following;
+                cellWidth = TextMeasure.clusterColumns(cellPlain, policy);
+            }
+            if (used + cellWidth > cols) {
+                if (used > 0) {
+                    lines.add(current.build());
+                    if (lines.size() >= maxLines) {
+                        return lines;
                     }
-                    // A stop wider than an empty line has nowhere to wrap to, so it is clamped to
-                    // the columns it can occupy; the painted line clips the same cells.
-                    stop = Math.min(stop, cols - used);
-                    current.append(" ".repeat(stop), span.style(), span.link());
-                    used += stop;
-                    continue;
-                }
-                String grapheme = withBase(raw);
-                int width = TextMeasure.clusterColumns(grapheme, policy);
-                if (used + width > cols) {
-                    if (used > 0) {
-                        lines.add(current.build());
-                        if (lines.size() >= maxLines) {
-                            return lines;
-                        }
-                        current = new LineBuilder();
-                        used = 0;
-                        softWrapped = true;
-                        if (" ".equals(raw)) {
-                            continue;
-                        }
-                    }
-                    if (width > cols) {
+                    current = new LineBuilder();
+                    used = 0;
+                    softWrapped = true;
+                    if (" ".equals(raw) && pieces == null) {
+                        // A space at the break is dropped: the blank it would leave belongs at the
+                        // end of the previous line, not at the start of this one.
                         continue;
                     }
                 }
-                current.append(grapheme, span.style(), span.link());
-                used += width;
-                softWrapped = false;
+                if (cellWidth > cols) {
+                    // A cell wider than the whole line is clipped, never half painted.
+                    continue;
+                }
             }
+            if (pieces == null) {
+                current.append(baseless ? TextMeasure.DOTTED_CIRCLE + raw : raw, style, link);
+            } else {
+                for (Piece piece : pieces) {
+                    current.append(piece.text(), piece.style(), piece.link());
+                }
+            }
+            used += cellWidth;
+            softWrapped = false;
         }
         lines.add(current.build());
         return lines;
+    }
+
+    /** One span-sized piece of a cell that a style boundary split into several pieces. */
+    private record Piece(String text, Style style, String link) {
+    }
+
+    /**
+     * Iterates the clusters of a styled value in order, with the style and link of the span each
+     * one came from, and can inspect the cluster after the current one without consuming it: the
+     * wrap arithmetic has to know the columns of a whole cell before it commits it to a line.
+     */
+    private static final class ClusterCursor {
+        private final List<StyledText.Span> spans;
+        private int spanIndex;
+        private Iterator<String> clusters = Collections.emptyIterator();
+        private Style spanStyle = Style.NONE;
+        private String spanLink;
+        private String ahead;
+        private Style aheadStyle = Style.NONE;
+        private String aheadLink;
+        private boolean hasAhead;
+        private String text;
+        private Style style = Style.NONE;
+        private String link;
+
+        ClusterCursor(StyledText value) {
+            this.spans = value.spans();
+        }
+
+        /** Consumes the next cluster; false once the value is spent. */
+        boolean next() {
+            if (!hasAhead && !fetch()) {
+                text = null;
+                return false;
+            }
+            text = ahead;
+            style = aheadStyle;
+            link = aheadLink;
+            hasAhead = false;
+            return true;
+        }
+
+        /** The cluster after the current one; null once the value is spent. Does not consume it. */
+        String peek() {
+            if (!hasAhead && !fetch()) {
+                return null;
+            }
+            return ahead;
+        }
+
+        String text() {
+            return text;
+        }
+
+        Style style() {
+            return style;
+        }
+
+        String link() {
+            return link;
+        }
+
+        private boolean fetch() {
+            while (!clusters.hasNext()) {
+                if (spanIndex >= spans.size()) {
+                    return false;
+                }
+                StyledText.Span span = spans.get(spanIndex++);
+                clusters = Graphemes.iterate(span.text()).iterator();
+                spanStyle = span.style();
+                spanLink = span.link();
+            }
+            ahead = clusters.next();
+            aheadStyle = spanStyle;
+            aheadLink = spanLink;
+            hasAhead = true;
+            return true;
+        }
     }
 
     /** Accumulates a complete styled run before creating an immutable span. */

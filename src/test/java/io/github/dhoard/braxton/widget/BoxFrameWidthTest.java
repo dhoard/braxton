@@ -24,12 +24,18 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.dhoard.braxton.internal.render.LayoutEngine;
+import io.github.dhoard.braxton.internal.render.Screen;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.style.Style;
+import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.ScreenRenderer;
 
@@ -52,18 +58,36 @@ class BoxFrameWidthTest {
      * occupied its own cell.
      */
     private static final List<String> BASELESS = List.of(
-            "\u0301",            // combining acute accent
-            "\u0301x",           // accent with nothing before it
-            "x\u0301",           // accent that has its own base
-            "\u200D",            // zero-width joiner
+            "\u0301",              // combining acute accent
+            "\u0301x",             // accent with nothing before it
+            "x\u0301",             // accent that has its own base
+            "\u200D",              // zero-width joiner
             "\u200D\u0301a\u200D",
-            "\uFE0F",            // variation selector 16 (wide presentation)
+            "\uFE0F",              // variation selector 16 (wide presentation)
             "\uFE0Fx",
-            "\uFE0E",            // variation selector 15 (text presentation)
+            "\uFE0E",              // variation selector 15 (text presentation)
             "\uFE0Ex",
-            "\u200B",            // zero-width space
-            "\uFEFFx",           // byte-order mark
-            "\u00ADx");          // soft hyphen
+            "\u200B",              // zero-width space
+            "\uFEFFx",             // byte-order mark
+            "\u00ADx");            // soft hyphen
+
+    /**
+     * A base, then a zero-width control, then a cluster with no base of its own. The control ends the
+     * plain-text cluster, so the mark after it is a cluster of its own that the measurement counts:
+     * these are the values a join that only asks "was a cell painted" gets wrong.
+     */
+    private static final List<String> CONTROL_THEN_BASELESS = List.of(
+            "\u200B\u0301",                              // control, then a mark
+            "\u65E5\u200B\u0301",                       // base, control, then a mark
+            "\uD83D\uDE00\u00AD\u0301",                // wide base, soft hyphen, then a mark
+            "\uD83D\uDE00\u00AD\u00AD\u0308",         // wide base, two soft hyphens, then a mark
+            "\uD83D\uDE00\u00AD\uFEFF\u20DD\u00AD",  // soft hyphen, BOM, enclosing circle
+            "ab\uFEFF\u0301",                            // text, BOM, then a mark
+            "ab\u00AD\u20DD");                           // text, soft hyphen, then a circle
+
+    /** Every cluster shape the frame tests below paint, controls included. */
+    private static final List<String> BASELESS_SHAPES = Stream.concat(
+            BASELESS.stream(), CONTROL_THEN_BASELESS.stream()).toList();
 
     private static String show(String value) {
         if (value == null) {
@@ -181,6 +205,103 @@ class BoxFrameWidthTest {
                             .as("content %s width %d row [%s]", show(content), width, show(row))
                             .isEqualTo(Math.max(2, width));
                 }
+            }
+        }
+    }
+
+    /** Cells a row was painted with; a wide cluster's second half is marked as a continuation. */
+    private static List<String> paintedCells(Screen screen, int row) {
+        List<String> cells = new ArrayList<>();
+        for (int col = 0; col < screen.cols(); col++) {
+            cells.add(screen.isContinuation(row, col)
+                    ? "<continuation>" : screen.cell(row, col).text());
+        }
+        return cells;
+    }
+
+    /**
+     * Checks the frame where it is painted rather than the text {@code render} produced. A row whose
+     * cells lost a column still reads back at the frame width when its plain text is measured again,
+     * because re-measuring joins the cells the paint path collapsed; only the column a cell landed
+     * in shows that the right edge is inside the frame.
+     */
+    private static void assertFrameIsPaintedColumnByColumn(Box box, int width) {
+        List<String> rendered = List.of(box.render(width).plainText().split("\n", -1));
+        Screen screen = new ScreenRenderer().screen(box.view(width),
+                new Viewport(rendered.size(), width));
+        assertThat(screen.rows()).as("rows painted for %s", rendered).isEqualTo(rendered.size());
+        for (int row = 0; row < rendered.size(); row++) {
+            assertThat(paintedCells(screen, row)).as("row %d of %s", row, rendered)
+                    .hasSize(width).doesNotContain("");
+            assertThat(screen.isContinuation(row, width - 1))
+                    .as("row %d of %s ends in a wide cluster's first half", row, rendered)
+                    .isFalse();
+            char edge = row == 0 ? FRAME.topRight()
+                    : row == rendered.size() - 1 ? FRAME.bottomRight() : FRAME.vertical();
+            assertThat(screen.cell(row, width - 1).text())
+                    .as("right edge of row %d of %s painted as %s", row, rendered,
+                            paintedCells(screen, row))
+                    .isEqualTo(Border.glyph(edge));
+        }
+        assertThat(new LayoutEngine().intrinsicHeight(box.view(width), width))
+                .as("rows measured for %s", rendered)
+                .isEqualTo(rendered.size());
+    }
+
+    /**
+     * A title whose own style differs from the frame's keeps its spans, so a mark reaches the paint
+     * path in a span of its own. The row is still one cluster sequence - the mark joins the frame
+     * cell beside it - so the painted frame must not gain the dotted circle's column and push its
+     * right edge out of the rows {@code render} and the measurement reserved.
+     */
+    @Test
+    void aStyledTitleWithABaselessClusterKeepsTheFrameWidthThroughPaint() {
+        for (String title : BASELESS_SHAPES) {
+            for (int width = 6; width <= 10; width++) {
+                assertFrameIsPaintedColumnByColumn(Box.of("ab").border(FRAME)
+                        .title(StyledText.of(title, Style.NONE.withBold())).width(width), width);
+            }
+        }
+    }
+
+    /**
+     * The same boundary inside the content: a mark in a span of its own continues the cell before
+     * it, so a frame row keeps the width the content was measured at instead of wrapping the right
+     * edge onto a row of its own.
+     */
+    @Test
+    void aStyledContentWithABaselessClusterKeepsTheFrameWidthThroughPaint() {
+        Style bold = Style.NONE.withBold();
+        List<StyledText> contents = List.of(
+                StyledText.of("ab", Style.NONE).append(StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("e", Style.NONE), StyledText.of("\u0301x", bold)),
+                StyledText.of("\u0301", bold),
+                StyledText.of("\u0301x", bold),
+                StyledText.of("ab\ncd", Style.NONE).append(StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("\t", Style.NONE),
+                        StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("\u65E5", Style.NONE),
+                        StyledText.of("\u200B\u0301", bold)));
+        for (StyledText content : contents) {
+            for (int width = 6; width <= 10; width++) {
+                assertFrameIsPaintedColumnByColumn(
+                        Box.of(content).border(FRAME).width(width), width);
+            }
+        }
+    }
+
+    /**
+     * A zero-width control ends the plain-text cluster before the mark, so the mark is a cluster of
+     * its own and the measurement counts the dotted-circle column the paint path has to leave for
+     * it. Joining the mark into the cell before the control would drop that column, and every cell
+     * after it - the right edge included - would land left of where the frame was measured.
+     */
+    @Test
+    void aControlBetweenABaseAndABaselessClusterKeepsTheFramesColumns() {
+        for (String content : CONTROL_THEN_BASELESS) {
+            for (int width = 4; width <= 10; width++) {
+                assertFrameIsPaintedColumnByColumn(
+                        Box.of(content).border(FRAME).width(width), width);
             }
         }
     }
