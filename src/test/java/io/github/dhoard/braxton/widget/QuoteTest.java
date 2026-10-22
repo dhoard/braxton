@@ -31,6 +31,7 @@ import java.util.Random;
 import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.internal.render.LayoutEngine;
+import io.github.dhoard.braxton.internal.render.Screen;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
@@ -165,6 +166,186 @@ class QuoteTest {
                         .isEqualTo(width - barWidth - 1);
             }
         }
+    }
+
+    /**
+     * A line that opens with a cluster that has no base of its own - a combining mark, a variation
+     * selector, a joiner - is painted inside the bar and the space after it: the mark joins that
+     * space instead of claiming a column, and a selector there widens it by one. Padding a line
+     * from its own measurement leaves that row short of the block or one column past it.
+     */
+    @Test
+    void aLineOpeningWithABaselessClusterKeepsTheBlockWidth() {
+        for (String content : List.of("\u0301", "\u0301x", "\uFE0F", "\uFE0Fx", "\uFE0Ex",
+                "\u200D", "\u200B", "\uFEFFx", "\u00ADx")) {
+            Quote quote = Quote.of()
+                    .append(StyledText.plain("ab"))
+                    .append(StyledText.plain(content))
+                    .background(Color.parse("#102030").orElseThrow());
+            List<StyledText> rows = quote.render().lines();
+            assertThat(rows).as("rows for content %s", show(content)).hasSize(2);
+            // The line with its own base is the control: the block's width is its four columns.
+            assertThat(rows.get(0).plainText()).as("control row for %s", show(content))
+                    .isEqualTo(BAR + " ab");
+            for (int row = 0; row < rows.size(); row++) {
+                String text = rows.get(row).plainText();
+                assertThat(TextMeasure.columns(text))
+                        .as("columns of row %d for content %s", row, show(content))
+                        .isEqualTo(4);
+            }
+            // The quoted content survives the padding unchanged, in the row it is painted in.
+            assertThat(rows.get(1).plainText()).as("row for content %s", show(content))
+                    .startsWith(BAR + " " + content);
+        }
+    }
+
+    /**
+     * The pad the row really needs: a mark that joins the space after the bar still takes the
+     * column the block owes that row, and a selector that widens the space leaves no pad to take.
+     */
+    @Test
+    void thePadOfARowIsChargedInsideTheBarAndItsSpace() {
+        Color background = Color.parse("#102030").orElseThrow();
+        Quote mark = Quote.of().append(StyledText.plain("ab"))
+                .append(StyledText.plain("\u0301x")).background(background);
+        assertThat(List.of(mark.render().plainText().split("\n", -1)))
+                .containsExactly(BAR + " ab", BAR + " \u0301x ");
+        Quote selector = Quote.of().append(StyledText.plain("ab"))
+                .append(StyledText.plain("\uFE0Fx")).background(background);
+        assertThat(List.of(selector.render().plainText().split("\n", -1)))
+                .containsExactly(BAR + " ab", BAR + " \uFE0Fx");
+    }
+
+    /**
+     * The block where it is painted rather than in the text {@code render} produced. Re-measuring a
+     * row's own plain text hides a column the paint path gave back to the space after the bar, so
+     * the cells are the oracle: the background band of every row has to end in the same column.
+     */
+    @Test
+    void everyPaintedRowCoversTheSameColumnsWhenALineOpensWithABaselessCluster() {
+        Color background = Color.parse("#102030").orElseThrow();
+        // The mark in a span of its own is how styled and pasted content arrives, and the quote
+        // keeps each span's own style, so the mark reaches the paint path split from the bar.
+        List<StyledText> contents = List.of(
+                StyledText.plain("\u0301x"),
+                StyledText.plain("\uFE0Fx"),
+                StyledText.of("\u0301", Style.NONE.withBold()).append(StyledText.plain("x")));
+        for (StyledText content : contents) {
+            Quote quote = Quote.of().append(StyledText.plain("ab"))
+                    .append(content).background(background);
+            List<StyledText> rows = quote.render().lines();
+            int width = TextMeasure.columns(rows.get(0).plainText());
+            assertThat(width).as("block width for %s", show(content.plainText())).isEqualTo(4);
+            assertThat(new LayoutEngine().intrinsicWidth(quote.view(), width + 8))
+                    .as("width measured for %s", show(content.plainText())).isEqualTo(width);
+            Screen screen = new ScreenRenderer().screen(quote.view(),
+                    new Viewport(rows.size(), width + 2));
+            assertThat(screen.rows()).as("painted rows for %s", show(content.plainText()))
+                    .isEqualTo(rows.size());
+            for (int row = 0; row < rows.size(); row++) {
+                assertThat(paintedColumns(screen, row))
+                        .as("painted columns of row %d for %s, painted as %s",
+                                row, show(content.plainText()), paintedCells(screen, row))
+                        .isEqualTo(width);
+                // The band the background paints ends on the block's last column and no further.
+                assertThat(lastPaintedColumn(screen, row))
+                        .as("last painted column of row %d for %s, painted as %s",
+                                row, show(content.plainText()), paintedCells(screen, row))
+                        .isEqualTo(width - 1);
+                for (int col = 1; col < width; col++) {
+                    if (screen.isContinuation(row, col)) {
+                        continue;
+                    }
+                    assertThat(screen.cell(row, col).style().background())
+                            .as("background at row %d column %d for %s",
+                                    row, col, show(content.plainText()))
+                            .isEqualTo(background);
+                }
+            }
+        }
+    }
+
+    /**
+     * The same invariant over content that opens lines with baseless clusters, as NFD-normalised
+     * text and text copied out of a document do.
+     */
+    @Test
+    void everyRenderedRowKeepsOneWidthWhenLinesOpenWithBaselessClusters() {
+        String[] atoms = {"a", "bc", " ", "\u65E5", "\uD83D\uDE00", "e\u0301",
+                "\u0301", "\uFE0F", "\uFE0E", "\u200D", "\u200B", "\u2502"};
+        Random random = new Random(17L);
+        for (int iteration = 0; iteration < 200; iteration++) {
+            Quote quote = Quote.of().background(Color.parse("#102030").orElseThrow());
+            List<String> expected = new ArrayList<>();
+            int lines = 1 + random.nextInt(3);
+            for (int line = 0; line < lines; line++) {
+                StringBuilder text = new StringBuilder();
+                for (int i = 0; i < 1 + random.nextInt(3); i++) {
+                    text.append(atoms[random.nextInt(atoms.length)]);
+                }
+                quote.append(StyledText.plain(text.toString()));
+                expected.add(show(text.toString()));
+            }
+            List<StyledText> rendered = quote.render().lines();
+            assertThat(rendered).hasSize(lines);
+            int width = TextMeasure.columns(rendered.get(0).plainText());
+            for (int line = 0; line < lines; line++) {
+                assertThat(TextMeasure.columns(rendered.get(line).plainText()))
+                        .as("row %d of %s", line, expected).isEqualTo(width);
+            }
+            Screen screen = new ScreenRenderer().screen(quote.view(),
+                    new Viewport(lines, width + 2));
+            assertThat(screen.rows()).as("painted rows of %s", expected).isEqualTo(lines);
+            for (int row = 0; row < lines; row++) {
+                assertThat(paintedColumns(screen, row))
+                        .as("painted columns of row %d of %s", row, expected).isEqualTo(width);
+            }
+        }
+    }
+
+    /** Columns a painted row actually occupies: a wide cell counts two, its continuation none. */
+    private static int paintedColumns(Screen screen, int row) {
+        int columns = 0;
+        for (int col = 0; col < screen.cols(); col++) {
+            if (screen.isContinuation(row, col)) {
+                continue;
+            }
+            columns += TextMeasure.columns(screen.cell(row, col).text());
+        }
+        return columns;
+    }
+
+    /** The last column a row paints in, so the block's edge has to land in one column. */
+    private static int lastPaintedColumn(Screen screen, int row) {
+        for (int col = screen.cols() - 1; col >= 0; col--) {
+            if (screen.isContinuation(row, col) || !screen.cell(row, col).isEmpty()) {
+                return col;
+            }
+        }
+        return -1;
+    }
+
+    /** The cells a row was painted with, for a readable failure message. */
+    private static List<String> paintedCells(Screen screen, int row) {
+        List<String> cells = new ArrayList<>();
+        for (int col = 0; col < screen.cols(); col++) {
+            cells.add(screen.isContinuation(row, col)
+                    ? "<continuation>" : show(screen.cell(row, col).text()));
+        }
+        return cells;
+    }
+
+    private static String show(String value) {
+        if (value == null) {
+            return "<none>";
+        }
+        StringBuilder text = new StringBuilder("\"");
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            text.append(c >= 0x20 && c < 0x7F
+                    ? String.valueOf(c) : String.format("\\u%04x", (int) c));
+        }
+        return text.append('"').toString();
     }
 
     @Test

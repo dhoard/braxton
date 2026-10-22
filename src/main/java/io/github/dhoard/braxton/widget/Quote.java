@@ -41,6 +41,11 @@ import io.github.dhoard.braxton.view.Views;
  *
  * <p>Tabs are expanded to the same four-column stops the text view uses, so the block keeps one
  * width instead of padding to a tab that paint expands wider.</p>
+ *
+ * <p>Each quoted line is padded inside the bar and the space after it, which are painted in the
+ * same row: a cluster with no base character of its own at the head of a line joins that space
+ * instead of occupying one of its own, and a variation selector there widens it. Padding a line
+ * from its own measurement leaves such a row a column short of the block or a column past it.</p>
  */
 public final class Quote {
 
@@ -93,13 +98,19 @@ public final class Quote {
             body.add(TabStops.expand(line));
         }
         StyledText out = StyledText.empty();
+        // The bar and the space after it are painted in the row before the quoted line, so the line
+        // is charged inside them rather than measured on its own: a cluster with no base of its own
+        // at the head of the line joins that space and claims no column, while a variation selector
+        // there widens it by a column the line measured on its own never paid for.
+        String prefix = bar + " ";
+        int prefixColumns = TextMeasure.columns(prefix);
         int width = 0;
         for (StyledText line : body) {
-            width = Math.max(width, TextMeasure.columns(line.plainText()));
+            width = Math.max(width, TextMeasure.columns(prefix + line.plainText()) - prefixColumns);
         }
         for (int i = 0; i < body.size(); i++) {
             StyledText line = body.get(i);
-            int pad = Math.max(0, width - TextMeasure.columns(line.plainText()));
+            int pad = GridRows.pad(prefix, line.plainText(), width);
             if (i > 0) {
                 out = out.append("\n");
             }
