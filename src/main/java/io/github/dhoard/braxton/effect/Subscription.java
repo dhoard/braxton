@@ -156,7 +156,8 @@ public sealed interface Subscription<Msg> {
      * values are mapped to messages on the thread that emits - the source's own thread, or the
      * timer worker for an interval - and the message is then enqueued for the owner thread. The
      * mapper must therefore be pure: it must not read or mutate the model, which only the owner
-     * thread may touch. {@code configuration} must compare equal for an unchanged live source.</p>
+     * thread may touch. {@code configuration} must compare equal for an unchanged live source.
+     * If {@code start} throws, later emissions through that emitter are ignored.</p>
      *
      * <p>Emitting from {@code start} itself runs on the owner thread, where an envelope never waits
      * for the queue to drain: a burst larger than the mailbox capacity fails the run with a mailbox

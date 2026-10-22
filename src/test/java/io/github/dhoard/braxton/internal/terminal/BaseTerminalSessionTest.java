@@ -42,6 +42,8 @@ class BaseTerminalSessionTest {
     private static final class ScriptedSession extends BaseTerminalSession {
         private final List<String> writes = new ArrayList<>();
         private boolean failNextWrite;
+        private Error writeError;
+        private int ownershipReleases;
         private int released;
 
         ScriptedSession() {
@@ -51,6 +53,9 @@ class BaseTerminalSessionTest {
         @Override
         protected void writeNative(String data) {
             writes.add(data);
+            if (writeError != null) {
+                throw writeError;
+            }
             if (failNextWrite) {
                 failNextWrite = false;
                 throw new IllegalStateException("broken output");
@@ -75,6 +80,11 @@ class BaseTerminalSessionTest {
         @Override
         protected void releaseNative() {
             released++;
+        }
+
+        @Override
+        protected void onClosed() {
+            ownershipReleases++;
         }
     }
 
@@ -171,6 +181,38 @@ class BaseTerminalSessionTest {
                 .contains(AnsiEncoder.ALT_SCREEN_OFF);
         assertThat(session.released).isEqualTo(1);
         assertThat(session.isOpen()).isFalse();
+    }
+
+    @Test
+    void anErrorRestoringModesStillReleasesNativeStateAndOwnership() {
+        ScriptedSession session = new ScriptedSession();
+        session.startSession();
+        Error failure = new AssertionError("mode restore failed");
+        session.writeError = failure;
+
+        assertThatThrownBy(session::close).isSameAs(failure);
+        assertThat(session.released).as("native/raw state must be released despite output failure")
+                .isEqualTo(1);
+        assertThat(session.ownershipReleases).isEqualTo(1);
+        assertThat(session.isOpen()).isFalse();
+        session.close();
+        assertThat(session.released).isEqualTo(1);
+        assertThat(session.ownershipReleases).isEqualTo(1);
+        assertThat(session.writes).hasSize(2);
+    }
+
+    @Test
+    void aRuntimeExceptionRestoringModesStillReleasesNativeStateAndOwnership() {
+        ScriptedSession session = new ScriptedSession();
+        session.startSession();
+        session.failNextWrite = true;
+
+        session.close();
+        session.close();
+        assertThat(session.released).isEqualTo(1);
+        assertThat(session.ownershipReleases).isEqualTo(1);
+        assertThat(session.isOpen()).isFalse();
+        assertThat(session.writes).hasSize(2);
     }
 
     @Test

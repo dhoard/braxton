@@ -533,8 +533,9 @@ Linux/glibc x86_64 `termios` layout; other Unix ABIs are refused rather than gue
   indents - is measured with the pinned width policy. A renderer built with another policy
   (`WidthPolicy.ONE_COLUMN`, or an application's own) applies to text wrapping and clipping, not
   to those computed widths, so a widget mixing wide and narrow content can look ragged under it.
-- Cancellation is cooperative: a task that ignores interruption is not forcibly stopped; its result
-  is suppressed and shutdown waits only for the configured grace period. User task code is not
+- Cancellation skips task bodies that have not started on the executor. For already-started tasks
+  it is cooperative: a task that ignores interruption is not forcibly stopped; its result is
+  suppressed and shutdown waits only for the configured grace period. User task code is not
   sandboxed.
 - The API is pre-1.0 and may change between minor releases.
 

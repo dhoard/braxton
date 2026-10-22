@@ -163,18 +163,20 @@ abstract class BaseTerminalSession implements TerminalSession {
             leaveApplicationModes();
         } catch (RuntimeException ignored) {
             // A broken output handle must not prevent raw-mode restoration.
-        }
-        try {
-            releaseNative();
         } finally {
-            if (hookRegistered) {
-                try {
-                    Runtime.getRuntime().removeShutdownHook(shutdownHook);
-                } catch (IllegalStateException alreadyShuttingDown) {
-                    // The JVM is already running hooks; nothing more to remove.
+            // Even an Error while encoding/restoring modes must not strand native raw state.
+            try {
+                releaseNative();
+            } finally {
+                if (hookRegistered) {
+                    try {
+                        Runtime.getRuntime().removeShutdownHook(shutdownHook);
+                    } catch (IllegalStateException alreadyShuttingDown) {
+                        // The JVM is already running hooks; nothing more to remove.
+                    }
                 }
+                onClosed();
             }
-            onClosed();
         }
     }
 

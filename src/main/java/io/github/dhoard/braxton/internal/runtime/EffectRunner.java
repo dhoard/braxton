@@ -182,8 +182,14 @@ public final class EffectRunner<Msg> {
     }
 
     private void runTask(Command.Task<Msg> command, Entry entry) {
-        entry.thread = Thread.currentThread();
         synchronized (lock) {
+            // An executor can start this runnable after cancellation, replacement, or shutdown.
+            // Check and publish the running thread atomically with respect to invalidation: either
+            // the body is skipped, or cancellation can interrupt it once startup has been claimed.
+            if (!isCurrent(entry)) {
+                return;
+            }
+            entry.thread = Thread.currentThread();
             running.add(Thread.currentThread());
         }
         Object value = null;
@@ -198,12 +204,13 @@ public final class EffectRunner<Msg> {
                 lock.notifyAll();
             }
         }
-        boolean current = finish(entry);
-        if (!current) {
-            return;
+        synchronized (lock) {
+            if (!isCurrent(entry)) {
+                return;
+            }
         }
         if (failure != null) {
-            deliverFailure(command, failure);
+            deliverFailure(command, failure, entry);
             return;
         }
         Msg message;
@@ -213,17 +220,31 @@ public final class EffectRunner<Msg> {
             // A completion mapper is application code. If it throws, the effect must still resolve:
             // report the mapper's failure through the failure mapper instead of losing the effect
             // on an uncaught exception.
-            deliverFailure(command, mapperFailure);
+            deliverFailure(command, mapperFailure, entry);
             return;
         }
-        deliver(message);
+        // Mapping is application code and can outlive cancellation or replacement. Keep the
+        // registration until mapping finishes, then claim completion only if it is still current.
+        if (finish(entry)) {
+            deliver(message);
+        }
     }
 
     /** Reports a failed or unmappable completion, containing a throwing failure mapper. */
     private void deliverFailure(Command.Task<Msg> command, Throwable failure) {
+        deliverFailure(command, failure, null);
+    }
+
+    private void deliverFailure(Command.Task<Msg> command, Throwable failure, Entry entry) {
         try {
-            deliver(command.onFailure().apply(failure));
+            Msg message = command.onFailure().apply(failure);
+            if (entry == null || finish(entry)) {
+                deliver(message);
+            }
         } catch (Throwable mapperFailure) {
+            if (entry != null) {
+                finish(entry);
+            }
             environment.diagnostics().accept("effect " + command.id()
                     + ": failure mapper threw " + mapperFailure.getClass().getSimpleName());
         }

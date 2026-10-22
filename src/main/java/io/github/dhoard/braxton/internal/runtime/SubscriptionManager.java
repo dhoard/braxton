@@ -295,9 +295,16 @@ public final class SubscriptionManager<Msg> {
                     enqueue(current.apply(value));
                 }
             };
-            AutoCloseable resource = source.start().apply(emitter);
-            return new ExternalLive<>(source.id(), source.configuration(), mapper, resource, epoch,
-                    diagnostics);
+            try {
+                AutoCloseable resource = source.start().apply(emitter);
+                return new ExternalLive<>(source.id(), source.configuration(), mapper, resource, epoch,
+                        diagnostics);
+            } catch (RuntimeException | Error failure) {
+                // start may have handed this emitter to another thread before failing. No Live
+                // was returned for reconcile to close, so invalidate that callback here instead.
+                mapper.set(null);
+                throw failure;
+            }
         }
         throw new IllegalArgumentException("unsupported subscription: " + leaf);
     }

@@ -191,6 +191,91 @@ class RuntimeLoopTest {
 
     @Test
     @Timeout(15)
+    void aFailureInTheFirstResizeProbeEndsTheRun() throws Exception {
+        assertResizeProbeFailure(1);
+    }
+
+    @Test
+    @Timeout(15)
+    void aFailureInALaterResizeProbeEndsTheRun() throws Exception {
+        assertResizeProbeFailure(2);
+    }
+
+    private static void assertResizeProbeFailure(int failingProbe) throws Exception {
+        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        RuntimeException failure = new IllegalStateException("resize probe failed");
+        AtomicReference<Thread> resizeReader = new AtomicReference<>();
+        AtomicReference<Throwable> uncaught = new AtomicReference<>();
+        CountDownLatch probing = new CountDownLatch(1);
+        TerminalBackend backend = (fallback, requested) -> {
+            terminal.open(fallback, requested);
+            return new TerminalSession() {
+                private int resizeProbes;
+
+                @Override
+                public TerminalCapabilities capabilities() {
+                    return terminal.capabilities();
+                }
+
+                @Override
+                public Size size() {
+                    if (Thread.currentThread().getName().equals("braxton-resize")) {
+                        Thread reader = Thread.currentThread();
+                        reader.setUncaughtExceptionHandler((thread, problem) -> uncaught.set(problem));
+                        resizeReader.set(reader);
+                        probing.countDown();
+                        if (++resizeProbes == failingProbe) {
+                            throw failure;
+                        }
+                    }
+                    return terminal.size();
+                }
+
+                @Override
+                public java.io.InputStream input() {
+                    return terminal.input();
+                }
+
+                @Override
+                public void write(String data) {
+                    terminal.write(data);
+                }
+
+                @Override
+                public boolean isOpen() {
+                    return terminal.isOpen();
+                }
+
+                @Override
+                public void close() {
+                    terminal.close();
+                }
+            };
+        };
+        AtomicReference<ExitResult> result = new AtomicReference<>();
+        Thread run = Thread.ofVirtual().name("resize-failure-test")
+                .start(() -> result.set(Application.run(new Counter(), RuntimeOptions.defaults(), backend)));
+        try {
+            assertThat(probing.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            resizeReader.get().join(5_000L);
+            assertThat(resizeReader.get().isAlive()).isFalse();
+            // The resize reader has either reported the failure or died without reporting it.
+            // A subsequent quit provides a deterministic fallback, not a timeout-based oracle.
+            terminal.feed("q");
+            run.join(5_000L);
+            assertThat(run.isAlive()).isFalse();
+            assertThat(result.get().kind()).isEqualTo(ExitResult.Kind.FAILURE);
+            assertThat(result.get().failure()).isSameAs(failure);
+            assertThat(uncaught.get()).as("no stack trace escapes the resize reader").isNull();
+            assertThat(terminal.isOpen()).isFalse();
+        } finally {
+            terminal.close();
+            run.join(5_000L);
+        }
+    }
+
+    @Test
+    @Timeout(15)
     void theReaderThreadsAreVirtualThreads() throws Exception {
         FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
         RuntimeOptions options = options(new FakeTerminal.ManualTimers());

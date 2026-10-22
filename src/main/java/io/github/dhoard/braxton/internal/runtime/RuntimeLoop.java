@@ -282,15 +282,15 @@ public final class RuntimeLoop<M, Msg> {
 
     private Thread startResizeThread() {
         return Thread.ofVirtual().name("braxton-resize").start(() -> {
-            Size last = session.size();
-            while (!Thread.currentThread().isInterrupted()) {
-                try {
-                    Thread.sleep(RESIZE_POLL_MILLIS);
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-                try {
+            try {
+                Size last = session.size();
+                while (!Thread.currentThread().isInterrupted()) {
+                    try {
+                        Thread.sleep(RESIZE_POLL_MILLIS);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
                     Size current = session.size();
                     if (!current.equals(last)) {
                         last = current;
@@ -298,10 +298,10 @@ public final class RuntimeLoop<M, Msg> {
                             return;
                         }
                     }
-                } catch (RuntimeException failure) {
-                    offerControl(new Mailbox.Close(ExitResult.failure(failure, List.of())));
-                    return;
                 }
+            } catch (RuntimeException failure) {
+                // The initial probe is reader work too: report it just like later poll failures.
+                offerControl(new Mailbox.Close(ExitResult.failure(failure, List.of())));
             }
         });
     }
