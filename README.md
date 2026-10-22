@@ -308,6 +308,8 @@ View<Msg> composer = Editor.view(ElementId.of("composer"), state.draft(), option
 Guarantees:
 
 - caret and selection positions are UTF-16 offsets on grapheme boundaries;
+- insertion leaves the caret after the inserted content, advancing to the end of the resulting
+  grapheme when it joins the following text;
 - editing never splits combining sequences, ZWJ emoji, or surrogate pairs;
 - length limits truncate at a complete grapheme; unlimited is explicit;
 - password/hidden editors mask output and refuse to copy by default;

@@ -63,6 +63,41 @@ class EditorTest {
         state = update(state, new EditorAction.Insert("X"));
         assertThat(state.text()).isEqualTo("aXb");
         assertThat(state.caret()).isEqualTo(2);
+        assertThat(state.anchor()).isEqualTo(2);
+        assertThat(state.hasSelection()).isFalse();
+    }
+
+    @Test
+    void insertionBeforeACombiningMarkMovesPastTheJoinedGrapheme() {
+        EditorOptions options = EditorOptions.defaults();
+        EditorState state = EditorState.of("\u0301").withCaret(0);
+        state = Editor.update(state, options, new EditorAction.Insert("a")).state();
+        assertThat(state.text()).isEqualTo("a\u0301");
+        assertThat(state.caret()).isEqualTo(2);
+        assertThat(state.anchor()).isEqualTo(2);
+        assertThat(state.hasSelection()).isFalse();
+
+        state = Editor.update(state, options, new EditorAction.Insert("b")).state();
+        assertThat(state.text()).isEqualTo("a\u0301b");
+        assertThat(state.caret()).isEqualTo(3);
+        assertThat(state.anchor()).isEqualTo(3);
+    }
+
+    @Test
+    void insertionBeforeAnEmojiMovesPastTheJoinedZwjGraphemeOnly() {
+        EditorOptions options = EditorOptions.defaults();
+        EditorState state = EditorState.of("\uD83D\uDCBBx").withCaret(0);
+        state = Editor.update(state, options,
+                new EditorAction.Insert("\uD83D\uDC69\u200D")).state();
+        assertThat(state.text()).isEqualTo("\uD83D\uDC69\u200D\uD83D\uDCBBx");
+        assertThat(state.caret()).isEqualTo(5);
+        assertThat(state.anchor()).isEqualTo(5);
+        assertThat(state.hasSelection()).isFalse();
+
+        state = Editor.update(state, options, new EditorAction.Insert("b")).state();
+        assertThat(state.text()).isEqualTo("\uD83D\uDC69\u200D\uD83D\uDCBBbx");
+        assertThat(state.caret()).isEqualTo(6);
+        assertThat(state.anchor()).isEqualTo(6);
     }
 
     @Test

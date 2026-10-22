@@ -123,6 +123,11 @@ public final class Editor {
         }
         String text = state.text().substring(0, start) + insert + state.text().substring(end);
         int caret = start + insert.length();
+        // Insertion can join the following text into a grapheme. Keep the caret after that
+        // cluster rather than letting EditorState round an interior offset back before the insert.
+        if (!TextMeasure.isBoundary(text, caret)) {
+            caret = TextMeasure.boundaryAfter(text, caret);
+        }
         return new EditorState(text, caret, caret, 0);
     }
 
