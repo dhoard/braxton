@@ -63,6 +63,11 @@ import io.github.dhoard.braxton.view.Views;
  * <p>A list {@code icon} is a one-line prefix, so a line break in it becomes a space and a tab
  * advances to the same four-column stops the text view paints; continuation lines therefore stay
  * under the first line's item text.</p>
+ *
+ * <p>A table is a rectangular grid: every row occupies the same number of columns. A row is painted
+ * as one grapheme-cluster sequence, so each cell's columns are charged inside that sequence rather
+ * than to the cell measured on its own - a cluster with no base character of its own at the head of
+ * a cell joins the pad of the cell before it instead of occupying a cell of its own.</p>
  */
 public final class Markup {
 
@@ -299,7 +304,7 @@ public final class Markup {
                 widths[column] = Math.max(widths[column], width);
             }
         }
-        StyledText out = StyledText.empty();
+        List<StyledText> renderedRows = new ArrayList<>();
         for (List<StyledText> row : rows) {
             List<List<StyledText>> cellLines = new ArrayList<>(columns);
             int height = 1;
@@ -311,16 +316,28 @@ public final class Markup {
                 height = Math.max(height, lines.size());
             }
             for (int line = 0; line < height; line++) {
+                StyledText rendered = StyledText.empty();
+                // The row is painted as one cluster sequence, so the cell is charged inside the row:
+                // a cluster with no base of its own at the head of the cell joins the gap of the cell
+                // before it and takes no column of its own, while a variation selector there widens
+                // that gap by a column. Padding from the cell measured alone makes the rows of one
+                // table different widths.
+                String painted = "";
                 for (int column = 0; column < columns; column++) {
                     List<StyledText> lines = cellLines.get(column);
                     StyledText value = line < lines.size() ? lines.get(line) : StyledText.empty();
-                    int used = TextMeasure.columns(value.plainText());
-                    out = out.append(value)
-                            .append(StyledText.of(" ".repeat(Math.max(gap,
-                                    widths[column] - used + gap)), style));
+                    String plain = value.plainText();
+                    int pad = Math.max(gap, GridRows.pad(painted, plain, widths[column]) + gap);
+                    painted = painted + plain + " ".repeat(pad);
+                    rendered = rendered.append(value)
+                            .append(StyledText.of(" ".repeat(pad), style));
                 }
-                out = out.append("\n");
+                renderedRows.add(rendered);
             }
+        }
+        StyledText out = StyledText.empty();
+        for (StyledText row : GridRows.shareOneWidth(renderedRows)) {
+            out = out.append(row).append("\n");
         }
         return out;
     }

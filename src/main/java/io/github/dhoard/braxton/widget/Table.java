@@ -40,6 +40,13 @@ import io.github.dhoard.braxton.view.Views;
  * the rows the caller supplied. Styling is part of a cell, not of its width. Tab stops are expanded
  * to the same four-column boundary the text view uses, so a measured column and a displayed column
  * always agree.</p>
+ *
+ * <p>A frame reserves one cell per edge character, so every row a bordered table renders occupies
+ * the width of that frame. A row is painted as one grapheme-cluster sequence, so a cell's columns -
+ * and the row's - are charged inside the sequence they are painted in: a cluster with no base
+ * character of its own, such as a combining mark, a variation selector or a joiner, joins the cell
+ * beside it instead of occupying a cell, which is a different number of columns from measuring that
+ * cell on its own.</p>
  */
 public final class Table {
 
@@ -127,7 +134,10 @@ public final class Table {
         return widths;
     }
 
-    /** Rendered rows; each row is padded to its column boundaries. */
+    /**
+     * Rendered rows; each row is padded to its column boundaries and every row to the width of the
+     * widest one.
+     */
     public List<StyledText> renderLines() {
         int[] widths = columnWidths();
         List<StyledText> out = new ArrayList<>();
@@ -145,19 +155,25 @@ public final class Table {
             }
             for (int line = 0; line < height; line++) {
                 StyledText rendered = StyledText.empty();
+                // The row is painted as one cluster sequence, so each cell is charged inside the row
+                // rather than measured on its own: a cluster with no base of its own at the head of
+                // a cell joins the cell before it - the previous cell's pad, or the frame's left
+                // edge once the row is framed - and takes no column of its own, while a variation
+                // selector there widens that cell by a column it never paid for.
+                String painted = "";
                 for (int column = 0; column < widths.length; column++) {
                     List<StyledText> lines = cellLines.get(column);
                     StyledText value = line < lines.size() ? lines.get(line) : StyledText.empty();
                     String plain = value.plainText();
-                    int used = TextMeasure.columns(plain);
-                    int pad = Math.max(0, widths[column] - used);
+                    int pad = GridRows.pad(painted, plain, widths[column]);
+                    painted = painted + plain + " ".repeat(pad);
                     rendered = rendered.append(value)
                             .append(StyledText.of(" ".repeat(pad), Style.NONE));
                 }
                 out.add(rendered);
             }
         }
-        return out;
+        return GridRows.shareOneWidth(out);
     }
 
     /** Table as a single styled value with newlines between rows. */
@@ -177,26 +193,35 @@ public final class Table {
     }
 
     private StyledText frame(List<StyledText> lines) {
-        int width = 0;
+        String vertical = Border.glyph(border.vertical());
+        // A framed row is one cluster sequence that starts with the left edge cell, so the row is
+        // measured inside that cell: a cluster with no base of its own at the head of the row joins
+        // the edge instead of starting a cell of its own, and a variation selector there widens it.
+        // Padding the row from its own measurement leaves it short or long by that column, and the
+        // right edge lands off the corners of the frame the same call drew.
+        int painted = 0;
         for (StyledText line : lines) {
-            width = Math.max(width, TextMeasure.columns(line.plainText()));
+            painted = Math.max(painted, TextMeasure.columns(vertical + line.plainText()));
         }
+        // One cell for the left edge, already counted above, and one for the right edge.
+        int width = painted + 1;
         String topLeft = Border.glyph(border.topLeft());
         String topRight = Border.glyph(border.topRight());
         String bottomLeft = Border.glyph(border.bottomLeft());
         String bottomRight = Border.glyph(border.bottomRight());
         String horizontal = Border.glyph(border.horizontal());
-        String vertical = Border.glyph(border.vertical());
         List<StyledText> framed = new ArrayList<>();
-        framed.add(StyledText.of(topLeft + horizontal.repeat(width) + topRight, borderStyle));
+        framed.add(StyledText.of(
+                topLeft + horizontal.repeat(Math.max(0, width - 2)) + topRight, borderStyle));
         for (StyledText line : lines) {
-            int pad = Math.max(0, width - TextMeasure.columns(line.plainText()));
+            int pad = Math.max(0, painted - TextMeasure.columns(vertical + line.plainText()));
             framed.add(StyledText.concat(
                     StyledText.of(vertical, borderStyle), line,
                     StyledText.of(" ".repeat(pad) + vertical, borderStyle)));
         }
         framed.add(StyledText.of(
-                bottomLeft + horizontal.repeat(width) + bottomRight, borderStyle));
+                bottomLeft + horizontal.repeat(Math.max(0, width - 2)) + bottomRight,
+                borderStyle));
         StyledText out = StyledText.empty();
         for (int i = 0; i < framed.size(); i++) {
             if (i > 0) {

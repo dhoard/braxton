@@ -38,7 +38,11 @@ class TablePropertyTest {
     @Test
     void rowsShareOneWidthForRandomCellsAndBorders() {
         Random random = new Random(23L);
-        String[] cells = {"a", "\u65E5", "ccc", "", "e\u0301"};
+        // The last four cells open with a cluster that has no base of its own. A row is painted as
+        // one cluster sequence, so that cluster joins the cell before it and the row occupies fewer
+        // or more columns than the cells measured one by one add up to.
+        String[] cells = {"a", "\u65E5", "ccc", "", "e\u0301",
+                "\u0301", "\u0301x", "\uFE0Fx", "\u200D"};
         for (int iteration = 0; iteration < 200; iteration++) {
             Table table = Table.of().buffer(random.nextInt(4))
                     .border(random.nextBoolean() ? Border.SINGLE : Border.NONE);

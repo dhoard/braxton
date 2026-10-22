@@ -29,10 +29,13 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.dhoard.braxton.internal.render.Screen;
+import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.view.ScreenRenderer;
 
 /** Markup styling tokens, the regular reset, and the table grid. */
 class MarkupTest {
@@ -132,6 +135,41 @@ class MarkupTest {
         assertThat(lines.get(1)).isEqualTo("bb  " + "c       ");
         assertThat(lines).allSatisfy(line ->
                 assertThat(TextMeasure.columns(line)).isEqualTo(12));
+    }
+
+    /**
+     * A row is painted as one cluster sequence, so a cell that opens with a cluster that has no base
+     * of its own - a combining mark, a variation selector, a joiner - joins the gap of the cell
+     * before it and occupies no column of its own there. Padding each cell from its own measurement
+     * charged that cell a column the row never spent, so the rows of one table came out different
+     * widths and the grid stopped being rectangular.
+     */
+    @Test
+    void aCellOpeningWithABaselessClusterKeepsTheGridRectangular() {
+        StyledText parsed = Markup.parse(
+                "<root><table><tr><td>a</td><td>\u0301x</td></tr>"
+                        + "<tr><td>b</td><td>y</td></tr></table></root>");
+        List<String> lines = List.of(parsed.plainText().split("\n", -1));
+        assertThat(lines).isEqualTo(List.of("a  \u0301x   ", "b  y   "));
+        assertThat(lines).allSatisfy(line ->
+                assertThat(TextMeasure.columns(line)).as("line [%s]", line).isEqualTo(7));
+        // Painted, the mark shares the cell of the gap before it, so the second cell's text still
+        // starts in the column the other row starts its second cell in.
+        Screen screen = new ScreenRenderer().screen(io.github.dhoard.braxton.view.Views.text(parsed),
+                new Viewport(2, 12));
+        assertThat(paintedColumn(screen, 0, 'x'))
+                .as("second cell column of row 0, rows painted to %d columns", screen.cols())
+                .isEqualTo(paintedColumn(screen, 1, 'y'));
+    }
+
+    /** The column {@code needle} was painted in on {@code row}, or -1 when it is not painted. */
+    private static int paintedColumn(Screen screen, int row, char needle) {
+        for (int column = 0; column < screen.cols(); column++) {
+            if (screen.cell(row, column).text().indexOf(needle) >= 0) {
+                return column;
+            }
+        }
+        return -1;
     }
 
     @Test

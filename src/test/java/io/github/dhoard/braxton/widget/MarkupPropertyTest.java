@@ -55,6 +55,29 @@ class MarkupPropertyTest {
                 .hasSize(1);
     }
 
+    /**
+     * The same grid with a cell that opens with a cluster that has no base of its own. The row is
+     * painted as one cluster sequence, so that cluster joins the gap of the cell before it instead
+     * of occupying a column: a cell padded from its own measurement made one row a column wider than
+     * the next.
+     */
+    @Test
+    void tableRowsShareOneWidthWhenACellOpensWithABaselessCluster() {
+        for (String cell : List.of("\u0301", "\u0301x", "\uFE0Fx", "\u200D", "\u200B")) {
+            for (int gap = 0; gap <= 2; gap++) {
+                String xml = "<root><table gap=\"" + gap + "\"><tr><td>ccc</td>"
+                        + "<td>" + cell + "</td></tr>"
+                        + "<tr><td>ccc</td><td>\u672C\u672C</td></tr></table></root>";
+                List<String> lines = Markup.parse(xml).plainText().lines().toList();
+                assertThat(lines).as("cell 0x%x gap %d", (int) cell.charAt(0), gap).hasSize(2);
+                assertThat(lines.stream()
+                        .map(io.github.dhoard.braxton.style.TextMeasure::columns).distinct())
+                        .as("rows of cell 0x%x gap %d", (int) cell.charAt(0), gap)
+                        .hasSize(1);
+            }
+        }
+    }
+
     @Test
     void aParentLinkAppliesToChildrenAndABackgroundIsInherited() {
         var linked = Markup.parse("<root><a href=\"https://x\"><span>one</span><span>two</span>"
