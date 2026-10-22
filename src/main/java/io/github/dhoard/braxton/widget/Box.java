@@ -40,6 +40,12 @@ import io.github.dhoard.braxton.view.Views;
  * the available width, while a fixed-width box truncates content to its inner width. Tabs are
  * expanded to the same four-column stops the text view uses, so a measured line and a painted line
  * always agree.</p>
+ *
+ * <p>A frame reserves one cell per edge character, so every rendered row occupies exactly the box
+ * width. The content and the title are therefore measured inside the frame: a row is painted as one
+ * grapheme-cluster sequence, and a cluster with no base character of its own - a combining mark, a
+ * variation selector, a joiner - joins the frame cell beside it instead of occupying a cell, which
+ * is a different number of columns from measuring that content on its own.</p>
  */
 public final class Box {
 
@@ -119,9 +125,16 @@ public final class Box {
         for (StyledText line : content.lines()) {
             lines.add(TabStops.expand(line));
         }
+        String vertical = Border.glyph(border.vertical());
         List<StyledText> clipped = new ArrayList<>();
         for (StyledText line : lines) {
-            clipped.add(truncate(line, Math.max(0, limit - 2)));
+            StyledText fitted = truncate(line, Math.max(0, limit - 2));
+            if (TextMeasure.columns(vertical + fitted.plainText()) > limit - 2) {
+                // The left frame cell took a column the content claimed for itself, so one fewer
+                // content column keeps the row inside the frame instead of past its right edge.
+                fitted = truncate(line, Math.max(0, limit - 3));
+            }
+            clipped.add(fitted);
         }
         if (!border.isVisible()) {
             // Border is a value type, so ask the border itself whether it draws a frame instead of
@@ -141,13 +154,16 @@ public final class Box {
         }
         StyledText out = StyledText.empty();
         out = out.append(top(limit));
-        String vertical = Border.glyph(border.vertical());
         for (StyledText line : clipped) {
+            // The row is one cluster sequence, so the content is counted with the frame cell beside
+            // it: a leading cluster with no base of its own occupies that cell rather than starting
+            // one of its own, and padding from the content measured alone leaves the row short by a
+            // column - every cell after it lands left of the frame above and below it.
+            int painted = TextMeasure.columns(vertical + line.plainText());
             out = out.append("\n")
                     .append(StyledText.of(vertical, style))
                     .append(line)
-                    .append(StyledText.of(" ".repeat(Math.max(0,
-                            limit - 2 - TextMeasure.columns(line.plainText())))
+                    .append(StyledText.of(" ".repeat(Math.max(0, limit - 1 - painted))
                             + vertical, style));
         }
         out = out.append("\n").append(StyledText.of(
@@ -177,11 +193,19 @@ public final class Box {
                 out = out.append(StyledText.of(horizontal.repeat(inner), style));
                 return out.append(StyledText.of(topRight, style));
             }
-            int used = TextMeasure.columns(fitted.plainText());
-            int trailing = Math.max(0, inner - used - 3);
+            // The label sits between the dash-space before it and the space after it, and the three
+            // are painted as one sequence: a cluster with no base of its own at either end joins the
+            // decoration cell beside it, so the label's columns are counted inside that sequence.
+            int painted = TextMeasure.columns(horizontal + " " + fitted.plainText() + " ");
+            if (painted > inner) {
+                // Even the label's own columns no longer fit the space a labelled edge reserves, so
+                // the edge is drawn plain rather than leaving a hole where the label was dropped.
+                out = out.append(StyledText.of(horizontal.repeat(inner), style));
+                return out.append(StyledText.of(topRight, style));
+            }
             out = out.append(StyledText.of(horizontal + " ", style))
                     .append(restyle(fitted, style))
-                    .append(StyledText.of(" " + horizontal.repeat(trailing), style));
+                    .append(StyledText.of(" " + horizontal.repeat(inner - painted), style));
         }
         return out.append(StyledText.of(topRight, style));
     }
