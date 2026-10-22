@@ -43,8 +43,8 @@ import io.github.dhoard.braxton.widget.EditorOptions;
 import io.github.dhoard.braxton.widget.EditorState;
 
 /**
- * Editor rendering: the draft a composer repaints on every keystroke. The 4096-character draft is
- * the case {@code HUNT_TRACKING.txt} has measured by hand for years.
+ * Editor rendering: the draft a composer repaints on every keystroke. The 4096-character draft
+ * exercises the long-input rendering costs described in the project's benchmark memory notes.
  */
 @State(Scope.Benchmark)
 @BenchmarkMode(Mode.AverageTime)

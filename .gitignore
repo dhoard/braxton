@@ -8,4 +8,3 @@ target/
 .settings/
 .DS_Store
 .flattened-pom.xml
-HUNT_TRACKING.txt

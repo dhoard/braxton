@@ -33,7 +33,7 @@ cluster.
 
 ## Why it matters (regression history)
 
-Cycle-271 fixed `Box` padding for an unstyled title, where the mark and the frame merged into one
+An earlier fix corrected `Box` padding for an unstyled title, where the mark and the frame merged into one
 span. A span boundary (styled title, `StyledText` content) kept the mark in its own span, and
 `paintLine` gave it a dotted-circle cell: the frame row gained a column, its right corner wrapped to
 the next row, and `intrinsicHeight` reported one row more than `render`. The fix replaced the

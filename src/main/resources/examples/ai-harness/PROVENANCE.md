@@ -14,7 +14,9 @@ repository:
 ```
 
 That session ran the project's `HUNT_LOOP.md` workflow for 45 of the 50 requested cycles, in two
-turns. The fixture keeps:
+turns. The workflow documents and tracker quoted in the fixture have since been retired.
+Their contents are historical example data, not active project instructions or runtime dependencies.
+The fixture keeps:
 
 - the greeting turn (`u there?`) from the previous fixture, with its profile fields set to the
   recorded profile;

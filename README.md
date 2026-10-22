@@ -507,9 +507,9 @@ across changes; overriding them on the command line (as the smoke run does) prod
 must not be compared with a recorded baseline. Every result carries an error margin and an allocation
 rate (`gc.alloc.rate.norm`), and both are specific to the machine and JDK that produced them.
 
-A benchmark delta is not by itself a reason to change the library. A performance change follows the
-project's hunt workflow: one issue per cycle, a deterministic in-repo oracle that fails before the
-change and passes after it, the full gate, and a terminal-emulation check when TUI code is touched.
+A benchmark delta is not by itself a reason to change the library. A performance change needs a
+focused scope, a deterministic in-repo oracle that fails before the change and passes after it,
+the full project gate, and a terminal-emulation check when TUI code is touched.
 
 ## Compatibility
 

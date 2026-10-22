@@ -48,7 +48,7 @@ java -cp "$(cat target/bench-cp.txt):target/classes:target/test-classes" \
 - `target/` proved volatile for benchmark evidence: a `target/benchmarks/` directory created after a
   build disappeared without any command of ours deleting it. Copy raw results out of `target/`
   immediately; the durable record is the table in the implementation plan.
-- Re-running one benchmark family is enough to validate a cycle: `org.openjdk.jmh.Main -prof gc
+- Re-running one benchmark family is enough to evaluate a focused change: `org.openjdk.jmh.Main -prof gc
   -rff <file> '<FamilyName>'` keeps the annotation parameters, so the numbers stay comparable to the
   recorded baseline. A whole-family run is tens of seconds, not the ~18 min of the full suite.
 - **Pyte check that actually proves "no user-visible change"**: build the jar with the fix reverted
@@ -62,7 +62,7 @@ java -cp "$(cat target/bench-cp.txt):target/classes:target/test-classes" \
 
 ## Measured gaps and what has been fixed
 
-- **Fixed (cycle 224, commit 8392f51)**: `TextMeasure.isBoundary` scanned over all indices was
+- **Fixed (commit 8392f51)**: `TextMeasure.isBoundary` scanned over all indices was
   quadratic: 256 chars 0.49 ms / 1.7 MB, 4096 chars 119.9 ms / 466 MB; a single call on a 4096-char
   draft cost ~29 µs and ~114 KB. The four boundary lookups now answer locally when the gap asked
   about, and the gap returned, sit between printable ASCII characters: 35.1 µs and 113.8 KB per
@@ -80,7 +80,7 @@ java -cp "$(cat target/bench-cp.txt):target/classes:target/test-classes" \
   surrogate, tabs, CR/LF and newlines, and measures allocation with
   `com.sun.management.ThreadMXBean.getThreadAllocatedBytes(long)` (HotSpot-only; selected with
   `Thread.currentThread().threadId()`), which is deterministic enough for a 256x margin.
-- **Fixed (cycle 226, commit ebb2fdd)**: `Editor.render` of a 4096-char draft cost 0.53-0.60 ms
+- **Fixed (commit ebb2fdd)**: `Editor.render` of a 4096-char draft cost 0.53-0.60 ms
   (ascii) / 1.12 ms (cjk) and 8.6-17.4 MB per call. The cost was in `Editor.renderLine`, which
   accumulated the run of same-styled clusters with `pending += display` - a fresh copy of the whole
   prefix per cluster. One `StringBuilder` instead: ascii/4096 597,593 -> 41,902 ns/op (14.3x) and
@@ -98,7 +98,7 @@ java -cp "$(cat target/bench-cp.txt):target/classes:target/test-classes" \
   concurrent-read tests cover this. See `plans/performance-fixes.impl.md` for measured results.
 - **Historical pre-fix baseline**: one 40x120 frame through `ScreenRenderer` cost 206 µs and 739 KB
   before encoding; do not treat this as a measurement of the current implementation.
-- **Fixed (cycle 225, commit fa6f81a)**: a 64 KiB bracketed paste through `PasteDecoder.read` cost
+- **Fixed (commit fa6f81a)**: a 64 KiB bracketed paste through `PasteDecoder.read` cost
   2.37 ms / 793 KB because `readByte` called `available()`, `read()` and `System.nanoTime()` once per
   byte (101,952 of each) and a `ByteArrayOutputStream` doubled and was then copied again. The stream
   is now asked what it holds once per burst and the payload goes into one array sized from that
