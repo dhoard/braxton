@@ -135,11 +135,11 @@ blocked, report the work as partial/blocked rather than assuming it works.
 
 ## 7. Planning and handoff contract
 
-**Design plan** (`DESIGN_PLAN_TEMPLATE.md`) defines the problem, observed baseline, requirements,
+**Design plan** (`DESIGN.md`) defines the problem, observed baseline, requirements,
 constraints, proposed behavior, decisions/trade-offs, relevant edge cases, acceptance criteria, and
 open questions. It should not prescribe a file-by-file work schedule or record execution results.
 
-**Implementation plan** (`IMPL_PLAN_TEMPLATE.md`) translates the governing design—or an explicitly
+**Implementation plan** (`IMPLEMENT.md`) translates the governing design—or an explicitly
 justified small change—into ordered, concrete modifications, regression coverage, commands, gates,
 rollback considerations, and an execution record. It must not silently redefine design decisions.
 
