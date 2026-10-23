@@ -64,6 +64,32 @@ class QuoteTest {
     }
 
     /**
+     * The bar and its space are prefix cells like any other, so styling the content cannot move a
+     * stop: a cluster a span boundary splits expands exactly as its joined plain text does.
+     */
+    @Test
+    void aTabAfterAClusterASpanBoundarySplitKeepsThePlainRows() {
+        Style bold = Style.NONE.withBold();
+        assertSplitRowsAreThePlainRows("a\u0301\tb", BAR + " a\u0301   b",
+                StyledText.concat(StyledText.of("a", Style.NONE),
+                        StyledText.of("\u0301\tb", bold)));
+        assertSplitRowsAreThePlainRows("a\uFE0F\tb", BAR + " a\uFE0F  b",
+                StyledText.concat(StyledText.of("a", Style.NONE),
+                        StyledText.of("\uFE0F\tb", bold)));
+    }
+
+    private static void assertSplitRowsAreThePlainRows(String value, String expected,
+            StyledText split) {
+        assertThat(split.plainText()).as("the same plain text").isEqualTo(value);
+        assertThat(List.of(Quote.of().append(split).render().plainText().split("\n", -1)))
+                .as("rows of \"%s\"", value)
+                .isEqualTo(List.of(Quote.of().append(StyledText.plain(value))
+                        .render().plainText().split("\n", -1)))
+                .containsExactly(expected);
+        assertThat(TextMeasure.columns(expected)).as("columns of \"%s\"", value).isEqualTo(7);
+    }
+
+    /**
      * The bar is a one-line prefix on every quoted line, so a break in it cannot split that line
      * into extra rows or merge its own characters into the content.
      */

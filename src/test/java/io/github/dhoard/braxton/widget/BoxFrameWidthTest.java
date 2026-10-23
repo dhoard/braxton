@@ -315,6 +315,29 @@ class BoxFrameWidthTest {
     }
 
     /**
+     * A tab that follows a cluster a span boundary splits lands on the stop of the joined cluster,
+     * so a frame reserves the content it paints: styling the same plain text can neither widen the
+     * interior and push a column out of the frame nor leave the last character clipped away.
+     */
+    @Test
+    void aTabAfterAClusterASpanBoundarySplitKeepsTheFramesContentWhole() {
+        Style bold = Style.NONE.withBold();
+        for (String value : List.of("a\u0301\tb", "a\uFE0F\tb")) {
+            StyledText split = StyledText.concat(StyledText.of(value.substring(0, 1), Style.NONE),
+                    StyledText.of(value.substring(1), bold));
+            // The frame keeps one cell per edge, so the interior holds the five columns of the
+            // expanded content from a width of seven up.
+            for (int width = 7; width <= 10; width++) {
+                assertThat(Box.of(split).border(FRAME).render(width).plainText())
+                        .as("content %s at width %d", show(value), width)
+                        .isEqualTo(Box.of(StyledText.plain(value)).border(FRAME).render(width)
+                                .plainText())
+                        .contains("b");
+            }
+        }
+    }
+
+    /**
      * The columns a row may use are the columns of the joined content, so a run boundary inside one
      * cluster must not let the content claim columns the frame never reserved. Both the fixed-width
      * and the responsive frame are checked: the box width is the same promise either way.

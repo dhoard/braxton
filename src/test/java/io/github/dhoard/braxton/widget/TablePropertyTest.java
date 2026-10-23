@@ -29,6 +29,7 @@ import java.util.Random;
 import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.layout.Border;
+import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 
@@ -62,6 +63,55 @@ class TablePropertyTest {
                     .map(TextMeasure::columns).distinct().toList();
             assertThat(renderedWidths).as("framed iteration %d", iteration)
                     .hasSizeLessThanOrEqualTo(1);
+        }
+    }
+
+    /**
+     * A span boundary is decoration, so where a cell's spans split must not change what the table
+     * renders: the same plain text reaches the same tab stops and the same columns whether it
+     * arrives in one span or several, however the tab follows the split.
+     */
+    @Test
+    void stylingACellNeverChangesTheRenderedTable() {
+        Random random = new Random(41L);
+        String[] atoms = {"a", "bc", " ", "\t", "e\u0301", "\u0301", "\uFE0F", "\u65E5",
+                "\uD83D\uDE00", "\u200B", "\uFE0E"};
+        Style bold = Style.NONE.withBold();
+        for (int iteration = 0; iteration < 200; iteration++) {
+            int buffer = random.nextInt(3);
+            Table plain = Table.of().buffer(buffer);
+            Table styled = Table.of().buffer(buffer);
+            int columns = 1 + random.nextInt(3);
+            int rows = 1 + random.nextInt(3);
+            for (int row = 0; row < rows; row++) {
+                java.util.List<StyledText> plainCells = new java.util.ArrayList<>();
+                java.util.List<StyledText> styledCells = new java.util.ArrayList<>();
+                for (int column = 0; column < columns; column++) {
+                    StringBuilder text = new StringBuilder();
+                    for (int atom = random.nextInt(4); atom > 0; atom--) {
+                        text.append(atoms[random.nextInt(atoms.length)]);
+                    }
+                    String value = text.toString();
+                    // Any boundary the value allows, so a boundary inside a cluster is common. A
+                    // surrogate pair is never cut: that would not be a styled value at all.
+                    int cut = value.isEmpty() ? 0 : random.nextInt(value.length());
+                    if (cut > 0 && Character.isHighSurrogate(value.charAt(cut - 1))) {
+                        cut++;
+                    }
+                    plainCells.add(StyledText.plain(value));
+                    styledCells.add(cut == 0 || cut == value.length()
+                            ? StyledText.of(value, bold)
+                            : StyledText.concat(StyledText.of(value.substring(0, cut), Style.NONE),
+                                    StyledText.of(value.substring(cut), bold)));
+                }
+                plain.row(plainCells);
+                styled.row(styledCells);
+            }
+            assertThat(styled.columnWidths()).as("iteration %d", iteration)
+                    .isEqualTo(plain.columnWidths());
+            assertThat(styled.renderLines()).as("iteration %d", iteration)
+                    .extracting(StyledText::plainText)
+                    .isEqualTo(plain.renderLines().stream().map(StyledText::plainText).toList());
         }
     }
 

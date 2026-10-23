@@ -109,6 +109,42 @@ class CatalogTest {
                 .isEqualTo("ab  x");
     }
 
+    /**
+     * A span boundary is decoration, so a boundary that splits one cluster in two - a base and the
+     * mark or selector that continues it - must leave the cell the width the same plain text has in
+     * one span. Charged per span, the pieces of "a\u0301" came to two columns where the joined
+     * cluster is one and the tab wrote one space fewer; the pieces of "a\uFE0F" came to one where
+     * the joined cluster is two and the tab wrote one space more.
+     */
+    @Test
+    void tableCellsExpandATabThatFollowsAClusterASpanBoundarySplit() {
+        Style bold = Style.NONE.withBold();
+        assertSplitCellIsThePlainCell(StyledText.plain("a\u0301\tb"),
+                StyledText.concat(StyledText.of("a", Style.NONE),
+                        StyledText.of("\u0301\tb", bold)),
+                "a\u0301   b");
+        assertSplitCellIsThePlainCell(StyledText.plain("a\uFE0F\tb"),
+                StyledText.concat(StyledText.of("a", Style.NONE),
+                        StyledText.of("\uFE0F\tb", bold)),
+                "a\uFE0F  b");
+    }
+
+    private static void assertSplitCellIsThePlainCell(StyledText plain, StyledText split,
+            String expected) {
+        assertThat(split.plainText()).as("the same plain text").isEqualTo(plain.plainText());
+        Table plainTable = Table.of().buffer(0);
+        plainTable.row(plain);
+        Table splitTable = Table.of().buffer(0);
+        splitTable.row(split);
+        assertThat(splitTable.columnWidths()).as("widths of \"%s\"", plain.plainText())
+                .isEqualTo(plainTable.columnWidths())
+                .containsExactly(TextMeasure.columns(expected));
+        assertThat(splitTable.renderLines().get(0).plainText())
+                .as("row of \"%s\"", plain.plainText())
+                .isEqualTo(plainTable.renderLines().get(0).plainText())
+                .isEqualTo(expected);
+    }
+
     @Test
     void markupTableColumnsLineUpWhenACellContainsATabStop() {
         StyledText rendered = Markup.parse("<root><table gap=\"1\">"
@@ -117,6 +153,26 @@ class CatalogTest {
         List<String> lines = new ScreenRenderer().plainLines(
                 io.github.dhoard.braxton.view.Views.text(rendered), new Viewport(2, 24));
         assertThat(lines.get(0).indexOf('c')).isEqualTo(lines.get(1).indexOf('y'));
+    }
+
+    /**
+     * The same trigger through the markup reader: a {@code <span>} that styles the mark after a base
+     * splits one cluster in two, and the decoration alone must not move the tab stop or the column
+     * the table aligns on.
+     */
+    @Test
+    void markupTableCellsExpandATabAfterAClusterASpanBoundarySplit() {
+        StyledText styled = Markup.parse("<root><table>"
+                + "<tr><td>x</td><td>a<span style=\"bold\">\u0301\tb</span></td></tr>"
+                + "<tr><td>y</td><td>z</td></tr></table></root>");
+        StyledText plain = Markup.parse("<root><table>"
+                + "<tr><td>x</td><td>a\u0301\tb</td></tr>"
+                + "<tr><td>y</td><td>z</td></tr></table></root>");
+        assertThat(styled.plainText()).as("the same plain text").isEqualTo(plain.plainText());
+        assertThat(new ScreenRenderer().plainLines(
+                        io.github.dhoard.braxton.view.Views.text(styled), new Viewport(2, 24)))
+                .isEqualTo(new ScreenRenderer().plainLines(
+                        io.github.dhoard.braxton.view.Views.text(plain), new Viewport(2, 24)));
     }
 
     @Test
