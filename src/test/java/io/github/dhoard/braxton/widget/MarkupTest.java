@@ -122,6 +122,93 @@ class MarkupTest {
         assertThat(Markup.parse("<root>hi</root>").plainText()).isEqualTo("hi");
     }
 
+    /**
+     * The documented attributes - {@code color}, {@code bg-color} and the {@code style} list - belong
+     * to the element that carries them wherever it sits in the document. A {@code td}, {@code tr} or
+     * {@code li} outside a grid reaches {@code renderNode} and keeps them; inside its owning
+     * container the renderer re-rendered the element's children with the container's own style, so
+     * the attributes disappeared with no diagnostic and the text painted in the terminal default
+     * while the markup around it kept its colour.
+     */
+    @Test
+    void cellsAndItemsKeepTheirOwnAttributesInsideTheirContainer() {
+        Color red = Color.parse("#ff0000").orElseThrow();
+        Color green = Color.parse("#00ff00").orElseThrow();
+        Color leaf = Color.parse("#22aa22").orElseThrow();
+        String coloured = "color=\"#ff0000\" bg-color=\"#00ff00\" style=\"bold\"";
+        Style standalone = spanStyle("<root><td " + coloured + ">red</td></root>");
+        assertThat(standalone.foreground()).as("a cell on its own is styled").isEqualTo(red);
+        assertThat(spanStyle("<root><p><td " + coloured + ">red</td></p></root>"))
+                .as("the same cell nested in a paragraph")
+                .isEqualTo(standalone);
+
+        StyledText table = Markup.parse("<root><table><tr><td " + coloured
+                + ">red</td></tr></table></root>");
+        assertThat(table.plainText()).as("the plain text and the padding are unchanged")
+                .isEqualTo("red  ");
+        assertThat(styleOfSpanContaining(table, "red")).as("the cell's own attributes").satisfies(cell -> {
+            assertThat(cell.foreground()).isEqualTo(red);
+            assertThat(cell.background()).isEqualTo(green);
+            assertThat(cell.bold()).isTrue();
+        });
+        // Painted, not just stored: the cell's first character carries its foreground.
+        RenderedScreen screen = new ScreenRenderer().screen(
+                io.github.dhoard.braxton.view.Views.text(table), new Viewport(1, 12));
+        assertThat(screen.cell(0, 0).text()).isEqualTo("r");
+        assertThat(screen.cell(0, 0).style().foreground()).isEqualTo(red);
+        assertThat(table.spans()).filteredOn(span -> "  ".equals(span.text()))
+                .as("the pad the grid adds is the table's decoration, not the cell's")
+                .allSatisfy(pad -> assertThat(pad.style()).isEqualTo(Style.NONE));
+
+        StyledText row = Markup.parse(
+                "<root><table><tr color=\"#ff0000\"><td>one</td><td>two</td></tr></table></root>");
+        assertThat(styleOfSpanContaining(row, "one").foreground())
+                .as("a row's own attributes inherit into its cells")
+                .isEqualTo(red);
+        assertThat(styleOfSpanContaining(row, "two").foreground())
+                .as("every cell of the row")
+                .isEqualTo(red);
+
+        StyledText list = Markup.parse("<root><ul><li color=\"#22aa22\">a<br/>b</li></ul></root>");
+        assertThat(list.plainText()).isEqualTo("  \u2022 a\n    b");
+        assertThat(styleOfSpanContaining(list, "a").foreground()).as("the item's first line")
+                .isEqualTo(leaf);
+        assertThat(styleOfSpanContaining(list, "b").foreground())
+                .as("the item's continuation line keeps it too")
+                .isEqualTo(leaf);
+        assertThat(styleOfSpanContaining(list, "\u2022").foreground())
+                .as("the bullet is the list's decoration and takes the list's attributes")
+                .isNull();
+
+        // Preserved: the container's own attributes still reach every cell and item.
+        assertThat(Markup.parse(
+                "<root><table color=\"#ff0000\"><tr><td>one</td><td>two</td></tr></table></root>").spans())
+                .filteredOn(span -> !span.text().isBlank())
+                .allSatisfy(span -> assertThat(span.style().foreground()).isEqualTo(red));
+        assertThat(Markup.parse("<root><ul color=\"#ff0000\"><li>one</li></ul></root>").spans())
+                .filteredOn(span -> !span.text().isBlank())
+                .allSatisfy(span -> assertThat(span.style().foreground()).isEqualTo(red));
+        // Preserved in the other direction: an item's own attributes stay on its own text.
+        StyledText boldItem = Markup.parse("<root><ul><li style=\"bold\">one</li></ul></root>");
+        assertThat(styleOfSpanContaining(boldItem, "one").bold()).isTrue();
+        assertThat(styleOfSpanContaining(boldItem, "\u2022").bold())
+                .as("an item does not restyle the list's bullet")
+                .isFalse();
+        assertThat(List.of(Markup.parse("<root><table><tr><td>a</td><td>longer</td></tr>"
+                + "<tr><td>bb</td><td>c</td></tr></table></root>").plainText().split("\n", -1)))
+                .as("grid geometry is untouched")
+                .containsExactly("a   longer  ", "bb  c       ");
+    }
+
+    /** The style of the spans whose text contains {@code needle}. */
+    private static Style styleOfSpanContaining(StyledText rendered, String needle) {
+        List<StyledText.Span> matching = rendered.spans().stream()
+                .filter(span -> span.text().contains(needle)).toList();
+        assertThat(matching).as("spans containing [%s] in %s", needle, rendered.spans()).isNotEmpty();
+        assertThat(matching).as("one styled run per search needle").hasSize(1);
+        return matching.get(0).style();
+    }
+
     @Test
     void aTableIsARectangularGridWithEveryCellPadded() {
         StyledText parsed = Markup.parse(

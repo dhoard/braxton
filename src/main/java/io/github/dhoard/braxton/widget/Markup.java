@@ -68,6 +68,12 @@ import io.github.dhoard.braxton.view.Views;
  * as one grapheme-cluster sequence, so each cell's columns are charged inside that sequence rather
  * than to the cell measured on its own - a cluster with no base character of its own at the head of
  * a cell joins the pad of the cell before it instead of occupying a cell of its own.</p>
+ *
+ * <p>{@code color}, {@code bg-color} and {@code style} apply to the element that carries them and
+ * are inherited by its descendants, wherever that element sits in the document: a {@code tr},
+ * {@code td} or {@code li} is styled inside its container exactly as it is on its own. The
+ * decoration a container adds - a list's bullet and continuation indent, a table's cell padding -
+ * carries the container's own attributes, not the item's or the cell's.</p>
  */
 public final class Markup {
 
@@ -238,7 +244,11 @@ public final class Markup {
                     || !"li".equalsIgnoreCase(item.getTagName())) {
                 continue;
             }
-            StyledText content = renderChildren(item, style, link);
+            // An item is an attribute-bearing element wherever it sits, which is what the renderNode
+            // arm for "li" does outside a list. Rendering the item's children with the list's style
+            // discarded the item's own color, bg-color and style list; the bullet and the
+            // continuation indent stay the list's decoration and keep the list's attributes.
+            StyledText content = renderNode(item, style, link);
             StyledText rendered = prefix
                     .append(indentAfterFirstLine(content, continuation, style, link));
             out = out.append(rendered);
@@ -278,12 +288,18 @@ public final class Markup {
         for (int i = 0; i < children.getLength(); i++) {
             if (children.item(i) instanceof Element row
                     && "tr".equalsIgnoreCase(row.getTagName())) {
+                // The grid needs each cell as a separate value, so the row is walked here instead of
+                // going through renderNode; that means its own attributes have to be read at this
+                // level so they inherit into its cells the way renderNode's "tr" arm inherits them.
+                Style rowStyle = applyAttributes(row, style);
                 List<StyledText> cells = new ArrayList<>();
                 NodeList rowChildren = row.getChildNodes();
                 for (int j = 0; j < rowChildren.getLength(); j++) {
                     if (rowChildren.item(j) instanceof Element cell
                             && "td".equalsIgnoreCase(cell.getTagName())) {
-                        cells.add(renderChildren(cell, style, link));
+                        // The same for the cell: renderNode applies its attributes and its children
+                        // inherit them. The pad added below is the grid's decoration.
+                        cells.add(renderNode(cell, rowStyle, link));
                     }
                 }
                 rows.add(cells);
