@@ -263,6 +263,12 @@ modifiers the byte already names, which is how xterm-family terminals report the
 Ctrl+C byte is `ctrl+alt+c`. A control byte never disappears into a bare Escape and never becomes a
 key name or text. ESC followed by ESC is two Escape gestures, and a lone ESC is one.
 
+An ESC byte inside an escape sequence cancels the sequence in progress and starts the next keypress,
+so a sequence a terminal leaves open — Meta+[ is reported as `ESC [` — never types its parameters or
+its final byte, and the key that follows keeps its own meaning. A sequence left incomplete when the
+escape timeout expires is abandoned the same way rather than waited for, because the byte that
+arrives later may be the next key the user pressed.
+
 ## Commands and subscriptions
 
 `Command` values are inert descriptions:

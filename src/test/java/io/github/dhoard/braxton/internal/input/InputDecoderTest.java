@@ -27,12 +27,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import io.github.dhoard.braxton.input.InputEvent;
+import io.github.dhoard.braxton.input.InputOptions;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.Modifiers;
 
@@ -43,14 +47,33 @@ class InputDecoderTest {
     /** Serves one byte per read so UTF-8 and escape sequences are genuinely split. */
     private static final class ByteAtATime extends InputStream {
         private final byte[] data;
+        private final int stallBefore;
+        private final long stallMillis;
         private int index;
+        private boolean stalled;
 
         ByteAtATime(byte[] data) {
+            this(data, -1, 0L);
+        }
+
+        /** Waits {@code stallMillis} before serving byte {@code stallBefore}. */
+        ByteAtATime(byte[] data, int stallBefore, long stallMillis) {
             this.data = data;
+            this.stallBefore = stallBefore;
+            this.stallMillis = stallMillis;
         }
 
         @Override
-        public int read() {
+        public int read() throws IOException {
+            if (!stalled && index == stallBefore) {
+                stalled = true;
+                try {
+                    Thread.sleep(stallMillis);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new InterruptedIOException("stalled test input interrupted");
+                }
+            }
             return index < data.length ? data[index++] & 0xFF : -1;
         }
 
@@ -436,6 +459,92 @@ class InputDecoderTest {
         assertThat(decoder.read().orElseThrow()).isEqualTo(new InputEvent.PasteInput("p"));
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("y");
         assertThat(decoder.read()).isEmpty();
+    }
+
+    /**
+     * An ESC byte inside a CSI body cancels the half-built sequence and starts the next keypress,
+     * exactly as the ESC ESC pair does. A terminal reports Meta+[ as {@code ESC [}, so the next
+     * keystroke - and every key repeat while Meta+[ is held - arrives while a CSI is still open. The
+     * abandoned sequence may contribute no keystroke of its own, and the sequence that follows keeps
+     * its key, including a bracketed paste marker.
+     */
+    @Test
+    void anEscapeInsideACsiBodyStartsTheNextSequenceRatherThanLeakingItsTail()
+            throws IOException {
+        InputDecoder decoder = new InputDecoder(TestReaders.utf8(new ByteAtATime(
+                ("\u001B[" + "\u001B[A\u001B[5~\u001B[200~hi\u001B[201~")
+                        .getBytes(StandardCharsets.UTF_8))));
+        assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).key())
+                .as("the arrow key after the abandoned CSI")
+                .isEqualTo(Key.UP);
+        assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).key())
+                .as("the Page Up after the abandoned CSI")
+                .isEqualTo(Key.PAGE_UP);
+        assertThat(decoder.read().orElseThrow())
+                .as("the paste marker survives the abandoned CSI")
+                .isEqualTo(new InputEvent.PasteInput("hi"));
+        assertThat(decoder.read()).as("no keystroke the user never pressed is left over")
+                .isEmpty();
+    }
+
+    /** Key repeat while Meta+[ is held leaves several CSIs open; only the last one carries a key. */
+    @Test
+    void repeatedIncompleteCsiStillDeliversTheKeyThatFollows() throws IOException {
+        InputDecoder decoder = new InputDecoder(TestReaders.utf8(new ByteAtATime(
+                ("\u001B[".repeat(3) + "\u001B[A").getBytes(StandardCharsets.UTF_8))));
+        assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).key()).isEqualTo(Key.UP);
+        assertThat(decoder.read()).isEmpty();
+    }
+
+    /**
+     * The same rule applies to the other position an escape can arrive in: an SS3 introducer broken
+     * by the next sequence is abandoned instead of leaving that sequence's bytes to be read as text,
+     * and an abandoned CSI does not swallow the Alt+key pair that follows it.
+     */
+    @Test
+    void anEscapeInsideAnIncompleteSequenceNeverTypesTheBytesThatFollow() throws IOException {
+        InputDecoder alt = new InputDecoder(
+                TestReaders.utf8(new ByteAtATime("\u001B[\u001Bx".getBytes(StandardCharsets.UTF_8))));
+        InputEvent.KeyInput altX = (InputEvent.KeyInput) alt.read().orElseThrow();
+        assertThat(altX.key()).as("Meta+[ then Alt+x names the key that was pressed")
+                .isEqualTo(Key.of("x", Modifiers.ALT));
+        assertThat(altX.text()).isEqualTo("x");
+        assertThat(alt.read()).as("no keystroke the user never pressed is left over").isEmpty();
+
+        InputDecoder ss3 = new InputDecoder(
+                TestReaders.utf8(new ByteAtATime("\u001BO\u001B[A".getBytes(StandardCharsets.UTF_8))));
+        assertThat(((InputEvent.KeyInput) ss3.read().orElseThrow()).key())
+                .as("the arrow key after the abandoned SS3 introducer")
+                .isEqualTo(Key.UP);
+        assertThat(ss3.read()).as("no keystroke the user never pressed is left over").isEmpty();
+    }
+
+    /**
+     * The escape timeout still bounds an incomplete CSI. The decoder cannot wait for the rest of a
+     * sequence, because the byte that arrives after the timeout is just as likely to be the next key
+     * the user pressed - Meta+[ on its own followed by a typed letter is exactly these bytes - so the
+     * partial sequence is abandoned and that keystroke is decoded normally.
+     */
+    @Test
+    @Timeout(5)
+    void anIncompleteCsiIsAbandonedAtTheEscapeTimeoutRatherThanSwallowingTheNextKey()
+            throws IOException {
+        // One arrow key whose final byte arrives 40 ms after its introducer.
+        byte[] splitArrowKey = "\u001B[A".getBytes(StandardCharsets.UTF_8);
+        InputDecoder decoder = new InputDecoder(TestReaders.utf8(
+                new ByteAtATime(splitArrowKey, 2, 40L)), new InputOptions(
+                        Duration.ofMillis(5), 64, 1024, Duration.ofMillis(250),
+                        Duration.ofMillis(100)));
+        InputEvent.KeyInput key = (InputEvent.KeyInput) decoder.read().orElseThrow();
+        assertThat(key.key()).as("the abandoned CSI did not adopt the byte that arrived later")
+                .isEqualTo(Key.of("a"));
+        assertThat(key.text()).isEqualTo("A");
+        assertThat(decoder.read()).isEmpty();
+
+        InputDecoder whole = new InputDecoder(TestReaders.utf8(new ByteAtATime(splitArrowKey)));
+        assertThat(((InputEvent.KeyInput) whole.read().orElseThrow()).key())
+                .as("the same bytes delivered at once are the arrow key")
+                .isEqualTo(Key.UP);
     }
 
     @Test

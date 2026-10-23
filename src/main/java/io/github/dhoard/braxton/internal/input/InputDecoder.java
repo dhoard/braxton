@@ -38,7 +38,9 @@ import io.github.dhoard.braxton.input.Modifiers;
  * <p>The decoder owns no application state and dispatches nothing: it reads one event at a time so
  * the runtime can route it against the latest committed view. Escape sequences are bounded by a
  * short timeout, CSI sequences by a byte cap, and scalar assembly preserves supplementary characters across split JLine reads.
- * JLine owns UTF-8 decoding and Braxton owns event normalization.</p>
+ * An ESC byte inside an in-progress sequence cancels that sequence and starts the next keypress, so
+ * a sequence a terminal leaves open never contributes a keystroke of its own. JLine owns UTF-8
+ * decoding and Braxton owns event normalization.</p>
  */
 public final class InputDecoder {
 
@@ -171,6 +173,13 @@ public final class InputDecoder {
             if (third < 0) {
                 return Optional.empty();
             }
+            if (third == 0x1B) {
+                // The next keypress starts here, exactly as inside a CSI body: the half-built SS3
+                // introducer is abandoned and the escape byte is given back, so the sequence that
+                // follows keeps its own key instead of having its bytes read as ordinary text.
+                in.unread(third);
+                return Optional.empty();
+            }
             return Optional.ofNullable(decodeSs3((char) third));
         }
         if (second == 0x1B) {
@@ -224,7 +233,24 @@ public final class InputDecoder {
         long deadline = escapeDeadline;
         while (true) {
             int next = readWithDeadline(deadline);
+            // End of input, or the escape timeout: the partial sequence is abandoned rather than
+            // waited for. Waiting for a final byte cannot be unbounded, and the byte that arrives
+            // after the timeout is just as likely to be the next key the user pressed - Meta+[ on
+            // its own followed by a typed letter is exactly these bytes - so the keystroke that
+            // follows the gap keeps its own meaning.
             if (next < 0) return "";
+            if (next == 0x1B) {
+                // An escape byte cancels the sequence in progress and starts the next keypress, the
+                // same way a second ESC ends the first gesture above. A terminal reports Meta+[ as
+                // "ESC [", so the next keystroke - and every key repeat while Meta+[ is held -
+                // arrives while this CSI is still open. Appending the byte would end the sequence at
+                // the next sequence's '[', and that sequence's parameters and final byte would then
+                // be decoded as ordinary text: the key the user pressed is lost and a keystroke they
+                // never pressed is inserted, which for a bracketed paste also destroys its marker.
+                // Give the escape byte back so the following read() decodes the real sequence.
+                in.unread(next);
+                return "";
+            }
             // Past the cap the sequence is not stored, but its bytes are still consumed up to the
             // final byte: stopping there would deliver the tail (parameters and final byte) to the
             // application as ordinary text.
