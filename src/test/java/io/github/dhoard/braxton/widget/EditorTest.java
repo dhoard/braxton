@@ -49,11 +49,16 @@ class EditorTest {
 
     /** The first row a viewport paints for {@code state}, through the real layout path. */
     private static String painted(EditorState state, EditorOptions options, boolean focused) {
-        java.util.List<String> lines = new io.github.dhoard.braxton.view.ScreenRenderer().plainLines(
+        return paintedLines(state, options, focused).get(0);
+    }
+
+    /** Every row a viewport paints for {@code state}, through the real layout path. */
+    private static java.util.List<String> paintedLines(EditorState state, EditorOptions options,
+            boolean focused) {
+        return new io.github.dhoard.braxton.view.ScreenRenderer().plainLines(
                 Editor.view(io.github.dhoard.braxton.view.ElementId.of("composer"), state, options,
                         focused, (EditorAction action) -> action),
                 new io.github.dhoard.braxton.layout.Viewport(2, 24));
-        return lines.get(0);
     }
 
     @Test
@@ -305,37 +310,84 @@ class EditorTest {
         state = new EditorState(state.text(), 3, 3, 0);
         EditorState down = update(state, new EditorAction.MoveDown());
         assertThat(down.caret()).isEqualTo("abcd\nx".length());
-        assertThat(down.preferredColumn()).isEqualTo(3);
+        // Painted column 5: the draft's "abc" after the two-column prompt.
+        assertThat(down.preferredColumn()).isEqualTo(5);
         assertThat(update(down, new EditorAction.MoveUp()).caret()).isEqualTo(3);
     }
 
     @Test
     void verticalMovementKeepsTheVisualColumnAcrossWideGlyphs() {
         String text = "a\u65E5b\nabcdef";
-        // After "a\u65E5" the caret is at grapheme 2 but visual column 3.
+        // After "a\u65E5" the caret is at grapheme 2 but visual column 3, painted at column 5.
         EditorState state = new EditorState(text, 2, 2, 0);
         EditorState down = update(state, new EditorAction.MoveDown());
         assertThat(text.substring(4, down.caret())).isEqualTo("abc");
-        assertThat(down.preferredColumn()).isEqualTo(3);
+        assertThat(down.preferredColumn()).isEqualTo(5);
         assertThat(update(down, new EditorAction.MoveUp()).caret()).isEqualTo(2);
     }
 
     @Test
     void verticalMovementCountsATabAsTheColumnsTheTextViewPaints() {
         String text = "a\tb\nabcdef";
-        // The draft is painted by the text view, which expands the tab to the next four-column
-        // stop, so the caret before "b" sits at visual column 4 rather than 2.
+        // The row is painted after the two-column prompt, which expands the tab to the next
+        // four-column stop from there: one cell, so the caret before "b" sits at painted column 4
+        // and stays two columns into the target line. Counting the tab from column 0 would put it
+        // at column 4 of the draft and land the caret four columns in.
         EditorState state = new EditorState(text, 2, 2, 0);
         EditorState down = update(state, new EditorAction.MoveDown());
-        assertThat(down.caret()).isEqualTo(text.indexOf("abcd") + 4);
+        assertThat(down.caret()).isEqualTo(text.indexOf("abcdef") + 2);
         assertThat(down.preferredColumn()).isEqualTo(4);
         assertThat(update(down, new EditorAction.MoveUp()).caret()).isEqualTo(2);
     }
 
     @Test
+    void verticalMovementCountsATabFromThePaintedPromptColumn() {
+        // The prompt prefixes every visible draft line, so a tab in the draft reaches its stop from
+        // the prompt's width. Measuring it from column 0 targets a different character and slides
+        // the caret left by the prompt's width modulo the tab stop.
+        EditorOptions options = EditorOptions.defaults().withPrompt("> ", Style.NONE)
+                .withVisibleLines(2);
+        String text = "ab\tc\n0123456789";
+        EditorState state = new EditorState(text, 3, 3, 0);
+        assertThat(paintedLines(state, options, true))
+                .containsExactly("> ab    " + Editor.CURSOR, "  0123456789");
+
+        EditorState down = Editor.update(state, options, new EditorAction.MoveDown()).state();
+        assertThat(paintedLines(down, options, true))
+                .containsExactly("> ab    c", "  012345" + Editor.CURSOR + "789");
+        // Six columns into the target line: the painted column 8 less the prompt's two columns.
+        assertThat(down.caret()).isEqualTo(state.lineStart(1) + 6);
+        assertThat(down.preferredColumn()).isEqualTo(8);
+        assertThat(Editor.update(down, options, new EditorAction.MoveUp()).state().caret())
+                .isEqualTo(3);
+    }
+
+    @Test
+    void verticalMovementSeeksATabOnTheTargetLineFromThePaintedPromptColumn() {
+        // The same gap in the opposite direction: seeking into a target line that contains a tab has
+        // to count it from the prompt, or the caret lands short of the painted column.
+        EditorOptions options = EditorOptions.defaults().withPrompt("> ", Style.NONE)
+                .withVisibleLines(2);
+        String text = "abcdef\n0\tabc";
+        EditorState state = new EditorState(text, 4, 4, 0);
+        assertThat(paintedLines(state, options, true))
+                .containsExactly("> abcd" + Editor.CURSOR + "f", "  0 abc");
+
+        EditorState down = Editor.update(state, options, new EditorAction.MoveDown()).state();
+        assertThat(paintedLines(down, options, true))
+                .containsExactly("> abcdef", "  0 ab" + Editor.CURSOR);
+        // Four columns into the target line: the tab there occupies the single cell left before
+        // the painted column 6, so the caret lands on "c" rather than on the tab after "0 ".
+        assertThat(down.caret()).isEqualTo(state.lineStart(1) + 4);
+        assertThat(down.preferredColumn()).isEqualTo(6);
+        assertThat(Editor.update(down, options, new EditorAction.MoveUp()).state().caret())
+                .isEqualTo(4);
+    }
+
+    @Test
     void verticalMovementStopsBeforeAWideGlyphItCannotFitInto() {
         String text = "abcdef\na\u65E5b";
-        // Visual column 2 falls inside the wide glyph on the shorter line.
+        // Painted column 4 falls inside the wide glyph on the shorter line.
         EditorState state = new EditorState(text, 2, 2, 0);
         EditorState down = update(state, new EditorAction.MoveDown());
         assertThat(down.caret()).isEqualTo(text.indexOf('\u65E5'));
@@ -346,10 +398,11 @@ class EditorTest {
         String text = "abcdef\nx\nabcdef";
         EditorState state = new EditorState(text, 6, 6, 0);
         EditorState first = update(state, new EditorAction.MoveDown());
-        assertThat(first.preferredColumn()).isEqualTo(6);
+        // Painted column 8: the draft's "abcdef" after the two-column prompt.
+        assertThat(first.preferredColumn()).isEqualTo(8);
         EditorState second = update(first, new EditorAction.MoveDown());
         assertThat(second.caret()).isEqualTo(text.length());
-        assertThat(second.preferredColumn()).isEqualTo(6);
+        assertThat(second.preferredColumn()).isEqualTo(8);
     }
 
     @Test

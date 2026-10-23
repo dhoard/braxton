@@ -70,8 +70,8 @@ public final class Editor {
                     moveHorizontal(state, -1));
             case EditorAction.MoveRight right -> EditorResult.unchanged(
                     moveHorizontal(state, 1));
-            case EditorAction.MoveUp up -> EditorResult.unchanged(moveVertical(state, -1));
-            case EditorAction.MoveDown down -> EditorResult.unchanged(moveVertical(state, 1));
+            case EditorAction.MoveUp up -> EditorResult.unchanged(moveVertical(state, opts, -1));
+            case EditorAction.MoveDown down -> EditorResult.unchanged(moveVertical(state, opts, 1));
             case EditorAction.MoveHome home -> EditorResult.unchanged(moveLineEdge(state, true));
             case EditorAction.MoveEnd end -> EditorResult.unchanged(moveLineEdge(state, false));
             case EditorAction.SelectAll all -> EditorResult.unchanged(selectAll(state));
@@ -195,18 +195,23 @@ public final class Editor {
         return new EditorState(state.text(), caret, caret, 0);
     }
 
-    private static EditorState moveVertical(EditorState state, int direction) {
+    private static EditorState moveVertical(EditorState state, EditorOptions options, int direction) {
         int line = state.lineAt(state.caret());
         int lineStart = state.lineStart(line);
+        // Every visible draft line is painted after the prompt, or after the blank stand-in of its
+        // width, so the caret's column is measured from there: a tab in the draft reaches the same
+        // stop the text view paints for it. Measuring from column 0 moves the caret to a column it
+        // is not drawn at, by the prompt's width modulo the tab stop.
+        int painted = paintedPromptWidth(options);
         // A vertical move keeps the column the caret was at on the line it came from, even when a
         // shorter line in between clamps it; horizontal moves and edits reset the preference.
         int column = state.preferredColumn() > 0
                 ? state.preferredColumn()
-                : visualColumn(state.text(), lineStart, state.caret());
+                : visualColumn(state.text(), lineStart, state.caret(), painted);
         int targetLine = Math.max(0, Math.min(state.lineCount() - 1, line + direction));
         int targetStart = state.lineStart(targetLine);
         int targetEnd = state.lineEnd(targetLine);
-        int caret = indexAtColumn(state.text(), targetStart, targetEnd, column);
+        int caret = indexAtColumn(state.text(), targetStart, targetEnd, column, painted);
         return new EditorState(state.text(), caret, caret, column);
     }
 
@@ -224,22 +229,27 @@ public final class Editor {
     }
 
     /**
-     * Visual column of {@code index} on its line: wide glyphs count their real width and a tab
-     * counts the columns the text view paints for it.
+     * Painted column of {@code index} on its line: the columns the row draws before it, so the count
+     * starts at {@code paintedStart} - the prompt the row carries - and a tab counts the columns the
+     * text view paints for it. Wide glyphs count their real width.
      */
-    private static int visualColumn(String text, int lineStart, int index) {
+    private static int visualColumn(String text, int lineStart, int index, int paintedStart) {
         int end = Math.max(lineStart, Math.min(index, text.length()));
-        int used = 0;
+        int used = paintedStart;
         for (String cluster : TextMeasure.graphemes(text.substring(lineStart, end))) {
             used += visualWidth(cluster, used);
         }
         return used;
     }
 
-    /** Caret offset at {@code column} visual columns, stopping before a glyph that would overshoot. */
-    private static int indexAtColumn(String text, int lineStart, int lineEnd, int column) {
+    /**
+     * Caret offset at {@code column} painted columns, stopping before a glyph that would overshoot.
+     * The row is counted from {@code paintedStart} for the same reason {@link #visualColumn} is.
+     */
+    private static int indexAtColumn(String text, int lineStart, int lineEnd, int column,
+            int paintedStart) {
         int position = lineStart;
-        int used = 0;
+        int used = paintedStart;
         for (String cluster : TextMeasure.graphemes(text.substring(lineStart, lineEnd))) {
             int next = position + cluster.length();
             int width = visualWidth(cluster, used);
@@ -295,8 +305,7 @@ public final class Editor {
         int first = Math.max(0, Math.min(caretLine - visible + 1, lines - visible));
         // The prompt is painted by the text view, which expands a tab to the next four-column
         // stop, so the blank stand-in on continuation lines uses the painted width.
-        int promptWidth = TextMeasure.columns(
-                TabStops.expand(StyledText.plain(opts.prompt())).plainText());
+        int promptWidth = paintedPromptWidth(opts);
         StyledText result = StyledText.empty();
         int start = state.lineStart(first);
         for (int line = first; line < first + visible; line++) {
@@ -310,6 +319,15 @@ public final class Editor {
             start = end + 1;
         }
         return result;
+    }
+
+    /**
+     * Columns the text view paints for the prompt, which prefixes every visible draft line. The
+     * layout engine expands a tab to the next four-column stop, so the prompt is measured expanded:
+     * movement and the blank stand-in on continuation lines must agree with what is drawn.
+     */
+    private static int paintedPromptWidth(EditorOptions options) {
+        return TextMeasure.columns(TabStops.expand(StyledText.plain(options.prompt())).plainText());
     }
 
     private static StyledText renderLine(EditorState state, EditorOptions opts, boolean focused,

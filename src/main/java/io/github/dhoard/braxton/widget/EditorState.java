@@ -31,6 +31,11 @@ import io.github.dhoard.braxton.style.TextMeasure;
  *
  * <p>Positions are UTF-16 offsets that always sit on a grapheme boundary. Selection is represented by
  * an anchor plus the caret; the anchor follows the caret when a move clears the selection.</p>
+ *
+ * <p>{@code preferredColumn} is the column a run of vertical moves returns to, measured as the
+ * caret's painted column: the columns the editor draws before it, including a configured prompt, so
+ * a tab in the draft advances from the same base the text view paints. Zero means measure the caret
+ * afresh, which is the case after a horizontal move, an edit, or a move to a line edge.</p>
  */
 public record EditorState(String text, int caret, int anchor, int preferredColumn) {
 
