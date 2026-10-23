@@ -122,9 +122,18 @@ public final class Editor {
             return state;
         }
         String text = state.text().substring(0, start) + insert + state.text().substring(end);
-        int caret = start + insert.length();
-        // Insertion can join the following text into a grapheme. Keep the caret after that
-        // cluster rather than letting EditorState round an interior offset back before the insert.
+        return edited(text, start + insert.length());
+    }
+
+    /**
+     * The state after an edit leaves the caret at {@code caret} in {@code text}.
+     *
+     * <p>An edit can join the surviving text on either side of the removed range into one grapheme,
+     * so the deletion point may sit inside a cluster. Keep the caret at the end of that cluster -
+     * the nearest representable position - rather than letting {@link EditorState} round the
+     * interior offset back before the base the deletion did not remove.</p>
+     */
+    private static EditorState edited(String text, int caret) {
         if (!TextMeasure.isBoundary(text, caret)) {
             caret = TextMeasure.boundaryAfter(text, caret);
         }
@@ -157,7 +166,7 @@ public final class Editor {
         }
         int previous = TextMeasure.previousBoundary(state.text(), state.caret());
         String text = state.text().substring(0, previous) + state.text().substring(state.caret());
-        return new EditorState(text, previous, previous, 0);
+        return edited(text, previous);
     }
 
     private static EditorState delete(EditorState state) {
@@ -169,14 +178,14 @@ public final class Editor {
         }
         int next = TextMeasure.boundaryAfter(state.text(), state.caret());
         String text = state.text().substring(0, state.caret()) + state.text().substring(next);
-        return new EditorState(text, state.caret(), state.caret(), 0);
+        return edited(text, state.caret());
     }
 
     private static EditorState deleteSelection(EditorState state) {
         int start = state.selectionStart();
         int end = state.selectionEnd();
         String text = state.text().substring(0, start) + state.text().substring(end);
-        return new EditorState(text, start, start, 0);
+        return edited(text, start);
     }
 
     private static EditorState moveHorizontal(EditorState state, int direction) {

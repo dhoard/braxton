@@ -101,6 +101,79 @@ class EditorTest {
     }
 
     @Test
+    void backspaceThatJoinsGraphemesLeavesTheCaretAfterTheJoinedCluster() {
+        EditorOptions options = EditorOptions.defaults();
+        EditorState state = EditorState.of("note\n\u0301x");
+        state = Editor.update(state, options, new EditorAction.MoveHome()).state();
+        assertThat(state.caret()).isEqualTo(5);
+
+        state = Editor.update(state, options, new EditorAction.Backspace()).state();
+        assertThat(state.text()).isEqualTo("note\u0301x");
+        assertThat(state.caret()).isEqualTo(5);
+        assertThat(state.anchor()).isEqualTo(5);
+        assertThat(state.hasSelection()).isFalse();
+        // The block cursor covers the text after the joined cluster, not the surviving base.
+        assertThat(painted(state, options, true)).isEqualTo("note\u0301" + Editor.CURSOR);
+
+        state = Editor.update(state, options, new EditorAction.Insert("Z")).state();
+        assertThat(state.text()).isEqualTo("note\u0301Zx");
+        assertThat(state.caret()).isEqualTo(6);
+    }
+
+    @Test
+    void deleteAndSelectionDeleteThatJoinGraphemesLeaveTheCaretAfterTheJoinedCluster() {
+        EditorOptions options = EditorOptions.defaults();
+
+        EditorState deleted = new EditorState("note\n\u0301x", 4, 4, 0);
+        deleted = Editor.update(deleted, options, new EditorAction.Delete()).state();
+        assertThat(deleted.text()).isEqualTo("note\u0301x");
+        assertThat(deleted.caret()).isEqualTo(5);
+        assertThat(deleted.anchor()).isEqualTo(5);
+
+        EditorState selected = new EditorState("note\n\u0301x", 4, 5, 0);
+        selected = Editor.update(selected, options, new EditorAction.Delete()).state();
+        assertThat(selected.text()).isEqualTo("note\u0301x");
+        assertThat(selected.caret()).isEqualTo(5);
+        assertThat(selected.anchor()).isEqualTo(5);
+
+        EditorState backspaced = new EditorState("note\n\u0301x", 5, 4, 0);
+        backspaced = Editor.update(backspaced, options, new EditorAction.Backspace()).state();
+        assertThat(backspaced.text()).isEqualTo("note\u0301x");
+        assertThat(backspaced.caret()).isEqualTo(5);
+        assertThat(backspaced.anchor()).isEqualTo(5);
+    }
+
+    @Test
+    void backspaceOverATabSeparatingABaseAndAMarkKeepsTheJoinedCluster() {
+        EditorOptions options = EditorOptions.defaults();
+        EditorState state = new EditorState("a\t\u0301b", 2, 2, 0);
+
+        state = Editor.update(state, options, new EditorAction.Backspace()).state();
+        assertThat(state.text()).isEqualTo("a\u0301b");
+        assertThat(state.caret()).isEqualTo(2);
+        assertThat(state.anchor()).isEqualTo(2);
+
+        state = Editor.update(state, options, new EditorAction.Insert("Z")).state();
+        assertThat(state.text()).isEqualTo("a\u0301Zb");
+        assertThat(state.caret()).isEqualTo(3);
+    }
+
+    @Test
+    void deletionThatRemovesANewlineWithoutAJoinKeepsTheCaretAtTheDeletionPoint() {
+        EditorOptions options = EditorOptions.defaults();
+        EditorState state = new EditorState("ab\ncd", 3, 3, 0);
+
+        state = Editor.update(state, options, new EditorAction.Backspace()).state();
+        assertThat(state.text()).isEqualTo("abcd");
+        assertThat(state.caret()).isEqualTo(2);
+
+        state = new EditorState("ab\ncd", 2, 2, 0);
+        state = Editor.update(state, options, new EditorAction.Delete()).state();
+        assertThat(state.text()).isEqualTo("abcd");
+        assertThat(state.caret()).isEqualTo(2);
+    }
+
+    @Test
     void backspaceRemovesAWholeGrapheme() {
         EditorState state = EditorState.of("a" + FAMILY);
         assertThat(update(state, new EditorAction.Backspace()).text()).isEqualTo("a");
