@@ -287,6 +287,48 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aSelectorSplitFromItsJoinerAfterATabStopKeepsTheColumnsTheRowMeasures() {
+        // A style boundary can split the run of clusters that continues a tab stop's last space:
+        // the joiner claims no column of itself and the selector that widens the cell follows it in
+        // the next span. The stop reserved only the cluster behind the tab, so the row it committed
+        // measured a column wider than the width it wrapped to, the value measured a row fewer than
+        // it painted, and paint dropped the row's tail - the "D" here - although a wider frame
+        // showed it. The whole run that continues the cell is reserved with the stop now.
+        StyledText split = StyledText.concat(StyledText.of("ab\t", Style.NONE),
+                StyledText.of("\u200D", Style.NONE.withBold()),
+                StyledText.of("\uFE0FCD", Style.NONE));
+        StyledText plain = StyledText.plain(split.plainText());
+        for (int cols = 1; cols <= 9; cols++) {
+            for (StyledText line : engine.wrapLines(split, cols)) {
+                assertThat(TextMeasure.columns(line.plainText()))
+                        .as("row at %d columns", cols)
+                        .isLessThanOrEqualTo(cols);
+            }
+            assertThat(engine.intrinsicHeight(Views.text(split), cols))
+                    .as("rows of \"%s\" at %d columns", split.plainText(), cols)
+                    .isEqualTo(engine.intrinsicHeight(Views.text(plain), cols));
+        }
+        // Six columns: "ab", the two of the stop, the column its last space gains, and "C" - "D"
+        // starts the next row, exactly as it does for the same text in one span.
+        int rows = engine.intrinsicHeight(Views.text(split), 6);
+        assertThat(rows).isEqualTo(2);
+        Screen screen = paint(Views.text(split), rows, 6);
+        assertThat(paintedCells(screen))
+                .isEqualTo(paintedCells(paint(Views.text(plain), rows, 6)));
+        assertThat(screen.cell(1, 0).text()).isEqualTo("D");
+        // A frame is measured from the rows its content wraps to, so the row it paints keeps every
+        // character the frame is tall enough for.
+        View<?> framed = Views.border(Border.SINGLE, Views.text(split));
+        int framedRows = engine.intrinsicHeight(framed, 8);
+        assertThat(framedRows).isEqualTo(4);
+        assertThat(paint(framed, framedRows, 8).plainLines()).containsExactly(
+                "\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
+                "\u2502ab  \u200D\uFE0FC\u2502",
+                "\u2502D     \u2502",
+                "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2518");
+    }
+
+    @Test
     void aSelectorInsideABaselessClusterKeepsTheColumnsItsDottedCircleMeasures() {
         // The dotted circle stands in for the base a cluster does not have, and the row holds it, so
         // the selector in that cluster widens the circle the way it widens any other base: two
@@ -354,6 +396,8 @@ class LayoutEngineTest {
                 StyledText.concat(StyledText.of("\t", Style.NONE), StyledText.of("\u0301", bold)),
                 StyledText.concat(StyledText.of("a\t", Style.NONE),
                         StyledText.of("\uFE0Fx", bold)),
+                StyledText.concat(StyledText.of("ab\t", Style.NONE),
+                        StyledText.of("\u200D", bold), StyledText.of("\uFE0FCD", Style.NONE)),
                 StyledText.concat(StyledText.of("\u0301", Style.NONE), StyledText.of("x", bold)),
                 StyledText.concat(StyledText.of("ab\n", Style.NONE),
                         StyledText.of("\u0301x", bold)),

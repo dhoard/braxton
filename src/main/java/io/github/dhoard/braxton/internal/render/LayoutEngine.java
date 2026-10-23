@@ -658,7 +658,7 @@ public final class LayoutEngine {
         LineBuilder current = new LineBuilder();
         int used = 0;
         boolean softWrapped = false;
-        ClusterCursor cursor = new ClusterCursor(text);
+        ClusterCursor cursor = new ClusterCursor(text, policy);
         while (cursor.next()) {
             String raw = cursor.text();
             Style style = cursor.style();
@@ -680,13 +680,18 @@ public final class LayoutEngine {
                 // The stop reaches the line as spaces, so that row's own plain text re-segments
                 // them together with the clusters that follow the tab: the last space of the stop
                 // is a cell those clusters continue, exactly as a typed space would be. A cluster
-                // that claims no column of its own - a variation selector, a joiner - is appended
-                // below, and a selector makes the cell it joins two columns wide. That column has
-                // to be reserved with the stop: charging the stop alone left the row a column
-                // wider than the width it wrapped to, and paint dropped the row's tail. A cluster
-                // with columns of its own - a bare combining mark - starts its own cell with the
-                // dotted circle in front of it, which keeps it clear of the stop's last space.
-                int widened = widenedByNextCluster(" ", cursor.peek());
+                // that claims no column of its own - a variation selector, a joiner - joins that
+                // cell, and a selector makes it two columns wide. That column has to be reserved
+                // with the stop: charging the stop alone left the row a column wider than the width
+                // it wrapped to, and paint dropped the row's tail. A style boundary can split the
+                // chain of clusters that continues the cell - a joiner in one span, the selector
+                // after it in the next - so the whole chain is read ahead and appended with the
+                // stop, not only the cluster behind the tab: the joiner claims nothing itself and
+                // the selector behind it is what widens the cell. A cluster with columns of its own
+                // - a bare combining mark - starts its own cell with the dotted circle in front of
+                // it, which keeps it clear of the stop's last space.
+                List<String> joins = cursor.clustersContinuing(" ");
+                int widened = widenedByClusters(" ", joins);
                 int stop = 4 - (used % 4);
                 if (used + stop + widened > cols && used > 0) {
                     lines.add(current.build());
@@ -700,11 +705,22 @@ public final class LayoutEngine {
                 // A stop wider than an empty line has nowhere to wrap to, so it is clamped to
                 // the columns it can occupy; the painted line clips the same cells. The column a
                 // selector after the tab adds is part of that clamp, and a stop left with no room
-                // for the cell it ends with is clipped whole, selector included.
+                // for the cell it ends with is clipped whole, selector included - a clipped stop
+                // leaves the clusters that join it to the loop below, which appends them where the
+                // stop's spaces would have been.
                 stop = Math.min(stop, cols - used - widened);
                 if (stop > 0) {
                     current.append(" ".repeat(stop), style, link);
                     used += stop + widened;
+                    if (!joins.isEmpty()) {
+                        // The scan read these past the tab without consuming them; now that the
+                        // stop is committed they join the cell it ends with, on the same line.
+                        for (int i = 0; i < joins.size(); i++) {
+                            cursor.next();
+                            current.append(cursor.text(), cursor.style(), cursor.link());
+                        }
+                        softWrapped = false;
+                    }
                 }
                 continue;
             }
@@ -782,28 +798,30 @@ public final class LayoutEngine {
     }
 
     /**
-     * The columns the cluster after a cell adds to that cell while claiming no column of its own -
-     * a variation selector widens the base it joins, a joiner does not. Only one cluster needs to
-     * be looked at: a single cluster occupies at most two columns, so the cluster after it can add
-     * nothing more. A cluster that claims columns of its own starts a cell of its own, and one the
-     * cell does not continue keeps its own columns, so neither is counted here.
+     * The columns the clusters after a cell add to that cell while claiming no column of their own -
+     * a variation selector widens the base it joins, a joiner does not. The whole chain that
+     * continues the cell has to be measured with it: a style boundary can split one cluster of the
+     * plain text into several clusters of a styled value, and the joiner that claims nothing of its
+     * own can sit in one span while the selector that widens the cell follows it in the next.
+     * Measuring only the first left the cell a column wider than the row was charged for.
      */
-    private int widenedByNextCluster(String cell, String following) {
-        if (following == null || TextMeasure.clusterColumns(following, policy) > 0
-                || !continuesCluster(cell, following)) {
-            return 0;
+    private int widenedByClusters(String cell, List<String> following) {
+        String grown = cell;
+        for (String cluster : following) {
+            grown += cluster;
         }
-        return Math.max(0, TextMeasure.clusterColumns(cell + following, policy)
+        return Math.max(0, TextMeasure.clusterColumns(grown, policy)
                 - TextMeasure.clusterColumns(cell, policy));
     }
 
     /**
      * Iterates the clusters of a styled value in order, with the style and link of the span each
-     * one came from, and can inspect the cluster after the current one without consuming it: the
+     * one came from, and can inspect the clusters after the current one without consuming them: the
      * wrap arithmetic has to know the columns of a whole cell before it commits it to a line.
      */
     private static final class ClusterCursor {
         private final List<StyledText.Span> spans;
+        private final WidthPolicy policy;
         private int spanIndex;
         private Iterator<String> clusters = Collections.emptyIterator();
         private Style spanStyle = Style.NONE;
@@ -812,12 +830,16 @@ public final class LayoutEngine {
         private Style aheadStyle = Style.NONE;
         private String aheadLink;
         private boolean hasAhead;
+        /** Clusters {@link #clustersContinuing} read ahead of the current one, in order. */
+        private List<Piece> buffered;
+        private int bufferedIndex;
         private String text;
         private Style style = Style.NONE;
         private String link;
 
-        ClusterCursor(StyledText value) {
+        ClusterCursor(StyledText value, WidthPolicy policy) {
             this.spans = value.spans();
+            this.policy = policy;
         }
 
         /** Consumes the next cluster; false once the value is spent. */
@@ -841,6 +863,47 @@ public final class LayoutEngine {
             return ahead;
         }
 
+        /**
+         * The clusters after the current one that continue {@code cell} as one cluster of the
+         * value's plain text while claiming no column of their own, in order, without consuming
+         * them. A style boundary can split one cluster of the plain text into a run of a value's
+         * clusters, so the run - not just the cluster behind the current one - is what shows how
+         * wide the cell it continues ends up. They stay in the cursor: the caller reads them back
+         * with {@link #next()} once the cell they widen is committed to a line.
+         */
+        List<String> clustersContinuing(String cell) {
+            List<String> chain = null;
+            String grown = cell;
+            while (hasAhead || fetchFromSource()) {
+                if (TextMeasure.clusterColumns(ahead, policy) > 0
+                        || !continuesCluster(grown, ahead)) {
+                    break;
+                }
+                if (chain == null) {
+                    chain = new ArrayList<>(2);
+                    if (buffered == null) {
+                        buffered = new ArrayList<>(2);
+                    } else {
+                        // The buffer is empty here: everything it held was delivered before the
+                        // current cluster, which is the tab this scan follows.
+                        buffered.clear();
+                    }
+                    bufferedIndex = 0;
+                }
+                chain.add(ahead);
+                buffered.add(new Piece(ahead, aheadStyle, aheadLink));
+                hasAhead = false;
+                grown += ahead;
+            }
+            if (chain != null && hasAhead) {
+                // The scan stopped at a cluster that does not continue the cell. It was read past
+                // the chain, so it queues behind it and is delivered in the value's own order.
+                buffered.add(new Piece(ahead, aheadStyle, aheadLink));
+                hasAhead = false;
+            }
+            return chain == null ? List.of() : chain;
+        }
+
         String text() {
             return text;
         }
@@ -854,6 +917,19 @@ public final class LayoutEngine {
         }
 
         private boolean fetch() {
+            if (buffered != null && bufferedIndex < buffered.size()) {
+                Piece piece = buffered.get(bufferedIndex++);
+                ahead = piece.text();
+                aheadStyle = piece.style();
+                aheadLink = piece.link();
+                hasAhead = true;
+                return true;
+            }
+            return fetchFromSource();
+        }
+
+        /** Reads the next cluster of the value's spans, ignoring anything a scan read ahead. */
+        private boolean fetchFromSource() {
             while (!clusters.hasNext()) {
                 if (spanIndex >= spans.size()) {
                     return false;
