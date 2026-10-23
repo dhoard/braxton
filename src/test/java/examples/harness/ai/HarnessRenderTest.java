@@ -104,4 +104,42 @@ class HarnessRenderTest {
                     assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(limit));
         }
     }
+
+    @Test
+    void aSelectorAfterASpaceKeepsTheCellsItsRowMeasures() {
+        // A variation selector with no base of its own - one whose base glyph was lost when the text
+        // was copied - continues the space in front of it and makes that cell two columns wide.
+        // The run after the space was measured on its own, which charges the selector nothing, so
+        // the row came back a cell wider than the width it wrapped to and pad() cut the "CD" behind
+        // it with an ellipsis that was never in the text.
+        assertThat(HarnessRender.wrap("a \uFE0FCD", 4)).containsExactly("a \uFE0F", "CD");
+        assertThat(HarnessRender.wrap("a \uFE0FCD", 5)).containsExactly("a \uFE0FCD");
+        for (int width = 1; width <= 8; width++) {
+            // The widest cell of this text is the space the selector widens: two columns.
+            int bound = Math.max(width, 2);
+            List<String> lines = HarnessRender.wrap("a \uFE0FCD", width);
+            assertThat(lines).as("width %d", width).allSatisfy(line ->
+                    assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(bound));
+            assertThat(String.join("", lines).replace(" ", "")).as("width %d", width)
+                    .isEqualTo("a\uFE0FCD");
+            assertThat(lines).as("width %d", width).noneMatch(line -> line.contains("\u2026"));
+        }
+    }
+
+    @Test
+    void aSelectorAfterIndentationKeepsTheCellsItsRowMeasures() {
+        // The same under-count after an indent or an expanded tab: the indent is not content, but the
+        // cell it ends with is still the one the selector widens.
+        assertThat(HarnessRender.wrap("  \uFE0F", 2)).allSatisfy(line ->
+                assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(2));
+        for (int width = 1; width <= 8; width++) {
+            int bound = Math.max(width, 2);
+            List<String> lines = HarnessRender.wrap("    \uFE0Fx", width);
+            assertThat(lines).as("width %d", width).allSatisfy(line ->
+                    assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(bound));
+            assertThat(String.join("", lines).replace(" ", "")).as("width %d", width)
+                    .isEqualTo("\uFE0Fx");
+            assertThat(lines).as("width %d", width).noneMatch(line -> line.contains("\u2026"));
+        }
+    }
 }

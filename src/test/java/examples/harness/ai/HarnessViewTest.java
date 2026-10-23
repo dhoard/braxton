@@ -236,6 +236,23 @@ class HarnessViewTest {
     }
 
     @Test
+    void aUserMessageWithABaselessSelectorKeepsItsTextInThePill() {
+        // The pill paints every wrapped row as " " + pad(row, cols - 2) + " ", so a row that costs
+        // more than cols - 2 cells is cut with an ellipsis and the user's own characters go with it.
+        HarnessState selector = HarnessState.initial(new Size(14, 6), "~/Development/braxton",
+                List.of()).withEntries(List.of(new HarnessEntry.User("a \uFE0FCD tail")));
+        HarnessState unmarked = HarnessState.initial(new Size(14, 6), "~/Development/braxton",
+                List.of()).withEntries(List.of(new HarnessEntry.User("a CD tail")));
+        List<String> marked = lines(selector);
+        assertThat(String.join("\n", marked)).contains("CD");
+        long cut = marked.stream().filter(line -> line.contains("\u2026")).count();
+        long cutWithoutSelector = lines(unmarked).stream()
+                .filter(line -> line.contains("\u2026")).count();
+        assertThat(cut).as("a lost selector must not cost the pill an ellipsis")
+                .isEqualTo(cutWithoutSelector);
+    }
+
+    @Test
     void tinyViewportsStillRenderExactlyTheirHeight() {
         HarnessState small = state("").withViewport(new Size(8, 40));
         assertThat(HarnessView.renderLines(small)).hasSize(8);

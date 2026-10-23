@@ -38,7 +38,10 @@ import io.github.dhoard.braxton.style.TextMeasure;
 class HarnessRenderPropertyTest {
 
     private static final String[] WORDS = {
-        "a", "bb", "ccc", "dddd", "\u65E5", "\u65E5\u672C", "e\u0301", "tool_read(path)", "==>"
+        "a", "bb", "ccc", "dddd", "\u65E5", "\u65E5\u672C", "e\u0301", "tool_read(path)", "==>",
+        // A variation selector with no base of its own, before and after a base: it joins the cell
+        // in front of it, which is the class of character the width bound used to miss.
+        "\uFE0F", "\uFE0Fx", "x\uFE0Fy"
     };
 
     private static String randomText(Random random) {

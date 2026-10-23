@@ -55,7 +55,14 @@ final class HarnessRender {
         return PasteSanitizer.plainText(text).replace("\t", "    ");
     }
 
-    /** Wraps plain text to {@code width} visible cells, preserving words and leading indentation. */
+    /**
+     * Wraps plain text to {@code width} visible cells, preserving words and leading indentation.
+     *
+     * <p>No row costs more than {@code width} cells unless one grapheme cluster of the text is
+     * itself wider than that: a cluster cannot be split, so it starts a row of its own. Callers
+     * such as the user-message pill in {@link HarnessProjection} pad every row to this width, so an
+     * over-wide row costs real text.</p>
+     */
     static List<String> wrap(String text, int width) {
         int limit = Math.max(1, width);
         List<String> out = new ArrayList<>();
@@ -87,6 +94,26 @@ final class HarnessRender {
                 index++;
             }
             int runWidth = runColumns(line, start, index);
+            // What the row would cost with the whole run on it, which is not always currentWidth
+            // plus the run's own columns: the run can continue the cell the row already ends with.
+            int rowWidth = appendedColumns(current, currentWidth, line, start, index);
+            if (!spaces && rowWidth > limit) {
+                // A cluster that claims no cell of its own - a variation selector whose base glyph
+                // was lost when the text was copied, a joiner - belongs to the cell in front of it.
+                // It cannot wrap away from that cell, so it stays on this row and the rest of the
+                // run is wrapped below.
+                int cellEnd = joinedCellEnd(current, line, start);
+                if (cellEnd > start) {
+                    int cellWidth = appendedColumns(current, currentWidth, line, start, cellEnd);
+                    if (cellWidth <= limit) {
+                        current.append(line, start, cellEnd);
+                        currentWidth = cellWidth;
+                        hasContent = true;
+                        index = cellEnd;
+                        continue;
+                    }
+                }
+            }
             if (spaces) {
                 if (currentWidth == 0) {
                     // The run is whitespace, so clip it instead of truncating it: truncate marks a
@@ -94,9 +121,9 @@ final class HarnessRender {
                     String leading = " ".repeat(Math.min(runWidth, limit));
                     current.append(leading);
                     currentWidth = visibleLength(leading);
-                } else if (currentWidth + runWidth <= limit) {
+                } else if (rowWidth <= limit) {
                     current.append(line, start, index);
-                    currentWidth += runWidth;
+                    currentWidth = rowWidth;
                 } else {
                     flush(current, out);
                     currentWidth = 0;
@@ -109,25 +136,28 @@ final class HarnessRender {
                     currentWidth = 0;
                 }
                 for (String cluster : TextMeasure.graphemes(line.substring(start, index))) {
-                    int clusterWidth = TextMeasure.columns(cluster);
-                    if (currentWidth > 0 && currentWidth + clusterWidth > limit) {
+                    int joinedWidth = appendedColumns(current, currentWidth, cluster, 0,
+                            cluster.length());
+                    if (currentWidth > 0 && joinedWidth > limit) {
                         if (hasContent) {
                             flush(current, out);
                         }
                         current.setLength(0);
                         currentWidth = 0;
+                        // The row is empty, so the cluster joins nothing of its own.
+                        joinedWidth = runColumns(cluster, 0, cluster.length());
                     }
                     current.append(cluster);
-                    currentWidth += clusterWidth;
+                    currentWidth = joinedWidth;
                     hasContent = true;
                 }
             } else if (currentWidth == 0) {
                 current.append(line, start, index);
-                currentWidth = runWidth;
+                currentWidth = rowWidth;
                 hasContent = true;
-            } else if (currentWidth + runWidth <= limit) {
+            } else if (rowWidth <= limit) {
                 current.append(line, start, index);
-                currentWidth += runWidth;
+                currentWidth = rowWidth;
                 hasContent = true;
             } else {
                 // Indentation alone is not content: a word that does not fit after it starts the
@@ -143,6 +173,56 @@ final class HarnessRender {
             }
         }
         flush(current, out);
+    }
+
+    /**
+     * The index just past the clusters at the head of the run that continue the cell the row being
+     * built ends with, or {@code start} when the run opens a cell of its own.
+     *
+     * <p>A cluster with no base of its own claims no cell: a variation selector whose base glyph
+     * was lost when the text was copied or scraped continues the space that stands in for that
+     * base, and widens it. Wrapping that selector to the next row with the run behind it charges
+     * this row for a column it never pays and leaves the selector to widen the first cell it finds
+     * on the next one.</p>
+     */
+    private static int joinedCellEnd(StringBuilder current, String line, int start) {
+        char first = line.charAt(start);
+        if (current.length() == 0 || first >= 0x20 && first <= 0x7E) {
+            // A printable ASCII character is never an extend, format, or spacing mark, so it always
+            // opens a cell of its own and continues nothing.
+            return start;
+        }
+        int cellEnd = TextMeasure.boundaryAfter(line, start);
+        int cellStart = TextMeasure.previousBoundary(current.toString(), current.length());
+        if (TextMeasure.graphemeCount(
+                current.substring(cellStart) + line.substring(start, cellEnd)) != 1) {
+            return start;
+        }
+        return cellEnd;
+    }
+
+    /**
+     * The columns the row built so far would occupy once {@code text[start,end)} follows it. A run
+     * is never measured on its own: a variation selector with no base of its own continues the cell
+     * in front of it and makes that cell two columns wide, and those are the columns the row costs
+     * once painted. Charging the run for the columns it holds alone left rows a cell wider than the
+     * width they were wrapped to, and {@link #pad} cut the real text they overflowed with an
+     * ellipsis.
+     */
+    private static int appendedColumns(StringBuilder current, int currentWidth, String text,
+            int start, int end) {
+        char first = text.charAt(start);
+        if (first >= 0x20 && first <= 0x7E) {
+            // A printable ASCII character is never an extend, format, or spacing mark, so it always
+            // starts a cell of its own: nothing across the gap joins and the two widths add up.
+            return currentWidth + runColumns(text, start, end);
+        }
+        if (current.length() == 0) {
+            return runColumns(text, start, end);
+        }
+        StringBuilder joined = new StringBuilder(current.length() + end - start);
+        joined.append(current).append(text, start, end);
+        return visibleLength(joined.toString());
     }
 
     /** Measure ordinary word/space runs without allocating one substring for every word. */
