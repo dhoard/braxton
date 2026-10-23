@@ -36,6 +36,7 @@ import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.StyledText;
+import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 
@@ -586,6 +587,53 @@ class LayoutEngineTest {
         assertThat(screen.plainLine(0)).isEqualTo("  tall");
         assertThat(screen.plainLine(1)).isEmpty();
         assertThat(screen.plainLine(3)).isEqualTo("     s");
+    }
+
+    @Test
+    void aRoutingWrapperDoesNotChangeAnEndAlignedFixedChildsContentWidth() {
+        // Focused and Keyed route messages and reserve no cells of their own, so a Fixed child they
+        // wrap keeps the content width it has without them: on the cross axis the routing wrapper
+        // is invisible, exactly as the Fixed it wraps already is.
+        View<Object> direct = Views.fixed(1, Views.text("tall"));
+        View<Object> focused = Views.focus(ElementId.of("field"), true, direct);
+        View<Object> keyed = Views.keyed(List.of(), direct, List.of());
+        View<Object> nested = Views.focus(ElementId.of("outer"), false, keyed);
+        for (View<Object> child : List.of(direct, focused, keyed, nested)) {
+            View<Object> view = Views.column(Alignment.END, List.of(child, Views.text("s")));
+            assertThat(engine.intrinsicWidth(view, 6)).as("width of %s", child).isEqualTo(4);
+            Screen screen = paint(view, 4, 6);
+            assertThat(screen.plainLine(0)).as("row 0 of %s", child).isEqualTo("  tall");
+            assertThat(screen.plainLine(1)).as("row 1 of %s", child).isEqualTo("     s");
+            assertThat(screen.plainLine(2)).as("row 2 of %s", child).isEmpty();
+        }
+        // The focus region is the rectangle the child painted, not the cell Fixed reserves.
+        LayoutEngine.Layout layout = engine.layout(
+                Views.column(Alignment.END, List.of(focused, Views.text("s"))), new Rect(0, 0, 4, 6));
+        assertThat(layout.regions()).hasSize(1);
+        assertThat(layout.regions().get(0).bounds()).isEqualTo(new Rect(0, 2, 1, 4));
+    }
+
+    @Test
+    void aRoutingWrapperDoesNotChangeARowHoldingAFixedChildsContentHeight() {
+        // The same wrapper must also stay out of the other axis: the row reserves the height its
+        // children paint, so a routing wrapper over a Fixed child cannot add a blank row beneath it.
+        View<Object> direct = Views.row(Views.fixed(3, Views.text("tall")), Views.text("X"));
+        View<Object> focused = Views.row(
+                Views.focus(ElementId.of("field"), true, Views.fixed(3, Views.text("tall"))),
+                Views.text("X"));
+        View<Object> keyed = Views.row(
+                Views.keyed(List.of(), Views.fixed(3, Views.text("tall")), List.of()),
+                Views.text("X"));
+        for (View<Object> row : List.of(direct, focused, keyed)) {
+            assertThat(engine.intrinsicHeight(row, 12)).as("height of %s", row).isEqualTo(2);
+            View<Object> view = Views.column(row, Views.text("z"));
+            assertThat(engine.intrinsicHeight(view, 12)).as("height of %s in a column", row)
+                    .isEqualTo(3);
+            Screen screen = paint(view, 4, 12);
+            assertThat(screen.plainLine(0)).as("row 0 of %s", row).isEqualTo("talX");
+            assertThat(screen.plainLine(1)).as("row 1 of %s", row).isEqualTo("l");
+            assertThat(screen.plainLine(2)).as("row 2 of %s", row).isEqualTo("z");
+        }
     }
 
     @Test

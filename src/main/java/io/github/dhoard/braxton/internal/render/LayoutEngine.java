@@ -453,7 +453,9 @@ public final class LayoutEngine {
     /**
      * The content that decides a child's cross axis. {@link View.Fixed} reserves and {@link View.Grow}
      * takes main-axis space from its parent, so neither wrapper's own measurement describes the
-     * cross axis; only what the wrapper contains does.
+     * cross axis; only what the wrapper contains does. {@link View.Focused} and {@link View.Keyed}
+     * are routing structure and reserve nothing, so they are transparent too: a routing wrapper
+     * must not change what the child it wraps measures on either axis.
      */
     private static View<?> crossAxis(View<?> child) {
         View<?> content = child;
@@ -462,6 +464,10 @@ public final class LayoutEngine {
                 content = fixed.child();
             } else if (content instanceof View.Grow<?> grow) {
                 content = grow.child();
+            } else if (content instanceof View.Keyed<?> keyed) {
+                content = keyed.child();
+            } else if (content instanceof View.Focused<?> focused) {
+                content = focused.child();
             } else {
                 return content;
             }
