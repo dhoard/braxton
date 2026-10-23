@@ -101,6 +101,9 @@ class TextMeasureStreamingTest {
                         && io.github.dhoard.braxton.internal.text.Unicode16Width.isWide(codePoint);
             }
         }
-        return !base && !mark ? 0 : !base ? 1 : wide ? 2 : 1;
+        // A cluster with no base of its own is painted behind the dotted circle that stands in for
+        // that base, so a selector in that cluster widens the circle the way it widens any other
+        // base: the cell occupies the two columns the painted text measures, not one.
+        return !base && !mark ? 0 : wide ? 2 : 1;
     }
 }

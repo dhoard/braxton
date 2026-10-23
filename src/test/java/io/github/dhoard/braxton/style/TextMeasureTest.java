@@ -57,6 +57,22 @@ class TextMeasureTest {
     }
 
     @Test
+    void aSelectorInABaselessClusterIsMeasuredAsTheDottedCellItIsPaintedIn() {
+        // Painting stands the dotted circle in for the base a cluster does not have, so a selector
+        // inside such a cluster widens that circle the way it widens any other base: the cell is
+        // two columns, not the one the bare cluster measures. Charged one column, every grid widget
+        // padded the row one column short and painted a column past its own column boundary.
+        for (String cluster : new String[] {"\u0301\uFE0F", "\uFE0F\u0301", "\u0301\u0301\uFE0F"}) {
+            assertThat(TextMeasure.columns(cluster))
+                    .as("columns of the base-less cluster and of the dotted cell painted for it")
+                    .isEqualTo(2)
+                    .isEqualTo(TextMeasure.columns(TextMeasure.DOTTED_CIRCLE + cluster));
+        }
+        // Without the selector the dotted cell keeps the one column of the circle.
+        assertThat(TextMeasure.columns("\u0301\uFE0E")).isEqualTo(1);
+    }
+
+    @Test
     void asciiIsOneColumn() {
         assertThat(TextMeasure.columns("abc")).isEqualTo(3);
         assertThat(TextMeasure.columns("")).isZero();

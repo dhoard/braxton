@@ -150,6 +150,8 @@ class TableSelectorTest {
             "\u200D\u0301a\u200D",
             "\uFE0F",              // variation selector 16 (wide presentation)
             "\uFE0Fx",
+            "\u0301\uFE0F",          // baseless cluster the selector widens: the dotted circle pays
+            "\uFE0F\u0301",          // the same cluster with the selector first
             "\uFE0E",              // variation selector 15 (text presentation)
             "\uFE0Ex",
             "\u200B",              // zero-width space
@@ -259,6 +261,28 @@ class TableSelectorTest {
         assertThat(invertedColumns(screen, 2))
                 .as("inverted columns of the mark cell, painted as %s", paintedCells(screen, 2))
                 .isEqualTo(4);
+    }
+
+    /**
+     * The reported selector: one header column and a cell that opens with a base-less cluster the
+     * selector widens. The dotted circle the paint path stands in for the missing base is two
+     * columns wide, so the data row occupies the columns of the header instead of one more than it.
+     */
+    @Test
+    void aBaselessClusterTheSelectorWidensKeepsTheHeaderAndDataRowsInOneGrid() {
+        RenderedScreen screen = new ScreenRenderer().screen(TableSelector.view(ElementId.of("table"),
+                new TableSelector.State(List.of("h"), List.of(List.of("\u0301\uFE0F")), 0, 0), true,
+                Style.NONE.withInvert(), Style.NONE, Style.NONE.withBold(),
+                action -> action.getClass().getSimpleName()), new Viewport(2, 8));
+        assertThat(paintedColumns(screen, 0))
+                .as("painted columns of the header, painted as %s", paintedCells(screen, 0))
+                .isEqualTo(4);
+        assertThat(paintedColumns(screen, 1))
+                .as("painted columns of the data row, painted as %s", paintedCells(screen, 1))
+                .isEqualTo(4);
+        assertThat(lastPaintedColumn(screen, 1))
+                .as("right edge of the data row, painted as %s", paintedCells(screen, 1))
+                .isEqualTo(lastPaintedColumn(screen, 0));
     }
 
     /** Every baseless cell form keeps the grid rectangular, in either column. */

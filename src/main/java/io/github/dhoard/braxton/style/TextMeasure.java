@@ -82,7 +82,15 @@ public final class TextMeasure {
         return total;
     }
 
-    /** Columns occupied by one grapheme cluster. */
+    /**
+     * Columns occupied by one grapheme cluster, as the cell it is painted in measures.
+     *
+     * <p>A cluster with no base character of its own is painted behind {@link #DOTTED_CIRCLE}, the
+     * base that stands in for the one it lacks, so a selector in that cluster widens the circle the
+     * way it widens any other base and the cell occupies the two columns the painted text measures
+     * - not the one column the bare cluster does. Charging that cell one column left every row a
+     * grid widget painted one column wider than the width it was measured at.</p>
+     */
     public static int clusterColumns(String cluster, WidthPolicy policy) {
         if (cluster.isEmpty()) {
             return 0;
@@ -122,9 +130,6 @@ public final class TextMeasure {
         }
         if (!base && !mark) {
             return 0;
-        }
-        if (!base) {
-            return 1;
         }
         return wide ? 2 : 1;
     }

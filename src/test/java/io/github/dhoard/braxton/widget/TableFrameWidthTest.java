@@ -64,6 +64,8 @@ class TableFrameWidthTest {
             "\u200D\u0301a\u200D",
             "\uFE0F",              // variation selector 16 (wide presentation)
             "\uFE0Fx",
+            "\u0301\uFE0F",          // baseless cluster the selector widens: the dotted circle pays
+            "\uFE0F\u0301",          // the same cluster with the selector first
             "\uFE0E",              // variation selector 15 (text presentation)
             "\uFE0Ex",
             "\u200B",              // zero-width space
@@ -253,6 +255,76 @@ class TableFrameWidthTest {
                 .row(StyledText.plain("\u0301"), StyledText.plain("bb"))
                 .row(StyledText.plain("\u65E5"), StyledText.plain("c")),
                 List.of("+------+", "|\u0301  bb  |", "|\u65E5 c  |", "+------+"));
+    }
+
+    /**
+     * The reported table: rows "ab" and a base-less cluster the selector widens. Painting stands a
+     * dotted circle in for the base the cluster lacks and the selector makes that circle two
+     * columns, so the cell occupies the two columns the row measures and both rows end in the same
+     * column. Charged the one column of the bare cluster, the row's second column started one
+     * column left and the row painted a column past the width its own plain text measured.
+     */
+    @Test
+    void aRowOpeningWithABaselessClusterTheSelectorWidensKeepsItsColumnBoundaries() {
+        Table table = Table.of()
+                .row(StyledText.plain("ab"), StyledText.plain("cd"))
+                .row(StyledText.plain("\u0301\uFE0F"), StyledText.plain("x"));
+        assertThat(table.columnWidths()).containsExactly(4, 4);
+        List<String> lines = table.renderLines().stream().map(StyledText::plainText).toList();
+        assertThat(lines).as("rows of the table")
+                .containsExactly("ab  cd  ", "\u0301\uFE0F  x   ");
+        assertThat(lines.stream().map(TextMeasure::columns).distinct())
+                .as("rows %s", lines.stream().map(TableFrameWidthTest::show).toList())
+                .hasSize(1);
+        RenderedScreen screen = new ScreenRenderer().screen(table.view(), new Viewport(2, 8));
+        assertThat(paintedCells(screen, 0)).as("cells painted for the ASCII row")
+                .containsExactly("a", "b", " ", " ", "c", "d", " ", " ");
+        assertThat(paintedCells(screen, 1))
+                .as("cells painted for the row that opens with the base-less cluster")
+                .containsExactly(TextMeasure.DOTTED_CIRCLE + "\u0301\uFE0F", "<continuation>",
+                        " ", " ", "x", " ", " ", " ");
+    }
+
+    /**
+     * The same cell one column in, inside a frame: the second column of the affected row starts
+     * where the second column of the row above starts, and every row ends in the last column of the
+     * top edge.
+     */
+    @Test
+    void aFrameAroundABaselessClusterTheSelectorWidensKeepsEveryColumnInPlace() {
+        Table table = Table.of().border(FRAME)
+                .row(StyledText.plain("ab"), StyledText.plain("cd"))
+                .row(StyledText.plain("\u0301\uFE0F"), StyledText.plain("x"));
+        List<String> framed = rows(table.render().plainText());
+        assertThat(framed).as("framed rows").containsExactly("+--------+", "|ab  cd  |",
+                "|" + "\u0301\uFE0F" + "  x    |", "+--------+");
+        int width = TextMeasure.columns(framed.get(0));
+        RenderedScreen screen = new ScreenRenderer().screen(table.view(),
+                new Viewport(framed.size(), width));
+        assertThat(paintedCells(screen, 1)).as("cells painted for the ASCII row")
+                .containsExactly("|", "a", "b", " ", " ", "c", "d", " ", " ", "|");
+        // The mark joins the frame's left edge and the selector widens that edge cell, so the row
+        // is charged the columns it really paints rather than one more than the frame drew.
+        assertThat(paintedCells(screen, 2))
+                .as("cells painted for the row that opens with the base-less cluster")
+                .containsExactly("|" + "\u0301\uFE0F", "<continuation>", " ", " ", "x", " ", " ",
+                        " ", " ", "|");
+        assertFrameIsPaintedColumnByColumn(table, framed);
+    }
+
+    /**
+     * A control such as a zero-width space keeps the base-less cluster in a cell of its own instead
+     * of letting it join the cell before it, so the same widening happens one cell in.
+     */
+    @Test
+    void aFrameAroundAControlAndABaselessClusterTheSelectorWidensCloses() {
+        Table table = Table.of().border(FRAME)
+                .row(StyledText.plain("ab"))
+                .row(StyledText.plain("\u200B\u0301\uFE0F"));
+        List<String> framed = rows(table.render().plainText());
+        assertThat(framed).as("framed rows").containsExactly(
+                "+----+", "|ab  |", "|\u200B\u0301\uFE0F  |", "+----+");
+        assertFrameIsPaintedColumnByColumn(table, framed);
     }
 
     /**
