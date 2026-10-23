@@ -537,7 +537,13 @@ public final class LayoutEngine {
         int nextCol = startCol;
         int limit = startCol + cols;
         // The cell being assembled: the plain text it paints. A cell is only painted once no later
-        // cluster continues it, because a continuation can widen or narrow it.
+        // cluster continues it, because a continuation can widen or narrow it. Its columns are
+        // therefore only known once it is whole, and that is where the row is tested for room:
+        // wrapLines charged the row for the same whole cluster, reading the clusters that continue
+        // it across the span boundary, while a cell started from one span's cluster can be narrower
+        // or wider by the time it ends. Testing the width it started with gave up on a cell that
+        // the row was measured to hold - a wide base whose U+FE0E arrives in the next span is one
+        // column, not two.
         StringBuilder cell = null;
         StringBuilder leading = null;
         int cellCol = startCol;
@@ -578,13 +584,17 @@ public final class LayoutEngine {
                     continue;
                 }
                 if (cell != null) {
+                    // This cluster does not continue the cell before it, so that cell is whole and
+                    // its final width is the width the row was charged for. It is the cell the row
+                    // has room for or not, and a cell that has none is not painted half: the rest of
+                    // the row goes the way wrapLines sent it, to the next line.
+                    if (nextCol + cellWidth > limit) {
+                        return;
+                    }
                     screen.put(row, cellCol, paintedText(cell, leading), cellStyle, cellLink,
                             cellWidth);
                     nextCol = cellCol + cellWidth;
                     leading = null;
-                }
-                if (nextCol + width > limit) {
-                    return;
                 }
                 cellCol = nextCol;
                 cellWidth = width;
@@ -593,7 +603,7 @@ public final class LayoutEngine {
                 cell = new StringBuilder(grapheme);
             }
         }
-        if (cell != null) {
+        if (cell != null && nextCol + cellWidth <= limit) {
             screen.put(row, cellCol, paintedText(cell, leading), cellStyle, cellLink, cellWidth);
         }
     }

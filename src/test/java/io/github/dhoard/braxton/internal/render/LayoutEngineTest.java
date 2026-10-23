@@ -222,6 +222,70 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aSelectorSplitAtTheLineEdgeThatNarrowsItsCellKeepsTheColumnsTheRowMeasures() {
+        // U+FE0E asks for the text form of the wide base before it, so the joined cluster is one
+        // column where the base alone is two. wrapLines reads the selector across the span
+        // boundary and charges the row for the joined cluster, but paintLine tested the fit with
+        // the width of the base inside its own span and gave up on the rest of the row: the row
+        // measured to hold the glyph was painted without it, and a frame one column wider showed
+        // it. The cell's columns are only final once every cluster that continues it has joined.
+        StyledText split = StyledText.concat(StyledText.of("abc", Style.NONE),
+                StyledText.of("\u4E2D", Style.NONE.withBold()),
+                StyledText.of("\uFE0E", Style.NONE));
+        StyledText plain = StyledText.plain(split.plainText());
+        assertThat(split.columns()).isEqualTo(4);
+        assertThat(engine.wrapLines(split, 4)).hasSize(1);
+        assertThat(engine.intrinsicWidth(Views.text(split), 4)).isEqualTo(4);
+        assertThat(engine.intrinsicHeight(Views.text(split), 4)).isEqualTo(1);
+        Screen screen = paint(Views.text(split), 1, 4);
+        assertThat(screen.cell(0, 3).text()).isEqualTo("\u4E2D\uFE0E");
+        assertThat(screen.plainLine(0)).isEqualTo("abc\u4E2D\uFE0E");
+        assertThat(paintedCells(screen))
+                .isEqualTo(paintedCells(paint(Views.text(plain), 1, 4)));
+    }
+
+    @Test
+    void aNarrowingSelectorSplitFromItsBaseKeepsTheRestOfTheRow() {
+        // The dropped cell is not always the row's last: the narrowed cell sits in the middle of
+        // this value and the row after it holds the tail. Every width from one to the value's own
+        // columns has to paint the cells wrapLines charged for it, so the same plain text paints
+        // the same cells whatever spans it arrived in.
+        StyledText split = StyledText.concat(StyledText.of("abc", Style.NONE),
+                StyledText.of("\u4E2D", Style.NONE.withBold()),
+                StyledText.of("\uFE0E", Style.NONE),
+                StyledText.of("xy", Style.NONE.withBold()));
+        StyledText plain = StyledText.plain(split.plainText());
+        assertThat(split.columns()).isEqualTo(6);
+        for (int cols = 1; cols <= 8; cols++) {
+            int rows = Math.max(1, engine.wrapLines(plain, cols).size());
+            assertThat(paintedCells(paint(Views.text(split), rows, cols)))
+                    .as("value \"%s\" at %d columns", split.plainText(), cols)
+                    .isEqualTo(paintedCells(paint(Views.text(plain), rows, cols)));
+        }
+        Screen screen = paint(Views.text(split), 2, 4);
+        assertThat(screen.plainLine(0)).isEqualTo("abc\u4E2D\uFE0E");
+        assertThat(screen.plainLine(1)).isEqualTo("xy");
+    }
+
+    @Test
+    void anEmojiAndItsTextPresentationSelectorSplitAcrossSpansStayOneCell() {
+        // The canonical use of U+FE0E: an emoji that terminals draw two columns wide is asked for
+        // its text form, which is one. The selector arrives in the run after the emoji, so the
+        // cell that fits the last column of this row is only known once the selector joins it.
+        StyledText split = StyledText.concat(StyledText.of("ab", Style.NONE),
+                StyledText.of("\uD83D\uDE42", Style.NONE.withBold()),
+                StyledText.of("\uFE0E", Style.NONE));
+        StyledText plain = StyledText.plain(split.plainText());
+        assertThat(split.columns()).isEqualTo(3);
+        assertThat(engine.intrinsicHeight(Views.text(split), 3)).isEqualTo(1);
+        Screen screen = paint(Views.text(split), 1, 3);
+        assertThat(screen.cell(0, 2).text()).isEqualTo("\uD83D\uDE42\uFE0E");
+        assertThat(screen.plainLine(0)).isEqualTo("ab\uD83D\uDE42\uFE0E");
+        assertThat(paintedCells(screen))
+                .isEqualTo(paintedCells(paint(Views.text(plain), 1, 3)));
+    }
+
+    @Test
     void aControlBeforeABaselessClusterKeepsTheColumnTheMarkMeasures() {
         // The measurement breaks the cluster after a control character such as a zero-width space,
         // so the mark that follows is a cluster of its own and its column is counted. Joining it
@@ -393,6 +457,11 @@ class LayoutEngineTest {
                         StyledText.of("\u200B\u0301", bold)),
                 StyledText.concat(StyledText.of("\uD83D\uDE00", Style.NONE),
                         StyledText.of("\u00AD\u0301", bold)),
+                StyledText.concat(StyledText.of("abc", Style.NONE),
+                        StyledText.of("\u4E2D", bold), StyledText.of("\uFE0E", Style.NONE)),
+                StyledText.concat(StyledText.of("ab", Style.NONE),
+                        StyledText.of("\uD83D\uDE42", bold),
+                        StyledText.of("\uFE0E", Style.NONE)),
                 StyledText.concat(StyledText.of("\t", Style.NONE), StyledText.of("\u0301", bold)),
                 StyledText.concat(StyledText.of("a\t", Style.NONE),
                         StyledText.of("\uFE0Fx", bold)),
