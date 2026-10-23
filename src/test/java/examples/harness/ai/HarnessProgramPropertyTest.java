@@ -36,7 +36,7 @@ import io.github.dhoard.braxton.app.InitContext;
 import io.github.dhoard.braxton.app.Transition;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.terminal.TerminalCapabilities;
+import io.github.dhoard.braxton.app.TerminalCapabilities;
 import io.github.dhoard.braxton.widget.EditorAction;
 
 /**
@@ -100,8 +100,7 @@ class HarnessProgramPropertyTest {
         for (int iteration = 0; iteration < 300; iteration++) {
             HarnessProgram program = new HarnessProgram(HarnessProgramPropertyTest::transcript,
                     "/tmp/project", List.of("warning"));
-            HarnessState state = program.init(new InitContext(new Viewport(12, 40),
-                    TerminalCapabilities.PLAIN, 0L, Map.of())).model();
+            HarnessState state = program.init(new InitContext(new Viewport(12, 40), TerminalCapabilities.PLAIN)).model();
             for (int step = 0; step < 40; step++) {
                 HarnessMsg message = randomMessage(random);
                 Transition<HarnessState, HarnessMsg> transition;

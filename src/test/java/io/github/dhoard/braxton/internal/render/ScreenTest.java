@@ -77,7 +77,7 @@ class ScreenTest {
         // The cleared half is a blank cell, so it still occupies its column in the row and in
         // the bytes the terminal receives.
         assertThat(screen.plainLine(0)).isEqualTo(" x");
-        assertThat(AnsiEncoder.encodeRow(screen, 0)).endsWith(" x  \u001B[0m");
+        assertThat(AnsiEncoder.encodeRow(screen, 0, true)).endsWith(" x  \u001B[0m");
     }
 
     @Test

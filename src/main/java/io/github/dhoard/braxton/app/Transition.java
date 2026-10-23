@@ -39,10 +39,6 @@ public record Transition<M, Msg>(M model, Command<Msg> command) {
         Objects.requireNonNull(command, "command");
     }
 
-    public static <M, Msg> Transition<M, Msg> stay(M model) {
-        return new Transition<>(model, Command.none());
-    }
-
     public static <M, Msg> Transition<M, Msg> next(M model) {
         return new Transition<>(model, Command.none());
     }

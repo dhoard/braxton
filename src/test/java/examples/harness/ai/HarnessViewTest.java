@@ -38,7 +38,7 @@ import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.view.View;
 
 import io.github.dhoard.braxton.internal.render.LayoutEngine;
-import io.github.dhoard.braxton.internal.render.Screen;
+import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Colors;
@@ -181,7 +181,7 @@ class HarnessViewTest {
 
     @Test
     void paletteIsCarriedByCellStylesRatherThanInlineAnsi() {
-        Screen screen = new ScreenRenderer().screen(HarnessView.view(state("")),
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")),
                 new Viewport(40, 120));
         boolean userBackground = false;
         boolean noticeColor = false;
@@ -206,7 +206,7 @@ class HarnessViewTest {
     @Test
     void composerRowAndCaretCarryTheInputAreaBackground() {
         HarnessState state = state("hi");
-        Screen screen = new ScreenRenderer().screen(HarnessView.view(state),
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state),
                 new Viewport(40, 120));
         int composerRow = HarnessProjection.allocate(40, state.editorRows()).transcript()
                 + HarnessProjection.allocate(40, state.editorRows()).gap()
@@ -376,7 +376,7 @@ class HarnessViewTest {
         HarnessState warning = new HarnessState(HarnessState.Status.READY, List.of(), PROFILE,
                 warningUsage, 1_048_576, List.of(), 0, EditorState.empty(), 0, List.of(), null, 0L,
                 0L, 0L, 0L, 0L, new Size(24, 80), "", "~/braxton");
-        Screen screen = new ScreenRenderer().screen(HarnessView.view(warning),
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(warning),
                 new Viewport(24, 80));
         boolean yellow = false;
         boolean red = false;
@@ -384,7 +384,7 @@ class HarnessViewTest {
                 new HarnessTranscript.Usage(100, 50, 0, 100, 1_000_000, null), 1_048_576,
                 List.of(), 0, EditorState.empty(), 0, List.of(), null, 0L, 0L, 0L, 0L, 0L,
                 new Size(24, 80), "", "~/braxton");
-        Screen errorScreen = new ScreenRenderer().screen(HarnessView.view(error),
+        RenderedScreen errorScreen = new ScreenRenderer().screen(HarnessView.view(error),
                 new Viewport(24, 80));
         for (int row = 0; row < screen.rows(); row++) {
             for (int col = 0; col < screen.cols(); col++) {

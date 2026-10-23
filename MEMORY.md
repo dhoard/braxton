@@ -12,6 +12,10 @@ not an authoritative source of requirements; verify details against `PROJECT.md`
   measure-equals-paint width invariant (one painted cell per cluster of the plain text), why plain
   text contiguity - not "a cell was painted" - decides that, the known span-initial-extend
   divergence, and the quadratic-copy trap `ClippedLayoutCostTest` guards.
+- [Terminal platform support and native verification](memory/terminal-platform-support.md) - the
+  per-ABI session split (Linux poll, Darwin `select$DARWIN_EXTSN`), the Darwin termios/os.name
+  traps that forbid reusing the Linux backend, the atomic close/lifetime rules, and how to run the
+  opt-in PTY/pyte verifier plus which platform combinations have actually been verified.
 
 ## Maintenance
 

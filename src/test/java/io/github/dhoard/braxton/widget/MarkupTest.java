@@ -29,7 +29,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.dhoard.braxton.internal.render.Screen;
+import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
@@ -155,7 +155,7 @@ class MarkupTest {
                 assertThat(TextMeasure.columns(line)).as("line [%s]", line).isEqualTo(7));
         // Painted, the mark shares the cell of the gap before it, so the second cell's text still
         // starts in the column the other row starts its second cell in.
-        Screen screen = new ScreenRenderer().screen(io.github.dhoard.braxton.view.Views.text(parsed),
+        RenderedScreen screen = new ScreenRenderer().screen(io.github.dhoard.braxton.view.Views.text(parsed),
                 new Viewport(2, 12));
         assertThat(paintedColumn(screen, 0, 'x'))
                 .as("second cell column of row 0, rows painted to %d columns", screen.cols())
@@ -163,7 +163,7 @@ class MarkupTest {
     }
 
     /** The column {@code needle} was painted in on {@code row}, or -1 when it is not painted. */
-    private static int paintedColumn(Screen screen, int row, char needle) {
+    private static int paintedColumn(RenderedScreen screen, int row, char needle) {
         for (int column = 0; column < screen.cols(); column++) {
             if (screen.cell(row, column).text().indexOf(needle) >= 0) {
                 return column;

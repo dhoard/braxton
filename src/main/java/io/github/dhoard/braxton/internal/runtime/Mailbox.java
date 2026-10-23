@@ -43,24 +43,19 @@ import io.github.dhoard.braxton.layout.Size;
 public final class Mailbox {
 
     /** One item in the hand-off queue. */
-    public sealed interface Envelope permits AppMessage, Input, Resize, Close {
-    }
+    public sealed interface Envelope permits AppMessage, Input, Resize, Close {}
 
     /** An application message produced by routing, a command, or a source. */
-    public record AppMessage(Object payload) implements Envelope {
-    }
+    public record AppMessage(Object payload) implements Envelope {}
 
     /** Raw normalized input, routed later against the latest committed view. */
-    public record Input(InputEvent event) implements Envelope {
-    }
+    public record Input(InputEvent event) implements Envelope {}
 
     /** A measured terminal resize. */
-    public record Resize(Size size) implements Envelope {
-    }
+    public record Resize(Size size) implements Envelope {}
 
     /** A request to stop the runtime; generated inside the runtime or by a backend. */
-    public record Close(ExitResult result) implements Envelope {
-    }
+    public record Close(ExitResult result) implements Envelope {}
 
     /** Largest millisecond timeout that still converts to nanoseconds without overflowing. */
     private static final long MAX_WAIT_MILLIS = Long.MAX_VALUE / 1_000_000L;
@@ -71,6 +66,7 @@ public final class Mailbox {
     private final Condition notFull = lock.newCondition();
     private final int capacity;
     private volatile boolean closed;
+    private boolean woken;
 
     public Mailbox(int capacity) {
         this.capacity = Math.max(1, capacity);
@@ -128,7 +124,8 @@ public final class Mailbox {
         lock.lock();
         try {
             if (closed || queue.size() >= capacity) {
-                throw new IllegalStateException("runtime mailbox overflow (capacity " + capacity + ")");
+                throw new IllegalStateException(
+                        "runtime mailbox overflow (capacity " + capacity + ")");
             }
             queue.addLast(envelope);
             notEmpty.signal();
@@ -142,12 +139,24 @@ public final class Mailbox {
      *
      * @return the envelope, or null on timeout or when the mailbox is closed
      */
+    public void wake() {
+        if (lock.tryLock()) {
+            try {
+                woken = true;
+                notEmpty.signal();
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
     public Envelope poll(long timeoutMillis) throws InterruptedException {
         long remaining = waitNanos(timeoutMillis);
         lock.lockInterruptibly();
         try {
             while (queue.isEmpty()) {
-                if (closed || remaining <= 0L) {
+                if (closed || woken || remaining <= 0L) {
+                    woken = false;
                     return null;
                 }
                 remaining = notEmpty.awaitNanos(remaining);
@@ -178,6 +187,7 @@ public final class Mailbox {
 
     /** Nanoseconds to wait, clamped so a huge millisecond value cannot overflow the conversion. */
     private static long waitNanos(long timeoutMillis) {
-        return TimeUnit.MILLISECONDS.toNanos(Math.max(0L, Math.min(timeoutMillis, MAX_WAIT_MILLIS)));
+        return TimeUnit.MILLISECONDS.toNanos(
+                Math.max(0L, Math.min(timeoutMillis, MAX_WAIT_MILLIS)));
     }
 }

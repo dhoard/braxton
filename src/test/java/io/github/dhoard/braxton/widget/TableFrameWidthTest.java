@@ -30,7 +30,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.internal.render.LayoutEngine;
-import io.github.dhoard.braxton.internal.render.Screen;
+import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.StyledText;
@@ -172,7 +172,7 @@ class TableFrameWidthTest {
     /**
      * Cells a row was painted with; a wide cluster's second half is marked as a continuation.
      */
-    private static List<String> paintedCells(Screen screen, int row) {
+    private static List<String> paintedCells(RenderedScreen screen, int row) {
         List<String> cells = new ArrayList<>();
         for (int col = 0; col < screen.cols(); col++) {
             cells.add(screen.isContinuation(row, col)
@@ -189,7 +189,7 @@ class TableFrameWidthTest {
      */
     private static void assertFrameIsPaintedColumnByColumn(Table table, List<String> rendered) {
         int width = TextMeasure.columns(rendered.get(0));
-        Screen screen = new ScreenRenderer().screen(table.view(),
+        RenderedScreen screen = new ScreenRenderer().screen(table.view(),
                 new Viewport(rendered.size(), width));
         assertThat(screen.rows()).as("rows painted for %s", rendered).isEqualTo(rendered.size());
         Border border = FRAME;

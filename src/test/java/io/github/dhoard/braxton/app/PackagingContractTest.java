@@ -39,10 +39,10 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The packaging contract the README states for the shipped artifact: the bytecode target and the
- * absence of any third-party reference in the core.
+ * permitted JLine terminal references in the core.
  *
  * <p>{@code ArchitectureTest} checks the same rule over the source tree. This checks it over the
- * compiled classes the artifact is built from, so a dependency that arrives without an import (a
+ * compiled classes the artifact is built from, so an undeclared dependency arriving without an import (a
  * generated source, a renamed package, a transitive type named in a signature) is still caught, and
  * it pins the documented bytecode version to what the build actually emits.</p>
  */
@@ -53,7 +53,7 @@ class PackagingContractTest {
 
     /** Packages the core may reference: the JDK modules it uses and Braxton itself. */
     private static final List<String> ALLOWED_REFERENCES = List.of(
-            "java/", "javax/", "org/w3c/", "org/xml/", "io/github/dhoard/");
+            "java/", "javax/", "org/w3c/", "org/xml/", "io/github/dhoard/", "org/jline/terminal/", "org/jline/utils/");
 
     private static final String CORE_ROOT = "io/github/dhoard/braxton/";
 
@@ -73,7 +73,7 @@ class PackagingContractTest {
     }
 
     @Test
-    void noCoreClassReferencesAThirdPartyPackage() throws IOException, URISyntaxException {
+    void theCoreReferencesOnlyItsDeclaredJLineTerminalDependency() throws IOException, URISyntaxException {
         List<Path> classes = coreClasses();
         assertThat(classes).as("the core compiled for this run").isNotEmpty();
         for (Path path : classes) {

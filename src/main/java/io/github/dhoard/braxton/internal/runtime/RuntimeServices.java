@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-package io.github.dhoard.braxton.app;
+package io.github.dhoard.braxton.internal.runtime;
 
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -34,10 +34,10 @@ import java.util.function.LongSupplier;
  * Tests provide manual timers and a controlled executor; production injection points stay small so
  * applications cannot accidentally reach terminal or thread state from pure code.</p>
  */
-public record RuntimeEnvironment(LongSupplier nanoTime, Executor effectExecutor, Timers timers,
+public record RuntimeServices(LongSupplier nanoTime, Executor effectExecutor, Timers timers,
         Consumer<String> diagnostics) {
 
-    public RuntimeEnvironment {
+    public RuntimeServices {
         nanoTime = nanoTime == null ? System::nanoTime : nanoTime;
         effectExecutor = effectExecutor == null ? Runnable::run : effectExecutor;
         timers = timers == null ? Timers.system() : timers;
@@ -45,24 +45,24 @@ public record RuntimeEnvironment(LongSupplier nanoTime, Executor effectExecutor,
     }
 
     /** Real time, real timers, and a shared virtual-thread executor for effect tasks. */
-    public static RuntimeEnvironment system() {
-        return new RuntimeEnvironment(System::nanoTime, EffectExecutors.shared(),
+    public static RuntimeServices system() {
+        return new RuntimeServices(System::nanoTime, EffectExecutors.shared(),
                 Timers.system(), message -> { });
     }
 
-    public RuntimeEnvironment withEffectExecutor(Executor executor) {
-        return new RuntimeEnvironment(nanoTime, executor, timers, diagnostics);
+    public RuntimeServices withEffectExecutor(Executor executor) {
+        return new RuntimeServices(nanoTime, executor, timers, diagnostics);
     }
 
-    public RuntimeEnvironment withTimers(Timers value) {
-        return new RuntimeEnvironment(nanoTime, effectExecutor, value, diagnostics);
+    public RuntimeServices withTimers(Timers value) {
+        return new RuntimeServices(nanoTime, effectExecutor, value, diagnostics);
     }
 
-    public RuntimeEnvironment withNanoTime(LongSupplier value) {
-        return new RuntimeEnvironment(value, effectExecutor, timers, diagnostics);
+    public RuntimeServices withNanoTime(LongSupplier value) {
+        return new RuntimeServices(value, effectExecutor, timers, diagnostics);
     }
 
-    public RuntimeEnvironment withDiagnostics(Consumer<String> sink) {
-        return new RuntimeEnvironment(nanoTime, effectExecutor, timers, sink);
+    public RuntimeServices withDiagnostics(Consumer<String> sink) {
+        return new RuntimeServices(nanoTime, effectExecutor, timers, sink);
     }
 }

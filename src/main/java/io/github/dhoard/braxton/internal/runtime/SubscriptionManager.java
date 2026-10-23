@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import io.github.dhoard.braxton.app.Timers;
+import io.github.dhoard.braxton.internal.runtime.Timers;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
 import io.github.dhoard.braxton.layout.Size;

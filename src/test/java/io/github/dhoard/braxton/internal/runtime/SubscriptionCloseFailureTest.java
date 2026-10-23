@@ -33,7 +33,7 @@ import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
-import io.github.dhoard.braxton.testkit.FakeTerminal;
+import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 
 /** A source that fails to close is reported, not propagated. */
 class SubscriptionCloseFailureTest {
@@ -42,7 +42,7 @@ class SubscriptionCloseFailureTest {
     void aFailingCloseIsReportedThroughDiagnostics() {
         List<String> diagnostics = new ArrayList<>();
         SubscriptionManager<String> manager = new SubscriptionManager<>(new Mailbox(8),
-                new FakeTerminal.ManualTimers(), 4, diagnostics::add);
+                new ManualTimers(), 4, diagnostics::add);
         Subscription<String> failing = Subscription.source(SubscriptionId.of("bad"), "cfg",
                 emitter -> () -> {
                     throw new IllegalStateException("cannot close");

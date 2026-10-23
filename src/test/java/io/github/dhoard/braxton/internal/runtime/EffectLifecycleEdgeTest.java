@@ -30,13 +30,13 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.dhoard.braxton.app.RuntimeEnvironment;
+import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
 import io.github.dhoard.braxton.clipboard.ClipboardConfig;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.internal.clipboard.ClipboardService;
 import io.github.dhoard.braxton.internal.clipboard.TerminalEnvironment;
-import io.github.dhoard.braxton.testkit.FakeTerminal;
+import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 
 /** Cancelling a finished effect is a no-op and cancelAll does not block new work afterwards. */
 class EffectLifecycleEdgeTest {
@@ -44,8 +44,8 @@ class EffectLifecycleEdgeTest {
     @Test
     void cancellingACompletedDelayIsANoOpAndCancelAllDoesNotBlockLaterWork() throws Exception {
         Mailbox mailbox = new Mailbox(16);
-        FakeTerminal.ManualTimers timers = new FakeTerminal.ManualTimers();
-        RuntimeEnvironment environment = new RuntimeEnvironment(() -> 1_000L, Runnable::run, timers,
+        ManualTimers timers = new ManualTimers();
+        RuntimeServices environment = new RuntimeServices(() -> 1_000L, Runnable::run, timers,
                 message -> { });
         ClipboardService clipboard = new ClipboardService(ClipboardConfig.defaults(),
                 new TerminalEnvironment(Map.of("TERM", "dumb")), message -> { });

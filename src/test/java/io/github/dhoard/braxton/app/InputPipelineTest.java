@@ -22,6 +22,9 @@
 
 package io.github.dhoard.braxton.app;
 
+import static io.github.dhoard.braxton.internal.runtime.JLineTestTerminal.run;
+import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
+import io.github.dhoard.braxton.internal.runtime.ManualTimers;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
@@ -30,7 +33,7 @@ import org.junit.jupiter.api.Timeout;
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.testkit.FakeTerminal;
+import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
@@ -56,14 +59,14 @@ class InputPipelineTest {
 
         @Override
         public Transition<Model, EditorAction> init(InitContext context) {
-            return Transition.stay(new Model(EditorState.empty(), 0));
+            return Transition.next(new Model(EditorState.empty(), 0));
         }
 
         @Override
         public Transition<Model, EditorAction> update(Model model, EditorAction action) {
             EditorResult result = Editor.update(model.draft(), OPTIONS, action);
             boolean submit = result.intent() instanceof EditorIntent.Submit;
-            return Transition.stay(new Model(submit ? EditorState.empty() : result.state(),
+            return Transition.next(new Model(submit ? EditorState.empty() : result.state(),
                     model.submitted() + (submit ? 1 : 0)));
         }
 
@@ -93,21 +96,22 @@ class InputPipelineTest {
     @Test
     @Timeout(20)
     void keystrokesEditTheDraftAndSubmitThroughTheRuntime() throws Exception {
-        FakeTerminal terminal = new FakeTerminal(new Size(4, 40));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 40));
         RuntimeOptions options = RuntimeOptions.defaults().withLimits(64, 4, 4)
-                .withEnvironment(RuntimeEnvironment.system()
-                        .withTimers(new FakeTerminal.ManualTimers())
+                ;
+        RuntimeServices services = RuntimeServices.system()
+                        .withTimers(new ManualTimers())
                         .withEffectExecutor(Runnable::run)
-                        .withNanoTime(() -> 1_000L));
+                        .withNanoTime(() -> 1_000L);
         Thread run = Thread.ofVirtual().name("input-pipeline")
-                .start(() -> Application.run(new DraftProgram(), options, terminal));
-        await(() -> terminal.output().contains("draft=[] submitted=0"));
+                .start(() -> run(new DraftProgram(), options, terminal, services));
+        await(() -> terminal.outputText().contains("draft=[] submitted=0"));
         terminal.feed("hi");
-        await(() -> terminal.output().contains("draft=[hi] submitted=0"));
+        await(() -> terminal.outputText().contains("draft=[hi] submitted=0"));
         terminal.feed("\u007f");
-        await(() -> terminal.output().contains("draft=[h] submitted=0"));
+        await(() -> terminal.outputText().contains("draft=[h] submitted=0"));
         terminal.feed("\r");
-        await(() -> terminal.output().contains("draft=[] submitted=1"));
+        await(() -> terminal.outputText().contains("draft=[] submitted=1"));
         terminal.endInput();
         run.join(5_000L);
         assertThat(run.isAlive()).isFalse();

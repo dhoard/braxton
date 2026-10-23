@@ -59,7 +59,7 @@ public class FramePipelineBenchmark {
     @Param({"24x80", "40x120"})
     public String viewport;
 
-    private final ScreenRenderer renderer = new ScreenRenderer();
+    private final io.github.dhoard.braxton.internal.render.LayoutEngine engine = new io.github.dhoard.braxton.internal.render.LayoutEngine();
 
     private View<Object> root;
     private Viewport parsed;
@@ -69,21 +69,21 @@ public class FramePipelineBenchmark {
     public void setup() {
         parsed = BenchViews.viewport(viewport);
         root = BenchViews.transcript(30, BenchCorpus.build("ascii", 240));
-        previous = renderer.screen(root, parsed);
+        previous = engine.layout(root, parsed.bounds()).screen();
     }
 
     @Benchmark
     public void paintFrame(Blackhole sink) {
-        sink.consume(renderer.screen(root, parsed));
+        sink.consume(engine.layout(root, parsed.bounds()).screen());
     }
 
     @Benchmark
     public void paintAndEncodeFrame(Blackhole sink) {
-        sink.consume(AnsiEncoder.frame(renderer.screen(root, parsed)));
+        sink.consume(AnsiEncoder.frame(engine.layout(root, parsed.bounds()).screen(), true));
     }
 
     @Benchmark
     public void paintAndDiffFrame(Blackhole sink) {
-        sink.consume(AnsiEncoder.diff(previous, renderer.screen(root, parsed)));
+        sink.consume(AnsiEncoder.diff(previous, engine.layout(root, parsed.bounds()).screen(), true));
     }
 }

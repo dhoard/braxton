@@ -23,43 +23,53 @@
 package io.github.dhoard.braxton.internal.input;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.PushbackInputStream;
 import java.util.Optional;
 
+import org.jline.utils.NonBlockingReader;
+
 import io.github.dhoard.braxton.input.InputEvent;
+import io.github.dhoard.braxton.input.InputOptions;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.Modifiers;
 
 /**
- * Decodes terminal bytes into normalized {@link InputEvent} values.
+ * Decodes timed terminal characters into normalized {@link InputEvent} values.
  *
  * <p>The decoder owns no application state and dispatches nothing: it reads one event at a time so
  * the runtime can route it against the latest committed view. Escape sequences are bounded by a
- * short timeout, CSI sequences by a byte cap, and printable input is decoded as UTF-8 so multibyte
- * characters and split reads behave correctly.</p>
+ * short timeout, CSI sequences by a byte cap, and scalar assembly preserves supplementary characters across split JLine reads.
+ * JLine owns UTF-8 decoding and Braxton owns event normalization.</p>
  */
 public final class InputDecoder {
 
     public static final int DEFAULT_ESCAPE_TIMEOUT_MILLIS = 30;
     public static final int MAX_CSI_LENGTH = 64;
 
-    private final PushbackInputStream in;
-    private final int escapeTimeoutMillis;
+    private final ScalarInput in;
+    private final long escapeTimeoutNanos;
+    private final int maxCsiCharacters;
     private final int maxPasteBytes;
     private final long pasteIdleTimeoutMillis;
+    private long escapeDeadline;
 
-    public InputDecoder(InputStream in) {
-        this(in, DEFAULT_ESCAPE_TIMEOUT_MILLIS, PasteDecoder.DEFAULT_MAX_BYTES,
-                PasteDecoder.DEFAULT_IDLE_TIMEOUT_MILLIS);
+    public InputDecoder(NonBlockingReader in) {
+        this(in, InputOptions.DEFAULT);
     }
 
-    public InputDecoder(InputStream in, int escapeTimeoutMillis, int maxPasteBytes,
-            long pasteIdleTimeoutMillis) {
-        this.in = new PushbackInputStream(in, 1);
-        this.escapeTimeoutMillis = Math.max(1, escapeTimeoutMillis);
-        this.maxPasteBytes = Math.max(0, maxPasteBytes);
-        this.pasteIdleTimeoutMillis = Math.max(1L, pasteIdleTimeoutMillis);
+    public InputDecoder(NonBlockingReader in, InputOptions options) {
+        this(in, options, () -> false);
+    }
+
+    public InputDecoder(
+            NonBlockingReader in,
+            InputOptions options,
+            java.util.function.BooleanSupplier cancelled) {
+        this.in = new ScalarInput(
+                in, Math.max(1, options.cancellationInterval().toMillis()), cancelled);
+        this.escapeTimeoutNanos = options.escapeTimeout().toNanos();
+        this.maxCsiCharacters = options.maxCsiCharacters();
+        this.maxPasteBytes = options.maxPasteBytes();
+        this.pasteIdleTimeoutMillis = Math.max(1, options.pasteIdleTimeout().toMillis());
     }
 
     /**
@@ -77,16 +87,15 @@ public final class InputDecoder {
             if (first < 0) {
                 return Optional.empty();
             }
-            InputEvent event = first == 0x1B
-                    ? readEscape().orElse(null)
-                    : decodeSingleByte(first);
+            escapeDeadline = System.nanoTime() + escapeTimeoutNanos;
+            InputEvent event = first == 0x1B ? readEscape().orElse(null) : decodeScalar(first);
             if (event != null) {
                 return Optional.of(event);
             }
         }
     }
 
-    private InputEvent decodeSingleByte(int value) throws IOException {
+    private InputEvent decodeScalar(int value) throws IOException {
         if (value < 0x20 || value == 0x7F) {
             return InputEvent.KeyInput.of(keyForControlByte(value));
         }
@@ -94,9 +103,10 @@ public final class InputDecoder {
             char c = (char) value;
             return InputEvent.KeyInput.of(keyForText(String.valueOf(c)), String.valueOf(c));
         }
-        String text = decodeUtf8(value);
+        String text = new String(Character.toChars(value));
         // A C1 control (U+0080-U+009F) arrives as a two-byte UTF-8 scalar, so it reaches here as
-        // printable-looking text. It is no more printable than a C0 control: it names no gesture and
+        // printable-looking text. It is no more printable than a C0 control: it names no gesture
+        // and
         // must not be carried as text, exactly as the Alt-modified path already decides for a C1
         // scalar. A key named after a control character is rejected outright, which would end the
         // run.
@@ -147,67 +157,6 @@ public final class InputDecoder {
         return Key.of(String.valueOf(letter), Modifiers.CTRL);
     }
 
-    /**
-     * Reassembles a multi-byte UTF-8 scalar from the already-read lead byte. A byte that cannot
-     * start a scalar (stray continuation, overlong lead, or beyond U+10FFFF) is dropped without
-     * consuming following bytes, and a sequence truncated by a non-continuation byte gives that
-     * byte back, so the next character is still decoded. A complete sequence that is itself
-     * ill-formed (an overlong form, a surrogate, or past U+10FFFF) is dropped as well: a string
-     * decoder would report it as U+FFFD, and that replacement character would reach the application
-     * as printable text it never typed.
-     */
-    private String decodeUtf8(int lead) throws IOException {
-        int expected;
-        if (lead >= 0xC2 && lead <= 0xDF) {
-            expected = 2;
-        } else if (lead >= 0xE0 && lead <= 0xEF) {
-            expected = 3;
-        } else if (lead >= 0xF0 && lead <= 0xF4) {
-            expected = 4;
-        } else {
-            return "";
-        }
-        byte[] bytes = new byte[expected];
-        bytes[0] = (byte) lead;
-        for (int i = 1; i < expected; i++) {
-            int next = in.read();
-            if (next < 0) {
-                return "";
-            }
-            if ((next & 0xC0) != 0x80) {
-                // The sequence is truncated: give the byte back so the character it starts is
-                // still decoded instead of being swallowed with the broken sequence.
-                in.unread(next);
-                return "";
-            }
-            bytes[i] = (byte) next;
-        }
-        int codePoint = codePoint(bytes, expected);
-        return codePoint < 0 ? "" : new String(Character.toChars(codePoint));
-    }
-
-    /**
-     * Code point of one complete UTF-8 sequence, or -1 when the sequence is overlong, a surrogate, or
-     * beyond U+10FFFF. Only the payload bits are read: the lead byte's range was already checked.
-     */
-    private static int codePoint(byte[] bytes, int length) {
-        int codePoint = switch (length) {
-            case 2 -> bytes[0] & 0x1F;
-            case 3 -> bytes[0] & 0x0F;
-            default -> bytes[0] & 0x07;
-        };
-        for (int i = 1; i < length; i++) {
-            codePoint = (codePoint << 6) | (bytes[i] & 0x3F);
-        }
-        boolean overlong = switch (length) {
-            case 2 -> codePoint < 0x80;
-            case 3 -> codePoint < 0x800;
-            default -> codePoint < 0x10000;
-        };
-        boolean surrogate = codePoint >= 0xD800 && codePoint <= 0xDFFF;
-        return overlong || surrogate || codePoint > 0x10FFFF ? -1 : codePoint;
-    }
-
     private Optional<InputEvent> readEscape() throws IOException {
         int second = readWithTimeout();
         if (second < 0) {
@@ -220,7 +169,7 @@ public final class InputDecoder {
         if (second == 'O') {
             int third = readWithTimeout();
             if (third < 0) {
-                return Optional.of(InputEvent.KeyInput.of(Key.ESCAPE));
+                return Optional.empty();
             }
             return Optional.ofNullable(decodeSs3((char) third));
         }
@@ -233,30 +182,31 @@ public final class InputDecoder {
         }
         if (second < 0x20 || second == 0x7F) {
             // ESC plus a control byte is how a terminal reports the Alt-modified key: ESC DEL is
-            // Alt+Backspace, and an xterm-family terminal with metaSendsEscape reports Alt+Enter and
+            // Alt+Backspace, and an xterm-family terminal with metaSendsEscape reports Alt+Enter
+            // and
             // Alt+Tab as ESC CR and ESC TAB. Every control byte names a gesture of its own, so the
-            // pair keeps that gesture and adds ALT to the modifiers the byte already names - ESC ETX
+            // pair keeps that gesture and adds ALT to the modifiers the byte already names - ESC
+            // ETX
             // is Alt plus the Ctrl+C gesture, and stays distinct from the ESC c pair that reports a
             // plain Alt+C. Consuming the pair as a bare Escape instead loses the keystroke the user
             // pressed and delivers one they never pressed, and Escape and Ctrl+C are two-press
             // gestures in real applications.
             Key control = keyForControlByte(second);
-            return Optional.of(InputEvent.KeyInput.of(
-                    control.with(control.modifiers().withAlt(true))));
+            return Optional.of(
+                    InputEvent.KeyInput.of(control.with(control.modifiers().withAlt(true))));
         }
         if (second >= 0x80) {
             // Alt plus a printable character outside ASCII: the following bytes belong to the same
             // UTF-8 scalar, so decode them together instead of naming the lead byte's Latin-1
             // character and leaving a stray continuation byte behind.
-            String text = decodeUtf8(second);
+            String text = new String(Character.toChars(second));
             // A C1 control (encoded as a multibyte scalar) is not printable either, and unlike a C0
             // control it names no key of its own, so ALT plus one is reported as the escape it
             // started with.
             if (text.isEmpty() || !isPrintable(text)) {
                 return Optional.of(InputEvent.KeyInput.of(Key.ESCAPE));
             }
-            return Optional.of(InputEvent.KeyInput.of(
-                    keyForText(text).with(Modifiers.ALT), text));
+            return Optional.of(InputEvent.KeyInput.of(keyForText(text).with(Modifiers.ALT), text));
         }
         char c = (char) second;
         return Optional.of(InputEvent.KeyInput.of(
@@ -265,38 +215,36 @@ public final class InputDecoder {
 
     /** Whether every code point of {@code text} is printable, so it can be a key name and text. */
     private static boolean isPrintable(String text) {
-        return text.codePoints().noneMatch(code -> code < 0x20 || code == 0x7F
-                || (code >= 0x80 && code <= 0x9F));
+        return text.codePoints()
+                .noneMatch(code -> code < 0x20 || code == 0x7F || (code >= 0x80 && code <= 0x9F));
     }
 
     private String readCsiSequence() throws IOException {
         StringBuilder sequence = new StringBuilder();
-        long deadline = System.nanoTime() + escapeTimeoutMillis * 1_000_000L;
+        long deadline = escapeDeadline;
         while (true) {
             int next = readWithDeadline(deadline);
-            if (next < 0) {
-                break;
-            }
+            if (next < 0) return "";
             // Past the cap the sequence is not stored, but its bytes are still consumed up to the
             // final byte: stopping there would deliver the tail (parameters and final byte) to the
             // application as ordinary text.
-            if (sequence.length() < MAX_CSI_LENGTH) {
+            if (sequence.length() < maxCsiCharacters) {
                 sequence.append((char) next);
             }
             if (next >= 0x40 && next <= 0x7E) {
                 break;
             }
-            deadline = System.nanoTime() + escapeTimeoutMillis * 1_000_000L;
         }
         return sequence.toString();
     }
 
     private InputEvent decodeCsi(String sequence) throws IOException {
         if (sequence.isEmpty()) {
-            return InputEvent.KeyInput.of(Key.ESCAPE);
+            return null;
         }
         if (PasteDecoder.START_BODY.equals(sequence)) {
-            PasteDecoder.Result paste = PasteDecoder.read(in, maxPasteBytes, pasteIdleTimeoutMillis);
+            PasteDecoder.Result paste =
+                    PasteDecoder.read(in, maxPasteBytes, pasteIdleTimeoutMillis);
             return new InputEvent.PasteInput(paste.text());
         }
         if (PasteDecoder.END_BODY.equals(sequence)) {
@@ -406,23 +354,10 @@ public final class InputDecoder {
     }
 
     private int readWithTimeout() throws IOException {
-        return readWithDeadline(System.nanoTime() + escapeTimeoutMillis * 1_000_000L);
+        return readWithDeadline(escapeDeadline);
     }
 
     private int readWithDeadline(long deadlineNanos) throws IOException {
-        while (true) {
-            if (in.available() > 0) {
-                return in.read();
-            }
-            if (System.nanoTime() - deadlineNanos >= 0L) {
-                return -1;
-            }
-            try {
-                Thread.sleep(1L);
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-                return -1;
-            }
-        }
+        return in.readUntil(deadlineNanos);
     }
 }

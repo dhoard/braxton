@@ -22,6 +22,7 @@
 
 package io.github.dhoard.braxton.testkit;
 
+import io.github.dhoard.braxton.internal.runtime.ManualTimers;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
@@ -29,12 +30,12 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.dhoard.braxton.app.Timers;
+import io.github.dhoard.braxton.internal.runtime.Timers;
 
 class ManualTimersTest {
     @Test
     void equalDeadlinesKeepRegistrationOrderAcrossCancellationAndReentrantScheduling() {
-        FakeTerminal.ManualTimers timers = new FakeTerminal.ManualTimers();
+        ManualTimers timers = new ManualTimers();
         List<String> calls = new ArrayList<>();
         Timers.Handle[] peer = new Timers.Handle[1];
         timers.schedule(10, () -> {
@@ -56,7 +57,7 @@ class ManualTimersTest {
 
     @Test
     void reentrantPositiveDelaysWaitForTheNextAdvanceAndNegativeAdvancesDoNotRewind() {
-        FakeTerminal.ManualTimers timers = new FakeTerminal.ManualTimers();
+        ManualTimers timers = new ManualTimers();
         List<String> calls = new ArrayList<>();
         timers.schedule(5, () -> {
             calls.add("first");

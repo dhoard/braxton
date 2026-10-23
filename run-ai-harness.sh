@@ -7,8 +7,8 @@
 #   ./run-ai-harness.sh            # ./mvnw clean package, then start the harness
 #   ./run-ai-harness.sh --no-build # skip packaging and start the existing jar
 #
-# The harness uses Gson and its annotation dependency. Gson is an optional
-# dependency scoped to the examples; both jars are copied into
+# The runtime uses JLine 4.4.8 FFM. The harness additionally uses optional
+# Gson and its annotation dependency; all runtime jars are copied into
 # target/showcase-lib so the packaged Braxton jar still contains no
 # third-party code.
 

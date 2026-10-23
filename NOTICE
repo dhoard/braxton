@@ -8,6 +8,17 @@ This product includes software developed by the Braxton project
 Braxton is licensed under the MIT License; see LICENSE.
 
 ================================================================================
+RUNTIME DEPENDENCIES (NOT BUNDLED IN THE BRAXTON JAR)
+================================================================================
+
+JLine local build 0.1.0-3601-SNAPSHOT — org.jline:jline-terminal, jline-terminal-ffm, and transitive jline-native
+Copyright (c) the original JLine authors.
+BSD 3-Clause License — https://opensource.org/licenses/BSD-3-Clause
+Source: https://github.com/jline/jline3
+JLine supplies terminal integration using its FFM provider. Its jars retain their own licenses
+and notices; distribute those notices with the dependency jars. Braxton does not shade them.
+
+================================================================================
 BUNDLED THIRD-PARTY COMPONENTS
 ================================================================================
 

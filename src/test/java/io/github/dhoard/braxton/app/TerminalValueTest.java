@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-package io.github.dhoard.braxton.terminal;
+package io.github.dhoard.braxton.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

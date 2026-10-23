@@ -30,8 +30,8 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 
-import io.github.dhoard.braxton.app.RuntimeEnvironment;
-import io.github.dhoard.braxton.app.Timers;
+import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
+import io.github.dhoard.braxton.internal.runtime.Timers;
 import io.github.dhoard.braxton.clipboard.ClipboardResult;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
@@ -64,7 +64,7 @@ public final class EffectRunner<Msg> {
     }
 
     private final Mailbox mailbox;
-    private final RuntimeEnvironment environment;
+    private final RuntimeServices environment;
     private final ClipboardService clipboard;
     private final int maxEffects;
     private final Map<EffectId, Entry> entries = new HashMap<>();
@@ -76,7 +76,7 @@ public final class EffectRunner<Msg> {
     private boolean quitRequested;
     private int quitStatus;
 
-    public EffectRunner(Mailbox mailbox, RuntimeEnvironment environment,
+    public EffectRunner(Mailbox mailbox, RuntimeServices environment,
             ClipboardService clipboard, int maxEffects) {
         this.mailbox = mailbox;
         this.environment = environment;

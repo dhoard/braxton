@@ -33,7 +33,7 @@ import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
-import io.github.dhoard.braxton.testkit.FakeTerminal;
+import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 
 class SubscriptionStartFailureTest {
 
@@ -50,7 +50,7 @@ class SubscriptionStartFailureTest {
     private static void assertFailedStartInvalidatesEmitter(Throwable failure) {
         Mailbox mailbox = new Mailbox(8);
         SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox,
-                new FakeTerminal.ManualTimers(), 4, message -> { });
+                new ManualTimers(), 4, message -> { });
         AtomicReference<Consumer<Object>> callback = new AtomicReference<>();
         AtomicInteger mapped = new AtomicInteger();
         Subscription<String> source = Subscription.source(SubscriptionId.of("failed"), "cfg",
@@ -78,7 +78,7 @@ class SubscriptionStartFailureTest {
     void aFailedReplacementKeepsOnlyTheOldSourceAndAllowsASuccessfulRetry() throws Exception {
         Mailbox mailbox = new Mailbox(8);
         SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox,
-                new FakeTerminal.ManualTimers(), 4, message -> { });
+                new ManualTimers(), 4, message -> { });
         SubscriptionId id = SubscriptionId.of("source");
         AtomicReference<Consumer<Object>> old = new AtomicReference<>();
         AtomicReference<Consumer<Object>> failed = new AtomicReference<>();

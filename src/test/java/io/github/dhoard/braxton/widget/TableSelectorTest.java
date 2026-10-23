@@ -31,7 +31,7 @@ import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.internal.render.Screen;
+import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.TextMeasure;
@@ -157,7 +157,7 @@ class TableSelectorTest {
             "\u00ADx");            // soft hyphen
 
     /** The grid painted through a viewport wider than it, cell (1, 1) selected. */
-    private static Screen grid(List<String> header, List<List<String>> rows) {
+    private static RenderedScreen grid(List<String> header, List<List<String>> rows) {
         return new ScreenRenderer().screen(TableSelector.view(ElementId.of("table"),
                 new TableSelector.State(header, rows, 1, 1), true, Style.NONE.withInvert(),
                 Style.NONE, Style.NONE.withBold(), action -> action.getClass().getSimpleName()),
@@ -165,7 +165,7 @@ class TableSelectorTest {
     }
 
     /** The cells a row was painted with; a wide cluster's second half is a continuation. */
-    private static List<String> paintedCells(Screen screen, int row) {
+    private static List<String> paintedCells(RenderedScreen screen, int row) {
         List<String> cells = new ArrayList<>();
         for (int col = 0; col < screen.cols(); col++) {
             cells.add(screen.isContinuation(row, col)
@@ -178,7 +178,7 @@ class TableSelectorTest {
      * The columns a row really occupies. Re-measuring the row's own plain text hides a column the
      * paint path gave back to the cell before it, so the cells are the oracle.
      */
-    private static int paintedColumns(Screen screen, int row) {
+    private static int paintedColumns(RenderedScreen screen, int row) {
         int columns = 0;
         for (int col = 0; col < screen.cols(); col++) {
             if (screen.isContinuation(row, col)) {
@@ -190,7 +190,7 @@ class TableSelectorTest {
     }
 
     /** The last column a row paints in, so the grid's right edge has to land in one column. */
-    private static int lastPaintedColumn(Screen screen, int row) {
+    private static int lastPaintedColumn(RenderedScreen screen, int row) {
         for (int col = screen.cols() - 1; col >= 0; col--) {
             if (!screen.isContinuation(row, col) && !screen.cell(row, col).isEmpty()) {
                 return col;
@@ -200,7 +200,7 @@ class TableSelectorTest {
     }
 
     /** The column {@code needle} was painted in on {@code row}, or -1 when it is not painted. */
-    private static int paintedColumn(Screen screen, int row, char needle) {
+    private static int paintedColumn(RenderedScreen screen, int row, char needle) {
         for (int column = 0; column < screen.cols(); column++) {
             if (!screen.isContinuation(row, column)
                     && screen.cell(row, column).text().indexOf(needle) >= 0) {
@@ -211,7 +211,7 @@ class TableSelectorTest {
     }
 
     /** The columns the inversion of the selected cell covers. */
-    private static int invertedColumns(Screen screen, int row) {
+    private static int invertedColumns(RenderedScreen screen, int row) {
         int columns = 0;
         for (int col = 0; col < screen.cols(); col++) {
             if (!screen.isContinuation(row, col) && screen.cell(row, col).style().invert()) {
@@ -244,7 +244,7 @@ class TableSelectorTest {
     @Test
     void aCellOpeningWithABaselessClusterKeepsTheGridRectangular() {
         // Column widths are [2, 2], so every row occupies (2 + 2) + (2 + 2) = 8 painted columns.
-        Screen screen = grid(List.of("h1", "h2"),
+        RenderedScreen screen = grid(List.of("h1", "h2"),
                 List.of(List.of("a", "b"), List.of("p", "\u0301x"), List.of("q", "\uFE0Fz")));
         assertThat(screen.rows()).isEqualTo(4);
         for (int row = 0; row < screen.rows(); row++) {
@@ -269,7 +269,7 @@ class TableSelectorTest {
                 List<List<String>> rows = column == 0
                         ? List.of(List.of(cell, "b"), List.of("bb", "c"))
                         : List.of(List.of("a", cell), List.of("bb", "c"));
-                Screen screen = grid(List.of("h1", "h2"), rows);
+                RenderedScreen screen = grid(List.of("h1", "h2"), rows);
                 assertThat(screen.rows()).as("cell %s column %d", show(cell), column).isEqualTo(3);
                 for (int row = 1; row < screen.rows(); row++) {
                     List<String> cells = paintedCells(screen, row);
@@ -297,7 +297,7 @@ class TableSelectorTest {
         // Column widths are [2, 5, 1], so every row occupies 4 + 7 + 3 = 14 columns and the third
         // column's text is painted in column 11 on every row.
         for (String cell : List.of("\u0301beta", "beta")) {
-            Screen screen = grid(List.of("id", "name", "x"),
+            RenderedScreen screen = grid(List.of("id", "name", "x"),
                     List.of(List.of("1", "alpha", "z"), List.of("22", cell, "z")));
             for (int row = 0; row < screen.rows(); row++) {
                 assertThat(paintedColumns(screen, row))

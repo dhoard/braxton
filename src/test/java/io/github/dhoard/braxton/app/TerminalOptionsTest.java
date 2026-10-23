@@ -20,16 +20,22 @@
  * SOFTWARE.
  */
 
-package io.github.dhoard.braxton.terminal;
+package io.github.dhoard.braxton.app;
 
-/** Facts about the attached terminal, captured once when the session opens. */
-public record TerminalCapabilities(boolean color, boolean alternateScreen, boolean bracketedPaste,
-        boolean mouse, String term) {
+import static org.assertj.core.api.Assertions.assertThat;
 
-    public static final TerminalCapabilities PLAIN =
-            new TerminalCapabilities(false, false, false, false, "dumb");
+import org.junit.jupiter.api.Test;
 
-    public TerminalCapabilities {
-        term = term == null ? "" : term;
+/** Session options are value data: every documented behaviour can be requested on its own. */
+class TerminalOptionsTest {
+
+    @Test
+    void everySessionOptionCanBeRequestedIndependently() {
+        TerminalOptions options = TerminalOptions.DEFAULT
+                .withAlternateScreen(false)
+                .withMouse(true)
+                .withBracketedPaste(false);
+        assertThat(options).isEqualTo(new TerminalOptions(false, true, false));
+        assertThat(TerminalOptions.DEFAULT.bracketedPaste()).isTrue();
     }
 }

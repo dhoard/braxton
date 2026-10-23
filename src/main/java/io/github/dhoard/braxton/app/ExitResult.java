@@ -25,15 +25,18 @@ package io.github.dhoard.braxton.app;
 import java.util.List;
 
 /** How an application run ended. */
-public record ExitResult(Kind kind, int status, Throwable failure, List<Throwable> cleanupFailures) {
+public record ExitResult(
+        Kind kind, int status, Throwable failure, List<Throwable> cleanupFailures) {
 
     public enum Kind {
-        /** The program asked to quit, or input ended cleanly. */
+        /** The program asked to quit. */
         QUIT,
         /** The input stream reached end-of-file. */
         INPUT_CLOSED,
         /** The runtime or application failed. */
-        FAILURE
+        FAILURE,
+        /** The caller interrupted the run. */
+        INTERRUPTED
     }
 
     public ExitResult {
@@ -50,6 +53,10 @@ public record ExitResult(Kind kind, int status, Throwable failure, List<Throwabl
 
     public static ExitResult failure(Throwable cause, List<Throwable> cleanupFailures) {
         return new ExitResult(Kind.FAILURE, 1, cause, cleanupFailures);
+    }
+
+    public static ExitResult interrupted() {
+        return new ExitResult(Kind.INTERRUPTED, 130, null, List.of());
     }
 
     public boolean ok() {

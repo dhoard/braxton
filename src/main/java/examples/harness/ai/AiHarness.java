@@ -29,7 +29,7 @@ import java.util.List;
 import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.app.RuntimeOptions;
-import io.github.dhoard.braxton.terminal.TerminalOptions;
+import io.github.dhoard.braxton.app.TerminalOptions;
 
 /**
  * Entry point for the native-Braxton AI Harness.

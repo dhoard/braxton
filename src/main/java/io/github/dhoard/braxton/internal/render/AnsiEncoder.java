@@ -50,27 +50,26 @@ public final class AnsiEncoder {
     private static final String OSC8_OPEN = "\u001B]8;;";
     private static final String STRING_TERMINATOR = "\u001B\\";
 
-    private AnsiEncoder() {
-    }
+    private AnsiEncoder() {}
 
     /** A complete frame: every row repainted in place. */
-    public static String frame(Screen screen) {
+    public static String frame(Screen screen, boolean color) {
         StringBuilder out = new StringBuilder();
         for (int row = 0; row < screen.rows(); row++) {
-            out.append(encodeRow(screen, row));
+            out.append(encodeRow(screen, row, color));
         }
         return out.toString();
     }
 
     /** Only the rows whose cells differ, or a full frame when there is no previous screen. */
-    public static String diff(Screen previous, Screen next) {
+    public static String diff(Screen previous, Screen next, boolean color) {
         if (previous == null || previous.rows() != next.rows() || previous.cols() != next.cols()) {
-            return frame(next);
+            return frame(next, color);
         }
         StringBuilder out = new StringBuilder();
         for (int row = 0; row < next.rows(); row++) {
             if (!rowEquals(previous, next, row)) {
-                out.append(encodeRow(next, row));
+                out.append(encodeRow(next, row, color));
             }
         }
         return out.toString();
@@ -87,7 +86,7 @@ public final class AnsiEncoder {
     }
 
     /** Absolute cursor move, line clear, and the row's styled content. */
-    public static String encodeRow(Screen screen, int row) {
+    public static String encodeRow(Screen screen, int row, boolean color) {
         StringBuilder out = new StringBuilder();
         out.append("\u001B[").append(row + 1).append(";1H\u001B[2K");
         int last = lastPaintedColumn(screen, row);
@@ -125,7 +124,8 @@ public final class AnsiEncoder {
                 }
                 active = cell.style();
                 if (!active.isPlain()) {
-                    out.append(sgr(active));
+                    out.append(
+                            sgr(color ? active : active.withForeground(null).withBackground(null)));
                     styled = true;
                 }
             }
@@ -190,12 +190,12 @@ public final class AnsiEncoder {
             params.add("9");
         }
         if (style.foreground() != null) {
-            params.add("38;2;" + style.foreground().red() + ";" + style.foreground().green()
-                    + ";" + style.foreground().blue());
+            params.add("38;2;" + style.foreground().red() + ";"
+                    + style.foreground().green() + ";" + style.foreground().blue());
         }
         if (style.background() != null) {
-            params.add("48;2;" + style.background().red() + ";" + style.background().green()
-                    + ";" + style.background().blue());
+            params.add("48;2;" + style.background().red() + ";"
+                    + style.background().green() + ";" + style.background().blue());
         }
         return params.isEmpty() ? "" : "\u001B[" + String.join(";", params) + "m";
     }

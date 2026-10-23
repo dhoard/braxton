@@ -35,7 +35,7 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.terminal.TerminalCapabilities;
+import io.github.dhoard.braxton.app.TerminalCapabilities;
 import io.github.dhoard.braxton.view.Views;
 
 /** Application entry values: transitions, exit results, init context, runtime options. */
@@ -45,7 +45,7 @@ class AppValueTest {
     void aTransitionRequiresACommandAndOffersStayAndNext() {
         assertThatThrownBy(() -> new Transition<>("m", null))
                 .isInstanceOf(NullPointerException.class);
-        Transition<String, String> stay = Transition.stay("m");
+        Transition<String, String> stay = Transition.next("m");
         assertThat(stay.command()).isInstanceOf(Command.None.class);
         assertThat(Transition.next("m", Command.quit(2)).command())
                 .isInstanceOf(Command.Quit.class);
@@ -70,16 +70,11 @@ class AppValueTest {
     }
 
     @Test
-    void anInitContextDefaultsAndReadsCapturedPropertiesOnly() {
-        InitContext context = new InitContext(null, null, 7L, Map.of("k", "v", "blank", " "));
+    void anInitContextContainsOnlyImmutableFacts() {
+        InitContext context = new InitContext(null, null);
         assertThat(context.viewport()).isEqualTo(Viewport.EMPTY);
         assertThat(context.capabilities()).isEqualTo(TerminalCapabilities.PLAIN);
-        assertThat(context.startedAtNanos()).isEqualTo(7L);
-        assertThat(context.property("k", "fallback")).isEqualTo("v");
-        assertThat(context.property("blank", "fallback")).isEqualTo("fallback");
-        assertThat(context.property("missing", "fallback")).isEqualTo("fallback");
-        assertThat(new InitContext(Viewport.of(new Size(2, 3)), null, 0L, null).properties())
-                .isEmpty();
+        assertThat(new InitContext(Viewport.of(new Size(2, 3)), null).viewport()).isEqualTo(new Viewport(2,3));
     }
 
     @Test
@@ -99,18 +94,18 @@ class AppValueTest {
         RuntimeOptions limited = defaults.withLimits(8, 2, 3);
         assertThat(limited.mailboxCapacity()).isEqualTo(8);
         assertThat(limited.maxSubscriptions()).isEqualTo(3);
-        assertThat(limited.environment()).isSameAs(defaults.environment());
+        assertThat(limited.input()).isSameAs(defaults.input());
     }
 
     private static final class DefaultSubscriptions implements Program<String, String> {
         @Override
         public Transition<String, String> init(InitContext context) {
-            return Transition.stay("");
+            return Transition.next("");
         }
 
         @Override
         public Transition<String, String> update(String model, String message) {
-            return Transition.stay(model);
+            return Transition.next(model);
         }
 
         @Override

@@ -33,10 +33,11 @@ import org.junit.jupiter.api.Test;
 import io.github.dhoard.braxton.input.InputEvent;
 
 /** Mouse reports are decoded only where they carry a key identity; the rest are skipped. */
+@org.junit.jupiter.api.extension.ExtendWith(io.github.dhoard.braxton.internal.input.TestReaders.class)
 class MouseMappingTest {
 
     private static String decode(String bytes) throws IOException {
-        InputDecoder decoder = new InputDecoder(new ByteAtATime(bytes.getBytes(StandardCharsets.UTF_8)));
+        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(bytes.getBytes(StandardCharsets.UTF_8))));
         StringBuilder out = new StringBuilder();
         while (true) {
             var event = decoder.read();

@@ -23,31 +23,11 @@
 package io.github.dhoard.braxton.app;
 
 import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.terminal.TerminalCapabilities;
 
-import java.util.Collections;
-import java.util.Map;
-
-/**
- * Immutable facts captured before {@code init} runs.
- *
- * <p>This is data, not a service locator: no stream, executor, clock, or terminal handle is exposed.
- * External application data belongs in the program's constructor or in a command.</p>
- */
-public record InitContext(Viewport viewport, TerminalCapabilities capabilities,
-        long startedAtNanos, Map<String, String> properties) {
-
+/** Immutable terminal facts captured before pure initialization. Application data belongs in the program constructor. */
+public record InitContext(Viewport viewport, TerminalCapabilities capabilities) {
     public InitContext {
         viewport = viewport == null ? Viewport.EMPTY : viewport;
         capabilities = capabilities == null ? TerminalCapabilities.PLAIN : capabilities;
-        properties = properties == null
-                ? Map.of()
-                : Collections.unmodifiableMap(new java.util.LinkedHashMap<>(properties));
-    }
-
-    /** Reads one captured property, never the live environment. */
-    public String property(String name, String fallback) {
-        String value = properties.get(name);
-        return value == null || value.isBlank() ? fallback : value;
     }
 }

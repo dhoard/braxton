@@ -41,7 +41,7 @@ class AnsiEncoderPropertyTest {
                 screen.put(0, 0, "a", first, "https://x", 1);
                 screen.put(0, 1, "b", second, null, 1);
                 screen.put(0, 2, "c", Style.NONE, null, 1);
-                String row = AnsiEncoder.encodeRow(screen, 0);
+                String row = AnsiEncoder.encodeRow(screen, 0, true);
                 int resets = row.split("\u001B\\[0m", -1).length - 1;
                 if (!first.isPlain() || !second.isPlain()) {
                     assertThat(resets).as("styled cells must be reset").isGreaterThanOrEqualTo(1);

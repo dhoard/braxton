@@ -20,20 +20,35 @@
  * SOFTWARE.
  */
 
-package io.github.dhoard.braxton.app;
+package io.github.dhoard.braxton.internal.input;
 
-/** A cancellable one-shot timer. */
-public interface Timers {
+import org.jline.utils.NonBlocking;
+import org.jline.utils.NonBlockingReader;
+import org.junit.jupiter.api.extension.AfterEachCallback;
+import org.junit.jupiter.api.extension.ExtensionContext;
 
-    /** Schedules {@code task} once after {@code delayNanos}. */
-    Handle schedule(long delayNanos, Runnable task);
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
-    interface Handle {
-        void cancel();
+/** Actual JLine decoders, closed after each parser test. */
+public final class TestReaders implements AfterEachCallback {
+    private static final ThreadLocal<List<NonBlockingReader>> READERS =
+            ThreadLocal.withInitial(ArrayList::new);
+
+    public static NonBlockingReader utf8(InputStream input) {
+        NonBlockingReader reader = NonBlocking.nonBlocking("test", input, StandardCharsets.UTF_8);
+        READERS.get().add(reader);
+        return reader;
     }
 
-    /** Real time, backed by a shared scheduler whose worker is a virtual thread. */
-    static Timers system() {
-        return SystemTimers.INSTANCE;
+    @Override
+    public void afterEach(ExtensionContext context) throws Exception {
+        try {
+            for (NonBlockingReader reader : READERS.get()) reader.close();
+        } finally {
+            READERS.remove();
+        }
     }
 }

@@ -80,20 +80,17 @@ public class InputDecodeBenchmark {
 
     @Benchmark
     public void decodeKeys(Blackhole sink) throws IOException {
-        InputDecoder decoder = new InputDecoder(stream(keyBytes));
-        while (true) {
-            InputEvent event = decoder.read().orElse(null);
-            if (event == null) {
-                break;
-            }
-            sink.consume(event);
+        try (var reader = org.jline.utils.NonBlocking.nonBlocking("benchmark", stream(keyBytes), StandardCharsets.UTF_8)) {
+            InputDecoder decoder = new InputDecoder(reader);
+            for (InputEvent event; (event = decoder.read().orElse(null)) != null;) sink.consume(event);
         }
     }
 
     @Benchmark
     public void readBracketedPaste(Blackhole sink) throws IOException {
-        sink.consume(PasteDecoder.read(stream(pasteBytes), PasteDecoder.DEFAULT_MAX_BYTES,
-                PasteDecoder.DEFAULT_IDLE_TIMEOUT_MILLIS));
+        try (var reader = org.jline.utils.NonBlocking.nonBlocking("benchmark", stream(pasteBytes), StandardCharsets.UTF_8)) {
+            sink.consume(PasteDecoder.read(reader, PasteDecoder.DEFAULT_MAX_BYTES, PasteDecoder.DEFAULT_IDLE_TIMEOUT_MILLIS));
+        }
     }
 
     @Benchmark

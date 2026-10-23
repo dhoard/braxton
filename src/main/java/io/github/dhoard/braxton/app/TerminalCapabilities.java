@@ -20,20 +20,16 @@
  * SOFTWARE.
  */
 
-package io.github.dhoard.braxton.terminal;
+package io.github.dhoard.braxton.app;
 
-import io.github.dhoard.braxton.layout.Size;
+/** Facts about the attached terminal, captured once when the session opens. */
+public record TerminalCapabilities(boolean color, boolean alternateScreen, boolean bracketedPaste,
+        boolean mouse, String term) {
 
-/** Opens one terminal session. Implementations select their platform lazily and may fail. */
-@FunctionalInterface
-public interface TerminalBackend {
+    public static final TerminalCapabilities PLAIN =
+            new TerminalCapabilities(false, false, false, false, "dumb");
 
-    /**
-     * Opens a session.
-     *
-     * @param size the fallback size used when the backend cannot probe the real one
-     * @param options session modes requested by the application
-     * @throws Exception when the platform/ABI is unsupported or terminal state cannot be acquired
-     */
-    TerminalSession open(Size size, TerminalOptions options) throws Exception;
+    public TerminalCapabilities {
+        term = term == null ? "" : term;
+    }
 }

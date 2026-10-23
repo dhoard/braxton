@@ -41,6 +41,7 @@ import org.junit.jupiter.api.Test;
  * pin the per-paste cost; the parity tests pin the byte-exact consumption the fast path must keep,
  * including the rule that nothing after the end marker is ever taken from the stream.
  */
+@org.junit.jupiter.api.extension.ExtendWith(io.github.dhoard.braxton.internal.input.TestReaders.class)
 class PasteDecodeCostTest {
 
     private static final String END = "\u001B[201~";
@@ -117,7 +118,7 @@ class PasteDecodeCostTest {
         byte[] payload = (mixed(65_536) + END).getBytes(StandardCharsets.UTF_8);
         CountingStream in = new CountingStream(payload);
         PasteDecoder.Result result =
-                PasteDecoder.read(in, PasteDecoder.DEFAULT_MAX_BYTES, 250L);
+                PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(in), PasteDecoder.DEFAULT_MAX_BYTES, 250L);
         assertThat(result.text()).as("the whole paste is decoded").hasSize(65_536);
         assertThat(result.terminated()).isTrue();
         assertThat(result.truncated()).isFalse();
@@ -135,15 +136,28 @@ class PasteDecodeCostTest {
         // payload's own size is buffering the decoder copies through.
         long stringOnly = allocated(
                 () -> sink = new String(payload, 0, body, StandardCharsets.UTF_8));
+        long fixtureOnly = allocated(() -> {
+            String characters = new String(payload, StandardCharsets.UTF_8);
+            try (var reader = new org.jline.utils.NonBlockingPumpReader(characters.length() + 1)) {
+                reader.getWriter().write(characters);
+                sink = reader;
+            } catch (IOException failure) { throw new AssertionError(failure); }
+        });
         long read = allocated(() -> {
             try {
-                sink = PasteDecoder.read(new ByteArrayInputStream(payload),
-                        PasteDecoder.DEFAULT_MAX_BYTES, 250L);
+                // Measure the parser's copying budget on JLine's character pump; byte-to-character
+                // acquisition is covered separately by JLineReaderTest. Avoid charging JLine's
+                // scalar charset-reader Timeout allocation to this Braxton buffer-copy invariant.
+                String characters = new String(payload, StandardCharsets.UTF_8);
+                try (var reader = new org.jline.utils.NonBlockingPumpReader(characters.length() + 1)) {
+                    reader.getWriter().write(characters);
+                    sink = PasteDecoder.read(reader, PasteDecoder.DEFAULT_MAX_BYTES, 250L);
+                }
             } catch (IOException failure) {
                 throw new AssertionError(failure);
             }
         });
-        assertThat(read)
+        assertThat(read - fixtureOnly)
                 .as("a paste should be buffered about once rather than copied on every buffer "
                         + "doubling and again on the way out")
                 .isLessThan(stringOnly + payload.length + 32_768L);
@@ -161,7 +175,7 @@ class PasteDecodeCostTest {
                         return pos < split ? split - pos : Math.min(1, super.available());
                     }
                 };
-                PasteDecoder.Result result = PasteDecoder.read(in, limit, 250L);
+                PasteDecoder.Result result = PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(in), limit, 250L);
                 assertThat(result.text()).isEqualTo(body.substring(0, Math.min(body.length(), limit)));
                 assertThat(result.terminated()).isTrue();
                 assertThat(result.truncated()).isEqualTo(body.length() > limit);
@@ -174,7 +188,7 @@ class PasteDecodeCostTest {
     void nothingAfterTheEndMarkerIsTakenFromTheStream() throws IOException {
         byte[] payload = ("abc" + END + "\u001B[A").getBytes(StandardCharsets.UTF_8);
         CountingStream in = new CountingStream(payload);
-        PasteDecoder.Result result = PasteDecoder.read(in, 1024, 250L);
+        PasteDecoder.Result result = PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(in), 1024, 250L);
         assertThat(result.text()).isEqualTo("abc");
         assertThat(result.terminated()).isTrue();
         assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8))
@@ -187,7 +201,7 @@ class PasteDecodeCostTest {
         byte[] payload = ("abc" + END + "de").getBytes(StandardCharsets.UTF_8);
         for (int window = 1; window <= 8; window++) {
             WindowedStream in = new WindowedStream(payload, window);
-            PasteDecoder.Result result = PasteDecoder.read(in, 1024, 250L);
+            PasteDecoder.Result result = PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(in), 1024, 250L);
             assertThat(result.text()).as("window " + window).isEqualTo("abc");
             assertThat(result.terminated()).as("window " + window).isTrue();
             assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8))
@@ -200,7 +214,7 @@ class PasteDecodeCostTest {
     void aPartialEndMarkerAtTheIdleEdgeIsPartOfThePayload() throws IOException {
         // The stream stops after an incomplete marker: those bytes are text, not a terminator.
         WindowedStream in = new WindowedStream(("ab\u001B[20").getBytes(StandardCharsets.UTF_8), 3);
-        PasteDecoder.Result result = PasteDecoder.read(in, 1024, 50L);
+        PasteDecoder.Result result = PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(in), 1024, 50L);
         assertThat(result.text()).isEqualTo("ab\u001B[20");
         assertThat(result.terminated()).isFalse();
         assertThat(result.truncated()).isFalse();
@@ -209,7 +223,7 @@ class PasteDecodeCostTest {
     @Test
     void aLimitCutsThePayloadButStillConsumesThroughTheEndMarker() throws IOException {
         WindowedStream in = new WindowedStream(("abcdef" + END + "z").getBytes(StandardCharsets.UTF_8), 3);
-        PasteDecoder.Result result = PasteDecoder.read(in, 3, 250L);
+        PasteDecoder.Result result = PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(in), 3, 250L);
         assertThat(result.text()).isEqualTo("abc");
         assertThat(result.truncated()).isTrue();
         assertThat(result.terminated()).isTrue();
@@ -220,7 +234,7 @@ class PasteDecodeCostTest {
     void aLimitThatSplitsACharacterDropsTheIncompleteTail() throws IOException {
         // "漢" is three bytes; a limit of 4 keeps one whole character and trims the half of the next.
         WindowedStream in = new WindowedStream(("漢漢" + END).getBytes(StandardCharsets.UTF_8), 2);
-        PasteDecoder.Result result = PasteDecoder.read(in, 4, 250L);
+        PasteDecoder.Result result = PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(in), 4, 250L);
         assertThat(result.text()).isEqualTo("漢");
         assertThat(result.truncated()).isTrue();
         assertThat(result.terminated()).isTrue();
@@ -233,12 +247,12 @@ class PasteDecodeCostTest {
         for (String body : bodies) {
             byte[] payload = (body + END + "rest").getBytes(StandardCharsets.UTF_8);
             PasteDecoder.Result burst =
-                    PasteDecoder.read(new ByteArrayInputStream(payload), 4096, 250L);
+                    PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteArrayInputStream(payload)), 4096, 250L);
             assertThat(burst.text()).as("burst of " + body).isEqualTo(body);
             assertThat(burst.terminated()).as("burst of " + body).isTrue();
             for (int window = 1; window <= 7; window++) {
                 PasteDecoder.Result split =
-                        PasteDecoder.read(new WindowedStream(payload, window), 4096, 250L);
+                        PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new WindowedStream(payload, window)), 4096, 250L);
                 assertThat(split.text()).as("window " + window + " of " + body).isEqualTo(body);
                 assertThat(split.terminated()).as("window " + window + " of " + body).isTrue();
                 assertThat(split.truncated()).as("window " + window + " of " + body).isFalse();
@@ -253,7 +267,7 @@ class PasteDecodeCostTest {
         payload.writeBytes(bytes(END));
         payload.writeBytes(bytes("after"));
         WindowedStream in = new WindowedStream(payload.toByteArray(), 512);
-        PasteDecoder.Result result = PasteDecoder.read(in, 1_000, 250L);
+        PasteDecoder.Result result = PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(in), 1_000, 250L);
         assertThat(result.text()).isEqualTo("x".repeat(1_000));
         assertThat(result.truncated()).isTrue();
         assertThat(result.terminated()).isTrue();

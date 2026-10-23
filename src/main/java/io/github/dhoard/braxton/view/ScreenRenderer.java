@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.view;
 import java.util.List;
 
 import io.github.dhoard.braxton.internal.render.LayoutEngine;
-import io.github.dhoard.braxton.internal.render.Screen;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.WidthPolicy;
 
@@ -51,23 +50,46 @@ public final class ScreenRenderer {
     }
 
     /** Painted screen for {@code view}. */
-    public Screen screen(View<?> view, Viewport viewport) {
-        return engine.layout(view, viewport.bounds()).screen();
+    public RenderedScreen screen(View<?> view, Viewport viewport) {
+        LayoutEngine.Layout layout = engine.layout(view, viewport.bounds());
+        var screen = layout.screen();
+        java.util.List<java.util.List<RenderedScreen.Cell>> rows = new java.util.ArrayList<>();
+        for (int row = 0; row < screen.rows(); row++) {
+            java.util.List<RenderedScreen.Cell> cells = new java.util.ArrayList<>();
+            for (int col = 0; col < screen.cols(); col++) {
+                var cell = screen.cell(row, col);
+                boolean continuation = screen.isContinuation(row, col);
+                int columns = continuation
+                        ? 0
+                        : col + 1 < screen.cols() && screen.isContinuation(row, col + 1) ? 2 : 1;
+                cells.add(new RenderedScreen.Cell(
+                        cell.text(), cell.style(), cell.link(), columns, continuation));
+            }
+            rows.add(cells);
+        }
+        return new RenderedScreen(
+                screen.rows(),
+                screen.cols(),
+                rows,
+                layout.regions().stream()
+                        .map(r -> new RenderedScreen.Region(r.id(), r.bounds()))
+                        .toList());
     }
 
     /** One string per row, trailing blanks trimmed. */
     public List<String> plainLines(View<?> view, Viewport viewport) {
-        return screen(view, viewport).plainLines();
+        return List.copyOf(engine.layout(view, viewport.bounds()).screen().plainLines());
     }
 
     /** Rows joined with {@code \n}. */
     public String plainText(View<?> view, Viewport viewport) {
-        return screen(view, viewport).plainText();
+        return engine.layout(view, viewport.bounds()).screen().plainText();
     }
 
     /** Focus regions in paint order, for pointer and focus tests. */
-    public List<LayoutEngine.Region> regions(View<?> view, Viewport viewport) {
-        return engine.layout(view, viewport.bounds()).regions();
+    public List<RenderedScreen.Region> regions(View<?> view, Viewport viewport) {
+        return engine.layout(view, viewport.bounds()).regions().stream()
+                .map(region -> new RenderedScreen.Region(region.id(), region.bounds())).toList();
     }
 
     /** Visible column width under the renderer's policy. */

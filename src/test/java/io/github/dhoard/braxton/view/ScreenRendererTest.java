@@ -61,7 +61,7 @@ class ScreenRendererTest {
                 new io.github.dhoard.braxton.layout.Viewport(1, 1),
                 new io.github.dhoard.braxton.layout.Viewport(3, 5),
                 new io.github.dhoard.braxton.layout.Viewport(6, 20))) {
-            io.github.dhoard.braxton.internal.render.Screen screen = renderer.screen(view, viewport);
+            io.github.dhoard.braxton.view.RenderedScreen screen = renderer.screen(view, viewport);
             assertThat(screen.rows()).as("rows").isEqualTo(viewport.rows());
             assertThat(screen.cols()).as("cols").isEqualTo(viewport.cols());
             java.util.List<String> lines = renderer.plainLines(view, viewport);

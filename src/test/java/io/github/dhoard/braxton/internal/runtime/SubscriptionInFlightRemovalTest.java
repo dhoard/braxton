@@ -37,7 +37,7 @@ import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-import io.github.dhoard.braxton.app.Timers;
+import io.github.dhoard.braxton.internal.runtime.Timers;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
 

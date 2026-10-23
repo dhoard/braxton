@@ -35,8 +35,8 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.dhoard.braxton.app.RuntimeEnvironment;
-import io.github.dhoard.braxton.app.Timers;
+import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
+import io.github.dhoard.braxton.internal.runtime.Timers;
 import io.github.dhoard.braxton.clipboard.ClipboardConfig;
 import io.github.dhoard.braxton.clipboard.ClipboardPath;
 import io.github.dhoard.braxton.clipboard.ClipboardResult;
@@ -44,15 +44,15 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.internal.clipboard.ClipboardService;
 import io.github.dhoard.braxton.internal.clipboard.TerminalEnvironment;
-import io.github.dhoard.braxton.testkit.FakeTerminal;
+import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 
 /** Commands are inert descriptions with exactly-once, epoch-guarded interpretation. */
 class EffectRunnerTest {
 
     private final Mailbox mailbox = new Mailbox(16);
-    private final FakeTerminal.ManualTimers timers = new FakeTerminal.ManualTimers();
+    private final ManualTimers timers = new ManualTimers();
     private final List<String> writes = new ArrayList<>();
-    private final RuntimeEnvironment environment = new RuntimeEnvironment(
+    private final RuntimeServices environment = new RuntimeServices(
             () -> 0L, Runnable::run, timers, message -> { });
     private final ClipboardService clipboard = new ClipboardService(
             ClipboardConfig.defaults(), new TerminalEnvironment(Map.of("TERM", "dumb")),
@@ -89,7 +89,7 @@ class EffectRunnerTest {
                         Thread.ofVirtual().factory());
         try {
             EffectRunner<String> runner = new EffectRunner<>(small,
-                    new RuntimeEnvironment(() -> 0L, executor, timers, message -> { }), clipboard, 2);
+                    new RuntimeServices(() -> 0L, executor, timers, message -> { }), clipboard, 2);
             runner.bindOwner(Thread.currentThread());
             small.enqueueFromOwner(new Mailbox.AppMessage("occupant"));
             runner.interpret(Command.task(EffectId.of("t"), () -> "done",
@@ -158,7 +158,7 @@ class EffectRunnerTest {
 
     @Test
     void taskRejectionByTheExecutorMapsToFailure() throws Exception {
-        RuntimeEnvironment rejecting = new RuntimeEnvironment(() -> 0L, task -> {
+        RuntimeServices rejecting = new RuntimeServices(() -> 0L, task -> {
             throw new java.util.concurrent.RejectedExecutionException("busy");
         }, timers, message -> { });
         EffectRunner<String> limited = new EffectRunner<>(mailbox, rejecting, clipboard, 4);
@@ -179,7 +179,7 @@ class EffectRunnerTest {
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            RuntimeEnvironment async = new RuntimeEnvironment(() -> 0L, executor, timers,
+            RuntimeServices async = new RuntimeServices(() -> 0L, executor, timers,
                     message -> { });
             EffectRunner<String> asyncRunner = new EffectRunner<>(mailbox, async, clipboard, 4);
             asyncRunner.bindOwner(Thread.currentThread());
@@ -216,7 +216,7 @@ class EffectRunnerTest {
         CountDownLatch interrupted = new CountDownLatch(1);
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            RuntimeEnvironment async = new RuntimeEnvironment(() -> 0L, executor, timers,
+            RuntimeServices async = new RuntimeServices(() -> 0L, executor, timers,
                     message -> { });
             EffectRunner<String> asyncRunner = new EffectRunner<>(mailbox, async, clipboard, 4);
             asyncRunner.bindOwner(Thread.currentThread());
@@ -245,7 +245,7 @@ class EffectRunnerTest {
     void aThrowingSuccessMapperIsReportedThroughTheFailureMapper() throws Exception {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            RuntimeEnvironment async = new RuntimeEnvironment(() -> 0L, executor, timers,
+            RuntimeServices async = new RuntimeServices(() -> 0L, executor, timers,
                     message -> { });
             EffectRunner<String> asyncRunner = new EffectRunner<>(mailbox, async, clipboard, 4);
             asyncRunner.bindOwner(Thread.currentThread());
@@ -264,7 +264,7 @@ class EffectRunnerTest {
     @Test
     void aThrowingFailureMapperIsContainedAndReportedAsADiagnostic() throws Exception {
         List<String> diagnostics = new ArrayList<>();
-        RuntimeEnvironment reporting = new RuntimeEnvironment(() -> 0L, Runnable::run, timers,
+        RuntimeServices reporting = new RuntimeServices(() -> 0L, Runnable::run, timers,
                 diagnostics::add);
         EffectRunner<String> runner = new EffectRunner<>(mailbox, reporting, clipboard, 4);
         runner.bindOwner(Thread.currentThread());

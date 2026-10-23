@@ -45,6 +45,7 @@ import io.github.dhoard.braxton.input.Modifiers;
  * guess about what a terminal emits. Only sequences the decoder maps are listed: a sequence it
  * deliberately ignores (a mouse report, an unknown CSI) is not asserted here.</p>
  */
+@org.junit.jupiter.api.extension.ExtendWith(io.github.dhoard.braxton.internal.input.TestReaders.class)
 class TerminalKeySequenceTest {
 
     /** One terminal gesture: the terminfo capability, the bytes, and the key it must become. */
@@ -90,7 +91,7 @@ class TerminalKeySequenceTest {
     @Test
     void everyTerminfoKeySequenceBecomesItsKeyAndConsumesEveryByte() throws IOException {
         for (Gesture gesture : TERMINFO_GESTURES) {
-            InputDecoder decoder = new InputDecoder(stream(gesture.sequence()));
+            InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(stream(gesture.sequence())));
             Optional<InputEvent> event = decoder.read();
             assertThat(event).as("%s %s decodes to an event", gesture.capability(),
                     gesture.sequence()).isNotEmpty();
@@ -106,8 +107,7 @@ class TerminalKeySequenceTest {
     @Test
     void everyTerminfoKeySequenceSurvivesAByteAtATimeStream() throws IOException {
         for (Gesture gesture : TERMINFO_GESTURES) {
-            InputDecoder decoder = new InputDecoder(
-                    new ByteAtATime(gesture.sequence().getBytes(StandardCharsets.UTF_8)));
+            InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(gesture.sequence().getBytes(StandardCharsets.UTF_8))));
             Optional<InputEvent> event = decoder.read();
             assertThat(event).as("%s split across reads still decodes", gesture.capability())
                     .isNotEmpty();
@@ -120,8 +120,7 @@ class TerminalKeySequenceTest {
     @Test
     void aTerminfoSequenceBetweenTypedCharactersKeepsBothSides() throws IOException {
         for (Gesture gesture : TERMINFO_GESTURES) {
-            InputDecoder decoder = new InputDecoder(
-                    stream("a" + gesture.sequence() + "b"));
+            InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(stream("a" + gesture.sequence() + "b")));
             assertThat(keyOf(decoder.read())).as("%s after typed text", gesture.capability())
                     .isEqualTo(Key.of("a"));
             assertThat(keyOf(decoder.read())).as("%s between typed text", gesture.capability())

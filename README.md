@@ -4,7 +4,7 @@
 
 [![Java](https://img.shields.io/badge/Java-25%2B-blue.svg)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Runtime dependencies](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen.svg)](#design-principles)
+[![Runtime dependencies](https://img.shields.io/badge/terminal-JLine%20FFM-blue.svg)](#design-principles)
 [![Status](https://img.shields.io/badge/status-pre--1.0-orange.svg)](#project-status-and-versioning)
 
 Braxton builds interactive terminal applications from immutable state, typed messages, pure
@@ -17,7 +17,7 @@ key handlers.
 - **Typed end to end** — application-owned sealed messages, exhaustive dispatch, no event bus.
 - **Explicit effects** — commands and subscriptions have defined lifetimes and cancellation.
 - **Deterministic rendering** — a structured cell renderer, one encoder, and a headless test path.
-- **Zero core runtime dependencies** — the library jar contains only Braxton classes and its fonts.
+- **JLine FFM terminal integration** — Braxton owns MVU and rendering; JLine owns native terminal access.
 
 ---
 
@@ -54,16 +54,27 @@ key handlers.
 | --- | --- |
 | JDK | **25 or newer** (the build targets bytecode 69) |
 | Maven | **3.9.16 or newer** (the wrapper pins this version) |
-| Terminal | ANSI/VT-capable terminal; Unix sessions require `--enable-native-access=ALL-UNNAMED` |
+| Terminal | ANSI/VT-capable terminal; interactive runs require `--enable-native-access=ALL-UNNAMED` |
 
 Platform support is described in [Compatibility](#compatibility).
 
 ## Build from source
 
-```bash
-git clone https://github.com/dhoard/braxton.git
-cd braxton
+From a Braxton checkout beside the patched JLine checkout (`../jline3`), first install its three required modules
+under the distinct local version used by this project's POM:
 
+```bash
+cd ../jline3
+TERM=xterm-256color ./mvx mvn -B -ntp -pl terminal-ffm -am -Dnisse.jgit.dynamicVersion=0.1.0-3601-SNAPSHOT -Djava.awt.headless=true clean install
+cd ../braxton
+```
+
+This local JLine build serializes a closed-stream check and byte consumption after native poll completion, preventing a
+closed input pump from consuming the next application's first key. Published Maven 4.4.8 does not
+contain this fix. The local version is not a Central release and must be installed before building
+Braxton or using its Maven artifact on another machine.
+
+```bash
 ./mvnw clean verify     # compile, run the test suite, build the jar
 ./run-ai-harness.sh     # package, then launch the bundled AI Harness example
 ```
@@ -73,7 +84,7 @@ cd braxton
 companion are copied to `target/showcase-lib` and are never bundled in the Braxton jar.
 
 On Windows, use a local Maven 3.9.16+ installation (`mvn clean verify`); the Bash launcher and the
-`mvnw` script are Unix-only. The native console backend is selected automatically.
+`mvnw` script are Unix-only. The local JLine build uses the FFM provider exclusively; JNI, exec, and dumb fallback are disabled.
 
 **Maven coordinates:** `io.github.dhoard:braxton` (automatic module name
 `io.github.dhoard.braxton`). Braxton is pre-1.0 and is not yet published to a public repository;
@@ -110,13 +121,13 @@ public final class HelloProgram implements Program<HelloProgram.Model, HelloProg
 
     @Override
     public Transition<Model, Msg> init(InitContext context) {
-        return Transition.stay(new Model(0));
+        return Transition.next(new Model(0));
     }
 
     @Override
     public Transition<Model, Msg> update(Model model, Msg message) {
         return switch (message) {
-            case Msg.Increment ignored -> Transition.stay(new Model(model.count() + 1));
+            case Msg.Increment ignored -> Transition.next(new Model(model.count() + 1));
             case Msg.Quit ignored -> Transition.next(model, Command.quit());
         };
     }
@@ -140,8 +151,8 @@ public final class HelloProgram implements Program<HelloProgram.Model, HelloProg
 ```
 
 ```bash
-./mvnw -q compile
-java --enable-native-access=ALL-UNNAMED -cp target/classes demo.HelloProgram
+./mvnw -q compile dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=target/showcase-lib
+java --enable-native-access=ALL-UNNAMED -cp "target/classes:target/showcase-lib/*" demo.HelloProgram
 ```
 
 The only bundled application is the [AI Harness](#ai-harness); it is a complete, production-shaped
@@ -184,7 +195,7 @@ Rules the runtime relies on:
 
 1. **`init`, `update`, `view`, and `subscriptions` are pure.** No I/O, clock reads, terminal
    access, or mutation of their arguments. `InitContext` carries already-captured values
-   (viewport, terminal capabilities, monotonic start time, system properties).
+   (viewport and terminal capabilities). Application configuration belongs in the program constructor; time arrives through explicit effects/messages.
 2. **Messages are application-owned.** A sealed interface of records keeps dispatch exhaustive
    and lets child features map their messages into a parent without casts.
 3. **Effects are data.** Return a `Command`; the runtime interprets it after the model commits.
@@ -365,10 +376,17 @@ accepted a payload. Copy sequences share the frame output owner and cannot split
 
 ## Runtime and terminal
 
-`Application.run(program)` opens one `TerminalSession`, which owns raw mode and its exact saved
-state, the alternate screen, cursor visibility, bracketed paste, optional mouse reporting, viewport
-measurement, and a cancelable input read. Closing the session wakes a blocked reader without
-closing `System.in`.
+`Application.run(program)` owns a JLine FFM `Terminal`, raw mode, alternate-screen/cursor,
+paste/mouse modes, input, sizing, and cleanup. It requires an attached process terminal and explicit
+native access. It returns a structured failure when those prerequisites are missing. There is no
+Braxton terminal backend/session SPI, alternate provider, or implicit `/dev/tty`/plain-output fallback.
+Closing a run stops its input consumer before terminal restoration and release; shared process streams
+remain available for subsequent runs.
+
+`RuntimeOptions` contains immutable limits and choices, including `InputOptions`, clipboard policy,
+and `app.TerminalOptions`. Clocks, timers, executors and diagnostic plumbing are internal runtime
+services, not application configuration. `ScreenRenderer.screen` returns an immutable
+`RenderedScreen` with cells/continuations and public ID/rectangle regions, using the same layout path.
 
 Defaults are configuration, not hidden constants:
 
@@ -380,7 +398,7 @@ Defaults are configuration, not hidden constants:
 | Paste payload / idle timeout / escape timeout / CSI length | 1 MiB / 250 ms / 30 ms / 64 bytes |
 | Shutdown grace | 2 s |
 
-`ExitResult` distinguishes a requested quit, clean end-of-input, and failure, and carries cleanup
+`ExitResult` distinguishes a requested quit, clean end-of-input, caller interruption (status 130), and failure, and carries cleanup
 failures without hiding the primary cause. Rendering is event-driven: an idle application does no
 work, and an interval subscription drives animation only while it is needed.
 
@@ -399,10 +417,15 @@ each target line once, and transcript projection styles only the visible window.
 uses the same one-column semantics without Unicode iterator/code-point allocation; other text
 retains the pinned Unicode and width-policy behavior.
 
-The runtime runs on Java 25 virtual threads: the input reader, the resize poller, the timer worker,
-the effect executor's tasks, and the terminal-restore shutdown hook are all virtual threads, so a
-blocking read, sleep, or application task parks instead of holding a platform thread. The runtime
-owner is the caller's thread; `Application.run` does not start or hijack it.
+Braxton uses a virtual input worker and virtual threads for its timer/effect work. The runtime
+owner is the caller's thread. Resize signals mark pending work without calling application code;
+the owner measures through JLine, with a 250 ms fallback size check. JLine manages its own native
+reader, signal, and shutdown threads; those threads are not necessarily virtual.
+
+Input uses JLine's timed character reader. Timeout is distinct from EOF; scalar assembly preserves
+supplementary characters and paste limits count UTF-8-equivalent bytes of complete scalars.
+Malformed encoded text follows JLine replacement decoding, including its handling of incomplete
+trailing bytes. Input content still passes through Braxton's normalization and rendering sanitization.
 
 ## AI Harness
 
@@ -439,7 +462,7 @@ responses, with no model, provider, network, or user-session access.
 
 | Package | Responsibility |
 | --- | --- |
-| `io.github.dhoard.braxton.app` | `Program`, `Transition`, `Application`, runtime options and environment |
+| `io.github.dhoard.braxton.app` | `Program`, `Transition`, `Application`, runtime options, immutable startup facts and terminal presentation choices |
 | `io.github.dhoard.braxton.effect` | `Command`, `Subscription`, effect and source identities |
 | `io.github.dhoard.braxton.input` | Value keys, modifiers, normalized events, bindings |
 | `io.github.dhoard.braxton.view` | Immutable views, `Views`, `ElementId`, `FocusState`, `ScreenRenderer` |
@@ -448,11 +471,10 @@ responses, with no model, provider, network, or user-session access.
 | `io.github.dhoard.braxton.widget` | Editor, markup, tables, boxes, badges, bars, quotes, gradients, selectors, animation |
 | `io.github.dhoard.braxton.asset` | FIGlet fonts, logos, image assets and views |
 | `io.github.dhoard.braxton.clipboard` | Configuration, sanitization, modes, results |
-| `io.github.dhoard.braxton.terminal` | Backend, session, capabilities, options |
-| `io.github.dhoard.braxton.internal` | Runtime loop, mailbox, effects, subscriptions, layout, cells, encoder, native sessions |
+| `io.github.dhoard.braxton.internal` | Runtime loop, mailbox, effects, subscriptions, layout, cells, encoder, direct JLine integration |
 
-Dependencies point inward: examples depend on the public library, native code is reached only by
-opening a real session, and the renderer performs no I/O. `internal` packages are not a supported
+Dependencies point inward: examples depend on the public library; runtime/input internals use JLine;
+models, views, routing and layout remain independent of terminal I/O. `internal` packages are not a supported
 API surface.
 
 ## Design principles
@@ -478,8 +500,7 @@ API surface.
 ./run-ai-harness.sh        # package and run the bundled example
 ```
 
-The build must stay warning-free under `-Xlint:all`, the core must keep zero third-party runtime
-dependencies, and the test suite must remain independent of a TTY, stdin, and raw mode. A headless
+The build must stay warning-free under `-Xlint:all`, the core must confine JLine terminal dependencies to runtime/input integration, and the test suite must remain independent of a TTY, stdin, and raw mode. A headless
 test run does not replace a manual check of a real terminal session.
 
 MIT license headers are enforced by Spotless during `verify`. Dependency-update reports honor the
@@ -523,13 +544,57 @@ the full project gate, and a terminal-emulation check when TUI code is touched.
 
 | Platform | Status |
 | --- | --- |
-| Linux / glibc x86_64 | Supported (native session backend) |
-| Windows console | Implemented; validation on real hardware is pending |
-| macOS / BSD | Rejected explicitly at startup |
+| Linux / glibc x86_64 | Local JLine FFM build; repeated PTY/pyte checks pass on Corretto 25.0.3; see implementation record |
+| macOS arm64 / aarch64 | JLine FFM target; native verification of this refactor pending |
+| macOS x86_64 / amd64 | JLine FFM target; native verification pending |
+| Windows x86_64 / console / ConPTY | JLine FFM target; Windows driver added, native verification pending |
+| Other OS/architecture combinations | Unverified; no fallback provider |
 | Java | 25 or newer |
 
-Terminal sessions require `--enable-native-access=ALL-UNNAMED`. The Unix backend uses the
-Linux/glibc x86_64 `termios` layout; other Unix ABIs are refused rather than guessed.
+Interactive runs require `--enable-native-access=ALL-UNNAMED` on the classpath. A module-path
+launch must instead grant access to `org.jline.terminal.ffm`. Braxton checks permission before
+initializing the FFM provider, even on JDKs that otherwise only warn. Maven resolves the locally
+installed `0.1.0-3601-SNAPSHOT` version of the pinned
+`jline-terminal` and `jline-terminal-ffm` dependencies and their transitive support artifacts;
+JLine is not shaded or optional. A launch with only the Braxton jar on its classpath is insufficient.
+JLine still performs native integration and can use internal signal APIs as an upstream fallback.
+
+### Native terminal verification
+
+The ordinary Maven suite uses owned JLine stream terminals and needs no real terminal or native
+access. Developer checks use owned PTYs and a private IPC channel to test the packaged MVU runtime:
+normalized Unicode/control/paste/wheel input, resizing, pyte output, large frames, idle-reader stop,
+immediate reopen, and restoration after quit, failure, JVM shutdown and SIGTERM. Prior native-backend
+platform checks do not establish support for this refactor. Forced process kill cannot guarantee restoration.
+
+Use Python with `pyte` and Java/javac on PATH:
+
+```bash
+./mvnw clean install
+python3 tools/terminal/verify_terminal.py --repeat 10 --pending-escape --harness  # owns its PTYs
+```
+
+The verifier builds a runtime dependency classpath, compiles its Java probe in an owned temporary
+directory, and tests the packaged jar. It needs no C compiler or Braxton ABI layout probe. The
+harness launcher copies all runtime dependencies into `target/showcase-lib` after each clean build.
+On Windows, build with Maven and prepare the classpath before the owned ConPTY verifier:
+
+```text
+mvn clean install
+mvn dependency:build-classpath -DincludeScope=runtime -Dmdep.outputFile=target/terminal-cp.txt
+python tools/terminal/verify_windows_terminal.py
+```
+
+The Windows driver uses developer-only Python ctypes for ConPTY and console-mode snapshots;
+it is not part of the published library. Run the corresponding checks on each named platform before
+claiming its terminal behavior is verified. Test outcomes and remaining gaps are recorded in
+[the implementation record](plans/jline4-mvu-refactor.impl.md#9-execution-record-and-handoff).
+
+The JLine refactor intentionally breaks the previous bootstrap/infrastructure API: backend/session
+interfaces and backend-taking run overloads are removed; terminal value imports move to `app`;
+`InitContext` exposes facts only; `RuntimeOptions.withEnvironment` and `Transition.stay` are removed.
+Use `Transition.next(model)` for a transition without work and `next(model, command)` for work.
+Headless callers consume immutable `RenderedScreen`, rather than internal mutable engine objects.
 
 ## Limitations
 
@@ -558,8 +623,8 @@ Before opening a pull request:
 2. Keep the automated suite TTY-free — no terminal, stdin, raw mode, or external services.
 3. Preserve the public contracts: immutable values, typed messages, pure `update`/`view`, explicit
    effects, and structural routing.
-4. Do not add a third-party runtime dependency to the core. The optional example dependency must
-   remain outside the published jar.
+4. Keep terminal integration on the selected local JLine FFM build and keep JLine types out of the public MVU API.
+   Preserve the thin jar and declared Maven runtime dependencies; Gson remains example-specific.
 5. Include a focused regression test for a behavior change and update the README/NOTICE when a
    contract changes.
 

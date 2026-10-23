@@ -31,10 +31,10 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.dhoard.braxton.app.RuntimeEnvironment;
+import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
-import io.github.dhoard.braxton.testkit.FakeTerminal;
+import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 
 /** An executor may retain a task until after its effect has been invalidated. */
 class EffectTaskStartupTest {
@@ -64,8 +64,8 @@ class EffectTaskStartupTest {
         List<String> bodies = new ArrayList<>();
         List<String> mappings = new ArrayList<>();
         Mailbox mailbox = new Mailbox(8);
-        RuntimeEnvironment environment = new RuntimeEnvironment(() -> 0L, queued::add,
-                new FakeTerminal.ManualTimers(), message -> { });
+        RuntimeServices environment = new RuntimeServices(() -> 0L, queued::add,
+                new ManualTimers(), message -> { });
         EffectRunner<String> runner = new EffectRunner<>(mailbox, environment, null, 1);
         EffectId id = EffectId.of("group/work");
         runner.interpret(task(id, "obsolete", bodies, mappings));

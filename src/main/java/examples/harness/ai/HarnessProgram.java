@@ -124,22 +124,22 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
             case HarnessMsg.Editor editor -> applyEditor(model, editor.action());
             case HarnessMsg.Submit submit -> submit(model, submit.text());
             case HarnessMsg.Tick tick -> tick(model, tick.nowNanos());
-            case HarnessMsg.Resized resized -> Transition.stay(model.withViewport(resized.size()));
-            case HarnessMsg.ScrollUp up -> Transition.stay(scrollBy(model, HarnessProjection.SCROLL_STEP));
-            case HarnessMsg.ScrollDown down -> Transition.stay(scrollBy(model, -HarnessProjection.SCROLL_STEP));
-            case HarnessMsg.PageUp pageUp -> Transition.stay(scrollBy(model, pageRows(model)));
-            case HarnessMsg.PageDown pageDown -> Transition.stay(scrollBy(model, -pageRows(model)));
-            case HarnessMsg.ScrollBottom bottom -> Transition.stay(model.withScroll(0));
+            case HarnessMsg.Resized resized -> Transition.next(model.withViewport(resized.size()));
+            case HarnessMsg.ScrollUp up -> Transition.next(scrollBy(model, HarnessProjection.SCROLL_STEP));
+            case HarnessMsg.ScrollDown down -> Transition.next(scrollBy(model, -HarnessProjection.SCROLL_STEP));
+            case HarnessMsg.PageUp pageUp -> Transition.next(scrollBy(model, pageRows(model)));
+            case HarnessMsg.PageDown pageDown -> Transition.next(scrollBy(model, -pageRows(model)));
+            case HarnessMsg.ScrollBottom bottom -> Transition.next(model.withScroll(0));
             case HarnessMsg.Escape escape -> escape(model, escape.atNanos());
             case HarnessMsg.ResponseBlock block -> responseBlock(model, block);
-            case HarnessMsg.Copied copied -> Transition.stay(model.withStatusMessage(
+            case HarnessMsg.Copied copied -> Transition.next(model.withStatusMessage(
                     clipboardStatus(copied.result())));
             case HarnessMsg.CopyVisible copy -> Transition.next(model,
                     Command.copy(HarnessProjection.visiblePlainText(model), HarnessMsg.Copied::new));
             case HarnessMsg.CopyLastReply copy -> copyLastReply(model);
-            case HarnessMsg.FocusComposer focus -> Transition.stay(model);
-            case HarnessMsg.UnhandledKey ignored -> Transition.stay(model);
-            case HarnessMsg.Notice notice -> Transition.stay(model.withStatusMessage(notice.text()));
+            case HarnessMsg.FocusComposer focus -> Transition.next(model);
+            case HarnessMsg.UnhandledKey ignored -> Transition.next(model);
+            case HarnessMsg.Notice notice -> Transition.next(model.withStatusMessage(notice.text()));
             case HarnessMsg.QuitRequest request -> quitRequest(model, request.atNanos());
             case HarnessMsg.Quit quit -> Transition.next(model, Command.quit());
         };
@@ -200,7 +200,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
         if (next.quitArmedUntilNanos() > 0L && nowNanos > next.quitArmedUntilNanos()) {
             next = endQuitConfirmation(next);
         }
-        return Transition.stay(next);
+        return Transition.next(next);
     }
 
     /**
@@ -211,7 +211,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
         if (model.quitArmedUntilNanos() > 0L && atNanos <= model.quitArmedUntilNanos()) {
             return Transition.next(model.withQuitArmed(0L), Command.quit());
         }
-        return Transition.stay(model.withQuitArmed(atNanos + QUIT_WINDOW_NANOS)
+        return Transition.next(model.withQuitArmed(atNanos + QUIT_WINDOW_NANOS)
                 .withStatusMessage(QUIT_CONFIRMATION_HINT));
     }
 
@@ -221,7 +221,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
             HarnessTranscript transcript) {
         HarnessTranscript source = transcript == null
                 ? HarnessTranscript.empty(List.of("empty transcript")) : transcript;
-        return Transition.stay(model.withTranscript(source));
+        return Transition.next(model.withTranscript(source));
     }
 
     private Transition<HarnessState, HarnessMsg> TranscriptionFailure(HarnessState model,
@@ -232,7 +232,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
         entries.add(new HarnessEntry.Failure(
                 "Could not read the bundled example transcript (" + reason
                         + "); fallback responses are active."));
-        return Transition.stay(model.withStatus(HarnessState.Status.READY)
+        return Transition.next(model.withStatus(HarnessState.Status.READY)
                 .withEntries(entries)
                 .withStatusMessage("Transcript unavailable; mock fallback active."));
     }
@@ -244,12 +244,12 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
         EditorResult result = Editor.update(model.draft(), editorOptions(), action);
         HarnessState next = model.withDraft(result.state());
         return switch (result.intent()) {
-            case EditorIntent.None none -> Transition.stay(next);
+            case EditorIntent.None none -> Transition.next(next);
             case EditorIntent.Submit submit -> submit(next, submit.text());
             // Copy carries "" when there is nothing to copy (an empty draft or a policy that
             // refuses); forwarding it would clear the in-process clipboard instead.
             case EditorIntent.Copy copy -> copy.text().isEmpty()
-                    ? Transition.stay(next.withStatusMessage("Nothing to copy."))
+                    ? Transition.next(next.withStatusMessage("Nothing to copy."))
                     : Transition.next(next, Command.copy(copy.text(), HarnessMsg.Copied::new));
             case EditorIntent.PasteRequest request -> Transition.next(next,
                     Command.readClipboard(text -> new HarnessMsg.Editor(new EditorAction.Paste(text))));
@@ -259,13 +259,13 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
     private Transition<HarnessState, HarnessMsg> submit(HarnessState model, String text) {
         String clean = HarnessRender.sanitize(text).strip();
         if (clean.isEmpty()) {
-            return Transition.stay(model);
+            return Transition.next(model);
         }
         if (model.status() != HarnessState.Status.READY) {
-            return Transition.stay(model.withStatusMessage("Transcript is still loading."));
+            return Transition.next(model.withStatusMessage("Transcript is still loading."));
         }
         if (model.outstandingPrompts() >= MAX_OUTSTANDING) {
-            return Transition.stay(model.withStatusMessage(
+            return Transition.next(model.withStatusMessage(
                     "Queue full (" + MAX_OUTSTANDING + "); prompt not submitted."));
         }
         List<HarnessEntry> entries = new ArrayList<>(model.entries());
@@ -277,7 +277,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
         if (next.working()) {
             List<String> pending = new ArrayList<>(next.pending());
             pending.add(clean);
-            return Transition.stay(next.withPending(pending));
+            return Transition.next(next.withPending(pending));
         }
         return startTurn(next, clean);
     }
@@ -309,7 +309,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
             HarnessMsg.ResponseBlock block) {
         if (!model.working() || block.generation() != model.generation()
                 || model.active() == null || block.ordinal() != model.active().blockIndex()) {
-            return Transition.stay(model);
+            return Transition.next(model);
         }
         HarnessTranscript.HarnessTurn turn = model.active().turn();
         if (block.ordinal() >= turn.responses().size()) {
@@ -331,7 +331,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
             next = next.withMetadata(model.active().turn().profile(), model.active().turn().usage());
         }
         if (next.pending().isEmpty()) {
-            return Transition.stay(next.withActive(null).withWorkStarted(0));
+            return Transition.next(next.withActive(null).withWorkStarted(0));
         }
         String prompt = next.pending().get(0);
         List<String> rest = new ArrayList<>(next.pending());
@@ -342,7 +342,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
 
     private Transition<HarnessState, HarnessMsg> escape(HarnessState model, long atNanos) {
         if (!model.working()) {
-            return Transition.stay(model.withEscArmed(0));
+            return Transition.next(model.withEscArmed(0));
         }
         if (model.escArmedUntilNanos() > 0 && atNanos <= model.escArmedUntilNanos()) {
             // A queued prompt was accepted and is now dropped, so it is reported the way every
@@ -362,7 +362,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
                                     + " discarded.");
             return Transition.next(next, Command.cancelNamespace("harness"));
         }
-        return Transition.stay(model.withEscArmed(atNanos + ESC_WINDOW_NANOS));
+        return Transition.next(model.withEscArmed(atNanos + ESC_WINDOW_NANOS));
     }
 
     // ── scrolling and clipboard ─────────────────────────────────────────────
@@ -388,7 +388,7 @@ public final class HarnessProgram implements Program<HarnessState, HarnessMsg> {
             }
         }
         if (reply.isBlank()) {
-            return Transition.stay(model.withStatusMessage("No assistant reply to copy."));
+            return Transition.next(model.withStatusMessage("No assistant reply to copy."));
         }
         return Transition.next(model, Command.copy(reply, HarnessMsg.Copied::new));
     }

@@ -49,7 +49,7 @@ class AnsiEncoderTest {
     void rowsAreAddressedAbsolutelyAndCleared() {
         Screen screen = new Screen(2, 4);
         screen.put(1, 0, "x", Style.NONE, null, 1);
-        String row = AnsiEncoder.encodeRow(screen, 1);
+        String row = AnsiEncoder.encodeRow(screen, 1, true);
         assertThat(row).startsWith("\u001B[2;1H\u001B[2K");
         assertThat(row).contains("x");
     }
@@ -61,7 +61,7 @@ class AnsiEncoderTest {
         Screen second = new Screen(2, 3);
         second.put(0, 0, "a", Style.NONE, null, 1);
         second.put(1, 0, "b", Style.NONE, null, 1);
-        String diff = AnsiEncoder.diff(first, second);
+        String diff = AnsiEncoder.diff(first, second, true);
         assertThat(diff).contains("\u001B[2;1H");
         assertThat(diff).doesNotContain("\u001B[1;1H");
     }
@@ -74,8 +74,8 @@ class AnsiEncoderTest {
         previous.put(0, 0, "x", Style.NONE, null, 1);
         Screen resized = new Screen(3, 6);
         resized.put(0, 0, "y", Style.NONE, null, 1);
-        String diff = AnsiEncoder.diff(previous, resized);
-        assertThat(diff).isEqualTo(AnsiEncoder.frame(resized));
+        String diff = AnsiEncoder.diff(previous, resized, true);
+        assertThat(diff).isEqualTo(AnsiEncoder.frame(resized, true));
         assertThat(diff).contains("\u001B[3;1H");
     }
 
@@ -84,7 +84,7 @@ class AnsiEncoderTest {
         Screen screen = new Screen(1, 4);
         screen.put(0, 0, "a", Style.NONE, "https://example.com", 1);
         screen.put(0, 1, "b", Style.NONE, "https://example.com", 1);
-        String row = AnsiEncoder.encodeRow(screen, 0);
+        String row = AnsiEncoder.encodeRow(screen, 0, true);
         assertThat(row.split("\u001B]8;;https://example.com", -1)).hasSize(2);
         assertThat(row).contains("\u001B\\");
     }
@@ -94,7 +94,7 @@ class AnsiEncoderTest {
         for (char control = 0x80; control <= 0x9f; control++) {
             Screen screen = new Screen(1, 2);
             screen.put(0, 0, "x", Style.NONE, "https://example.com/a" + control + "b", 1);
-            String encoded = AnsiEncoder.encodeRow(screen, 0);
+            String encoded = AnsiEncoder.encodeRow(screen, 0, true);
             assertThat(encoded).doesNotContain(String.valueOf(control));
             assertThat(encoded).contains("https://example.com/ab");
         }
@@ -105,7 +105,7 @@ class AnsiEncoderTest {
         var content = StyledText.of("x\u001B[31my", Style.NONE);
         var screen = new io.github.dhoard.braxton.internal.render.LayoutEngine()
                 .layout(Views.text(content), new Rect(0, 0, 1, 10)).screen();
-        String row = AnsiEncoder.encodeRow(screen, 0);
+        String row = AnsiEncoder.encodeRow(screen, 0, true);
         assertThat(row).contains("x[31my");
         assertThat(row.replace("\u001B[1;1H\u001B[2K", "")).doesNotContain("\u001B[31m");
     }
@@ -114,7 +114,7 @@ class AnsiEncoderTest {
     void interiorBlankCellsAreEncodedSoLaterContentKeepsItsColumn() {
         Screen screen = new Screen(1, 4);
         screen.put(0, 1, "b", Style.NONE, null, 1);
-        assertThat(AnsiEncoder.encodeRow(screen, 0))
+        assertThat(AnsiEncoder.encodeRow(screen, 0, true))
                 .isEqualTo("\u001B[1;1H\u001B[2K b");
     }
 
@@ -123,7 +123,7 @@ class AnsiEncoderTest {
         Screen screen = new Screen(1, 4);
         screen.put(0, 0, "a", Style.bg(io.github.dhoard.braxton.style.Colors.BLACK), null, 1);
         screen.put(0, 2, "c", Style.NONE, null, 1);
-        assertThat(AnsiEncoder.encodeRow(screen, 0))
+        assertThat(AnsiEncoder.encodeRow(screen, 0, true))
                 .endsWith("a\u001B[0m c");
     }
 
@@ -131,7 +131,7 @@ class AnsiEncoderTest {
     void trailingBlankCellsAreNotEncoded() {
         Screen screen = new Screen(1, 6);
         screen.put(0, 0, "a", Style.NONE, null, 1);
-        assertThat(AnsiEncoder.encodeRow(screen, 0))
+        assertThat(AnsiEncoder.encodeRow(screen, 0, true))
                 .isEqualTo("\u001B[1;1H\u001B[2Ka");
     }
 
@@ -140,7 +140,17 @@ class AnsiEncoderTest {
         Screen screen = new Screen(2, 2);
         screen.put(0, 0, "a", Style.NONE, null, 1);
         screen.put(1, 0, "b", Style.NONE, null, 1);
-        String frame = AnsiEncoder.frame(screen);
+        String frame = AnsiEncoder.frame(screen, true);
         assertThat(frame.indexOf("\u001B[1;1H")).isLessThan(frame.indexOf("\u001B[2;1H"));
+    }
+    @Test
+    void disablingColorKeepsTextAndOtherAttributesWithoutEmittingRgbControls() {
+        Screen screen = new Screen(1,3);
+        screen.put(0,0,"x",io.github.dhoard.braxton.style.Style.NONE.withBold()
+                .withForeground(new io.github.dhoard.braxton.style.Color(255,0,0))
+                .withBackground(new io.github.dhoard.braxton.style.Color(0,0,255)),null,1);
+        String plain = AnsiEncoder.frame(screen,false);
+        assertThat(plain).contains("x", "\u001b[1m").doesNotContain("38;2", "48;2");
+        assertThat(AnsiEncoder.frame(screen,true)).contains("38;2", "48;2");
     }
 }

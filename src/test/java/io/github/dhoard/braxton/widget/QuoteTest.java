@@ -31,7 +31,7 @@ import java.util.Random;
 import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.internal.render.LayoutEngine;
-import io.github.dhoard.braxton.internal.render.Screen;
+import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
@@ -238,7 +238,7 @@ class QuoteTest {
             assertThat(width).as("block width for %s", show(content.plainText())).isEqualTo(4);
             assertThat(new LayoutEngine().intrinsicWidth(quote.view(), width + 8))
                     .as("width measured for %s", show(content.plainText())).isEqualTo(width);
-            Screen screen = new ScreenRenderer().screen(quote.view(),
+            RenderedScreen screen = new ScreenRenderer().screen(quote.view(),
                     new Viewport(rows.size(), width + 2));
             assertThat(screen.rows()).as("painted rows for %s", show(content.plainText()))
                     .isEqualTo(rows.size());
@@ -293,7 +293,7 @@ class QuoteTest {
                 assertThat(TextMeasure.columns(rendered.get(line).plainText()))
                         .as("row %d of %s", line, expected).isEqualTo(width);
             }
-            Screen screen = new ScreenRenderer().screen(quote.view(),
+            RenderedScreen screen = new ScreenRenderer().screen(quote.view(),
                     new Viewport(lines, width + 2));
             assertThat(screen.rows()).as("painted rows of %s", expected).isEqualTo(lines);
             for (int row = 0; row < lines; row++) {
@@ -304,7 +304,7 @@ class QuoteTest {
     }
 
     /** Columns a painted row actually occupies: a wide cell counts two, its continuation none. */
-    private static int paintedColumns(Screen screen, int row) {
+    private static int paintedColumns(RenderedScreen screen, int row) {
         int columns = 0;
         for (int col = 0; col < screen.cols(); col++) {
             if (screen.isContinuation(row, col)) {
@@ -316,7 +316,7 @@ class QuoteTest {
     }
 
     /** The last column a row paints in, so the block's edge has to land in one column. */
-    private static int lastPaintedColumn(Screen screen, int row) {
+    private static int lastPaintedColumn(RenderedScreen screen, int row) {
         for (int col = screen.cols() - 1; col >= 0; col--) {
             if (screen.isContinuation(row, col) || !screen.cell(row, col).isEmpty()) {
                 return col;
@@ -326,7 +326,7 @@ class QuoteTest {
     }
 
     /** The cells a row was painted with, for a readable failure message. */
-    private static List<String> paintedCells(Screen screen, int row) {
+    private static List<String> paintedCells(RenderedScreen screen, int row) {
         List<String> cells = new ArrayList<>();
         for (int col = 0; col < screen.cols(); col++) {
             cells.add(screen.isContinuation(row, col)

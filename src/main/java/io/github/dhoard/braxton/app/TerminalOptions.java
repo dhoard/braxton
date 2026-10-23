@@ -22,25 +22,28 @@
 
 package io.github.dhoard.braxton.app;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
 /**
- * Shared executor for application effect tasks.
+ * Session behaviour an application can request before it starts.
  *
- * <p>Every task runs on its own virtual thread: a task is application work that may block on I/O,
- * and the project requires virtual threads unless one cannot work. The executor is never shut
- * down; virtual threads are daemons, so idle capacity cannot keep the process alive.</p>
+ * <p>Full-window applications use the alternate screen by default so exit restores the user's
+ * scrollback instead of erasing it. Mouse reporting is opt-in; bracketed paste defaults on when supported.</p>
  */
-final class EffectExecutors {
+public record TerminalOptions(boolean alternateScreen, boolean mouse, boolean bracketedPaste) {
 
-    private static final ExecutorService SHARED = Executors.newThreadPerTaskExecutor(
-            Thread.ofVirtual().name("braxton-effect-", 0).factory());
+    public static final TerminalOptions DEFAULT = new TerminalOptions(true, false, true);
 
-    private EffectExecutors() {
+    public TerminalOptions {
     }
 
-    static ExecutorService shared() {
-        return SHARED;
+    public TerminalOptions withMouse(boolean value) {
+        return new TerminalOptions(alternateScreen, value, bracketedPaste);
+    }
+
+    public TerminalOptions withAlternateScreen(boolean value) {
+        return new TerminalOptions(value, mouse, bracketedPaste);
+    }
+
+    public TerminalOptions withBracketedPaste(boolean value) {
+        return new TerminalOptions(alternateScreen, mouse, value);
     }
 }

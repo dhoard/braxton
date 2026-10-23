@@ -35,13 +35,13 @@ import org.junit.jupiter.api.Test;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
 import io.github.dhoard.braxton.layout.Size;
-import io.github.dhoard.braxton.testkit.FakeTerminal;
+import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 
 /** Source reconciliation: identity, mapping refresh, epochs, and limits. */
 class SubscriptionManagerTest {
 
     private final Mailbox mailbox = new Mailbox(32);
-    private final FakeTerminal.ManualTimers timers = new FakeTerminal.ManualTimers();
+    private final ManualTimers timers = new ManualTimers();
     private final List<String> diagnostics = new ArrayList<>();
     private final SubscriptionManager<String> manager =
             new SubscriptionManager<>(mailbox, timers, 2, diagnostics::add);
@@ -267,7 +267,7 @@ class SubscriptionManagerTest {
         java.util.concurrent.CountDownLatch ran = new java.util.concurrent.CountDownLatch(1);
         Mailbox ownBox = new Mailbox(4);
         SubscriptionManager<String> real = new SubscriptionManager<>(ownBox,
-                io.github.dhoard.braxton.app.Timers.system(), 2, message -> { });
+                io.github.dhoard.braxton.internal.runtime.Timers.system(), 2, message -> { });
         String owner = Thread.currentThread().getName();
         real.reconcile(Subscription.interval(SubscriptionId.of("tick"), Duration.ofMillis(1),
                 time -> {

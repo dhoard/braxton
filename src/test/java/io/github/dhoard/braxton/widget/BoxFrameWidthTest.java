@@ -31,7 +31,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.internal.render.LayoutEngine;
-import io.github.dhoard.braxton.internal.render.Screen;
+import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Style;
@@ -234,7 +234,7 @@ class BoxFrameWidthTest {
     }
 
     /** Cells a row was painted with; a wide cluster's second half is marked as a continuation. */
-    private static List<String> paintedCells(Screen screen, int row) {
+    private static List<String> paintedCells(RenderedScreen screen, int row) {
         List<String> cells = new ArrayList<>();
         for (int col = 0; col < screen.cols(); col++) {
             cells.add(screen.isContinuation(row, col)
@@ -251,7 +251,7 @@ class BoxFrameWidthTest {
      */
     private static void assertFrameIsPaintedColumnByColumn(Box box, int width) {
         List<String> rendered = List.of(box.render(width).plainText().split("\n", -1));
-        Screen screen = new ScreenRenderer().screen(box.view(width),
+        RenderedScreen screen = new ScreenRenderer().screen(box.view(width),
                 new Viewport(rendered.size(), width));
         assertThat(screen.rows()).as("rows painted for %s", rendered).isEqualTo(rendered.size());
         for (int row = 0; row < rendered.size(); row++) {

@@ -42,12 +42,13 @@ import io.github.dhoard.braxton.internal.input.InputDecoder;
 import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.terminal.TerminalCapabilities;
+import io.github.dhoard.braxton.app.TerminalCapabilities;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.widget.EditorAction;
 import io.github.dhoard.braxton.widget.EditorState;
 
 /** The harness program: seeding, submission, pacing, cancellation, limits, and intents. */
+@org.junit.jupiter.api.extension.ExtendWith(io.github.dhoard.braxton.internal.input.TestReaders.class)
 class HarnessProgramTest {
 
     private static final HarnessTranscript.Profile PROFILE =
@@ -81,7 +82,7 @@ class HarnessProgramTest {
     @Test
     void initIsLoadingAndReturnsOneTaskCommand() {
         Transition<HarnessState, HarnessMsg> transition = program().init(
-                new InitContext(new Viewport(24, 80), TerminalCapabilities.PLAIN, 0L, java.util.Map.of()));
+                new InitContext(new Viewport(24, 80), TerminalCapabilities.PLAIN));
         assertThat(transition.model().status()).isEqualTo(HarnessState.Status.LOADING);
         assertThat(transition.command()).isInstanceOf(Command.Task.class);
     }
@@ -300,8 +301,8 @@ class HarnessProgramTest {
         HarnessState running = update(ready(), new HarnessMsg.Submit("hello")).model();
         assertThat(running.working()).isTrue();
 
-        InputDecoder decoder = new InputDecoder(new ByteArrayInputStream(
-                new byte[] {0x1B, 0x0D, 0x1B, 0x0D}));
+        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteArrayInputStream(
+                new byte[] {0x1B, 0x0D, 0x1B, 0x0D})));
         HarnessState state = running;
         for (int press = 0; press < 2; press++) {
             state = state.withDraft(EditorState.of("press " + press));

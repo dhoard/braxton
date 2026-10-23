@@ -84,7 +84,7 @@ class BorderTitleTest {
         assertThat(screen.cell(1, 0).text()).as("the edge is a blank cell, not a control character")
                 .isEqualTo(" ");
         assertThat(screen.plainLines()).containsExactly("+----+", " [2K", "+----+");
-        String frame = AnsiEncoder.frame(screen);
+        String frame = AnsiEncoder.frame(screen, true);
         // The encoder clears each row exactly once; a fourth clear could only come from content.
         assertThat(frame.split("\u001b\\[2K", -1)).as("line clears in the frame").hasSize(4);
         // The same boundary owns an unpaired surrogate: UTF-8 would replace it with '?', so the
@@ -126,7 +126,7 @@ class BorderTitleTest {
                     .containsExactly("+  +", "|ab|", "+  +");
             assertThat(screen.cell(0, 1).text()).as("horizontal edge 0x%04x", (int) edge)
                     .isEqualTo(" ");
-            assertThat(AnsiEncoder.frame(screen)).as("horizontal edge 0x%04x", (int) edge)
+            assertThat(AnsiEncoder.frame(screen, true)).as("horizontal edge 0x%04x", (int) edge)
                     .doesNotContain("\n").doesNotContain("\t");
             Border vertical = new Border('+', '+', '+', '+', '-', edge);
             Screen side = new LayoutEngine()
@@ -139,7 +139,7 @@ class BorderTitleTest {
                     .isEqualTo(" ");
             assertThat(side.cell(1, 3).text()).as("trailing edge 0x%04x", (int) edge)
                     .isEqualTo(" ");
-            assertThat(AnsiEncoder.frame(side)).as("vertical edge 0x%04x", (int) edge)
+            assertThat(AnsiEncoder.frame(side, true)).as("vertical edge 0x%04x", (int) edge)
                     .doesNotContain("\n").doesNotContain("\t");
         }
     }
@@ -162,7 +162,7 @@ class BorderTitleTest {
                     .as("horizontal edge 0x%04x top row", (int) edge).isEqualTo(4);
             assertThat(screen.cell(0, 1).text()).as("horizontal edge 0x%04x", (int) edge)
                     .isEqualTo(" ");
-            assertThat(AnsiEncoder.frame(screen)).as("horizontal edge 0x%04x", (int) edge)
+            assertThat(AnsiEncoder.frame(screen, true)).as("horizontal edge 0x%04x", (int) edge)
                     .doesNotContain(String.valueOf(edge));
             Border vertical = new Border('+', '+', '+', '+', '-', edge);
             Screen side = new LayoutEngine()
@@ -175,7 +175,7 @@ class BorderTitleTest {
                     .isEqualTo(" ");
             assertThat(side.cell(1, 3).text()).as("trailing edge 0x%04x", (int) edge)
                     .isEqualTo(" ");
-            assertThat(AnsiEncoder.frame(side)).as("vertical edge 0x%04x", (int) edge)
+            assertThat(AnsiEncoder.frame(side, true)).as("vertical edge 0x%04x", (int) edge)
                     .doesNotContain(String.valueOf(edge));
         }
     }
@@ -213,7 +213,7 @@ class BorderTitleTest {
                                     .isLessThanOrEqualTo(1);
                         }
                     }
-                    assertThat(AnsiEncoder.frame(screen))
+                    assertThat(AnsiEncoder.frame(screen, true))
                             .as("edge 0x%04x width %d never reaches the terminal", (int) edge, width)
                             .doesNotContain(String.valueOf(edge));
                 }

@@ -20,22 +20,20 @@
  * SOFTWARE.
  */
 
-package io.github.dhoard.braxton.terminal;
+package io.github.dhoard.braxton.internal.runtime;
 
-import static org.assertj.core.api.Assertions.assertThat;
+/** A cancellable one-shot timer. */
+public interface Timers {
 
-import org.junit.jupiter.api.Test;
+    /** Schedules {@code task} once after {@code delayNanos}. */
+    Handle schedule(long delayNanos, Runnable task);
 
-/** Session options are value data: every documented behaviour can be requested on its own. */
-class TerminalOptionsTest {
+    interface Handle {
+        void cancel();
+    }
 
-    @Test
-    void everySessionOptionCanBeRequestedIndependently() {
-        TerminalOptions options = TerminalOptions.DEFAULT
-                .withAlternateScreen(false)
-                .withMouse(true)
-                .withBracketedPaste(false);
-        assertThat(options).isEqualTo(new TerminalOptions(false, true, false));
-        assertThat(TerminalOptions.DEFAULT.bracketedPaste()).isTrue();
+    /** Real time, backed by a shared scheduler whose worker is a virtual thread. */
+    static Timers system() {
+        return SystemTimers.INSTANCE;
     }
 }

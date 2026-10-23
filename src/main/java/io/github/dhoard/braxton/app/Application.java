@@ -23,7 +23,6 @@
 package io.github.dhoard.braxton.app;
 
 import io.github.dhoard.braxton.internal.runtime.RuntimeLoop;
-import io.github.dhoard.braxton.terminal.TerminalBackend;
 
 /**
  * Entry point for running one MVU application.
@@ -34,11 +33,10 @@ import io.github.dhoard.braxton.terminal.TerminalBackend;
  */
 public final class Application {
 
-    private Application() {
-    }
+    private Application() {}
 
     /**
-     * Runs with the system terminal backend and default options.
+     * Runs with the JLine FFM system terminal and default options.
      *
      * @return how the run ended; never null
      */
@@ -47,28 +45,12 @@ public final class Application {
     }
 
     /**
-     * Runs with the system terminal backend.
+     * Runs with the JLine FFM system terminal.
      *
      * @return how the run ended; never null
      */
     public static <M, Msg> ExitResult run(Program<M, Msg> program, RuntimeOptions options) {
-        return run(program, options, io.github.dhoard.braxton.internal.terminal.SystemTerminalBackend.INSTANCE);
-    }
-
-    /**
-     * Runs against an explicit backend. Intended for embedding and headless tests; the backend still
-     * owns every terminal-state change.
-     *
-     * @return how the run ended; never null
-     */
-    public static <M, Msg> ExitResult run(Program<M, Msg> program, RuntimeOptions options,
-            TerminalBackend backend) {
-        if (program == null) {
-            throw new IllegalArgumentException("program is required");
-        }
-        if (backend == null) {
-            throw new IllegalArgumentException("backend is required");
-        }
-        return new RuntimeLoop<>(program, options, backend).run();
+        if (program == null) throw new IllegalArgumentException("program is required");
+        return new RuntimeLoop<>(program, options).run();
     }
 }

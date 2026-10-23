@@ -100,16 +100,16 @@ public class ScreenEncodeBenchmark {
 
     @Benchmark
     public void encodeFullFrame(Blackhole sink) {
-        sink.consume(AnsiEncoder.frame(styled));
+        sink.consume(AnsiEncoder.frame(styled, true));
     }
 
     @Benchmark
     public void encodeUnchangedDiff(Blackhole sink) {
-        sink.consume(AnsiEncoder.diff(styled, styled));
+        sink.consume(AnsiEncoder.diff(styled, styled, true));
     }
 
     @Benchmark
     public void encodeOneCellDiff(Blackhole sink) {
-        sink.consume(AnsiEncoder.diff(styled, changed));
+        sink.consume(AnsiEncoder.diff(styled, changed, true));
     }
 }

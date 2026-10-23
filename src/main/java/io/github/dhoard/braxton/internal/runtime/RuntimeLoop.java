@@ -23,20 +23,26 @@
 package io.github.dhoard.braxton.internal.runtime;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
+import org.jline.terminal.impl.ffm.FfmTerminalProvider;
+import org.jline.terminal.spi.TerminalExt;
+import org.jline.utils.InfoCmp;
+import org.jline.utils.ShutdownHooks;
 
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.app.InitContext;
 import io.github.dhoard.braxton.app.Program;
-import io.github.dhoard.braxton.app.RuntimeEnvironment;
 import io.github.dhoard.braxton.app.RuntimeOptions;
+import io.github.dhoard.braxton.app.TerminalCapabilities;
 import io.github.dhoard.braxton.app.Transition;
-import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.internal.clipboard.ClipboardService;
 import io.github.dhoard.braxton.internal.clipboard.TerminalEnvironment;
@@ -47,37 +53,48 @@ import io.github.dhoard.braxton.internal.render.LayoutEngine;
 import io.github.dhoard.braxton.internal.render.Screen;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.terminal.TerminalBackend;
-import io.github.dhoard.braxton.terminal.TerminalSession;
 import io.github.dhoard.braxton.view.View;
 
 /**
  * The single runtime owner.
  *
- * <p>It opens one terminal session, initializes the program, then serializes everything that
+ * <p>It opens one JLine terminal, initializes the program, then serializes everything that
  * touches the model: routing, {@code update}, command interpretation, subscription reconciliation,
  * layout, and output. Input, timers, tasks, and sources only enqueue immutable envelopes. Rendering
  * coalesces application changes with a minimum 16 ms gap between presentations. Input, resize,
  * and orderly exit flush dirty state immediately; an idle application performs no view work.</p>
  *
- * <p>The owner is the caller's thread; the two reader threads (input and resize) are virtual
- * threads. Both block on streams or sleeps, which is exactly what a virtual thread handles without
- * holding a carrier thread.</p>
+ * <p>The owner is the caller's thread. A virtual input worker enqueues normalized events.
+ * The owner samples JLine sizes after nonblocking signal notifications and on a bounded fallback
+ * interval. JLine manages its own native input/signal threads.</p>
  */
 public final class RuntimeLoop<M, Msg> {
 
     private static final long POLL_MILLIS = 50L;
-    private static final long RESIZE_POLL_MILLIS = 100L;
+    private static final long RESIZE_POLL_MILLIS = 250L;
+    private static final AtomicBoolean OWNED = new AtomicBoolean();
     private static final long FRAME_NANOS = TimeUnit.MILLISECONDS.toNanos(16L);
 
+    private final AtomicBoolean started = new AtomicBoolean();
     private final Program<M, Msg> program;
     private final RuntimeOptions options;
-    private final TerminalBackend backend;
+    private final RuntimeServices services;
+    private final Terminal suppliedTerminal;
+    private final Object outputLock = new Object();
+    private final AtomicBoolean resizePending = new AtomicBoolean();
+    private volatile boolean stopping;
+    private volatile Terminal terminal;
+    private boolean ownsConsole;
+    private boolean modesEntered;
+    private boolean terminalClosed;
+    private TerminalCapabilities capabilities;
+    private ShutdownHooks.Task restoreTask;
+    private long nextResizeAt;
+    private boolean interrupted;
 
     private final LayoutEngine engine = new LayoutEngine();
     private final List<Throwable> cleanupFailures = new ArrayList<>();
 
-    private TerminalSession session;
     private Mailbox mailbox;
     private EffectRunner<Msg> effects;
     private SubscriptionManager<Msg> subscriptions;
@@ -92,50 +109,201 @@ public final class RuntimeLoop<M, Msg> {
     private long nextFrameAtNanos;
 
     private Thread inputThread;
-    private Thread resizeThread;
 
-    public RuntimeLoop(Program<M, Msg> program, RuntimeOptions options, TerminalBackend backend) {
-        this.program = program;
+    public RuntimeLoop(Program<M, Msg> program, RuntimeOptions options) {
+        this(program, options, null, RuntimeServices.system());
+    }
+
+    /** Internal construction seam: an actual JLine terminal, never a Braxton backend abstraction. */
+    public RuntimeLoop(
+            Program<M, Msg> program,
+            RuntimeOptions options,
+            Terminal terminal,
+            RuntimeServices services) {
+        this.program = java.util.Objects.requireNonNull(program, "program");
         this.options = options == null ? RuntimeOptions.defaults() : options;
-        this.backend = backend;
+        this.suppliedTerminal = terminal;
+        this.services = java.util.Objects.requireNonNull(services, "services");
+    }
+
+    private void openTerminal() throws IOException {
+        if (suppliedTerminal == null) {
+            if (!OWNED.compareAndSet(false, true))
+                throw new IllegalStateException("another Braxton application owns the terminal");
+            ownsConsole = true;
+            restoreTask = ShutdownHooks.add(this::shutdownRestore);
+            if (!FfmTerminalProvider.class.getModule().isNativeAccessEnabled()) {
+                throw new IllegalStateException(
+                        "JLine FFM requires --enable-native-access=ALL-UNNAMED on the classpath,"
+                                + " or --enable-native-access=org.jline.terminal.ffm on the module"
+                                + " path");
+            }
+            try {
+                terminal = TerminalBuilder.builder()
+                        .name("braxton")
+                        .system(true)
+                        .devTty(false)
+                        .provider("ffm")
+                        .dumb(false)
+                        .encoding(StandardCharsets.UTF_8)
+                        .graphemeCluster(false)
+                        .build();
+            } catch (IOException | RuntimeException failure) {
+                throw new IOException(
+                        "Cannot open JLine FFM: an attached process terminal is required; verify"
+                                + " the FFM dependency and native-access permission",
+                        failure);
+            }
+            if (!(terminal instanceof TerminalExt ext)
+                    || ext.getProvider() == null
+                    || !"ffm".equals(ext.getProvider().name()))
+                throw new IllegalStateException("JLine FFM provider required");
+        } else terminal = suppliedTerminal;
+        String type = terminal.getType();
+        if (type == null
+                || type.startsWith("dumb")
+                || terminal.getStringCapability(InfoCmp.Capability.cursor_address) == null) {
+            throw new IllegalStateException("a cursor-addressable VT terminal is required");
+        }
+        String name = type.toLowerCase(java.util.Locale.ROOT);
+        boolean vt = name.contains("xterm")
+                || name.contains("screen")
+                || name.contains("tmux")
+                || name.contains("rxvt")
+                || name.contains("windows");
+        Integer colors = terminal.getNumericCapability(InfoCmp.Capability.max_colors);
+        capabilities = new TerminalCapabilities(
+                colors != null && colors > 0,
+                terminal.getStringCapability(InfoCmp.Capability.enter_ca_mode) != null,
+                vt,
+                terminal.hasMouseSupport(),
+                type);
+        terminal.enterRawMode();
+        terminal.handle(Terminal.Signal.WINCH, ignored -> {
+            resizePending.set(true);
+            Mailbox current = mailbox;
+            if (current != null) current.wake();
+        });
+        synchronized (outputLock) {
+            modesEntered = true;
+            StringBuilder entry = new StringBuilder();
+            if (options.terminal().alternateScreen() && capabilities.alternateScreen())
+                entry.append(AnsiEncoder.ALT_SCREEN_ON);
+            entry.append(AnsiEncoder.HIDE_CURSOR);
+            if (options.terminal().bracketedPaste() && capabilities.bracketedPaste())
+                entry.append(AnsiEncoder.ENABLE_BRACKETED_PASTE);
+            if (options.terminal().mouse() && capabilities.mouse())
+                entry.append(AnsiEncoder.ENABLE_MOUSE);
+            writeOutput(entry.toString());
+        }
+    }
+
+    private Size terminalSize() {
+        try {
+            var size = terminal.getSize();
+            if (size.getRows() > 0 && size.getColumns() > 0)
+                return new Size(size.getRows(), size.getColumns());
+        } catch (RuntimeException unavailable) {
+            services.diagnostics().accept("terminal size temporarily unavailable");
+        }
+        return (viewport.rows() == 0 || viewport.cols() == 0)
+                ? new Size(24, 80)
+                : new Size(viewport.rows(), viewport.cols());
+    }
+
+    private void writeOutput(String data) {
+        synchronized (outputLock) {
+            if (stopping) throw new IllegalStateException("runtime is stopping");
+            flushOutput(data);
+        }
+    }
+
+    /** Called only with outputLock held, including the final restoration operation. */
+    private void flushOutput(String data) {
+        terminal.writer().write(data);
+        terminal.writer().flush();
+        if (terminal.writer().checkError())
+            throw new IllegalStateException("terminal output failed");
+    }
+
+    /** JLine's ordered shutdown task: close admission before restoring application modes. */
+    void shutdownRestore() {
+        stopping = true;
+        Mailbox current = mailbox;
+        if (current != null) current.close();
+        restoreModes();
+    }
+
+    private void restoreModes() {
+        synchronized (outputLock) {
+            if (!modesEntered || terminal == null) return;
+            modesEntered = false;
+            StringBuilder exit = new StringBuilder();
+            if (options.terminal().mouse() && capabilities.mouse())
+                exit.append(AnsiEncoder.DISABLE_MOUSE);
+            if (options.terminal().bracketedPaste() && capabilities.bracketedPaste())
+                exit.append(AnsiEncoder.DISABLE_BRACKETED_PASTE);
+            exit.append(AnsiEncoder.RESET).append(AnsiEncoder.SHOW_CURSOR);
+            if (options.terminal().alternateScreen() && capabilities.alternateScreen())
+                exit.append(AnsiEncoder.ALT_SCREEN_OFF);
+            flushOutput(exit.toString());
+        }
     }
 
     public ExitResult run() {
+        if (!started.compareAndSet(false, true)) {
+            return ExitResult.failure(
+                    new IllegalStateException("runtime can only run once"), List.of());
+        }
         ExitResult result;
         try {
-            session = backend.open(new Size(24, 80), options.terminal());
-            Size size = session.size();
+            openTerminal();
+            Size size = terminalSize();
             viewport = new Viewport(size.rows(), size.cols());
             mailbox = new Mailbox(options.mailboxCapacity());
-            RuntimeEnvironment environment = options.environment();
-            clipboard = new ClipboardService(options.clipboard(), TerminalEnvironment.system(),
-                    session::write);
-            effects = new EffectRunner<>(mailbox, environment, clipboard,
-                    options.maxConcurrentEffects());
+            RuntimeServices environment = services;
+            clipboard = new ClipboardService(
+                    options.clipboard(), TerminalEnvironment.system(), this::writeOutput);
+            effects = new EffectRunner<>(
+                    mailbox, environment, clipboard, options.maxConcurrentEffects());
             effects.bindOwner(Thread.currentThread());
-            subscriptions = new SubscriptionManager<>(mailbox, environment.timers(),
-                    options.maxSubscriptions(), environment.diagnostics());
+            subscriptions = new SubscriptionManager<>(
+                    mailbox,
+                    environment.timers(),
+                    options.maxSubscriptions(),
+                    environment.diagnostics());
             subscriptions.bindOwner(Thread.currentThread());
 
-            inputThread = startInputThread();
-            resizeThread = startResizeThread();
-
-            InitContext context = new InitContext(viewport, session.capabilities(),
-                    environment.nanoTime().getAsLong(), systemProperties());
+            InitContext context = new InitContext(viewport, capabilities);
             commit(program.init(context));
             present();
+            terminal.resume();
+            inputThread = startInputThread();
             result = loop();
+        } catch (InterruptedException cancellation) {
+            interrupted = true;
+            result = ExitResult.interrupted();
         } catch (Throwable failure) {
             failed = true;
             result = ExitResult.failure(failure, List.of());
         }
-        return cleanup(result);
+        ExitResult outcome = cleanup(result);
+        if (interrupted) Thread.currentThread().interrupt();
+        return outcome;
     }
 
     // ── loop ─────────────────────────────────────────────────────────────────
 
     private ExitResult loop() throws InterruptedException {
         while (true) {
+            if (stopping) return ExitResult.inputClosed();
+            long now = System.nanoTime();
+            if (resizePending.getAndSet(false) || now - nextResizeAt >= 0) {
+                nextResizeAt = now + TimeUnit.MILLISECONDS.toNanos(RESIZE_POLL_MILLIS);
+                Size size = terminalSize();
+                if (size.rows() != viewport.rows() || size.cols() != viewport.cols())
+                    applyResize(size);
+            }
             if (effects.quitRequested()) {
                 return ExitResult.quit(effects.quitStatus());
             }
@@ -151,7 +319,8 @@ public final class RuntimeLoop<M, Msg> {
                 // fault), shut down instead of hanging with no way to receive Ctrl+C.
                 if (!inputThread.isAlive() && mailbox.size() == 0) {
                     return ExitResult.failure(
-                            new IllegalStateException("input reader stopped unexpectedly"), List.of());
+                            new IllegalStateException("input reader stopped unexpectedly"),
+                            List.of());
                 }
                 continue;
             }
@@ -168,8 +337,11 @@ public final class RuntimeLoop<M, Msg> {
             } else if (envelope instanceof Mailbox.Resize resize) {
                 applyResize(resize.size());
             }
-            if (viewDirty && (envelope instanceof Mailbox.Input || envelope instanceof Mailbox.Resize
-                    || effects.quitRequested() || frameReady())) {
+            if (viewDirty
+                    && (envelope instanceof Mailbox.Input
+                            || envelope instanceof Mailbox.Resize
+                            || effects.quitRequested()
+                            || frameReady())) {
                 present();
             }
             if (effects.quitRequested()) {
@@ -187,8 +359,8 @@ public final class RuntimeLoop<M, Msg> {
             return POLL_MILLIS;
         }
         long remaining = Math.max(0L, nextFrameAtNanos - System.nanoTime());
-        return Math.max(1L, Math.min(POLL_MILLIS,
-                TimeUnit.NANOSECONDS.toMillis(remaining + 999_999L)));
+        return Math.max(
+                1L, Math.min(POLL_MILLIS, TimeUnit.NANOSECONDS.toMillis(remaining + 999_999L)));
     }
 
     @SuppressWarnings("unchecked")
@@ -213,13 +385,13 @@ public final class RuntimeLoop<M, Msg> {
 
     private InputEvent stamp(InputEvent event) {
         if (event instanceof InputEvent.KeyInput key && key.capturedAtNanos() == 0L) {
-            return key.stamped(options.environment().nanoTime().getAsLong());
+            return key.stamped(services.nanoTime().getAsLong());
         }
         return event;
     }
 
     private void applyResize(Size size) {
-        Size current = session.size();
+        Size current = terminalSize();
         Size effective = current.rows() > 0 && current.cols() > 0 ? current : size;
         viewport = new Viewport(effective.rows(), effective.cols());
         subscriptions.notifyResize(effective);
@@ -227,6 +399,7 @@ public final class RuntimeLoop<M, Msg> {
     }
 
     private void commit(Transition<M, Msg> transition) {
+        if (stopping) return;
         boolean changed = transition.model() != model;
         model = transition.model();
         subscriptions.reconcile(program.subscriptions(model));
@@ -240,9 +413,9 @@ public final class RuntimeLoop<M, Msg> {
         View<Msg> view = program.view(model, viewport);
         LayoutEngine.Layout layout = engine.layout(view, viewport.bounds());
         Screen screen = layout.screen();
-        String output = AnsiEncoder.diff(currentScreen, screen);
+        String output = AnsiEncoder.diff(currentScreen, screen, capabilities.color());
         if (!output.isEmpty()) {
-            session.write(output);
+            writeOutput(output);
         }
         currentView = view;
         currentScreen = screen;
@@ -255,8 +428,9 @@ public final class RuntimeLoop<M, Msg> {
 
     private Thread startInputThread() {
         return Thread.ofVirtual().name("braxton-input").start(() -> {
-            InputDecoder decoder = new InputDecoder(session.input());
-            while (!Thread.currentThread().isInterrupted()) {
+            InputDecoder decoder =
+                    new InputDecoder(terminal.reader(), options.input(), () -> stopping);
+            while (!stopping && !Thread.currentThread().isInterrupted()) {
                 try {
                     Optional<InputEvent> event = decoder.read();
                     if (event.isEmpty()) {
@@ -267,41 +441,17 @@ public final class RuntimeLoop<M, Msg> {
                         return;
                     }
                 } catch (IOException closed) {
+                    if (stopping) return;
                     offerControl(new Mailbox.Close(ExitResult.failure(closed, List.of())));
                     return;
-                } catch (RuntimeException failure) {
+                } catch (Throwable failure) {
+                    if (stopping) return;
                     // Never let the reader die silently: an uncaught exception would leave the
                     // owner polling an empty mailbox forever (a hung application that cannot even
                     // process Ctrl+C) and print a stack trace over the alternate screen.
                     offerControl(new Mailbox.Close(ExitResult.failure(failure, List.of())));
                     return;
                 }
-            }
-        });
-    }
-
-    private Thread startResizeThread() {
-        return Thread.ofVirtual().name("braxton-resize").start(() -> {
-            try {
-                Size last = session.size();
-                while (!Thread.currentThread().isInterrupted()) {
-                    try {
-                        Thread.sleep(RESIZE_POLL_MILLIS);
-                    } catch (InterruptedException interrupted) {
-                        Thread.currentThread().interrupt();
-                        return;
-                    }
-                    Size current = session.size();
-                    if (!current.equals(last)) {
-                        last = current;
-                        if (!offer(new Mailbox.Resize(current))) {
-                            return;
-                        }
-                    }
-                }
-            } catch (RuntimeException failure) {
-                // The initial probe is reader work too: report it just like later poll failures.
-                offerControl(new Mailbox.Close(ExitResult.failure(failure, List.of())));
             }
         });
     }
@@ -345,14 +495,26 @@ public final class RuntimeLoop<M, Msg> {
         // source or effect cancellation, not the end of cleanup. Stopping here would leave the
         // mailbox open (its producers, including the input reader, keep retrying an owner that has
         // already gone away) and skip the thread joins.
-        closeSession();
-        if (mailbox != null) {
-            mailbox.close();
+        stopping = true;
+        if (mailbox != null) mailbox.close();
+        // Let JLine's finite read expire normally: interruption skips its outstanding-poll
+        // cancellation path. Stop the consumer before closing/releasing the native terminal.
+        if (inputThread != null) {
+            try {
+                inputThread.join(500);
+            } catch (InterruptedException cancellation) {
+                interrupted = true;
+            }
+            if (inputThread.isAlive()) {
+                inputThread.interrupt();
+                cleanupFailures.add(new IllegalStateException("input worker did not stop"));
+            }
         }
+        closeTerminal();
         if (subscriptions != null) {
             try {
                 subscriptions.closeAll();
-            } catch (RuntimeException failure) {
+            } catch (Throwable failure) {
                 cleanupFailures.add(failure);
             }
         }
@@ -361,16 +523,14 @@ public final class RuntimeLoop<M, Msg> {
                 effects.cancelAll();
                 int remaining = effects.awaitIdle(options.shutdownGrace());
                 if (remaining > 0) {
-                    options.environment().diagnostics().accept(
-                            "shutdown: " + remaining + " effect task(s) still running");
+                    services.diagnostics()
+                            .accept("shutdown: " + remaining + " effect task(s) still running");
                 }
-            } catch (RuntimeException failure) {
+            } catch (Throwable failure) {
                 cleanupFailures.add(failure);
             }
         }
-        closeSession();
         join(inputThread);
-        join(resizeThread);
         if (failed && result.failure() == null) {
             return ExitResult.failure(new IllegalStateException("runtime failed"), cleanupFailures);
         }
@@ -385,15 +545,33 @@ public final class RuntimeLoop<M, Msg> {
         return new ExitResult(result.kind(), result.status(), result.failure(), cleanupFailures);
     }
 
-    /** Restores and releases the terminal; a failing restore is recorded and cleanup continues. */
-    private void closeSession() {
-        if (session == null) {
-            return;
-        }
+    private void closeTerminal() {
         try {
-            session.close();
-        } catch (RuntimeException failure) {
+            restoreModes();
+        } catch (Throwable failure) {
             cleanupFailures.add(failure);
+        }
+        if (restoreTask != null) {
+            try {
+                ShutdownHooks.remove(restoreTask);
+            } catch (Throwable failure) {
+                cleanupFailures.add(failure);
+            }
+            restoreTask = null;
+        }
+        synchronized (outputLock) {
+            if (terminal != null && !terminalClosed) {
+                terminalClosed = true;
+                try {
+                    terminal.close();
+                } catch (Throwable failure) {
+                    cleanupFailures.add(failure);
+                }
+            }
+        }
+        if (ownsConsole) {
+            ownsConsole = false;
+            OWNED.set(false);
         }
     }
 
@@ -407,18 +585,6 @@ public final class RuntimeLoop<M, Msg> {
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
         }
-    }
-
-    private static Map<String, String> systemProperties() {
-        Properties properties = System.getProperties();
-        Map<String, String> copy = new java.util.LinkedHashMap<>();
-        for (String name : properties.stringPropertyNames()) {
-            String value = properties.getProperty(name);
-            if (value != null) {
-                copy.put(name, value);
-            }
-        }
-        return copy;
     }
 
     /** Exposed for tests: the command type currently held, never {@code null} after init. */

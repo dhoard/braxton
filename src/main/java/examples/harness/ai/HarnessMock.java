@@ -61,7 +61,7 @@ final class HarnessMock {
                 Program          holds immutable state and pure update/view
                 Editor           owns the draft and emits submit/copy/paste intents
                 View             describes layout; layout paints cells
-                TerminalSession  owns raw mode and cancellable input
+                JLine Terminal   owns raw mode and timed input
                 """;
         HarnessEntry.Tool tool = new HarnessEntry.Tool(
                 "read src/main/java/examples/harness/ai/HarnessProgram.java",

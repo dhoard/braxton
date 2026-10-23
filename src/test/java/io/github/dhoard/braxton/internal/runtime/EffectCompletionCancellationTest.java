@@ -32,10 +32,10 @@ import java.util.function.Function;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.dhoard.braxton.app.RuntimeEnvironment;
+import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
-import io.github.dhoard.braxton.testkit.FakeTerminal;
+import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 
 /** Mapping a completion does not end the effect's cancellable lifetime. */
 class EffectCompletionCancellationTest {
@@ -76,7 +76,7 @@ class EffectCompletionCancellationTest {
         Mailbox mailbox = new Mailbox(8);
         AtomicReference<Thread> worker = new AtomicReference<>();
         AtomicReference<Throwable> uncaught = new AtomicReference<>();
-        RuntimeEnvironment environment = new RuntimeEnvironment(() -> 0L, task -> {
+        RuntimeServices environment = new RuntimeServices(() -> 0L, task -> {
             Thread thread = Thread.ofVirtual().unstarted(() -> {
                 try {
                     task.run();
@@ -86,7 +86,7 @@ class EffectCompletionCancellationTest {
             });
             worker.set(thread);
             thread.start();
-        }, new FakeTerminal.ManualTimers(), message -> { });
+        }, new ManualTimers(), message -> { });
         EffectRunner<String> runner = new EffectRunner<>(mailbox, environment, null, 1);
         CountDownLatch mapping = new CountDownLatch(1);
         CompletableFuture<Void> release = new CompletableFuture<>();

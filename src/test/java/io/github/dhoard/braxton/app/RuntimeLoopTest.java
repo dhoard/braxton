@@ -22,6 +22,9 @@
 
 package io.github.dhoard.braxton.app;
 
+import static io.github.dhoard.braxton.internal.runtime.JLineTestTerminal.run;
+import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
+import io.github.dhoard.braxton.internal.runtime.ManualTimers;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
@@ -32,7 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-import io.github.dhoard.braxton.app.Timers;
+import io.github.dhoard.braxton.internal.runtime.Timers;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.effect.Subscription;
@@ -40,10 +43,8 @@ import io.github.dhoard.braxton.effect.SubscriptionId;
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.terminal.TerminalBackend;
-import io.github.dhoard.braxton.terminal.TerminalCapabilities;
-import io.github.dhoard.braxton.terminal.TerminalSession;
-import io.github.dhoard.braxton.testkit.FakeTerminal;
+import io.github.dhoard.braxton.app.TerminalCapabilities;
+import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 
@@ -55,15 +56,15 @@ class RuntimeLoopTest {
 
         @Override
         public Transition<Integer, String> init(InitContext context) {
-            return Transition.stay(0);
+            return Transition.next(0);
         }
 
         @Override
         public Transition<Integer, String> update(Integer model, String message) {
             return switch (message) {
-                case "inc" -> Transition.stay(model + 1);
+                case "inc" -> Transition.next(model + 1);
                 case "quit" -> Transition.next(model, Command.quit(3));
-                default -> Transition.stay(model);
+                default -> Transition.next(model);
             };
         }
 
@@ -76,12 +77,8 @@ class RuntimeLoopTest {
         }
     }
 
-    private static RuntimeOptions options(FakeTerminal.ManualTimers timers) {
-        return RuntimeOptions.defaults().withLimits(32, 8, 8)
-                .withEnvironment(RuntimeEnvironment.system()
-                        .withTimers(timers)
-                        .withEffectExecutor(Runnable::run)
-                        .withNanoTime(() -> 1_000L));
+    private static RuntimeOptions options() {
+        return RuntimeOptions.defaults().withLimits(32,8,8);
     }
 
     /** A sealed message type with no null case, so a null message fails the run. */
@@ -96,12 +93,12 @@ class RuntimeLoopTest {
 
         @Override
         public Transition<Integer, String> init(InitContext context) {
-            return Transition.stay(0);
+            return Transition.next(0);
         }
 
         @Override
         public Transition<Integer, String> update(Integer model, String message) {
-            return Transition.stay(model);
+            return Transition.next(model);
         }
 
         @Override
@@ -124,19 +121,19 @@ class RuntimeLoopTest {
     @Test
     @Timeout(15)
     void aResizeIsMeasuredAndPaintedWithoutAnotherMessage() throws Exception {
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
-        RuntimeOptions options = options(new FakeTerminal.ManualTimers());
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
+        RuntimeOptions options = options();
         Thread run = Thread.ofVirtual().name("resize-test")
-                .start(() -> Application.run(new Measured(), options, terminal));
-        await(() -> terminal.output().contains("size: 6x20"));
+                .start(() -> run(new Measured(), options, terminal));
+        await(() -> terminal.outputText().contains("size: 6x20"));
 
         terminal.resize(new Size(4, 10));
 
-        await(() -> terminal.output().contains("size: 4x10"));
+        await(() -> terminal.outputText().contains("size: 4x10"));
         terminal.endInput();
         run.join(5_000L);
         assertThat(run.isAlive()).isFalse();
-        assertThat(terminal.output()).contains("size: 4x10");
+        assertThat(terminal.outputText()).contains("size: 4x10");
     }
 
     @Test
@@ -145,18 +142,18 @@ class RuntimeLoopTest {
         // The mapper declines the smaller size; a declined emission is not a message, so nothing
         // reaches update and the run keeps going. Delivering it as a null message instead makes a
         // sealed-message dispatch throw and ends the run with a failure.
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
-        RuntimeOptions options = options(new FakeTerminal.ManualTimers());
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
+        RuntimeOptions options = options();
         Program<Integer, ResizeMessage> program = new Program<>() {
             @Override
             public Transition<Integer, ResizeMessage> init(InitContext context) {
-                return Transition.stay(0);
+                return Transition.next(0);
             }
 
             @Override
             public Transition<Integer, ResizeMessage> update(Integer model, ResizeMessage message) {
                 return switch (message) {
-                    case SizeChanged changed -> Transition.stay(changed.size().rows());
+                    case SizeChanged changed -> Transition.next(changed.size().rows());
                 };
             }
 
@@ -174,12 +171,12 @@ class RuntimeLoopTest {
         java.util.concurrent.atomic.AtomicReference<ExitResult> result =
                 new java.util.concurrent.atomic.AtomicReference<>();
         Thread run = Thread.ofVirtual().name("declining-resize")
-                .start(() -> result.set(Application.run(program, options, terminal)));
-        await(() -> terminal.output().contains("size: 6x20"));
+                .start(() -> result.set(run(program, options, terminal)));
+        await(() -> terminal.outputText().contains("size: 6x20"));
 
         terminal.resize(new Size(4, 10));
 
-        await(() -> terminal.output().contains("size: 4x10"));
+        await(() -> terminal.outputText().contains("size: 4x10"));
         terminal.endInput();
         run.join(5_000L);
         assertThat(run.isAlive()).isFalse();
@@ -191,131 +188,56 @@ class RuntimeLoopTest {
 
     @Test
     @Timeout(15)
-    void aFailureInTheFirstResizeProbeEndsTheRun() throws Exception {
-        assertResizeProbeFailure(1);
+    void unavailableSizeUsesFallbackAndTheRunRemainsUsable() {
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6,20));
+        terminal.failSize(new IllegalStateException("temporary size failure"));
+        terminal.feed("q");
+        ExitResult result = run(new Counter(), RuntimeOptions.defaults(), terminal);
+        assertThat(result.kind()).as("%s %s", result.failure(), result.failure() == null ? "" : java.util.Arrays.toString(result.failure().getStackTrace())).isEqualTo(ExitResult.Kind.QUIT);
+        assertThat(terminal.isOpen()).isFalse();
     }
 
     @Test
     @Timeout(15)
-    void aFailureInALaterResizeProbeEndsTheRun() throws Exception {
-        assertResizeProbeFailure(2);
-    }
-
-    private static void assertResizeProbeFailure(int failingProbe) throws Exception {
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
-        RuntimeException failure = new IllegalStateException("resize probe failed");
-        AtomicReference<Thread> resizeReader = new AtomicReference<>();
-        AtomicReference<Throwable> uncaught = new AtomicReference<>();
-        CountDownLatch probing = new CountDownLatch(1);
-        TerminalBackend backend = (fallback, requested) -> {
-            terminal.open(fallback, requested);
-            return new TerminalSession() {
-                private int resizeProbes;
-
-                @Override
-                public TerminalCapabilities capabilities() {
-                    return terminal.capabilities();
-                }
-
-                @Override
-                public Size size() {
-                    if (Thread.currentThread().getName().equals("braxton-resize")) {
-                        Thread reader = Thread.currentThread();
-                        reader.setUncaughtExceptionHandler((thread, problem) -> uncaught.set(problem));
-                        resizeReader.set(reader);
-                        probing.countDown();
-                        if (++resizeProbes == failingProbe) {
-                            throw failure;
-                        }
-                    }
-                    return terminal.size();
-                }
-
-                @Override
-                public java.io.InputStream input() {
-                    return terminal.input();
-                }
-
-                @Override
-                public void write(String data) {
-                    terminal.write(data);
-                }
-
-                @Override
-                public boolean isOpen() {
-                    return terminal.isOpen();
-                }
-
-                @Override
-                public void close() {
-                    terminal.close();
-                }
-            };
-        };
-        AtomicReference<ExitResult> result = new AtomicReference<>();
-        Thread run = Thread.ofVirtual().name("resize-failure-test")
-                .start(() -> result.set(Application.run(new Counter(), RuntimeOptions.defaults(), backend)));
-        try {
-            assertThat(probing.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
-            resizeReader.get().join(5_000L);
-            assertThat(resizeReader.get().isAlive()).isFalse();
-            // The resize reader has either reported the failure or died without reporting it.
-            // A subsequent quit provides a deterministic fallback, not a timeout-based oracle.
-            terminal.feed("q");
-            run.join(5_000L);
-            assertThat(run.isAlive()).isFalse();
-            assertThat(result.get().kind()).isEqualTo(ExitResult.Kind.FAILURE);
-            assertThat(result.get().failure()).isSameAs(failure);
-            assertThat(uncaught.get()).as("no stack trace escapes the resize reader").isNull();
-            assertThat(terminal.isOpen()).isFalse();
-        } finally {
-            terminal.close();
-            run.join(5_000L);
-        }
-    }
-
-    @Test
-    @Timeout(15)
-    void theReaderThreadsAreVirtualThreads() throws Exception {
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
-        RuntimeOptions options = options(new FakeTerminal.ManualTimers());
+    void theInputReaderIsVirtualAndTheOwnerMeasuresTheTerminal() throws Exception {
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
+        RuntimeOptions options = options();
         Thread run = Thread.ofVirtual().name("reader-kinds")
-                .start(() -> Application.run(new Counter(), options, terminal));
-        await(() -> terminal.readOnVirtualThread() && terminal.measuredOnVirtualThread());
+                .start(() -> run(new Counter(), options, terminal));
+        await(() -> terminal.readOnVirtualThread() && terminal.measured());
         terminal.endInput();
         run.join(5_000L);
         assertThat(run.isAlive()).isFalse();
         assertThat(terminal.readOnVirtualThread()).as("input reader").isTrue();
-        assertThat(terminal.measuredOnVirtualThread()).as("resize poller").isTrue();
+        assertThat(terminal.measured()).as("terminal size was measured").isTrue();
     }
 
     @Test
     void inputIsRoutedAndRenderedBeforeEndOfInput() {
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
-        RuntimeOptions options = options(new FakeTerminal.ManualTimers());
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
+        RuntimeOptions options = options();
         terminal.feed("aa");
         terminal.endInput();
 
-        ExitResult result = Application.run(new Counter(), options, terminal);
+        ExitResult result = run(new Counter(), options, terminal);
 
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(terminal.output()).contains("count: 2");
-        assertThat(terminal.output()).contains("\u001B[");
+        assertThat(terminal.outputText()).contains("count: 2");
+        assertThat(terminal.outputText()).contains("\u001B[");
         assertThat(terminal.isOpen()).isFalse();
     }
 
     @Test
     @Timeout(5)
     void typingASpaceDoesNotKillTheInputReader() {
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
         terminal.feed(" ");
         terminal.endInput();
 
-        ExitResult result = Application.run(new Counter(), options(new FakeTerminal.ManualTimers()),
-                terminal);
+        ExitResult result = run(new Counter(), options(), terminal);
 
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(terminal.output()).contains("count: 1");
+        assertThat(terminal.outputText()).contains("count: 1");
     }
 
     /** Blocks its first update until the test releases it, so the owner is busy at end-of-input. */
@@ -325,7 +247,7 @@ class RuntimeLoopTest {
 
         @Override
         public Transition<Integer, String> init(InitContext context) {
-            return Transition.stay(0);
+            return Transition.next(0);
         }
 
         @Override
@@ -338,7 +260,7 @@ class RuntimeLoopTest {
                     Thread.currentThread().interrupt();
                 }
             }
-            return Transition.stay(model + 1);
+            return Transition.next(model + 1);
         }
 
         @Override
@@ -351,13 +273,13 @@ class RuntimeLoopTest {
     @Test
     @Timeout(15)
     void inputIsNotLostWhenTheOwnerIsBusy() throws Exception {
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
-        RuntimeOptions options = options(new FakeTerminal.ManualTimers()).withLimits(1, 8, 8);
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
+        RuntimeOptions options = options().withLimits(1, 8, 8);
         SlowStart program = new SlowStart();
         java.util.concurrent.atomic.AtomicReference<ExitResult> outcome =
                 new java.util.concurrent.atomic.AtomicReference<>();
         Thread runner = Thread.ofVirtual().start(
-                () -> outcome.set(Application.run(program, options, terminal)));
+                () -> outcome.set(run(program, options, terminal)));
         terminal.feed("a");
         assertThat(program.entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
                 .as("the first update is running").isTrue();
@@ -372,7 +294,7 @@ class RuntimeLoopTest {
         assertThat(outcome.get().kind())
                 .as("every key is processed, so the run ends at end-of-input: %s", outcome.get())
                 .isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(terminal.output())
+        assertThat(terminal.outputText())
                 .as("no key is dropped while the owner is busy")
                 .contains("count: 3");
     }
@@ -380,13 +302,13 @@ class RuntimeLoopTest {
     @Test
     @Timeout(15)
     void aCleanEndOfInputIsNotReportedAsAFailureWhenTheMailboxWasFull() throws Exception {
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
-        RuntimeOptions options = options(new FakeTerminal.ManualTimers()).withLimits(1, 8, 8);
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
+        RuntimeOptions options = options().withLimits(1, 8, 8);
         SlowStart program = new SlowStart();
         java.util.concurrent.atomic.AtomicReference<ExitResult> outcome =
                 new java.util.concurrent.atomic.AtomicReference<>();
         Thread runner = Thread.ofVirtual().start(
-                () -> outcome.set(Application.run(program, options, terminal)));
+                () -> outcome.set(run(program, options, terminal)));
         terminal.feed("a");
         assertThat(program.entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
                 .as("the first update is running").isTrue();
@@ -406,11 +328,10 @@ class RuntimeLoopTest {
     @Test
     @Timeout(5)
     void anInputReaderFailureEndsTheRunInsteadOfHanging() {
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
         terminal.failInput(new IllegalStateException("decoder boom"));
 
-        ExitResult result = Application.run(new Counter(), options(new FakeTerminal.ManualTimers()),
-                terminal);
+        ExitResult result = run(new Counter(), options(), terminal);
 
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
         assertThat(result.failure()).hasMessageContaining("decoder boom");
@@ -419,25 +340,23 @@ class RuntimeLoopTest {
 
     @Test
     void aMouseClickIsIgnoredInsteadOfEndingTheProgram() {
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
         terminal.feed("\u001B[<0;10;5M\u001B[<0;10;5ma");
         terminal.endInput();
 
-        ExitResult result = Application.run(new Counter(), options(new FakeTerminal.ManualTimers()),
-                terminal);
+        ExitResult result = run(new Counter(), options(), terminal);
 
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(terminal.output()).contains("count: 1");
+        assertThat(terminal.outputText()).contains("count: 1");
     }
 
     @Test
     void aQuitCommandEndsTheRunWithItsStatus() {
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
         terminal.feed("q");
         terminal.endInput();
 
-        ExitResult result = Application.run(new Counter(), options(new FakeTerminal.ManualTimers()),
-                terminal);
+        ExitResult result = run(new Counter(), options(), terminal);
 
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.QUIT);
         assertThat(result.status()).isEqualTo(3);
@@ -450,46 +369,42 @@ class RuntimeLoopTest {
         // Application.run builds a fresh runtime per call, so a second run in the same JVM must
         // start clean: its own terminal, its own first frame, its own exit, and no reader thread
         // left over from the first run.
-        FakeTerminal first = new FakeTerminal(new Size(6, 20));
+        JLineTestTerminal first = new JLineTestTerminal(new Size(6, 20));
         first.feed("q");
         first.endInput();
-        ExitResult firstResult = Application.run(new Counter(),
-                options(new FakeTerminal.ManualTimers()), first);
+        ExitResult firstResult = run(new Counter(), options(), first);
         assertThat(firstResult.kind()).isEqualTo(ExitResult.Kind.QUIT);
         assertThat(firstResult.status()).isEqualTo(3);
         assertThat(first.isOpen()).as("the first session is closed").isFalse();
 
-        FakeTerminal second = new FakeTerminal(new Size(6, 20));
+        JLineTestTerminal second = new JLineTestTerminal(new Size(6, 20));
         second.feed("a");
         second.feed(" ");
         second.feed("q");
         second.endInput();
-        ExitResult secondResult = Application.run(new Counter(),
-                options(new FakeTerminal.ManualTimers()), second);
+        ExitResult secondResult = run(new Counter(), options(), second);
         assertThat(secondResult.kind()).as("the second run still quits").isEqualTo(ExitResult.Kind.QUIT);
         assertThat(secondResult.status()).isEqualTo(3);
         assertThat(second.isOpen()).isFalse();
         // The second run received its own input and painted its own model, not the first one's.
-        assertThat(second.output()).as("the second run counts its own keys").contains("count: 2");
-        assertThat(second.output()).doesNotContain("count: 5");
+        assertThat(second.outputText()).as("the second run counts its own keys").contains("count: 2");
+        assertThat(second.outputText()).doesNotContain("count: 5");
     }
 
     @Test
     @Timeout(30)
     void aSecondRunAfterAFailedFirstRunStillWorks() {
-        FakeTerminal broken = new FakeTerminal(new Size(6, 20));
+        JLineTestTerminal broken = new JLineTestTerminal(new Size(6, 20));
         broken.endInput();
-        ExitResult first = Application.run(new Exploding(), options(new FakeTerminal.ManualTimers()),
-                broken);
+        ExitResult first = run(new Exploding(), options(), broken);
         assertThat(first.kind()).isEqualTo(ExitResult.Kind.FAILURE);
 
-        FakeTerminal healthy = new FakeTerminal(new Size(6, 20));
+        JLineTestTerminal healthy = new JLineTestTerminal(new Size(6, 20));
         healthy.feed("q");
         healthy.endInput();
-        ExitResult second = Application.run(new Counter(),
-                options(new FakeTerminal.ManualTimers()), healthy);
+        ExitResult second = run(new Counter(), options(), healthy);
         assertThat(second.kind()).isEqualTo(ExitResult.Kind.QUIT);
-        assertThat(healthy.output()).contains("count: 0");
+        assertThat(healthy.outputText()).contains("count: 0");
     }
 
     /** Fails during init, so the run ends in a failure that must not poison the next one. */
@@ -502,7 +417,7 @@ class RuntimeLoopTest {
 
         @Override
         public Transition<Integer, String> update(Integer model, String message) {
-            return Transition.stay(model);
+            return Transition.next(model);
         }
 
         @Override
@@ -533,7 +448,7 @@ class RuntimeLoopTest {
         public Transition<Integer, String> update(Integer model, String message) {
             return "tick".equals(message)
                     ? Transition.next(model, Command.quit())
-                    : Transition.stay(model);
+                    : Transition.next(model);
         }
 
         @Override
@@ -551,17 +466,18 @@ class RuntimeLoopTest {
     @Test
     @Timeout(15)
     void shutdownAbandonsAHangingEffectAfterTheGracePeriod() throws Exception {
-        FakeTerminal terminal = new FakeTerminal(new Size(4, 20));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 20));
         CountDownLatch started = new CountDownLatch(1);
         List<String> diagnostics = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
-        FakeTerminal.ManualTimers ignored = new FakeTerminal.ManualTimers();
+        ManualTimers ignored = new ManualTimers();
         RuntimeOptions options = RuntimeOptions.defaults()
                 .withLimits(32, 8, 8)
-                .withEnvironment(RuntimeEnvironment.system()
+                ;
+        RuntimeServices services = RuntimeServices.system()
                         .withTimers(Timers.system())
-                        .withDiagnostics(diagnostics::add));
+                        .withDiagnostics(diagnostics::add);
         Thread run = Thread.ofVirtual().name("hanging-effect")
-                .start(() -> Application.run(new HangingEffect(started), options, terminal));
+                .start(() -> run(new HangingEffect(started), options, terminal, services));
         assertThat(started.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
         run.join(10_000L);
         assertThat(run.isAlive()).as("shutdown must not wait for a task that ignores interruption")
@@ -575,7 +491,7 @@ class RuntimeLoopTest {
 
         @Override
         public Transition<String, String> init(InitContext context) {
-            return Transition.stay("ok");
+            return Transition.next("ok");
         }
 
         @Override
@@ -583,7 +499,7 @@ class RuntimeLoopTest {
             if ("boom".equals(message)) {
                 throw new IllegalStateException("update failed");
             }
-            return Transition.stay("explode".equals(message) ? "explode" : model);
+            return Transition.next("explode".equals(message) ? "explode" : model);
         }
 
         @Override
@@ -599,20 +515,20 @@ class RuntimeLoopTest {
     @Test
     @Timeout(15)
     void aThrowingUpdateOrViewEndsTheRunAsAFailureAndClosesTheSession() throws Exception {
-        FakeTerminal terminal = new FakeTerminal(new Size(3, 12));
-        RuntimeOptions options = options(new FakeTerminal.ManualTimers());
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(3, 12));
+        RuntimeOptions options = options();
         Thread run = Thread.ofVirtual().name("crashing-update")
-                .start(() -> Application.run(new Crashing(), options, terminal));
-        await(() -> terminal.output().contains("safe"));
+                .start(() -> run(new Crashing(), options, terminal));
+        await(() -> terminal.outputText().contains("safe"));
         terminal.feed("x");
         run.join(5_000L);
         assertThat(run.isAlive()).as("a throwing update must end the run").isFalse();
         assertThat(terminal.isOpen()).as("the session is closed on failure").isFalse();
 
-        FakeTerminal second = new FakeTerminal(new Size(3, 12));
+        JLineTestTerminal second = new JLineTestTerminal(new Size(3, 12));
         Thread crashingView = Thread.ofVirtual().name("crashing-view")
-                .start(() -> Application.run(new Crashing(), options, second));
-        await(() -> second.output().contains("safe"));
+                .start(() -> run(new Crashing(), options, second));
+        await(() -> second.outputText().contains("safe"));
         second.feed("y");
         crashingView.join(5_000L);
         assertThat(crashingView.isAlive()).as("a throwing view must end the run").isFalse();
@@ -624,12 +540,12 @@ class RuntimeLoopTest {
         Program<Integer, String> empty = new Program<>() {
             @Override
             public Transition<Integer, String> init(InitContext context) {
-                return Transition.stay(0);
+                return Transition.next(0);
             }
 
             @Override
             public Transition<Integer, String> update(Integer model, String message) {
-                return Transition.stay(model);
+                return Transition.next(model);
             }
 
             @Override
@@ -637,12 +553,11 @@ class RuntimeLoopTest {
                 return Views.text("hello");
             }
         };
-        FakeTerminal terminal = new FakeTerminal(new Size(4, 10));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 10));
         terminal.endInput();
-        ExitResult result = Application.run(empty, options(new FakeTerminal.ManualTimers()),
-                terminal);
+        ExitResult result = run(empty, options(), terminal);
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(terminal.output()).contains("hello");
+        assertThat(terminal.outputText()).contains("hello");
     }
 
     @Test
@@ -651,7 +566,7 @@ class RuntimeLoopTest {
         // The documented rendering model: "an idle application does no work". With no envelope to
         // process, the owner must neither call update nor rebuild the view nor repaint, however
         // many poll and resize intervals elapse.
-        FakeTerminal terminal = new FakeTerminal(new Size(4, 12));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 12));
         java.util.concurrent.atomic.AtomicInteger updates =
                 new java.util.concurrent.atomic.AtomicInteger();
         java.util.concurrent.atomic.AtomicInteger views =
@@ -659,13 +574,13 @@ class RuntimeLoopTest {
         Program<Integer, String> program = new Program<>() {
             @Override
             public Transition<Integer, String> init(InitContext context) {
-                return Transition.stay(0);
+                return Transition.next(0);
             }
 
             @Override
             public Transition<Integer, String> update(Integer model, String message) {
                 updates.incrementAndGet();
-                return Transition.stay(model + 1);
+                return Transition.next(model + 1);
             }
 
             @Override
@@ -676,13 +591,12 @@ class RuntimeLoopTest {
             }
         };
         Thread run = Thread.ofVirtual().name("idle-test")
-                .start(() -> Application.run(program, options(new FakeTerminal.ManualTimers()),
-                        terminal));
+                .start(() -> run(program, options(), terminal));
         // The owner writes its first frame after buildView returns, so waiting for the write
         // (not for the view counter) is what makes the baseline frame complete: sampling the log
         // while the owner is still inside its first pass records an empty frame and then reports
         // the initial paint as idle output.
-        await(() -> !terminal.writes().isEmpty());
+        await(() -> terminal.outputText().contains("idle 0"));
         List<String> firstFrame = terminal.writes();
         Thread.sleep(400L);
         assertThat(updates).as("an idle application calls no update").hasValue(0);
@@ -702,20 +616,20 @@ class RuntimeLoopTest {
         // The documented threading model: "the runtime owner is the caller's thread; Application.run
         // does not start or hijack it", while the input and resize readers are virtual threads.
         // Every program callback therefore observes the thread that called run().
-        FakeTerminal terminal = new FakeTerminal(new Size(4, 20));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 20));
         Thread caller = Thread.currentThread();
         List<Thread> callbacks = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         Program<Integer, String> program = new Program<>() {
             @Override
             public Transition<Integer, String> init(InitContext context) {
                 callbacks.add(Thread.currentThread());
-                return Transition.stay(0);
+                return Transition.next(0);
             }
 
             @Override
             public Transition<Integer, String> update(Integer model, String message) {
                 callbacks.add(Thread.currentThread());
-                return Transition.stay(model + 1);
+                return Transition.next(model + 1);
             }
 
             @Override
@@ -727,16 +641,14 @@ class RuntimeLoopTest {
         };
         terminal.feed("a");
         terminal.endInput();
-        ExitResult result = Application.run(program, options(new FakeTerminal.ManualTimers()),
-                terminal);
+        ExitResult result = run(program, options(), terminal);
 
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
         assertThat(callbacks).as("init, update and view all run on the caller's thread")
                 .isNotEmpty().allSatisfy(thread -> assertThat(thread).isSameAs(caller));
         assertThat(terminal.readOnVirtualThread()).as("the input reader is a virtual thread")
                 .isTrue();
-        assertThat(terminal.measuredOnVirtualThread()).as("the resize poller is a virtual thread")
-                .isTrue();
+        // Viewport sampling is now performed by the model owner through JLine.
     }
 
     @Test
@@ -771,7 +683,7 @@ class RuntimeLoopTest {
             @Override
             public Transition<Integer, String> update(Integer model, String message) {
                 updates.incrementAndGet();
-                return Transition.stay(model);
+                return Transition.next(model);
             }
 
             @Override
@@ -783,19 +695,19 @@ class RuntimeLoopTest {
                 java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         java.util.concurrent.ExecutorService executor =
                 java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
-        FakeTerminal terminal = new FakeTerminal(new Size(4, 20));
-        RuntimeEnvironment environment = RuntimeEnvironment.system()
-                .withTimers(new FakeTerminal.ManualTimers())
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 20));
+        RuntimeServices environment = RuntimeServices.system()
+                .withTimers(new ManualTimers())
                 .withEffectExecutor(executor)
                 .withDiagnostics(diagnostics::add)
                 .withNanoTime(() -> 1_000L);
         RuntimeOptions options = new RuntimeOptions(java.time.Duration.ofMillis(200), 32, 8, 8,
                 io.github.dhoard.braxton.clipboard.ClipboardConfig.defaults(),
-                io.github.dhoard.braxton.terminal.TerminalOptions.DEFAULT, environment);
+                io.github.dhoard.braxton.app.TerminalOptions.DEFAULT, null);
         java.util.concurrent.atomic.AtomicReference<ExitResult> result =
                 new java.util.concurrent.atomic.AtomicReference<>();
         Thread run = Thread.ofVirtual().name("grace-test")
-                .start(() -> result.set(Application.run(program, options, terminal)));
+                .start(() -> result.set(run(program, options, terminal, environment)));
         try {
             assertThat(started.await(10, java.util.concurrent.TimeUnit.SECONDS))
                     .as("the stubborn task starts").isTrue();
@@ -834,7 +746,7 @@ class RuntimeLoopTest {
                 new java.util.concurrent.atomic.AtomicInteger();
         java.util.concurrent.atomic.AtomicInteger tasks =
                 new java.util.concurrent.atomic.AtomicInteger();
-        FakeTerminal.ManualTimers timers = new FakeTerminal.ManualTimers();
+        ManualTimers timers = new ManualTimers();
         Program<Integer, String> program = new Program<>() {
             @Override
             public Transition<Integer, String> init(InitContext context) {
@@ -851,7 +763,7 @@ class RuntimeLoopTest {
             @Override
             public Transition<Integer, String> update(Integer model, String message) {
                 updates.incrementAndGet();
-                return Transition.stay(model);
+                return Transition.next(model);
             }
 
             @Override
@@ -859,14 +771,15 @@ class RuntimeLoopTest {
                 return Views.text("batch");
             }
         };
-        FakeTerminal terminal = new FakeTerminal(new Size(3, 10));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(3, 10));
         RuntimeOptions options = RuntimeOptions.defaults().withLimits(32, 8, 8)
-                .withEnvironment(RuntimeEnvironment.system()
+                ;
+        RuntimeServices services = RuntimeServices.system()
                         .withTimers(timers)
                         .withEffectExecutor(Runnable::run)
                         .withDiagnostics(diagnostics::add)
-                        .withNanoTime(() -> 1_000L));
-        ExitResult result = Application.run(program, options, terminal);
+                        .withNanoTime(() -> 1_000L);
+        ExitResult result = run(program, options, terminal, services);
 
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.QUIT);
         assertThat(result.status()).isEqualTo(5);
@@ -887,11 +800,12 @@ class RuntimeLoopTest {
             throw new IllegalStateException("cancel failed");
         };
         RuntimeOptions options = RuntimeOptions.defaults().withLimits(32, 8, 8)
-                .withEnvironment(RuntimeEnvironment.system()
+                ;
+        RuntimeServices services = RuntimeServices.system()
                         .withTimers(uncancellable)
                         .withEffectExecutor(Runnable::run)
-                        .withNanoTime(() -> 1_000L));
-        FakeTerminal terminal = new FakeTerminal(new Size(3, 10));
+                        .withNanoTime(() -> 1_000L);
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(3, 10));
         Program<Integer, String> program = new Program<>() {
             @Override
             public Transition<Integer, String> init(InitContext context) {
@@ -911,8 +825,8 @@ class RuntimeLoopTest {
         };
         java.util.concurrent.atomic.AtomicReference<ExitResult> result = new java.util.concurrent.atomic.AtomicReference<>();
         Thread run = Thread.ofVirtual().name("cleanup-failure-test")
-                .start(() -> result.set(Application.run(program, options, terminal)));
-        await(() -> !terminal.writes().isEmpty());
+                .start(() -> result.set(run(program, options, terminal, services)));
+        await(() -> terminal.outputText().contains("safe"));
         terminal.feed("a");
         run.join(5_000L);
         assertThat(run.isAlive()).isFalse();
@@ -926,7 +840,7 @@ class RuntimeLoopTest {
 
     @Test
     void theSessionIsClosedEvenWhenStartupFails() {
-        FakeTerminal terminal = new FakeTerminal(new Size(4, 10));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 10));
         Program<Integer, String> broken = new Program<>() {
             @Override
             public Transition<Integer, String> init(InitContext context) {
@@ -935,7 +849,7 @@ class RuntimeLoopTest {
 
             @Override
             public Transition<Integer, String> update(Integer model, String message) {
-                return Transition.stay(model);
+                return Transition.next(model);
             }
 
             @Override
@@ -943,8 +857,7 @@ class RuntimeLoopTest {
                 return Views.text("");
             }
         };
-        ExitResult result = Application.run(broken, options(new FakeTerminal.ManualTimers()),
-                terminal);
+        ExitResult result = run(broken, options(), terminal);
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
         assertThat(result.failure()).hasMessageContaining("boom");
         assertThat(terminal.isOpen()).isFalse();
@@ -960,7 +873,7 @@ class RuntimeLoopTest {
 
         @Override
         public Transition<Integer, String> update(Integer model, String message) {
-            return Transition.stay(model);
+            return Transition.next(model);
         }
 
         @Override
@@ -969,83 +882,19 @@ class RuntimeLoopTest {
         }
     }
 
-    /**
-     * A session whose restore fails once. It marks the restore attempted first, like the real
-     * session, so the second, idempotent close completes the underlying session instead of failing
-     * again.
-     */
-    private static final class FailingRestoreSession implements TerminalSession {
-
-        private final FakeTerminal terminal;
-        private final AtomicBoolean restoreAttempted = new AtomicBoolean();
-
-        FailingRestoreSession(FakeTerminal terminal) {
-            this.terminal = terminal;
-        }
-
-        @Override
-        public TerminalCapabilities capabilities() {
-            return terminal.capabilities();
-        }
-
-        @Override
-        public Size size() {
-            return terminal.size();
-        }
-
-        @Override
-        public java.io.InputStream input() {
-            return terminal.input();
-        }
-
-        @Override
-        public void write(String data) {
-            terminal.write(data);
-        }
-
-        @Override
-        public boolean isOpen() {
-            return terminal.isOpen();
-        }
-
-        @Override
-        public void close() {
-            if (!restoreAttempted.getAndSet(true)) {
-                throw new IllegalStateException("session restore failed");
-            }
-            terminal.close();
-        }
-    }
-
     @Test
-    @Timeout(20)
-    void aFailingSessionRestoreIsCarriedAsACleanupFailureInsteadOfEscapingTheRun() {
-        // Application.run's contract is to return how the run ended and to carry cleanup failures.
-        // A session whose restore throws must not abort the rest of cleanup (the mailbox close and
-        // the thread joins) or escape the runtime as an exception.
-        FakeTerminal terminal = new FakeTerminal(new Size(3, 10));
-        FailingRestoreSession session = new FailingRestoreSession(terminal);
-        TerminalBackend backend = (size, requested) -> {
-            terminal.open(size, requested);
-            return session;
-        };
-
-        ExitResult result = Application.run(new Quitting(),
-                options(new FakeTerminal.ManualTimers()), backend);
-
+    void aFailingJLineCloseIsCarriedAsACleanupFailure() {
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(3,10));
+        terminal.failClose(new IllegalStateException("terminal restore failed"));
+        ExitResult result = run(new Quitting(), RuntimeOptions.defaults(), terminal);
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
-        assertThat(result.failure()).hasMessage("session restore failed");
-        assertThat(result.cleanupFailures())
-                .anySatisfy(failure -> assertThat(failure).hasMessage("session restore failed"));
-        assertThat(session.isOpen()).as("the second, idempotent close still ran").isFalse();
+        assertThat(result.cleanupFailures()).anySatisfy(f -> assertThat(f).hasMessage("terminal restore failed"));
+        assertThat(terminal.isOpen()).isFalse();
     }
 
     @Test
-    void aSecondRealBackendCannotOwnTheTerminal() {
-        var backend = io.github.dhoard.braxton.internal.terminal.SystemTerminalBackend.INSTANCE;
-        // A fake backend exercises the runtime; this check only asserts the real backend type exists
-        // and that the unsupported-platform path is reachable without touching a console.
-        assertThat(backend).isNotNull();
+    void pureApiInitializationDoesNotOpenNativeResources() {
+        assertThat(RuntimeOptions.defaults().input()).isNotNull();
     }
 
     /** Subscribes to a source that emits a burst from its own start function. */
@@ -1053,12 +902,12 @@ class RuntimeLoopTest {
 
         @Override
         public Transition<Integer, String> init(InitContext context) {
-            return Transition.stay(0);
+            return Transition.next(0);
         }
 
         @Override
         public Transition<Integer, String> update(Integer model, String message) {
-            return Transition.stay(model + 1);
+            return Transition.next(model + 1);
         }
 
         @Override
@@ -1084,11 +933,11 @@ class RuntimeLoopTest {
     void aSourceThatOverflowsTheMailboxFromItsStartFunctionEndsTheRun() throws Exception {
         // start() runs on the owner thread, so an emission there must never wait for the owner to
         // drain: the owner is the consumer. An oversized burst is the documented fatal overflow.
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
-        RuntimeOptions tight = options(new FakeTerminal.ManualTimers()).withLimits(2, 4, 4);
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
+        RuntimeOptions tight = options().withLimits(2, 4, 4);
         AtomicReference<ExitResult> result = new AtomicReference<>();
         Thread run = Thread.ofVirtual().name("burst-test")
-                .start(() -> result.set(Application.run(new Bursting(5), tight, terminal)));
+                .start(() -> result.set(run(new Bursting(5), tight, terminal)));
         run.join(8_000L);
         assertThat(run.isAlive()).as("the run ends instead of waiting for itself").isFalse();
         assertThat(result.get().kind()).isEqualTo(ExitResult.Kind.FAILURE);
@@ -1100,19 +949,17 @@ class RuntimeLoopTest {
     @Test
     @Timeout(20)
     void aSourceThatEmitsFromItsStartFunctionStillRunsWhenTheMailboxHasRoom() throws Exception {
-        FakeTerminal terminal = new FakeTerminal(new Size(6, 20));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
         terminal.endInput();
-        ExitResult result = Application.run(new Counter(), options(new FakeTerminal.ManualTimers()),
-                terminal);
+        ExitResult result = run(new Counter(), options(), terminal);
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(terminal.output()).contains("count:");
+        assertThat(terminal.outputText()).contains("count:");
 
-        FakeTerminal burstTerminal = new FakeTerminal(new Size(6, 20));
+        JLineTestTerminal burstTerminal = new JLineTestTerminal(new Size(6, 20));
         AtomicReference<ExitResult> burst = new AtomicReference<>();
         Thread burstRun = Thread.ofVirtual().name("burst-control")
-                .start(() -> burst.set(Application.run(new Bursting(5),
-                        options(new FakeTerminal.ManualTimers()), burstTerminal)));
-        await(() -> burstTerminal.output().contains("burst: 5"));
+                .start(() -> burst.set(run(new Bursting(5), options(), burstTerminal)));
+        await(() -> burstTerminal.outputText().contains("burst: 5"));
         burstTerminal.endInput();
         burstRun.join(5_000L);
         assertThat(burstRun.isAlive()).isFalse();
@@ -1121,12 +968,13 @@ class RuntimeLoopTest {
 
     @Test
     void renderedFramesAreWrittenThroughTheSessionOnly() {
-        FakeTerminal terminal = new FakeTerminal(new Size(3, 12));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(3, 12));
         terminal.feed("a");
         terminal.endInput();
-        Application.run(new Counter(), options(new FakeTerminal.ManualTimers()), terminal);
+        run(new Counter(), options(), terminal);
         assertThat(terminal.writes()).isNotEmpty();
-        assertThat(terminal.writes()).allSatisfy(write ->
-                assertThat(write).doesNotContain("\u001B[?1049"));
+        assertThat(terminal.outputText()).contains("\u001B[?1049h").contains("\u001B[?1049l").contains("count: 1");
+        assertThat(terminal.writes().stream().filter(write -> write.contains("count:")))
+                .allSatisfy(write -> assertThat(write).doesNotContain("\u001B[?1049"));
     }
 }

@@ -11,8 +11,13 @@
   Python environment containing pyte; if necessary, install it in a dedicated virtual
   environment during an authorized implementation stage. Do not claim terminal
   verification based solely on headless assertions or Maven success.
-- Keep benchmarks opt-in, preserve the library's dependency and compatibility contracts,
-  and verify historical observations in memory against current source and tests.
+- Keep benchmarks opt-in. Terminal integration uses locally built JLine
+  `0.1.0-3601-SNAPSHOT` with the FFM provider only;
+  no compatibility facade, alternate provider, or custom native backend is retained. Keep JLine
+  and internal engine/service types out of the public MVU API. Verify historical memory against
+  current source and tests; old native-backend platform evidence does not verify JLine.
+- Default Maven tests must remain native-access-free and TTY-free. Native PTY/ConPTY and pyte
+  checks are opt-in developer verification, using owned processes/terminals only.
 
 ## External SDLC orchestration
 

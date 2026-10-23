@@ -187,7 +187,7 @@ class SelectorTest {
     }
 
     /** The cell's style flags these tests set, so the assertion is about style, not identity. */
-    private static String activeFlags(io.github.dhoard.braxton.internal.render.Screen screen, int row,
+    private static String activeFlags(io.github.dhoard.braxton.view.RenderedScreen screen, int row,
             int col) {
         Style style = screen.cell(row, col).style();
         List<String> flags = new java.util.ArrayList<>();
