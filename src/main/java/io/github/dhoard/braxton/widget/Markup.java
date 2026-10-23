@@ -62,7 +62,10 @@ import io.github.dhoard.braxton.view.Views;
  *
  * <p>A list {@code icon} is a one-line prefix, so a line break in it becomes a space and a tab
  * advances to the same four-column stops the text view paints; continuation lines therefore stay
- * under the first line's item text.</p>
+ * under the first line's item text. That indent is charged inside the run of clusters the row is
+ * painted as, exactly as a table cell is: a cluster with no base character of its own at the head
+ * of an item, or at the head of a continuation line, joins the space the prefix ends with and is
+ * charged there.</p>
  *
  * <p>A table is a rectangular grid: every row occupies the same number of columns. A row is painted
  * as one grapheme-cluster sequence, so each cell's columns are charged inside that sequence rather
@@ -236,7 +239,7 @@ public final class Markup {
         // prefix never reaches, or split the item across rows.
         StyledText prefix = TabStops.expand(StyledText.of(
                 " ".repeat(Math.max(0, gap)) + singleLine(bullet) + " ", style, link));
-        String continuation = " ".repeat(TextMeasure.columns(prefix.plainText()));
+        String prefixText = prefix.plainText();
         StyledText out = StyledText.empty();
         NodeList children = list.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
@@ -250,7 +253,7 @@ public final class Markup {
             // continuation indent stay the list's decoration and keep the list's attributes.
             StyledText content = renderNode(item, style, link);
             StyledText rendered = prefix
-                    .append(indentAfterFirstLine(content, continuation, style, link));
+                    .append(indentAfterFirstLine(content, prefixText, style, link));
             out = out.append(rendered);
             if (!rendered.plainText().endsWith("\n")) {
                 out = out.append(StyledText.of("\n", style, link));
@@ -264,21 +267,66 @@ public final class Markup {
         return LineBreaks.singleRow(value);
     }
 
-    /** Aligns every line after the first under the first line's text, keeping span styling. */
-    private static StyledText indentAfterFirstLine(StyledText content, String indent, Style style,
+    /**
+     * Aligns every line after the first under the first line's text, keeping span styling. The
+     * indent is charged inside the run of clusters the row is painted as, the way {@link GridRows}
+     * charges a cell: a cluster with no base character of its own - a combining mark, a variation
+     * selector, a joiner - at the head of a line joins the space the prefix ends with and widens it
+     * there, so the column a line's text starts at is measured with the prefix and that line joined
+     * rather than from the prefix measured on its own.
+     */
+    private static StyledText indentAfterFirstLine(StyledText content, String prefix, Style style,
             String link) {
         List<StyledText> lines = content.lines();
+        int columns = paintedPrefixColumns(prefix, lines.isEmpty() ? "" : lines.get(0).plainText());
         StyledText out = StyledText.empty();
         for (int i = 0; i < lines.size(); i++) {
             if (i > 0) {
                 out = out.append(StyledText.of("\n", style, link));
                 if (!lines.get(i).isEmpty()) {
-                    out = out.append(StyledText.of(indent, style, link));
+                    out = out.append(StyledText.of(
+                            continuationIndent(columns, lines.get(i).plainText()), style, link));
                 }
             }
             out = out.append(lines.get(i));
         }
         return out;
+    }
+
+    /**
+     * Columns the one-line {@code prefix} occupies at the start of the row painted as prefix then
+     * {@code line}. The prefix's last cluster reaches past the prefix when the line opens with a
+     * cluster that has no base of its own, and that cluster is the prefix's, not the line's: it is
+     * painted behind the base the prefix supplies and a variation selector widens it, so the line's
+     * own text starts a column further right than the prefix measured alone puts it.
+     */
+    private static int paintedPrefixColumns(String prefix, String line) {
+        if (prefix.isEmpty()) {
+            return 0;
+        }
+        String painted = prefix + line;
+        int end = 0;
+        for (String cluster : TextMeasure.graphemes(painted)) {
+            end += cluster.length();
+            if (end >= prefix.length()) {
+                break;
+            }
+        }
+        return TextMeasure.columns(painted.substring(0, end));
+    }
+
+    /**
+     * Spaces that put a continuation line's text in column {@code columns}, the column the first
+     * line's text was painted in. A line that itself opens with a base-less cluster widens the last
+     * of those spaces, and that column comes back out of the indent so the line stays under the text
+     * it is meant to hang under.
+     */
+    private static String continuationIndent(int columns, String line) {
+        String indent = " ".repeat(columns);
+        while (!indent.isEmpty() && paintedPrefixColumns(indent, line) > columns) {
+            indent = indent.substring(1);
+        }
+        return indent;
     }
 
     private static StyledText renderTable(Element table, Style style, String link) {

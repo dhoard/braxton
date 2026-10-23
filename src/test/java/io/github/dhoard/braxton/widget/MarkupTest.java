@@ -249,6 +249,88 @@ class MarkupTest {
                 .isEqualTo(paintedColumn(screen, 1, 'y'));
     }
 
+    /**
+     * A list item whose text opens with a cluster that has no base of its own paints that cluster
+     * behind the space its bullet ends with, and a variation selector widens it. The continuation
+     * indent is charged the same way, so the continuation lines stay under the item text instead of
+     * a column to its left.
+     */
+    @Test
+    void aListItemOpeningWithABaselessClusterHangsItsContinuationUnderItsText() {
+        String selector = "<root><ul gap=\"0\" icon=\"*\"><li>\uFE0Fx<br/>y</li></ul></root>";
+        RenderedScreen starred = new ScreenRenderer().screen(
+                Markup.view(selector), new Viewport(6, 24));
+        assertThat(paintedColumn(starred, 0, 'x'))
+                .as("item text column, painted to %d columns", starred.cols())
+                .isEqualTo(paintedColumn(starred, 1, 'y'))
+                .isNotEqualTo(-1);
+        // The selector widens the space the icon ends with, so the item text really is painted in
+        // the third column, one right of the two columns the icon measures on its own.
+        assertThat(paintedColumn(starred, 0, 'x')).as("widened icon").isEqualTo(3);
+
+        RenderedScreen bulleted = new ScreenRenderer().screen(
+                Markup.view("<root><ul><li>\uFE0Fx<br/>y</li></ul></root>"), new Viewport(6, 24));
+        assertThat(paintedColumn(bulleted, 0, 'x'))
+                .as("item text column of a default bullet, painted to %d columns", bulleted.cols())
+                .isEqualTo(paintedColumn(bulleted, 1, 'y'))
+                .isNotEqualTo(-1);
+        assertThat(paintedColumn(bulleted, 0, 'x'))
+                .as("widened default bullet")
+                .isEqualTo(5);
+    }
+
+    /**
+     * A continuation line that opens with the same kind of cluster widens the last space of its own
+     * indent, and that column comes back out of the indent: charging only the first line's leading
+     * cluster left such a line a column right of the text it hangs under.
+     */
+    @Test
+    void aContinuationLineOpeningWithABaselessClusterHangsUnderItsItemText() {
+        RenderedScreen screen = new ScreenRenderer().screen(
+                Markup.view("<root><ul gap=\"0\" icon=\"*\"><li>x<br/>\uFE0Fy</li></ul></root>"),
+                new Viewport(6, 24));
+        assertThat(paintedColumn(screen, 0, 'x'))
+                .as("item text column, painted to %d columns", screen.cols())
+                .isEqualTo(paintedColumn(screen, 1, 'y'))
+                .isNotEqualTo(-1);
+
+        // The item's own head is a base, so the icon is painted at the two columns it measures;
+        // it is the continuation line's selector that would widen that line's indent to three.
+        assertThat(paintedColumn(screen, 0, 'x')).as("item text column").isEqualTo(2);
+
+        RenderedScreen both = new ScreenRenderer().screen(Markup.view(
+                "<root><ul gap=\"0\" icon=\"*\"><li>\uFE0Fa<br/>\uFE0Fb</li></ul></root>"),
+                new Viewport(6, 24));
+        assertThat(paintedColumn(both, 0, 'a'))
+                .as("item text column, painted to %d columns", both.cols())
+                .isEqualTo(paintedColumn(both, 1, 'b'))
+                .isNotEqualTo(-1);
+        assertThat(paintedColumn(both, 1, 'b')).as("continuation column").isEqualTo(3);
+    }
+
+    /**
+     * A cluster with no base of its own that does not widen the painted prefix - a combining mark, a
+     * joiner, the text-display selector - must keep the alignment it already had.
+     */
+    @Test
+    void aListItemOpeningWithANarrowBaselessClusterKeepsItsIndent() {
+        for (String head : List.of("\u0301", "\u200D", "\uFE0E")) {
+            RenderedScreen screen = new ScreenRenderer().screen(
+                    Markup.view("<root><ul gap=\"0\" icon=\"*\"><li>" + head
+                            + "x<br/>y</li></ul></root>"),
+                    new Viewport(6, 24));
+            assertThat(paintedColumn(screen, 0, 'x'))
+                    .as("item text column of head U+%04X, painted to %d columns",
+                            head.codePointAt(0), screen.cols())
+                    .isEqualTo(paintedColumn(screen, 1, 'y'))
+                    .isNotEqualTo(-1);
+            // Joined, but narrow: the text still starts at the icon's own two columns.
+            assertThat(paintedColumn(screen, 1, 'y'))
+                    .as("continuation column of head U+%04X", head.codePointAt(0))
+                    .isEqualTo(2);
+        }
+    }
+
     /** The column {@code needle} was painted in on {@code row}, or -1 when it is not painted. */
     private static int paintedColumn(RenderedScreen screen, int row, char needle) {
         for (int column = 0; column < screen.cols(); column++) {
