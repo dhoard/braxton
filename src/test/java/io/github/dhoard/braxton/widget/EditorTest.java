@@ -385,6 +385,97 @@ class EditorTest {
     }
 
     @Test
+    void verticalMovementChargesABaselessClusterToTheCellTheRowPaintsItIn() {
+        // A draft cluster with no base character of its own is painted inside the cell the row drew
+        // before it - the prompt's trailing space, or the last space of the blank stand-in a
+        // continuation line carries - exactly as LayoutEngine continues a cell across a span
+        // boundary. Charging it a cell of its own (or none, for a lone selector) draws the block in
+        // one column and lands the caret a cluster away from it on every vertical move.
+        EditorOptions options = EditorOptions.defaults().withPrompt("> ", Style.NONE)
+                .withVisibleLines(2);
+        EditorState state = new EditorState("\u0301abcdef\nabcdefgh", 7, 7, 0);
+        assertThat(paintedLines(state, options, true))
+                .containsExactly("> \u0301abcdef" + Editor.CURSOR, "  abcdefgh");
+
+        EditorState down = Editor.update(state, options, new EditorAction.MoveDown()).state();
+        // The mark shares the prompt's second cell, so the row drew the block in column 8.
+        assertThat(down.preferredColumn()).isEqualTo(8);
+        assertThat(down.caret()).isEqualTo(state.lineStart(1) + 6);
+        assertThat(paintedLines(down, options, true))
+                .containsExactly("> \u0301abcdef", "  abcdef" + Editor.CURSOR + "h");
+        // The way back returns to the offset that cell was drawn for.
+        assertThat(Editor.update(down, options, new EditorAction.MoveUp()).state().caret())
+                .isEqualTo(7);
+
+        // Seeking into a line that opens with a mark charges the joined cell there too: the target
+        // row paints its first draft cluster inside the stand-in's last cell.
+        String target = "abcdef\n\u0301abcdefgh";
+        EditorState source = new EditorState(target, 6, 6, 0);
+        EditorState moved = Editor.update(source, options, new EditorAction.MoveDown()).state();
+        assertThat(moved.preferredColumn()).isEqualTo(8);
+        assertThat(moved.caret()).isEqualTo(source.lineStart(1) + 7);
+        assertThat(paintedLines(moved, options, true))
+                .containsExactly("> abcdef", "  \u0301abcdef" + Editor.CURSOR + "h");
+
+        // The opposite sign: a lone selector claims no cell of its own but widens the one it joins,
+        // so the block is drawn in column 9 while an arithmetic that charged it nothing aimed at 8.
+        EditorState selector = new EditorState("\uFE0Fabcdef\nabcdefgh", 7, 7, 0);
+        assertThat(paintedLines(selector, options, true))
+                .containsExactly("> \uFE0Fabcdef" + Editor.CURSOR, "  abcdefgh");
+        EditorState selectorDown = Editor.update(selector, options,
+                new EditorAction.MoveDown()).state();
+        assertThat(selectorDown.preferredColumn()).isEqualTo(9);
+        assertThat(selectorDown.caret()).isEqualTo(selector.lineStart(1) + 7);
+        assertThat(paintedLines(selectorDown, options, true))
+                .containsExactly("> \uFE0Fabcdef", "  abcdefg" + Editor.CURSOR);
+    }
+
+    @Test
+    void aBaselessClusterAtTheHeadOfALineAgreesWithThePaintWhereItKeepsItsOwnCell() {
+        EditorState mark = new EditorState("\u0301abcdef\nabcdefgh", 7, 7, 0);
+        // With no prompt the row gives the mark its own cell - the dotted circle the text view
+        // paints in place of the base it lacks - so the arithmetic and the paint already agree.
+        EditorOptions plain = EditorOptions.defaults().withVisibleLines(2);
+        assertThat(paintedLines(mark, plain, true))
+                .containsExactly("\u25CC\u0301abcdef" + Editor.CURSOR, "abcdefgh");
+        EditorState plainDown = Editor.update(mark, plain, new EditorAction.MoveDown()).state();
+        assertThat(plainDown.preferredColumn()).isEqualTo(7);
+        assertThat(plainDown.caret()).isEqualTo(mark.lineStart(1) + 7);
+
+        // A masked row draws one mask glyph per cluster, and that glyph is a base of its own: no
+        // join happens, so one cell per cluster is still the column the row paints.
+        EditorOptions password = EditorOptions.defaults().withPrompt("> ", Style.NONE)
+                .withVisibleLines(2).withMasking(EditorOptions.Masking.PASSWORD);
+        assertThat(paintedLines(mark, password, true).get(0))
+                .isEqualTo("> \u2022\u2022\u2022\u2022\u2022\u2022\u2022" + Editor.CURSOR);
+        EditorState maskedDown = Editor.update(mark, password,
+                new EditorAction.MoveDown()).state();
+        assertThat(maskedDown.preferredColumn()).isEqualTo(9);
+        assertThat(maskedDown.caret()).isEqualTo(mark.lineStart(1) + 7);
+
+        // A prompt that ends with a tab reaches its last cell as the space of a stop, and the text
+        // view continues a stop's space only with the clusters that claim no column of their own.
+        // The mark therefore keeps the column it measures there, dotted circle in front of it.
+        EditorOptions tab = EditorOptions.defaults().withPrompt(">\t", Style.NONE)
+                .withVisibleLines(2);
+        EditorState stop = new EditorState("\u0301abcdef\nabcdefgh", 7, 7, 0);
+        assertThat(paintedLines(stop, tab, true))
+                .containsExactly(">   \u25CC\u0301abcdef" + Editor.CURSOR, "    abcdefgh");
+        EditorState stopDown = Editor.update(stop, tab, new EditorAction.MoveDown()).state();
+        assertThat(stopDown.preferredColumn()).isEqualTo(11);
+        assertThat(stopDown.caret()).isEqualTo(stop.lineStart(1) + 7);
+        assertThat(paintedLines(stopDown, tab, true))
+                .containsExactly(">   \u25CC\u0301abcdef", "    abcdefg" + Editor.CURSOR);
+        // The selector that claims no column does join that space, and is charged the column it
+        // gives the cell it joins.
+        EditorState selectorStop = new EditorState("\uFE0Fabcdef\nabcdefgh", 7, 7, 0);
+        assertThat(paintedLines(selectorStop, tab, true))
+                .containsExactly(">   \uFE0Fabcdef" + Editor.CURSOR, "    abcdefgh");
+        assertThat(Editor.update(selectorStop, tab, new EditorAction.MoveDown()).state()
+                .preferredColumn()).isEqualTo(11);
+    }
+
+    @Test
     void verticalMovementStopsBeforeAWideGlyphItCannotFitInto() {
         String text = "abcdef\na\u65E5b";
         // Painted column 4 falls inside the wide glyph on the shorter line.

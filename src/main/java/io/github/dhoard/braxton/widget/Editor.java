@@ -203,7 +203,7 @@ public final class Editor {
         // width, so the caret's column is measured from there: a tab in the draft reaches the same
         // stop the text view paints for it. Measuring from column 0 moves the caret to a column it
         // is not drawn at, by the prompt's width modulo the tab stop.
-        int painted = paintedPromptWidth(options);
+        String prompt = paintedPrompt(options);
         // The column is counted the way the row is painted, so a masked draft is measured one cell
         // per cluster: its rows show mask glyphs, never the cleartext widths, and a move aimed at a
         // cleartext column draws the block columns right of where it was last drawn. A hidden row
@@ -215,11 +215,16 @@ public final class Editor {
         // shorter line in between clamps it; horizontal moves and edits reset the preference.
         int column = state.preferredColumn() > 0
                 ? state.preferredColumn()
-                : visualColumn(state.text(), lineStart, state.caret(), painted, masking);
+                : visualColumn(state.text(), lineStart, state.caret(),
+                        prefixOf(state, options, prompt, line), masking);
         int targetLine = Math.max(0, Math.min(state.lineCount() - 1, line + direction));
         int targetStart = state.lineStart(targetLine);
         int targetEnd = state.lineEnd(targetLine);
-        int caret = indexAtColumn(state.text(), targetStart, targetEnd, column, painted, masking);
+        // The row the block lands on carries its own prefix: only the first line of the window
+        // paints the prompt, and the rest the blank stand-in. The cell a draft cluster joins can
+        // therefore differ between the row the caret left and the row it arrives on.
+        int caret = indexAtColumn(state.text(), targetStart, targetEnd, column,
+                prefixOf(state, options, prompt, targetLine), masking);
         return new EditorState(state.text(), caret, caret, column);
     }
 
@@ -238,36 +243,40 @@ public final class Editor {
 
     /**
      * Painted column of {@code index} on its line: the columns the row draws before it, so the count
-     * starts at {@code paintedStart} - the prompt the row carries - and a tab counts the columns the
-     * text view paints for it. Wide glyphs count their real width, and a masked line counts one cell
-     * per cluster because the mask glyph is all that row draws.
+     * starts at {@code prefix} - the prompt the first visible line carries, or the blank stand-in of
+     * its width - and a tab counts the columns the text view paints for it. Wide glyphs count their
+     * real width, and a masked line counts one cell per cluster because the mask glyph is all that
+     * row draws.
      */
-    private static int visualColumn(String text, int lineStart, int index, int paintedStart,
+    private static int visualColumn(String text, int lineStart, int index, PaintedPrefix prefix,
             boolean masking) {
         int end = Math.max(lineStart, Math.min(index, text.length()));
-        int used = paintedStart;
+        int used = prefix.columns();
+        PaintedPrefix joinable = prefix;
         for (String cluster : TextMeasure.graphemes(text.substring(lineStart, end))) {
-            used += paintedCells(cluster, used, masking);
+            used += paintedCells(cluster, used, masking, joinable);
+            joinable = NO_PREFIX;
         }
         return used;
     }
 
     /**
      * Caret offset at {@code column} painted columns, stopping before a glyph that would overshoot.
-     * The row is counted from {@code paintedStart} for the same reason {@link #visualColumn} is.
+     * The row is counted from {@code prefix} for the same reason {@link #visualColumn} is.
      */
     private static int indexAtColumn(String text, int lineStart, int lineEnd, int column,
-            int paintedStart, boolean masking) {
+            PaintedPrefix prefix, boolean masking) {
         int position = lineStart;
-        int used = paintedStart;
+        int used = prefix.columns();
+        PaintedPrefix joinable = prefix;
         for (String cluster : TextMeasure.graphemes(text.substring(lineStart, lineEnd))) {
-            int next = position + cluster.length();
-            int width = paintedCells(cluster, used, masking);
+            int width = paintedCells(cluster, used, masking, joinable);
+            joinable = NO_PREFIX;
             if (used + width > column) {
                 break;
             }
             used += width;
-            position = next;
+            position += cluster.length();
         }
         return position;
     }
@@ -276,10 +285,79 @@ public final class Editor {
      * Cells one cluster occupies on a painted row, after {@code used} cells of that row. The renderer
      * and the caret's column arithmetic share this rule so a move can never aim at a column its row
      * does not draw: a masked row draws one glyph per cluster, however wide the cleartext underneath
-     * it is, and an unmasked row occupies what {@link #visualWidth} measures.
+     * it is, and an unmasked row occupies what {@link #visualWidth} measures - except for the cluster
+     * that opens the draft, which the row paints inside the cell its prefix ends with whenever it
+     * has no base character of its own.
      */
-    private static int paintedCells(String cluster, int used, boolean masking) {
-        return masking ? 1 : visualWidth(cluster, used);
+    private static int paintedCells(String cluster, int used, boolean masking, PaintedPrefix prefix) {
+        if (masking) {
+            return 1;
+        }
+        String cell = prefix.cell();
+        if (cell != null && TextMeasure.graphemeCount(cell + cluster) == 1
+                && (!prefix.tabStop() || TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED) == 0)) {
+            // The cluster continues the cell the row already painted, so it costs the columns that
+            // cell gains or loses - the join LayoutEngine makes when a span boundary splits one
+            // cluster of the row's plain text. A bare combining mark adds no column this way, and a
+            // lone variation selector adds the column it gives the base it joins. Where the cell is
+            // the space a tab reached, only the clusters that claim no column join it: a bare mark
+            // there keeps the column it measures, the dotted circle standing in for its base.
+            return TextMeasure.clusterColumns(cell + cluster, WidthPolicy.PINNED)
+                    - TextMeasure.clusterColumns(cell, WidthPolicy.PINNED);
+        }
+        return visualWidth(cluster, used);
+    }
+
+    /**
+     * The prefix one painted row carries: {@code columns} drawn before its draft and the {@code cell}
+     * that run ends with, or {@code null} when the row draws no prefix at all.
+     *
+     * <p>{@code tabStop} marks the cell a tab in the prompt reached. The text view continues that
+     * space only with clusters that claim no column of their own, so a cluster with columns of its
+     * own keeps its own cell after a stop, while a prompt's ordinary last cluster takes the mark into
+     * the cell it is painted in.</p>
+     *
+     * <p>Only the cluster that opens a draft can join the prefix's cell. The rest are whole clusters
+     * of the draft's own text, and the segmentation the paint path reads for the row is that same
+     * one, so none of them continues the cell before it.</p>
+     */
+    private record PaintedPrefix(int columns, String cell, boolean tabStop) {
+    }
+
+    private static final PaintedPrefix NO_PREFIX = new PaintedPrefix(0, null, false);
+
+    /** The prefix of {@code line} in the window the editor paints while the caret is on that line. */
+    private static PaintedPrefix prefixOf(EditorState state, EditorOptions options, String prompt,
+            int line) {
+        return line == firstVisibleLine(state, options, line)
+                ? promptPrefix(options, prompt)
+                : indentPrefix(prompt);
+    }
+
+    /** The prefix the first visible line paints: the prompt as the text view draws it. */
+    private static PaintedPrefix promptPrefix(EditorOptions options, String prompt) {
+        int columns = TextMeasure.columns(prompt);
+        if (columns == 0) {
+            // Nothing is drawn before the draft, so its first cluster claims a cell of its own.
+            return NO_PREFIX;
+        }
+        List<String> clusters = TextMeasure.graphemes(prompt);
+        String cell = clusters.get(clusters.size() - 1);
+        return new PaintedPrefix(columns, cell, options.prompt().endsWith("\t"));
+    }
+
+    /** The blank stand-in every other visible line paints in place of the prompt. */
+    private static PaintedPrefix indentPrefix(String prompt) {
+        int columns = TextMeasure.columns(prompt);
+        // A run of typed blanks, so its last cell is one space and a mark joins it as any other.
+        return columns == 0 ? NO_PREFIX : new PaintedPrefix(columns, " ", false);
+    }
+
+    /** The first line of the window {@link #render} paints for a caret on {@code caretLine}. */
+    private static int firstVisibleLine(EditorState state, EditorOptions options, int caretLine) {
+        int lines = state.lineCount();
+        int visible = Math.min(options.maxVisibleLines(), lines);
+        return Math.max(0, Math.min(caretLine - visible + 1, lines - visible));
     }
 
     /**
@@ -323,10 +401,12 @@ public final class Editor {
         int lines = state.lineCount();
         int visible = Math.min(opts.maxVisibleLines(), lines);
         int caretLine = state.lineAt(state.caret());
-        int first = Math.max(0, Math.min(caretLine - visible + 1, lines - visible));
+        int first = firstVisibleLine(state, opts, caretLine);
         // The prompt is painted by the text view, which expands a tab to the next four-column
         // stop, so the blank stand-in on continuation lines uses the painted width.
-        int promptWidth = paintedPromptWidth(opts);
+        String prompt = paintedPrompt(opts);
+        PaintedPrefix promptPrefix = promptPrefix(opts, prompt);
+        PaintedPrefix indentPrefix = indentPrefix(prompt);
         StyledText result = StyledText.empty();
         int start = state.lineStart(first);
         for (int line = first; line < first + visible; line++) {
@@ -335,30 +415,30 @@ public final class Editor {
             }
             int newline = state.text().indexOf('\n', start);
             int end = newline < 0 ? state.text().length() : newline;
-            result = result.append(renderLine(state, opts, focused, start, end,
-                    line == first, promptWidth));
+            result = result.append(renderLine(state, opts, focused, start, end, line == first,
+                    line == first ? promptPrefix : indentPrefix));
             start = end + 1;
         }
         return result;
     }
 
     /**
-     * Columns the text view paints for the prompt, which prefixes every visible draft line. The
-     * layout engine expands a tab to the next four-column stop, so the prompt is measured expanded:
-     * movement and the blank stand-in on continuation lines must agree with what is drawn.
+     * The prompt as the text view paints it, with its tabs expanded to the next four-column stop.
+     * Every visible draft line carries it, continuation lines as the blank stand-in of its width,
+     * so the caret's column arithmetic and the painted row start from one prefix.
      */
-    private static int paintedPromptWidth(EditorOptions options) {
-        return TextMeasure.columns(TabStops.expand(StyledText.plain(options.prompt())).plainText());
+    private static String paintedPrompt(EditorOptions options) {
+        return TabStops.expand(StyledText.plain(options.prompt())).plainText();
     }
 
     private static StyledText renderLine(EditorState state, EditorOptions opts, boolean focused,
-            int start, int end, boolean firstLine, int promptWidth) {
+            int start, int end, boolean firstLine, PaintedPrefix prefix) {
         StyledText out = StyledText.empty();
         if (!opts.prompt().isEmpty()) {
             if (firstLine) {
                 out = out.append(StyledText.of(opts.prompt(), opts.promptStyle()));
             } else {
-                out = out.append(StyledText.of(" ".repeat(promptWidth), opts.promptStyle()));
+                out = out.append(StyledText.of(" ".repeat(prefix.columns()), opts.promptStyle()));
             }
         }
         String text = state.text().substring(start, end);
@@ -372,7 +452,11 @@ public final class Editor {
         // Painted columns before this line's draft: the prompt, or the blank stand-in that keeps
         // later lines aligned. A tab advances to the next stop from there, exactly as the text view
         // expands it, so the caret's block can cover the cells the draft really occupies.
-        int used = promptWidth;
+        int used = prefix.columns();
+        // The cell that prefix ends with, which the first cluster of the draft is painted inside
+        // when it has no base of its own. Where the row draws its own glyph instead of the cluster -
+        // the block cursor, or a mask glyph - that glyph is the base, so nothing joins it.
+        PaintedPrefix joinable = prefix;
         // Segment this line once. A per-cluster boundaryAfter() over the whole draft is O(n^2) and
         // cost tens of milliseconds per frame on a draft at the editor's length limit; the line's
         // own grapheme boundaries are the draft's, because a line starts and ends on a newline
@@ -385,7 +469,8 @@ public final class Editor {
             // The cells this cluster occupies where it is painted: one mask glyph, or the gap a tab
             // advances to its stop. The caret's column arithmetic uses the same rule, so a vertical
             // move returns the block to the cell this line draws it in.
-            int cells = paintedCells(cluster, used, masking);
+            int cells = paintedCells(cluster, used, masking, cursor ? NO_PREFIX : joinable);
+            joinable = NO_PREFIX;
             if (cursor) {
                 // The block covers the grapheme under the caret. A two-column grapheme, and a tab
                 // reaching its stop, occupy those cells; one block would leave the line short and

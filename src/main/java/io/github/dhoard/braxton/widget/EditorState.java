@@ -45,9 +45,10 @@ import io.github.dhoard.braxton.style.TextMeasure;
  *
  * <p>{@code preferredColumn} is the column a run of vertical moves returns to, measured as the
  * caret's painted column: the columns the editor draws before it, including a configured prompt, so
- * a tab in the draft advances from the same base the text view paints and a masked draft counts one
- * cell per cluster, the one glyph its rows draw. Zero means measure the caret afresh, which is the
- * case after a horizontal move, an edit, or a move to a line edge.</p>
+ * a tab in the draft advances from the same base the text view paints, a masked draft counts one
+ * cell per cluster, the one glyph its rows draw, and a cluster with no base character of its own is
+ * charged the cell the row paints it in. Zero means measure the caret afresh, which is the case
+ * after a horizontal move, an edit, or a move to a line edge.</p>
  */
 public record EditorState(String text, int caret, int anchor, int preferredColumn) {
 
