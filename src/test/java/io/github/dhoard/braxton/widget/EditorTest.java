@@ -571,6 +571,61 @@ class EditorTest {
     }
 
     @Test
+    void aDraftSeededWithLineEndingsBecomesTheEditorsOwnDraft() {
+        // The draft lives in the application's model, so it arrives from a file, a fixture, or a
+        // restored session with whatever break that platform writes. The reducer normalizes what it
+        // inserts; the state's entry points have to prepare what they are given, or the draft holds
+        // a character the row paints as no cell at all while the caret's column arithmetic counts
+        // it as one.
+        for (String raw : java.util.List.of("a\r\nb", "a\rb", "a\nb")) {
+            String label = raw.replace("\r", "\\r").replace("\n", "\\n");
+            EditorState seeded = EditorState.of(raw);
+            assertThat(seeded.text()).as("draft of %s", label).isEqualTo("a\nb");
+            assertThat(seeded.text()).as("no carriage return in %s", label).doesNotContain("\r");
+            assertThat(seeded.lineCount()).as("lines of %s", label).isEqualTo(2);
+            // The offsets the caller passed are its own coordinates: the end of the text it gave.
+            assertThat(seeded.caret()).as("caret of %s", label)
+                    .isEqualTo(seeded.text().length());
+            assertThat(seeded.anchor()).as("anchor of %s", label)
+                    .isEqualTo(seeded.text().length());
+            assertThat(EditorState.empty().withText(raw).text()).as("withText of %s", label)
+                    .isEqualTo("a\nb");
+        }
+        // A CR/LF pair is one break, so it costs one unit: an offset the caller counted past the
+        // break names the same character of the prepared draft it named in the text it supplied.
+        EditorState seeded = new EditorState("ab\r\ncd", 4, 0, 0);
+        assertThat(seeded.text()).isEqualTo("ab\ncd");
+        assertThat(seeded.caret()).isEqualTo(3);
+        assertThat(seeded.caretLine()).contains("cd");
+        assertThat(new EditorState("ab\r\ncd", 6, 6, 0).caret()).isEqualTo(5);
+        // An offset between the CR and the LF of one pair names no grapheme boundary - the pair is
+        // one cluster - so it lands at the start of the break that replaces the pair.
+        assertThat(new EditorState("ab\r\ncd", 3, 3, 0).caret()).isEqualTo(2);
+    }
+
+    @Test
+    void aDraftSeededWithACarriageReturnDrawsTheCaretInTheColumnTheRowPaints() {
+        // preferredColumn and the caret's column are documented as the columns the row draws before
+        // the caret. An unprepared CR is measured as a column and painted as no cell, which leaves
+        // the block a column right of the text it sits in and lets two offsets draw it in the same
+        // place. Preparing the draft is what makes the two agree.
+        EditorState seeded = new EditorState("a\rb\nxyz", 2, 2, 0);
+        assertThat(seeded).isEqualTo(new EditorState("a\nb\nxyz", 2, 2, 0));
+        assertThat(paintedLines(seeded, OPTIONS, true))
+                .isEqualTo(paintedLines(new EditorState("a\nb\nxyz", 2, 2, 0), OPTIONS, true));
+        assertThat(Editor.lines(seeded)).containsExactly("a", "b", "xyz");
+        // Stepping over the break moves the block: no offset hides in a column the row never paints.
+        assertThat(paintedLines(new EditorState("a\rb\nxyz", 1, 1, 0), OPTIONS, true).get(0))
+                .isEqualTo("> a" + Editor.CURSOR);
+        assertThat(paintedLines(new EditorState("a\rb\nxyz", 2, 2, 0), OPTIONS, true).get(1))
+                .isEqualTo("  " + Editor.CURSOR);
+        // The column a vertical move returns to is the column the row paints the block in.
+        EditorState up = Editor.update(seeded, OPTIONS, new EditorAction.MoveUp()).state();
+        assertThat(up.preferredColumn()).isEqualTo(2);
+        assertThat(paintedLines(up, OPTIONS, true).get(0)).isEqualTo("> " + Editor.CURSOR);
+    }
+
+    @Test
     void equivalentBreakFormsInsertIdenticallyUnderALengthLimit() {
         // Conversion happens before truncation and offset math, so LF, CRLF, and lone CR from the
         // same logical value leave the same text, caret, anchor, and line count. A length limit

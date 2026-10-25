@@ -370,9 +370,12 @@ already gone. Pass `StyledText.plain(LineBreaks.normalize(raw))` to a styled-inp
 as `Badge`, or flatten the raw text when a one-row value is intended. The helpers are stateless:
 a CR at the end of one call and the LF at the start of the next are two independent breaks, so
 assemble the value first. `PasteSanitizer` and editor insertion normalize before their own
-filtering and truncation. `Box.title(String)` flattens its raw title before the span boundary;
-its `StyledText` overload still receives already-sanitized content. Lower-level `View.BorderBox`
-titles keep their existing first-row clipping and do not flatten.
+filtering and truncation. `EditorState` normalizes the draft it is given - by its constructor,
+`of(...)`, or `withText(...)` - and carries the caller's caret and anchor offsets onto the prepared
+text, so a draft restored from CRLF data never holds a character that the caret's column arithmetic
+counts while the painted row omits its cell. `Box.title(String)` flattens its raw title before the
+span boundary; its `StyledText` overload still receives already-sanitized content. Lower-level
+`View.BorderBox` titles keep their existing first-row clipping and do not flatten.
 
 **Clipboard and paste.** `PasteSanitizer` offers `NORMAL` (preserves indentation) and `AGGRESSIVE`
 (trims and can collapse blank lines) modes. `ClipboardConfig` snapshots `braxton.clipboard.*`

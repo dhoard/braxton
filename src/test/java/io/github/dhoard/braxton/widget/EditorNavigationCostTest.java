@@ -95,9 +95,14 @@ class EditorNavigationCostTest {
     }
 
     @Test
-    void lineExtractionRetainsEmptyLinesAndCarriageReturns() {
-        for (String text : List.of("", "a\n", "\n\n", "a\r\nb", "界\n🙂")) {
-            assertThat(Editor.lines(EditorState.of(text))).containsExactly(text.split("\n", -1));
-        }
+    void lineExtractionRetainsEmptyLinesAndEverySeededBreakForm() {
+        // The draft is prepared where it is entered, so a seeded CR/LF pair or lone CR is a break of
+        // the draft itself, and no extracted line keeps a stray carriage return.
+        assertThat(Editor.lines(EditorState.of(""))).containsExactly("");
+        assertThat(Editor.lines(EditorState.of("a\n"))).containsExactly("a", "");
+        assertThat(Editor.lines(EditorState.of("\n\n"))).containsExactly("", "", "");
+        assertThat(Editor.lines(EditorState.of("a\r\nb"))).containsExactly("a", "b");
+        assertThat(Editor.lines(EditorState.of("a\rb"))).containsExactly("a", "b");
+        assertThat(Editor.lines(EditorState.of("界\n🙂"))).containsExactly("界", "🙂");
     }
 }

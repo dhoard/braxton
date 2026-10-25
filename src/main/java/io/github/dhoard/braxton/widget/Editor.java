@@ -102,8 +102,9 @@ public final class Editor {
 
     /**
      * Inserts text at the caret or over the selection. Line endings are normalized to the editor's
-     * line break (LF), matching the paste sanitizer and the decoder, so a raw carriage return never
-     * sits in the draft as an invisible offset that does not break a line.
+     * line break (LF), matching the paste sanitizer, the decoder, and the draft {@link EditorState}
+     * is given, so a raw carriage return never sits in the draft as an invisible offset that does
+     * not break a line.
      */
     private static EditorState insert(EditorState state, EditorOptions options, String raw) {
         if (raw.isEmpty()) {

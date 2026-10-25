@@ -24,6 +24,7 @@ package io.github.dhoard.braxton.widget;
 
 import java.util.Optional;
 
+import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.TextMeasure;
 
 /**
@@ -31,6 +32,16 @@ import io.github.dhoard.braxton.style.TextMeasure;
  *
  * <p>Positions are UTF-16 offsets that always sit on a grapheme boundary. Selection is represented by
  * an anchor plus the caret; the anchor follows the caret when a move clears the selection.</p>
+ *
+ * <p>The draft is prepared the way {@link Editor}'s input paths prepare what they insert:
+ * {@link LineBreaks#normalize} converts LF, CRLF, and a lone CR to the editor's LF, so a draft an
+ * application owns - seeded from a file, a clipboard, a fixture, or a restored session - can never
+ * hold a raw carriage return. A CR would be charged one column by the caret's column arithmetic and
+ * painted as no cell at all, because a text span drops it as a control character, which puts the
+ * caret in a column its row does not draw.</p>
+ *
+ * <p>The {@code caret} and {@code anchor} a caller passes are offsets in the text it supplied; they
+ * are carried across that conversion to the same position in the prepared draft.</p>
  *
  * <p>{@code preferredColumn} is the column a run of vertical moves returns to, measured as the
  * caret's painted column: the columns the editor draws before it, including a configured prompt, so
@@ -40,10 +51,51 @@ import io.github.dhoard.braxton.style.TextMeasure;
 public record EditorState(String text, int caret, int anchor, int preferredColumn) {
 
     public EditorState {
-        text = text == null ? "" : text;
+        String supplied = text == null ? "" : text;
+        // Preparing the line endings where the draft is entered, not only where the reducer inserts,
+        // is what keeps the draft one text: the rows paint the draft's own lines, and every offset
+        // the state reports counts the characters those rows draw.
+        String draft = LineBreaks.normalize(supplied);
+        if (draft != supplied) {
+            // normalize returns the value it was given when there is nothing to convert, so a new
+            // string is the signal that breaks before an offset collapsed to one unit each.
+            caret = preparedOffset(supplied, caret);
+            anchor = preparedOffset(supplied, anchor);
+        }
+        text = draft;
         caret = clampToBoundary(text, caret);
         anchor = clampToBoundary(text, anchor);
         preferredColumn = Math.max(0, preferredColumn);
+    }
+
+    /**
+     * The offset in a {@link LineBreaks#normalize prepared} draft that corresponds to {@code offset}
+     * counted in the text the caller supplied: one CR, or one CR/LF pair, becomes the one LF that
+     * breaks the line. An offset between the CR and the LF of one pair - a position no grapheme
+     * boundary names, because the pair is a single cluster - maps to the start of the LF replacing
+     * it, the position the boundary clamping below would have chosen in the supplied text.
+     */
+    private static int preparedOffset(String supplied, int offset) {
+        int limit = Math.max(0, Math.min(offset, supplied.length()));
+        int units = 0;
+        int index = 0;
+        while (index < limit) {
+            if (supplied.charAt(index) == '\r') {
+                // The pair test matches LineBreaks: a CR is followed by its LF in the supplied text,
+                // wherever the offset happens to sit.
+                boolean pair = index + 1 < supplied.length()
+                        && supplied.charAt(index + 1) == '\n';
+                if (pair) {
+                    if (index + 1 >= limit) {
+                        break;
+                    }
+                    index++;
+                }
+            }
+            index++;
+            units++;
+        }
+        return units;
     }
 
     private static int clampToBoundary(String text, int index) {
@@ -57,6 +109,8 @@ public record EditorState(String text, int caret, int anchor, int preferredColum
 
     public static EditorState of(String text) {
         String value = text == null ? "" : text;
+        // The offsets are the caller's own coordinates in the text it supplied; the constructor
+        // carries them onto the end of the prepared draft.
         return new EditorState(value, value.length(), value.length(), 0);
     }
 
@@ -123,7 +177,8 @@ public record EditorState(String text, int caret, int anchor, int preferredColum
 
     public EditorState withText(String value) {
         // The canonical constructor and of() treat null as an empty draft; a wither must not be
-        // the one public entry point that throws instead.
+        // the one public entry point that throws instead. Replacing the draft prepares its line
+        // endings the same way, because a restored draft arrives with its own platform's breaks.
         String text = value == null ? "" : value;
         return new EditorState(text, text.length(), text.length(), 0);
     }
@@ -152,17 +207,15 @@ public record EditorState(String text, int caret, int anchor, int preferredColum
     /**
      * One mask glyph per cluster, line breaks kept, exactly as {@link Editor#render} draws them.
      *
-     * <p>A CR/LF pair is one cluster but also one line break: {@link Editor#render} masks the CR
-     * cell and breaks the line at the LF, so the pair masks as one glyph followed by a newline.
-     * Masking it as only a glyph would collapse two lines into one.</p>
+     * <p>The only break a draft can carry is the LF the canonical constructor prepared, and it
+     * segments as a cluster of its own: the break masks as the break, never as a glyph, so masking
+     * cannot collapse the two lines it separates into one.</p>
      */
     private String masked() {
         StringBuilder masked = new StringBuilder(text.length());
         for (String cluster : TextMeasure.graphemes(text)) {
             if ("\n".equals(cluster)) {
                 masked.append('\n');
-            } else if (cluster.indexOf('\n') >= 0) {
-                masked.append("\u2022").append('\n');
             } else {
                 masked.append("\u2022");
             }

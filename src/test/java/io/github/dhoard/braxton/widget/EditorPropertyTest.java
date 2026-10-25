@@ -68,9 +68,13 @@ class EditorPropertyTest {
     @Test
     void arandomActionSequenceKeepsTheStateConsistent() {
         Random random = new Random(11L);
-        String[] atoms = {"a", "b", " ", "\n", "\u65E5", "\uD83D\uDE00", "e\u0301", "1"};
+        // A seeded draft is the application's own text, so the atoms include every break form it may
+        // carry: the state's entry points prepare them, the reducer prepares what it inserts.
+        String[] atoms = {"a", "b", " ", "\n", "\r\n", "\r", "\u65E5", "\uD83D\uDE00", "e\u0301",
+                "1"};
         for (int iteration = 0; iteration < 400; iteration++) {
             EditorState state = EditorState.of(randomText(random, atoms));
+            assertThat(state.text()).as("seeded draft").doesNotContain("\r");
             int limit = 1 + random.nextInt(12);
             EditorOptions options = EditorOptions.defaults().withMaxLength(limit);
             if (random.nextBoolean()) {
@@ -83,6 +87,8 @@ class EditorPropertyTest {
             for (int step = 0; step < 25; step++) {
                 EditorState before = state;
                 state = Editor.update(state, options, randomAction(random)).state();
+                assertThat(state.text()).as("no carriage return survives step %d", step)
+                        .doesNotContain("\r");
                 assertThat(TextMeasure.isBoundary(state.text(), state.caret()))
                         .as("caret %d of [%s]", state.caret(), state.text()).isTrue();
                 assertThat(TextMeasure.isBoundary(state.text(), state.anchor()))
