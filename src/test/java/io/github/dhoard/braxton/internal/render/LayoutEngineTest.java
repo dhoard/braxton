@@ -146,6 +146,84 @@ class LayoutEngineTest {
     }
 
     @Test
+    void anAlignedColumnKeepsAGrowContentNestedInsideARowChild() {
+        // A row child is measured at the column's full width, where rowWidths gives its Grow child
+        // a share of that width. The cross-axis width that places the child has to count the same
+        // content: measuring the Grow as zero narrowed the rectangle to "Score: " and the flex
+        // text inside it was never painted.
+        View<?> status = Views.row(Views.text("Score: "), Views.grow(Views.text("42")));
+        assertThat(paint(Views.column(Alignment.START, List.of(status)), 1, 12).plainLine(0))
+                .isEqualTo("Score: 42");
+        assertThat(paint(Views.column(Alignment.CENTER, List.of(status)), 1, 12).plainLine(0))
+                .as("centred status line keeps its flex value")
+                .isEqualTo(" Score: 42");
+        assertThat(paint(Views.column(Alignment.END, List.of(status)), 1, 12).plainLine(0))
+                .as("end-aligned status line keeps its flex value")
+                .isEqualTo("   Score: 42");
+    }
+
+    @Test
+    void anAlignedColumnPaintsEveryRowItsMeasuredHeightReserves() {
+        // The measurement and the paint rectangle have to agree on the width: at 12 columns the
+        // row reserves five rows for the wrapped value, then painted at seven it needed one, so
+        // four reserved rows were left blank and the words after "Score: " disappeared.
+        View<?> status = Views.row(Views.text("Score: "),
+                Views.grow(Views.text("aaaa bbbb cccc dddd eeee")));
+        assertThat(engine.intrinsicHeight(status, 12)).isEqualTo(5);
+        Screen screen = paint(Views.column(Alignment.CENTER, List.of(status)), 5, 12);
+        String painted = String.join("", screen.plainLines());
+        for (String word : List.of("Score:", "aaaa", "bbbb", "cccc", "dddd", "eeee")) {
+            assertThat(painted).as("%s in the centred status line", word).contains(word);
+        }
+    }
+
+    @Test
+    void anAlignedColumnKeepsAGrowOnlyRowsContent() {
+        // A row of nothing but flex measures zero intrinsic width, which left an aligned column
+        // with an empty rectangle: the rows were reserved and paint() drew nothing at all.
+        View<?> growOnly = Views.row(Views.grow(Views.text("mid")));
+        assertThat(paint(Views.column(Alignment.CENTER, List.of(growOnly)), 1, 10).plainLine(0))
+                .isEqualTo("   mid");
+        assertThat(paint(Views.column(Alignment.END, List.of(growOnly)), 1, 10).plainLine(0))
+                .isEqualTo("       mid");
+    }
+
+    @Test
+    void aCentredFrameAroundAGrowChildKeepsItsContentWidth() {
+        // The frame paints the rectangle it is given, so a flex-blind cross-axis width collapsed
+        // it to its two corners with the value it frames lost between them.
+        View<?> framed = Views.border(Border.SINGLE,
+                Views.row(Views.grow(Views.text("content"))));
+        Screen screen = paint(Views.column(Alignment.CENTER, List.of(framed)), 3, 14);
+        assertThat(screen.plainLine(0)).isEqualTo("  \u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510");
+        assertThat(screen.plainLine(1)).isEqualTo("  \u2502content\u2502");
+        assertThat(screen.plainLine(2)).isEqualTo("  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518");
+    }
+
+    @Test
+    void aCentredOverlayKeepsAFlexLayerContentWidth() {
+        // An overlay layer is measured on the cross axis like a column child, so a flex row layer
+        // contributes the text it holds and not the zero its wrapper measures.
+        View<?> overlay = Views.overlay(
+                List.of(Views.text("base"), Views.row(Views.grow(Views.text("layer")))), false);
+        assertThat(engine.intrinsicWidth(overlay, 12)).isEqualTo(5);
+        assertThat(paint(Views.column(Alignment.CENTER, List.of(overlay)), 1, 12).plainLine(0))
+                .isEqualTo("   layer");
+    }
+
+    @Test
+    void aColumnChildOfARowKeepsAGrowChildsContentWidth() {
+        // The same cross-axis rule decides the columns a row hands a nested column: measured as
+        // zero, the column was given no rectangle and its flex content was never painted.
+        View<?> nested = Views.column(Alignment.CENTER,
+                List.of(Views.row(Views.grow(Views.text("inner")))));
+        assertThat(engine.intrinsicWidth(nested, 12)).isEqualTo(5);
+        assertThat(paint(nested, 1, 12).plainLine(0)).isEqualTo("   inner");
+        assertThat(paint(Views.row(nested, Views.text("|end")), 1, 12).plainLine(0))
+                .isEqualTo("inner|end");
+    }
+
+    @Test
     void aColumnMeasuresTheHeightOfARowHoldingAGrowChild() {
         View<?> view = Views.column(Views.row(Views.grow(Views.text("mid"))),
                 Views.text("last"));

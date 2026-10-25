@@ -135,7 +135,10 @@ public sealed interface View<Msg> {
     /**
      * Children stacked top to bottom, each in the rows it measured. A start-aligned child spans the
      * column's full width; a centred or end-aligned child keeps its measured width at the aligned
-     * offset.
+     * offset. That width is the content the child occupies at the column's width, so a {@link Grow}
+     * nested inside a row or overlay layer contributes what it holds rather than the zero it
+     * measures on its own main axis - the rows a child is measured in and the rectangle it is
+     * painted in are then the same width, and alignment cannot clip its content away.
      */
     record Column<Msg>(List<View<Msg>> items, Alignment align) implements View<Msg> {
 

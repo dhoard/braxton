@@ -167,7 +167,7 @@ public final class LayoutEngine {
     private int columnWidth(View.Column<?> column, int maxCols) {
         int widest = 0;
         for (int i = 0; i < column.items().size(); i++) {
-            widest = Math.max(widest, intrinsicWidth(crossAxis(column.items().get(i)), maxCols));
+            widest = Math.max(widest, contentWidth(crossAxis(column.items().get(i)), maxCols));
         }
         return widest;
     }
@@ -242,6 +242,25 @@ public final class LayoutEngine {
         return Math.min(maxCols, used);
     }
 
+    /**
+     * The rightmost column the row's content reaches when it is painted at {@code cols}. Each
+     * child is counted at the share {@link #paintRow} gives it, so a {@code Grow} contributes what
+     * it holds and a child that fills its share keeps the row as wide as the space it was given.
+     */
+    private int rowContentWidth(View.Row<?> row, int cols) {
+        List<? extends View<?>> items = row.items();
+        int[] widths = rowWidths(items, cols);
+        int offset = 0;
+        int widest = 0;
+        for (int i = 0; i < items.size(); i++) {
+            if (widths[i] > 0) {
+                widest = Math.max(widest, offset + contentWidth(items.get(i), widths[i]));
+            }
+            offset += widths[i];
+        }
+        return Math.min(cols, widest);
+    }
+
     private int overlayHeight(View.Overlay<?> overlay, int cols, int maxRows) {
         int tallest = 0;
         for (int i = 0; i < overlay.layers().size(); i++) {
@@ -256,7 +275,7 @@ public final class LayoutEngine {
     private int overlayWidth(View.Overlay<?> overlay, int maxCols) {
         int widest = 0;
         for (int i = 0; i < overlay.layers().size(); i++) {
-            widest = Math.max(widest, intrinsicWidth(crossAxis(overlay.layers().get(i)), maxCols));
+            widest = Math.max(widest, contentWidth(crossAxis(overlay.layers().get(i)), maxCols));
         }
         return widest;
     }
@@ -447,7 +466,45 @@ public final class LayoutEngine {
         if (child instanceof View.Fill<?>) {
             return cols;
         }
-        return Math.min(cols, intrinsicWidth(crossAxis(child), cols));
+        return Math.min(cols, contentWidth(crossAxis(child), cols));
+    }
+
+    /**
+     * The columns a child's content occupies when it is painted at {@code cols}, the width a
+     * cross-axis measurement has to use.
+     *
+     * <p>{@link #intrinsicWidth} answers for the main axis: a {@link View.Grow} takes its size from
+     * its parent, so it measures as zero and a row's own width leaves its share out. A column's
+     * cross axis is not a reservation but the rectangle its child is painted in, so what a
+     * {@code Grow} holds has to be counted at the share of the width that child's own layout gives
+     * it. Measuring it as zero narrows the rectangle below the width the child's height was
+     * measured at and clips away the content those rows were reserved for.</p>
+     */
+    private int contentWidth(View<?> view, int cols) {
+        if (cols <= 0) {
+            return 0;
+        }
+        return switch (view) {
+            case View.Text<?> text -> textWidth(text.text(), cols);
+            case View.Blank<?> blank -> 0;
+            case View.Fill<?> fill -> cols;
+            case View.Column<?> column -> columnWidth(column, cols);
+            case View.Row<?> row -> rowContentWidth(row, cols);
+            case View.Padding<?> padding -> Math.min(cols,
+                    padding.insets().horizontal() + contentWidth(padding.child(),
+                            Math.max(0, cols - padding.insets().horizontal())));
+            case View.BorderBox<?> box -> {
+                int frame = box.border().isVisible() ? 2 : 0;
+                yield Math.min(cols, frame + contentWidth(box.child(), Math.max(0, cols - frame)));
+            }
+            // A Fixed reserves its size on a parent row's main axis, so that row is as wide as the
+            // size and not as the content inside it; a column's cross axis unwraps it (crossAxis).
+            case View.Fixed<?> fixed -> Math.min(cols, fixed.size());
+            case View.Grow<?> grow -> Math.min(cols, contentWidth(grow.child(), cols));
+            case View.Overlay<?> overlay -> overlayWidth(overlay, cols);
+            case View.Keyed<?> keyed -> contentWidth(keyed.child(), cols);
+            case View.Focused<?> focused -> contentWidth(focused.child(), cols);
+        };
     }
 
     /**
