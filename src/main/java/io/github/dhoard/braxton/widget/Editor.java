@@ -255,7 +255,7 @@ public final class Editor {
         PaintedPrefix joinable = prefix;
         for (String cluster : TextMeasure.graphemes(text.substring(lineStart, end))) {
             used += paintedCells(cluster, used, masking, joinable);
-            joinable = NO_PREFIX;
+            joinable = cellBehind(cluster, masking);
         }
         return used;
     }
@@ -271,7 +271,7 @@ public final class Editor {
         PaintedPrefix joinable = prefix;
         for (String cluster : TextMeasure.graphemes(text.substring(lineStart, lineEnd))) {
             int width = paintedCells(cluster, used, masking, joinable);
-            joinable = NO_PREFIX;
+            joinable = cellBehind(cluster, masking);
             if (used + width > column) {
                 break;
             }
@@ -285,9 +285,10 @@ public final class Editor {
      * Cells one cluster occupies on a painted row, after {@code used} cells of that row. The renderer
      * and the caret's column arithmetic share this rule so a move can never aim at a column its row
      * does not draw: a masked row draws one glyph per cluster, however wide the cleartext underneath
-     * it is, and an unmasked row occupies what {@link #visualWidth} measures - except for the cluster
-     * that opens the draft, which the row paints inside the cell its prefix ends with whenever it
-     * has no base character of its own.
+     * it is, and an unmasked row occupies what {@link #visualWidth} measures - except for a cluster
+     * the row paints inside the cell before it: the one that opens the draft, which joins the cell
+     * its prefix ends with whenever it has no base character of its own, and the clusters behind a
+     * tab, which join the space that stop ends with ({@link #cellBehind}).
      */
     private static int paintedCells(String cluster, int used, boolean masking, PaintedPrefix prefix) {
         if (masking) {
@@ -309,17 +310,39 @@ public final class Editor {
     }
 
     /**
+     * The cell the row leaves open to the cluster behind {@code cluster}, or none. A tab reaches its
+     * stop as spaces, and those spaces are the row's own plain text, so it re-segments the stop's
+     * last space with the clusters behind the tab: they continue that space exactly as they would a
+     * typed one, and only the clusters claiming no column of their own join it - the column a
+     * selector adds there is reserved with the stop, as {@code LayoutEngine} does. A masked row
+     * draws one mask glyph for the tab instead of its spaces, and that glyph is a base of its own.
+     *
+     * <p>Every other cluster is a whole cluster of the draft's own text, and the segmentation the
+     * paint path reads for the row is that same one, so nothing follows it into its cell.</p>
+     */
+    private static PaintedPrefix cellBehind(String cluster, boolean masking) {
+        if (!masking && "\t".equals(cluster)) {
+            // No columns of its own: the stop's columns were already charged to the tab.
+            return new PaintedPrefix(0, " ", true);
+        }
+        return NO_PREFIX;
+    }
+
+    /**
      * The prefix one painted row carries: {@code columns} drawn before its draft and the {@code cell}
-     * that run ends with, or {@code null} when the row draws no prefix at all.
+     * that run ends with, or {@code null} when the row draws no prefix at all. {@link #cellBehind}
+     * builds the same shape for the last space of a stop inside the draft; it carries no columns of
+     * its own, because those were charged to the tab.
      *
-     * <p>{@code tabStop} marks the cell a tab in the prompt reached. The text view continues that
-     * space only with clusters that claim no column of their own, so a cluster with columns of its
-     * own keeps its own cell after a stop, while a prompt's ordinary last cluster takes the mark into
-     * the cell it is painted in.</p>
+     * <p>{@code tabStop} marks the cell a tab reached, in the prompt or in the draft. The text view
+     * continues that space only with clusters that claim no column of their own, so a cluster with
+     * columns of its own keeps its own cell after a stop, while a prompt's ordinary last cluster takes
+     * the mark into the cell it is painted in.</p>
      *
-     * <p>Only the cluster that opens a draft can join the prefix's cell. The rest are whole clusters
-     * of the draft's own text, and the segmentation the paint path reads for the row is that same
-     * one, so none of them continues the cell before it.</p>
+     * <p>Only the cluster that opens a draft can join the prefix's cell, and the clusters behind a tab
+     * can join the cell that stop ends with. The rest are whole clusters of the draft's own text, and
+     * the segmentation the paint path reads for the row is that same one, so none of them continues
+     * the cell before it.</p>
      */
     private record PaintedPrefix(int columns, String cell, boolean tabStop) {
     }
@@ -454,8 +477,10 @@ public final class Editor {
         // expands it, so the caret's block can cover the cells the draft really occupies.
         int used = prefix.columns();
         // The cell that prefix ends with, which the first cluster of the draft is painted inside
-        // when it has no base of its own. Where the row draws its own glyph instead of the cluster -
-        // the block cursor, or a mask glyph - that glyph is the base, so nothing joins it.
+        // when it has no base of its own; a tab leaves the same opening at the last space of its
+        // stop, which cellBehind carries to the cluster behind it. Where the row draws its own glyph
+        // in place of the cluster - the block cursor, or a mask glyph - that glyph, not the cell
+        // before it, is the base the cluster sits on.
         PaintedPrefix joinable = prefix;
         // Segment this line once. A per-cluster boundaryAfter() over the whole draft is O(n^2) and
         // cost tens of milliseconds per frame on a draft at the editor's length limit; the line's
@@ -470,7 +495,7 @@ public final class Editor {
             // advances to its stop. The caret's column arithmetic uses the same rule, so a vertical
             // move returns the block to the cell this line draws it in.
             int cells = paintedCells(cluster, used, masking, cursor ? NO_PREFIX : joinable);
-            joinable = NO_PREFIX;
+            joinable = cellBehind(cluster, masking);
             if (cursor) {
                 // The block covers the grapheme under the caret. A two-column grapheme, and a tab
                 // reaching its stop, occupy those cells; one block would leave the line short and

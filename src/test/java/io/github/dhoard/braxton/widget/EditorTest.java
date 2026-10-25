@@ -431,6 +431,128 @@ class EditorTest {
     }
 
     @Test
+    void verticalMovementChargesASelectorAfterADraftTabToTheCellTheStopEndsWith() {
+        // A tab in the draft reaches its stop as spaces, and the row's own plain text re-segments
+        // that last space with the clusters behind the tab: LayoutEngine reserves the column a
+        // widening selector adds together with the stop, and LayoutEngineTest's
+        // aSelectorAfterATabStopKeepsTheColumnsTheRowMeasures pins that paint as a two-column cell.
+        // The caret's arithmetic has to charge that column too, or the block is drawn in column 9
+        // while the move aims at 8 - and, being sticky, keeps aiming there for the rest of the run.
+        EditorOptions options = EditorOptions.defaults().withVisibleLines(2);
+        String text = "\t\uFE0Fdone\nabcdefghij";
+        EditorState state = new EditorState(text, 6, 6, 0);
+        assertThat(paintedLines(state, options, true))
+                .containsExactly("    \uFE0Fdone" + Editor.CURSOR, "abcdefghij");
+
+        EditorState down = Editor.update(state, options, new EditorAction.MoveDown()).state();
+        assertThat(down.preferredColumn()).isEqualTo(9);
+        assertThat(down.caret()).isEqualTo(state.lineStart(1) + 9);
+        assertThat(paintedLines(down, options, true))
+                .containsExactly("    \uFE0Fdone", "abcdefghi" + Editor.CURSOR);
+        // The way back returns to the cell the stop ends with.
+        assertThat(Editor.update(down, options, new EditorAction.MoveUp()).state().caret())
+                .isEqualTo(6);
+
+        // A second move of the same run stays in that column instead of stepping one left.
+        EditorState three = new EditorState("\t\uFE0Fdone\nabcdefghij\nklmnopqrst", 6, 6, 0);
+        EditorState second = Editor.update(
+                Editor.update(three, options, new EditorAction.MoveDown()).state(), options,
+                new EditorAction.MoveDown()).state();
+        assertThat(second.preferredColumn()).isEqualTo(9);
+        assertThat(second.caret()).isEqualTo(three.lineStart(2) + 9);
+        assertThat(paintedLines(second, options, true))
+                .containsExactly("abcdefghij", "klmnopqrs" + Editor.CURSOR);
+
+        // The same rule sizes the block that covers a later tab: the stop behind the widened cell has
+        // the three columns the row was measured at, so the text after it keeps its columns instead
+        // of being slid one right.
+        EditorState onStop = new EditorState("\t\uFE0F\tzz", 2, 2, 0);
+        assertThat(paintedLines(onStop, options, true).get(0))
+                .isEqualTo("    \uFE0F" + Editor.CURSOR + Editor.CURSOR + Editor.CURSOR + "zz");
+
+        // The same stop behind a prompt: every continuation line is indented by the prompt's width,
+        // and the selector still widens the cell the stop ends with.
+        EditorOptions prompt = EditorOptions.defaults().withPrompt("> ", Style.NONE)
+                .withVisibleLines(2);
+        EditorState seeded = new EditorState("a\t\uFE0Fbc\nabcdefghij", 5, 5, 0);
+        assertThat(paintedLines(seeded, prompt, true))
+                .containsExactly("> a \uFE0Fbc" + Editor.CURSOR, "  abcdefghij");
+        EditorState moved = Editor.update(seeded, prompt, new EditorAction.MoveDown()).state();
+        assertThat(moved.preferredColumn()).isEqualTo(7);
+        assertThat(moved.caret()).isEqualTo(seeded.lineStart(1) + 5);
+        assertThat(paintedLines(moved, prompt, true))
+                .containsExactly("> a \uFE0Fbc", "  abcde" + Editor.CURSOR + "ghij");
+    }
+
+    @Test
+    void verticalMovementSeeksIntoALineWhoseTabIsFollowedByASelector() {
+        // The column is charged on the line the caret seeks into as well. Aiming short of the column
+        // the row reaches draws the block one column right of where the move aimed, on the cell of
+        // the text that paid for the selector's column.
+        EditorOptions options = EditorOptions.defaults().withVisibleLines(2);
+        String text = "abcdefghij\nx\t\uFE0Fyz0123456789";
+        EditorState state = new EditorState(text, 8, 8, 0);
+        assertThat(paintedLines(state, options, true))
+                .containsExactly("abcdefgh" + Editor.CURSOR + "j", "x   \uFE0Fyz0123456789");
+
+        EditorState down = Editor.update(state, options, new EditorAction.MoveDown()).state();
+        assertThat(down.preferredColumn()).isEqualTo(8);
+        assertThat(down.caret()).isEqualTo(state.lineStart(1) + 6);
+        assertThat(paintedLines(down, options, true))
+                .containsExactly("abcdefghij", "x   \uFE0Fyz0" + Editor.CURSOR + "23456789");
+        assertThat(Editor.update(down, options, new EditorAction.MoveUp()).state().caret())
+                .isEqualTo(8);
+    }
+
+    @Test
+    void aClusterBehindADraftTabThatPaintsItsOwnCellKeepsIt() {
+        // The stop's last space is open only to the clusters that claim no column of their own,
+        // which is what LayoutEngine reads ahead and reserves with the stop. A bare combining mark
+        // keeps the column it measures, the dotted circle standing in for its base; a cluster with a
+        // base of its own takes a cell of its own; and a control between the tab and the selector
+        // breaks the chain the cell continues, so the selector joins nothing and claims no column.
+        EditorOptions options = EditorOptions.defaults().withVisibleLines(2);
+        EditorState mark = new EditorState("\t\u0301done\nabcdefghij", 6, 6, 0);
+        assertThat(paintedLines(mark, options, true))
+                .containsExactly("    \u25CC\u0301done" + Editor.CURSOR, "abcdefghij");
+        assertThat(Editor.update(mark, options, new EditorAction.MoveDown()).state()
+                .preferredColumn()).isEqualTo(9);
+
+        EditorState base = new EditorState("\tX\uFE0Fdone\nabcdefghij", 7, 7, 0);
+        assertThat(paintedLines(base, options, true))
+                .containsExactly("    X\uFE0Fdone" + Editor.CURSOR, "abcdefghij");
+        assertThat(Editor.update(base, options, new EditorAction.MoveDown()).state()
+                .preferredColumn()).isEqualTo(10);
+
+        EditorState control = new EditorState("\t\u200B\uFE0Fdone\nabcdefghij", 7, 7, 0);
+        assertThat(paintedLines(control, options, true))
+                .containsExactly("    \u200B\uFE0Fdone" + Editor.CURSOR, "abcdefghij");
+        assertThat(Editor.update(control, options, new EditorAction.MoveDown()).state()
+                .preferredColumn()).isEqualTo(8);
+
+        // A second tab is charged its own stop, measured from where the widened cell before it
+        // ends; it does not continue that cell.
+        EditorState stops = new EditorState("\t\t\uFE0Fx\nabcdefghij", 4, 4, 0);
+        assertThat(paintedLines(stops, options, true))
+                .containsExactly("        \uFE0Fx" + Editor.CURSOR, "abcdefghij");
+        assertThat(Editor.update(stops, options, new EditorAction.MoveDown()).state()
+                .preferredColumn()).isEqualTo(10);
+
+        // A masked row draws one mask glyph for the tab instead of its spaces, and that glyph is a
+        // base of its own, so the row stays one cell per cluster.
+        EditorOptions password = EditorOptions.defaults().withVisibleLines(2)
+                .withMasking(EditorOptions.Masking.PASSWORD);
+        EditorState masked = new EditorState("\t\uFE0Fdone\nabcdefghij", 6, 6, 0);
+        assertThat(paintedLines(masked, password, true))
+                .containsExactly("\u2022\u2022\u2022\u2022\u2022\u2022" + Editor.CURSOR,
+                        "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022");
+        EditorState maskedDown = Editor.update(masked, password,
+                new EditorAction.MoveDown()).state();
+        assertThat(maskedDown.preferredColumn()).isEqualTo(6);
+        assertThat(maskedDown.caret()).isEqualTo(masked.lineStart(1) + 6);
+    }
+
+    @Test
     void aBaselessClusterAtTheHeadOfALineAgreesWithThePaintWhereItKeepsItsOwnCell() {
         EditorState mark = new EditorState("\u0301abcdef\nabcdefgh", 7, 7, 0);
         // With no prompt the row gives the mark its own cell - the dotted circle the text view
