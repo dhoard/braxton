@@ -24,17 +24,39 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
+import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.view.ElementId;
+import io.github.dhoard.braxton.view.ScreenRenderer;
 
-/** Masked drafts paint one mask per cluster, keep line structure, and never copy. */
+/**
+ * Masked drafts paint one mask per cluster, keep line structure, move by the columns they paint,
+ * and never copy.
+ */
 class EditorMaskingTest {
 
     private static final EditorOptions PASSWORD = EditorOptions.defaults()
             .withMasking(EditorOptions.Masking.PASSWORD);
     private static final EditorOptions HIDDEN = EditorOptions.defaults()
             .withMasking(EditorOptions.Masking.HIDDEN);
+
+    /** Every row a viewport paints for {@code state}, through the real layout path. */
+    private static List<String> paintedLines(EditorState state, EditorOptions options) {
+        return new ScreenRenderer().plainLines(
+                Editor.view(ElementId.of("passphrase"), state, options, true,
+                        (EditorAction action) -> action),
+                new Viewport(2, 24));
+    }
+
+    /** Painted column of the block cursor in {@code row}, or -1 when the row does not draw one. */
+    private static int blockColumn(String row) {
+        return row.indexOf(Editor.CURSOR);
+    }
 
     @Test
     void aPasswordDraftMasksEachClusterAndKeepsItsLines() {
@@ -79,6 +101,96 @@ class EditorMaskingTest {
         assertThat(Editor.copyableText(state, HIDDEN)).isEmpty();
         assertThat(Editor.update(state, HIDDEN, new EditorAction.Copy()).intent())
                 .isEqualTo(new EditorIntent.Copy(""));
+    }
+
+    @Test
+    void aVerticalMoveInAPasswordDraftReturnsToTheColumnTheMaskedRowPaints() {
+        // A masked row draws one glyph per cluster, so the block is painted two cells into a line of
+        // two emoji, and the column a vertical move returns to is that painted column. Measuring the
+        // cleartext the row never draws - two columns per astral cluster - aims two columns right of
+        // where the block was drawn, so the block jumps sideways on the move.
+        String draft = "\uD83D\uDE00\uD83D\uDE00\nabcdefgh";
+        EditorState state = new EditorState(draft, 4, 4, 0);
+        List<String> before = paintedLines(state, PASSWORD);
+        assertThat(before).containsExactly("\u2022\u2022" + Editor.CURSOR, "\u2022".repeat(8));
+
+        EditorState down = Editor.update(state, PASSWORD, new EditorAction.MoveDown()).state();
+        assertThat(down.preferredColumn()).isEqualTo(2);
+        assertThat(down.caret()).isEqualTo(draft.indexOf('c'));
+        List<String> after = paintedLines(down, PASSWORD);
+        assertThat(after).containsExactly("\u2022\u2022",
+                "\u2022\u2022" + Editor.CURSOR + "\u2022".repeat(5));
+        assertThat(blockColumn(after.get(1))).isEqualTo(blockColumn(before.get(0)));
+        assertThat(Editor.update(down, PASSWORD, new EditorAction.MoveUp()).state().caret())
+                .isEqualTo(4);
+
+        // The same draft unmasked keeps the cleartext columns: the mask is the only difference.
+        EditorState clear = Editor.update(state, EditorOptions.defaults(),
+                new EditorAction.MoveDown()).state();
+        assertThat(clear.preferredColumn()).isEqualTo(4);
+        assertThat(clear.caret()).isEqualTo(draft.indexOf('e'));
+    }
+
+    @Test
+    void aVerticalMoveInAPasswordDraftCountsATabAsTheSingleMaskGlyphItPaints() {
+        // A paste under the default PasteMode.NORMAL keeps tabs, and a masked row draws one glyph for
+        // a tab: three cells before the block, not the four-column stop an unmasked row expands it
+        // to. The tab is where the disagreement between the two rules is largest.
+        String draft = "a\tb\nabcdefgh";
+        EditorState state = new EditorState(draft, 3, 3, 0);
+        assertThat(paintedLines(state, PASSWORD))
+                .containsExactly("\u2022\u2022\u2022" + Editor.CURSOR, "\u2022".repeat(8));
+
+        EditorState down = Editor.update(state, PASSWORD, new EditorAction.MoveDown()).state();
+        assertThat(down.preferredColumn()).isEqualTo(3);
+        assertThat(down.caret()).isEqualTo(draft.indexOf('d'));
+        assertThat(paintedLines(down, PASSWORD)).containsExactly("\u2022\u2022\u2022",
+                "\u2022\u2022\u2022" + Editor.CURSOR + "\u2022".repeat(4));
+        assertThat(Editor.update(down, PASSWORD, new EditorAction.MoveUp()).state().caret())
+                .isEqualTo(3);
+
+        EditorState clear = Editor.update(state, EditorOptions.defaults(),
+                new EditorAction.MoveDown()).state();
+        assertThat(clear.preferredColumn()).isEqualTo(5);
+        assertThat(clear.caret()).isEqualTo(draft.indexOf('f'));
+    }
+
+    @Test
+    void aVerticalMoveInAPasswordDraftWithAPromptCountsThePromptAndEveryMaskGlyph() {
+        // The prompt prefixes every masked line, so the caret's column is the prompt's painted width
+        // plus one cell per masked cluster, and the target line is sought from that same base.
+        EditorOptions password = PASSWORD.withPrompt("> ", Style.NONE);
+        String draft = "\u65E5\u65E5\nabcd";
+        EditorState state = new EditorState(draft, 2, 2, 0);
+        assertThat(paintedLines(state, password))
+                .containsExactly("> \u2022\u2022" + Editor.CURSOR, "  " + "\u2022".repeat(4));
+
+        EditorState down = Editor.update(state, password, new EditorAction.MoveDown()).state();
+        assertThat(down.preferredColumn()).isEqualTo(4);
+        assertThat(down.caret()).isEqualTo(draft.indexOf('c'));
+        assertThat(paintedLines(down, password)).containsExactly("> \u2022\u2022",
+                "  \u2022\u2022" + Editor.CURSOR + "\u2022");
+        assertThat(Editor.update(down, password, new EditorAction.MoveUp()).state().caret())
+                .isEqualTo(2);
+    }
+
+    @Test
+    void aHiddenDraftPaintsItsBlockAtThePromptColumnAndRemembersTheMaskedColumn() {
+        // A hidden row draws no glyph before the block, so the block sits at the prompt's column
+        // wherever the caret is: no offset of a hidden line paints a column a vertical move could
+        // return to. The remembered column is still the masked layout's - one cell per cluster - so
+        // a move returns the caret to the cluster that layout names, never to the cleartext columns
+        // a hidden row does not draw.
+        String draft = "\uD83D\uDE00\uD83D\uDE00\nabcdefgh";
+        EditorState state = new EditorState(draft, 4, 4, 0);
+        assertThat(blockColumn(paintedLines(state, HIDDEN).get(0))).isZero();
+
+        EditorState down = Editor.update(state, HIDDEN, new EditorAction.MoveDown()).state();
+        assertThat(down.preferredColumn()).isEqualTo(2);
+        assertThat(down.caret()).isEqualTo(draft.indexOf('c'));
+        assertThat(blockColumn(paintedLines(down, HIDDEN).get(1))).isZero();
+        assertThat(Editor.update(down, HIDDEN, new EditorAction.MoveUp()).state().caret())
+                .isEqualTo(4);
     }
 
     @Test

@@ -331,7 +331,8 @@ Guarantees:
   when the surviving text on either side of the removed range merges into one cluster;
 - editing never splits combining sequences, ZWJ emoji, or surrogate pairs;
 - length limits truncate at a complete grapheme; unlimited is explicit;
-- password/hidden editors mask output and refuse to copy by default;
+- password/hidden editors mask output and refuse to copy by default; a vertical move in a masked
+  draft returns to the column that masked row paints, one cell per cluster;
 - visual scroll-to-caret is derived, so drawing never mutates state.
 
 ## Widgets, assets, and clipboard

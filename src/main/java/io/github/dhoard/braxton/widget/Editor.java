@@ -204,15 +204,22 @@ public final class Editor {
         // stop the text view paints for it. Measuring from column 0 moves the caret to a column it
         // is not drawn at, by the prompt's width modulo the tab stop.
         int painted = paintedPromptWidth(options);
+        // The column is counted the way the row is painted, so a masked draft is measured one cell
+        // per cluster: its rows show mask glyphs, never the cleartext widths, and a move aimed at a
+        // cleartext column draws the block columns right of where it was last drawn. A hidden row
+        // draws no glyph before its block - the block sits at the prompt's column wherever the caret
+        // is - so it paints no column for a move to agree with; counting the masked cells is what
+        // keeps a vertical move returning the caret to the cluster the masked layout names.
+        boolean masking = options.masking() != EditorOptions.Masking.NONE;
         // A vertical move keeps the column the caret was at on the line it came from, even when a
         // shorter line in between clamps it; horizontal moves and edits reset the preference.
         int column = state.preferredColumn() > 0
                 ? state.preferredColumn()
-                : visualColumn(state.text(), lineStart, state.caret(), painted);
+                : visualColumn(state.text(), lineStart, state.caret(), painted, masking);
         int targetLine = Math.max(0, Math.min(state.lineCount() - 1, line + direction));
         int targetStart = state.lineStart(targetLine);
         int targetEnd = state.lineEnd(targetLine);
-        int caret = indexAtColumn(state.text(), targetStart, targetEnd, column, painted);
+        int caret = indexAtColumn(state.text(), targetStart, targetEnd, column, painted, masking);
         return new EditorState(state.text(), caret, caret, column);
     }
 
@@ -232,13 +239,15 @@ public final class Editor {
     /**
      * Painted column of {@code index} on its line: the columns the row draws before it, so the count
      * starts at {@code paintedStart} - the prompt the row carries - and a tab counts the columns the
-     * text view paints for it. Wide glyphs count their real width.
+     * text view paints for it. Wide glyphs count their real width, and a masked line counts one cell
+     * per cluster because the mask glyph is all that row draws.
      */
-    private static int visualColumn(String text, int lineStart, int index, int paintedStart) {
+    private static int visualColumn(String text, int lineStart, int index, int paintedStart,
+            boolean masking) {
         int end = Math.max(lineStart, Math.min(index, text.length()));
         int used = paintedStart;
         for (String cluster : TextMeasure.graphemes(text.substring(lineStart, end))) {
-            used += visualWidth(cluster, used);
+            used += paintedCells(cluster, used, masking);
         }
         return used;
     }
@@ -248,12 +257,12 @@ public final class Editor {
      * The row is counted from {@code paintedStart} for the same reason {@link #visualColumn} is.
      */
     private static int indexAtColumn(String text, int lineStart, int lineEnd, int column,
-            int paintedStart) {
+            int paintedStart, boolean masking) {
         int position = lineStart;
         int used = paintedStart;
         for (String cluster : TextMeasure.graphemes(text.substring(lineStart, lineEnd))) {
             int next = position + cluster.length();
-            int width = visualWidth(cluster, used);
+            int width = paintedCells(cluster, used, masking);
             if (used + width > column) {
                 break;
             }
@@ -264,9 +273,20 @@ public final class Editor {
     }
 
     /**
+     * Cells one cluster occupies on a painted row, after {@code used} cells of that row. The renderer
+     * and the caret's column arithmetic share this rule so a move can never aim at a column its row
+     * does not draw: a masked row draws one glyph per cluster, however wide the cleartext underneath
+     * it is, and an unmasked row occupies what {@link #visualWidth} measures.
+     */
+    private static int paintedCells(String cluster, int used, boolean masking) {
+        return masking ? 1 : visualWidth(cluster, used);
+    }
+
+    /**
      * Columns one cluster occupies after {@code used} columns of its line. A tab advances to the
      * next four-column stop, exactly as the text view paints the draft; measuring it as one column
-     * would move the caret to a column it is not drawn at.
+     * would move the caret to a column it is not drawn at. A masked row never reaches this rule: it
+     * draws one glyph per cluster, {@link #paintedCells}.
      */
     private static int visualWidth(String cluster, int used) {
         if ("\t".equals(cluster)) {
@@ -362,10 +382,10 @@ public final class Editor {
             boolean selected = selectionStart >= 0 && position >= selectionStart && position < selectionEnd;
             String display = opts.masking() == EditorOptions.Masking.HIDDEN ? "" : masking ? MASK : cluster;
             boolean cursor = focused && state.caret() == position;
-            // The cells this cluster occupies where it is painted. A tab is the gap to its stop, so
-            // measuring it as one column (as the masking glyph is) would disagree with the text
-            // view, and with {@link #visualWidth}, which already counts it that way for movement.
-            int cells = masking ? 1 : visualWidth(cluster, used);
+            // The cells this cluster occupies where it is painted: one mask glyph, or the gap a tab
+            // advances to its stop. The caret's column arithmetic uses the same rule, so a vertical
+            // move returns the block to the cell this line draws it in.
+            int cells = paintedCells(cluster, used, masking);
             if (cursor) {
                 // The block covers the grapheme under the caret. A two-column grapheme, and a tab
                 // reaching its stop, occupy those cells; one block would leave the line short and
