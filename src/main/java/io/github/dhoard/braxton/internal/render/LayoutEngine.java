@@ -722,6 +722,11 @@ public final class LayoutEngine {
                 if (stop > 0) {
                     current.append(" ".repeat(stop), style, link);
                     used += stop + widened;
+                    // The stop is committed content on this line, not a break: its spaces occupy the
+                    // columns in front of everything that follows, so a space after it belongs to
+                    // the row rather than to the blank the break left behind. Only the clusters the
+                    // scan read past the tab may still join the cell the stop ends with.
+                    softWrapped = false;
                     if (!joins.isEmpty()) {
                         // The scan read these past the tab without consuming them; now that the
                         // stop is committed they join the cell it ends with, on the same line.
@@ -729,7 +734,6 @@ public final class LayoutEngine {
                             cursor.next();
                             current.append(cursor.text(), cursor.style(), cursor.link());
                         }
-                        softWrapped = false;
                     }
                 }
                 continue;

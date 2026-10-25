@@ -427,6 +427,49 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aSpaceAfterATabStopOnASoftWrappedRowKeepsTheColumnItMeasures() {
+        // A soft break may only drop the one space it broke at. The tab that opens the new row is
+        // committed content - the row holds the spaces of its stop, columns 0-3 - so the space
+        // after that stop sits in the middle of the row and is painted at column 4, with the text
+        // behind it at column 5. The wrap went on treating the row as "nothing committed since the
+        // break", swallowed that space, and shifted the rest of the row one column left: the space
+        // the input spells after the tab never reached the screen.
+        assertThat(engine.wrapLines(StyledText.plain("aaaaaa \t d"), 6))
+                .extracting(line -> line.plainText())
+                .containsExactly("aaaaaa", "     d");
+        // The same row broken before the tab instead of before the space is the reference: it
+        // paints the same cells before and after the fix, so the dropped space is the difference.
+        assertThat(paintedCells(paint(Views.text("aaaaaa \t d"), 2, 6)))
+                .isEqualTo(paintedCells(paint(Views.text("aaaaaa\t d"), 2, 6)));
+        // A run of spaces after the stop keeps the columns it measures: the row that cannot hold
+        // them all breaks again instead of losing them.
+        assertThat(engine.wrapLines(StyledText.plain("aaaaaa \t   d"), 6))
+                .extracting(line -> line.plainText())
+                .containsExactly("aaaaaa", "      ", "d");
+        // No row may measure wider than the width it wrapped to. Leaving the stop's last space
+        // free to be widened by a cluster that arrives after the break charged that column to no
+        // row at all, and paint then dropped the tail of the row that held it.
+        for (int cols = 1; cols <= 8; cols++) {
+            for (StyledText line : engine.wrapLines(StyledText.plain("\t \t\uFE0Fx"), cols)) {
+                assertThat(TextMeasure.columns(line.plainText()))
+                        .as("row at %d columns", cols)
+                        .isLessThanOrEqualTo(cols);
+            }
+        }
+        // The realistic shape: a tab used as an alignment column, whose preceding space is the
+        // place the line breaks. The frame keeps the path it wraps to intact.
+        View<?> framed = Views.border(Border.SINGLE, Views.text("settings: \t /etc/app.conf"));
+        int rows = engine.intrinsicHeight(framed, 11);
+        assertThat(rows).isEqualTo(5);
+        assertThat(paint(framed, rows, 11).plainLines()).containsExactly(
+                "\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
+                "\u2502settings:\u2502",
+                "\u2502     /etc\u2502",
+                "\u2502/app.conf\u2502",
+                "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518");
+    }
+
+    @Test
     void aLeadingFormatCharacterInItsOwnSpanStaysWithTheClusterItBelongsTo() {
         // The plain text keeps a zero-width space in front of the mark it precedes, so the row it
         // is painted on has to keep it too: a span boundary that separated them dropped it, and the
