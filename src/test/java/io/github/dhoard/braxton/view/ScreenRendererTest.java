@@ -24,6 +24,8 @@ package io.github.dhoard.braxton.view;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 import io.github.dhoard.braxton.layout.Viewport;
@@ -71,7 +73,8 @@ class ScreenRendererTest {
             assertThat(lines).allSatisfy(line -> {
                 assertThat(TextMeasure.columns(line)).as("line [%s]", line)
                         .isLessThanOrEqualTo(viewport.cols());
-                assertThat(line).as("trailing blanks are trimmed").isEqualTo(line.stripTrailing());
+                // Only U+0020 is padding, so only U+0020 is trimmed from the end of a row.
+                assertThat(line).as("trailing blanks are trimmed").doesNotEndWith(" ");
             });
         }
         io.github.dhoard.braxton.view.View<String> spaced = io.github.dhoard.braxton.view.Views.text(
@@ -79,5 +82,41 @@ class ScreenRendererTest {
         assertThat(renderer.plainLines(spaced,
                 new io.github.dhoard.braxton.layout.Viewport(1, 6)))
                 .as("interior blanks are kept as columns").containsExactly("a  b");
+    }
+
+    @Test
+    void bothPlainViewsKeepAPaintedUnicodeSpaceAtTheRowEnd() {
+        // Every padding path pads with U+0020, so a row-final Unicode space other than a blank is a
+        // painted cell: the cell view and both plain-text views of one screen must report it.
+        ScreenRenderer renderer = new ScreenRenderer();
+        View<String> view = Views.column(
+                Views.text("first"),
+                Views.text("\u3000"),
+                Views.text("last"));
+        Viewport viewport = new Viewport(3, 8);
+        List<String> lines = renderer.plainLines(view, viewport);
+        RenderedScreen screen = renderer.screen(view, viewport);
+        assertThat(lines).containsExactly("first", "\u3000", "last");
+        assertThat(screen.plainLines()).as("one screen, two views").isEqualTo(lines);
+        assertThat(screen.plainText()).as("rows joined with newlines")
+                .isEqualTo(String.join("\n", lines));
+        assertThat(screen.cell(1, 0).text()).isEqualTo("\u3000");
+        assertThat(screen.cell(1, 0).columns()).isEqualTo(2);
+        assertThat(screen.isContinuation(1, 1)).isTrue();
+    }
+
+    @Test
+    void thePlainViewsTrimBlankPaddingAfterAPaintedUnicodeSpace() {
+        // Blank padding after a painted EM SPACE is still trimmed, while the EM SPACE itself stays.
+        ScreenRenderer renderer = new ScreenRenderer();
+        View<String> view = Views.text("Total\u2003");
+        Viewport viewport = new Viewport(1, 8);
+        List<String> lines = renderer.plainLines(view, viewport);
+        RenderedScreen screen = renderer.screen(view, viewport);
+        assertThat(lines).containsExactly("Total\u2003");
+        assertThat(screen.plainLines()).as("one screen, two views").isEqualTo(lines);
+        assertThat(screen.plainText()).isEqualTo("Total\u2003");
+        assertThat(screen.cell(0, 5).text()).isEqualTo("\u2003");
+        assertThat(screen.cell(0, 6).text()).isEmpty();
     }
 }

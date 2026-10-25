@@ -73,11 +73,22 @@ public record RenderedScreen(int rows, int cols, List<List<Cell>> cells, List<Re
         return rows == 0 || cols == 0;
     }
 
+    /**
+     * Plain text of one row, trailing blanks trimmed.
+     *
+     * <p>Only U+0020 is trimmed: every padding path in Braxton pads with a blank, so any other
+     * trailing whitespace is a painted cell, reported exactly as {@code Screen.plainLine} keeps it
+     * and the encoder emits it.</p>
+     */
     public String plainLine(int row) {
         StringBuilder out = new StringBuilder();
         for (Cell cell : cells.get(row))
             if (!cell.continuation()) out.append(cell.text().isEmpty() ? " " : cell.text());
-        return out.toString().stripTrailing();
+        int end = out.length();
+        while (end > 0 && out.charAt(end - 1) == ' ') {
+            end--;
+        }
+        return out.substring(0, end);
     }
 
     public List<String> plainLines() {

@@ -76,7 +76,10 @@ public final class ScreenRenderer {
                         .toList());
     }
 
-    /** One string per row, trailing blanks trimmed. */
+    /**
+     * One string per row, trailing blank padding trimmed. A row-final character that is not a blank
+     * was painted, so it is kept, matching {@link RenderedScreen#plainLine(int)}.
+     */
     public List<String> plainLines(View<?> view, Viewport viewport) {
         return List.copyOf(engine.layout(view, viewport.bounds()).screen().plainLines());
     }

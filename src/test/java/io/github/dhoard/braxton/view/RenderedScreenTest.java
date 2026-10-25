@@ -54,4 +54,25 @@ class RenderedScreenTest {
         regions.clear();
         assertThat(snapshot.plainText()).isEqualTo("x");
     }
+
+    @Test
+    void plainViewsTrimOnlyBlankPaddingAndKeepPaintedUnicodeSpaces() {
+        // U+0020 is the only character any padding path paints, so it is the only character the
+        // plain-text views may drop from the end of a row; a row-final Unicode space is painted
+        // content and must survive, exactly as Screen.plainLine reports it.
+        var painted = new java.util.ArrayList<RenderedScreen.Cell>();
+        painted.add(new RenderedScreen.Cell("a", Style.NONE, null, 1, false));
+        painted.add(new RenderedScreen.Cell("\u3000", Style.NONE, null, 2, false));
+        painted.add(new RenderedScreen.Cell("", Style.NONE, null, 0, true));
+        var padded = new java.util.ArrayList<RenderedScreen.Cell>();
+        padded.add(new RenderedScreen.Cell("x", Style.NONE, null, 1, false));
+        padded.add(new RenderedScreen.Cell(" ", Style.NONE, null, 1, false));
+        padded.add(new RenderedScreen.Cell(" ", Style.NONE, null, 1, false));
+        var snapshot = new RenderedScreen(2, 3, java.util.List.of(painted, padded),
+                java.util.List.of());
+        assertThat(snapshot.plainLine(0)).isEqualTo("a\u3000");
+        assertThat(snapshot.plainLine(1)).as("blank padding is still trimmed").isEqualTo("x");
+        assertThat(snapshot.plainLines()).containsExactly("a\u3000", "x");
+        assertThat(snapshot.plainText()).isEqualTo("a\u3000\nx");
+    }
 }
