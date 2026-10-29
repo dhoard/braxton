@@ -214,7 +214,7 @@ class ArchitectureTest {
             try (var input = getClass().getResourceAsStream(path)) {
                 assertThat(input).isNotNull();
                 var properties = new java.util.Properties(); properties.load(input);
-                assertThat(properties.getProperty("version")).isEqualTo("0.1.0-3601-SNAPSHOT");
+                assertThat(properties.getProperty("version")).isEqualTo("0.1.0-jline-braxton");
             }
         }
     }

@@ -85,8 +85,10 @@ class BorderTitleTest {
                 .isEqualTo(" ");
         assertThat(screen.plainLines()).containsExactly("+----+", " [2K", "+----+");
         String frame = AnsiEncoder.frame(screen, true);
-        // The encoder clears each row exactly once; a fourth clear could only come from content.
-        assertThat(frame.split("\u001b\\[2K", -1)).as("line clears in the frame").hasSize(4);
+        // All rows paint their full width, including sanitized blank edge cells. No clear is
+        // needed, so a line-clear sequence could only come from unsanitized content.
+        assertThat(frame).isEqualTo("\u001b[1;1H+----+\u001b[2;1H [2K  \u001b[3;1H+----+");
+        assertThat(frame).doesNotContain("\u001b[2K", "\u001b[0K");
         // The same boundary owns an unpaired surrogate: UTF-8 would replace it with '?', so the
         // cell would display a character the border never held.
         Border surrogate = new Border('\ud800', '+', '+', '+', '-', '|');

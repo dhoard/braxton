@@ -43,10 +43,13 @@ public final class JLineTestTerminal implements AutoCloseable {
     private volatile boolean closed;
     private volatile boolean measured;
     private volatile RuntimeException readFailure;
+    private volatile IOException readIoFailure;
     private volatile RuntimeException sizeFailure;
     private volatile RuntimeException closeFailure;
     private volatile boolean outputFailure;
     private volatile java.util.function.Consumer<String> outputObserver = text -> {};
+    private volatile java.util.function.Consumer<String> beforeWrite = text -> {};
+    private volatile Runnable beforeFlush = () -> {};
     private final Terminal terminal;
 
     public JLineTestTerminal() {
@@ -89,12 +92,33 @@ public final class JLineTestTerminal implements AutoCloseable {
                             true,
                             null,
                             org.jline.terminal.Size.of(size.cols(), size.rows())) {
+                        private final PrintWriter checkedWriter = new PrintWriter(super.writer()) {
+                            @Override
+                            public void write(String text) {
+                                beforeWrite.accept(text);
+                                super.write(text);
+                            }
+
+                            @Override
+                            public void flush() {
+                                beforeFlush.run();
+                                super.flush();
+                            }
+                        };
+
+                        @Override
+                        public PrintWriter writer() {
+                            // JLine may call writer() during its own construction.
+                            return checkedWriter == null ? super.writer() : checkedWriter;
+                        }
+
                         private final NonBlockingReader actualReader = super.reader();
                         private final NonBlockingReader checkedReader = new NonBlockingReader() {
                             protected int read(long timeout, boolean peek) throws IOException {
                                 virtualRead.compareAndSet(
                                         false, Thread.currentThread().isVirtual());
                                 if (readFailure != null) throw readFailure;
+                                if (readIoFailure != null) throw readIoFailure;
                                 return peek
                                         ? actualReader.peek(timeout)
                                         : actualReader.read(timeout);
@@ -155,12 +179,24 @@ public final class JLineTestTerminal implements AutoCloseable {
         readFailure = failure;
     }
 
+    public void failInputWith(IOException failure) {
+        readIoFailure = failure;
+    }
+
     public void failSize(RuntimeException failure) {
         sizeFailure = failure;
     }
 
     public void onOutput(java.util.function.Consumer<String> observer) {
         outputObserver = observer;
+    }
+
+    void beforeWrite(java.util.function.Consumer<String> observer) {
+        beforeWrite = observer;
+    }
+
+    void beforeFlush(Runnable observer) {
+        beforeFlush = observer;
     }
 
     public void failOutput() {

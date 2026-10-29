@@ -34,6 +34,7 @@ import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.StyledText;
+import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.ScreenRenderer;
 
@@ -362,5 +363,35 @@ class TableFrameWidthTest {
                             .toList())
                     .hasSize(1);
         }
+    }
+
+    /**
+     * The reported table: a cell whose selector is split from the mark that follows it by a style
+     * boundary. The boundary is decoration - the cluster keeps the two columns it measures, so the
+     * second column of that row starts in the column it was measured at, the column the row above
+     * starts its second column in, and the row paints as wide as it was measured rather than one
+     * column short of it.
+     */
+    @Test
+    void aStyleBoundaryInsideABaselessClusterKeepsTheColumnsTheRowMeasures() {
+        Table table = Table.of()
+                .row(StyledText.plain("ab"), StyledText.plain("one"))
+                .row(StyledText.of("\uFE0F", Style.NONE.withBold())
+                        .append(StyledText.of("\u0301y", Style.NONE)),
+                        StyledText.plain("two"));
+        assertThat(table.columnWidths()).as("measured columns").containsExactly(5, 5);
+        List<String> lines = table.renderLines().stream().map(StyledText::plainText).toList();
+        assertThat(lines).as("rows of the table")
+                .containsExactly("ab   one  ", "\uFE0F\u0301y  two  ");
+        assertThat(lines.stream().map(TextMeasure::columns).distinct())
+                .as("rows %s", lines.stream().map(TableFrameWidthTest::show).toList())
+                .hasSize(1);
+        RenderedScreen screen = new ScreenRenderer().screen(table.view(), new Viewport(2, 10));
+        assertThat(paintedCells(screen, 0)).as("cells painted for the ASCII row")
+                .containsExactly("a", "b", " ", " ", " ", "o", "n", "e", " ", " ");
+        assertThat(paintedCells(screen, 1))
+                .as("cells painted for the row whose selector is split from its mark")
+                .containsExactly(TextMeasure.DOTTED_CIRCLE + "\uFE0F\u0301", "<continuation>",
+                        "y", " ", " ", "t", "w", "o", " ", " ");
     }
 }

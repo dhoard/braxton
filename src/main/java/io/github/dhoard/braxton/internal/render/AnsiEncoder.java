@@ -31,8 +31,8 @@ import io.github.dhoard.braxton.style.Style;
  * Turns painted cells into terminal escape sequences.
  *
  * <p>Only this encoder writes SGR and OSC 8 sequences. Content text never contains escape bytes, so
- * data cannot inject terminal commands. Rows are addressed absolutely and cleared before writing,
- * which keeps a shrinking row from leaving stale cells behind.</p>
+ * data cannot inject terminal commands. Rows are addressed absolutely, painted in place, and only
+ * their unused suffix is cleared, so shrinking rows leave no stale cells or clear-before-paint gap.</p>
  */
 public final class AnsiEncoder {
 
@@ -67,9 +67,19 @@ public final class AnsiEncoder {
             return frame(next, color);
         }
         StringBuilder out = new StringBuilder();
+        boolean repaintNext = false;
         for (int row = 0; row < next.rows(); row++) {
-            if (!rowEquals(previous, next, row)) {
+            if (repaintNext || !rowEquals(previous, next, row)) {
                 out.append(encodeRow(next, row, color));
+                // A row that writes its last column leaves the terminal at the right edge, and a
+                // terminal that renders some cluster wider than the grid charged it finishes the row
+                // past that edge: the tail wraps, and it wraps onto the start of the row below. That
+                // row's own cells did not change, so a diff would leave the wrapped cells there for
+                // good. Repainting it clears whatever the row above spilled into it, in the same
+                // batch, so nothing is ever painted outside the row that owns it.
+                repaintNext = lastPaintedColumn(next, row) + 1 >= next.cols();
+            } else {
+                repaintNext = false;
             }
         }
         return out.toString();
@@ -85,11 +95,22 @@ public final class AnsiEncoder {
         return true;
     }
 
-    /** Absolute cursor move, line clear, and the row's styled content. */
+    /** Absolute cursor move, styled content, then a default-style clear of the unused suffix. */
     public static String encodeRow(Screen screen, int row, boolean color) {
+        if (screen.cols() == 0) {
+            return "";
+        }
         StringBuilder out = new StringBuilder();
-        out.append("\u001B[").append(row + 1).append(";1H\u001B[2K");
-        int last = lastPaintedColumn(screen, row);
+        out.append("\u001B[").append(row + 1).append(";1H");
+        int end = paintedEnd(screen, row);
+        if (end == 0) {
+            out.append(RESET).append("\u001B[2K");
+            return out.toString();
+        }
+        int last = end - 1;
+        if (screen.isContinuation(row, last)) {
+            last--;
+        }
         Style active = Style.NONE;
         String activeLink = null;
         boolean styled = false;
@@ -99,8 +120,8 @@ public final class AnsiEncoder {
             }
             Cell cell = screen.cell(row, col);
             if (cell.isEmpty()) {
-                // The line was cleared first, but a gap still has to occupy its column; otherwise
-                // the cells after it would be written to the left of where the grid placed them.
+                // Gaps must overwrite old content and occupy their columns so later cells stay
+                // where the grid placed them.
                 if (activeLink != null) {
                     out.append(OSC8_OPEN).append(STRING_TERMINATOR);
                     activeLink = null;
@@ -144,10 +165,14 @@ public final class AnsiEncoder {
         if (styled) {
             out.append(RESET);
         }
+        if (end < screen.cols()) {
+            out.append("\u001B[").append(row + 1).append(';').append(end + 1).append("H")
+                    .append(RESET).append("\u001B[0K");
+        }
         return out.toString();
     }
 
-    /** Last column holding painted content; trailing blanks need no output after the line clear. */
+    /** Last column holding a painted grapheme, excluding continuation cells. */
     private static int lastPaintedColumn(Screen screen, int row) {
         for (int col = screen.cols() - 1; col >= 0; col--) {
             if (!screen.isContinuation(row, col) && !screen.cell(row, col).isEmpty()) {
@@ -155,6 +180,19 @@ public final class AnsiEncoder {
             }
         }
         return -1;
+    }
+
+    /** Exclusive painted extent, including the second column of a wide grapheme. */
+    private static int paintedEnd(Screen screen, int row) {
+        for (int col = screen.cols() - 1; col >= 0; col--) {
+            if (screen.isContinuation(row, col)) {
+                return col + 1;
+            }
+            if (!screen.cell(row, col).isEmpty()) {
+                return col + 1;
+            }
+        }
+        return 0;
     }
 
     private static String safeLink(String link) {

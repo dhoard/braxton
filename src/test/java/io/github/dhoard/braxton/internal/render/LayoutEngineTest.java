@@ -493,6 +493,55 @@ class LayoutEngineTest {
     }
 
     @Test
+    void aSelectorSplitFromABaselessClusterKeepsTheColumnsItsDottedCircleMeasures() {
+        // The plain text keeps the selector in front of the mark: together they are one cluster, and
+        // the selector is the character that makes the dotted circle's cell two columns wide. A span
+        // boundary between them committed the selector outside the cell and measured the cell without
+        // it, so the same plain text painted one column where every measurement of it says two, the
+        // dotted circle moved behind the selector, and every cell after it landed one column left.
+        StyledText split = StyledText.of("\uFE0F", Style.NONE.withBold())
+                .append(StyledText.of("\u0301a", Style.NONE));
+        StyledText plain = StyledText.plain(split.plainText());
+        assertThat(TextMeasure.columns(split.plainText())).isEqualTo(3);
+        assertThat(split.columns()).isEqualTo(3);
+        assertThat(engine.intrinsicWidth(Views.text(split), 4)).isEqualTo(3);
+        for (int cols = 1; cols <= 8; cols++) {
+            assertThat(engine.intrinsicWidth(Views.text(split), cols))
+                    .as("intrinsic width of \"%s\" at %d columns", split.plainText(), cols)
+                    .isEqualTo(engine.intrinsicWidth(Views.text(plain), cols));
+            assertThat(engine.intrinsicHeight(Views.text(split), cols))
+                    .as("intrinsic height of \"%s\" at %d columns", split.plainText(), cols)
+                    .isEqualTo(engine.intrinsicHeight(Views.text(plain), cols));
+        }
+        // The widened cell cannot share the last column of a two-column row, so the "a" it cannot
+        // hold starts the next row - the row count the same plain text measures.
+        assertThat(engine.intrinsicHeight(Views.text(split), 2)).isEqualTo(2);
+        Screen screen = paint(Views.text(split), 2, 2);
+        assertThat(screen.cell(0, 0).text()).isEqualTo(TextMeasure.DOTTED_CIRCLE + "\uFE0F\u0301");
+        assertThat(screen.isContinuation(0, 1)).isTrue();
+        assertThat(screen.plainLine(1)).isEqualTo("a");
+        for (int cols = 1; cols <= 8; cols++) {
+            int rows = Math.max(1, engine.wrapLines(plain, cols).size());
+            assertThat(paintedCells(paint(Views.text(split), rows, cols)))
+                    .as("value \"%s\" at %d columns", split.plainText(), cols)
+                    .isEqualTo(paintedCells(paint(Views.text(plain), rows, cols)));
+        }
+        // A joiner is invisible and adds no column, but the plain text keeps it inside the cluster
+        // just the same, so the dotted circle stays in front of the cluster rather than sliding
+        // between its two halves.
+        StyledText joined = StyledText.of("\u200D", Style.NONE.withBold())
+                .append(StyledText.of("\u0301", Style.NONE));
+        assertThat(paint(Views.text(joined), 1, 3).cell(0, 0).text())
+                .isEqualTo(TextMeasure.DOTTED_CIRCLE + "\u200D\u0301");
+        // The cell is one cluster, so it carries the link of the span the cluster - and therefore
+        // the dotted circle written in front of it - starts in.
+        StyledText linked = StyledText.of("\uFE0F", Style.NONE, "https://example.com")
+                .append(StyledText.of("\u0301", Style.NONE));
+        assertThat(paint(Views.text(linked), 1, 3).cell(0, 0).link())
+                .isEqualTo("https://example.com");
+    }
+
+    @Test
     void aSelectorAfterATabStopKeepsTheColumnsItsFrameMeasures() {
         // A frame is measured from the columns its content's rows occupy. A tab stop that never
         // charged the selector after it measured the value one column narrower than it painted, so
@@ -592,7 +641,17 @@ class LayoutEngineTest {
                 StyledText.concat(StyledText.of("ab\n", Style.NONE),
                         StyledText.of("\u0301x", bold)),
                 StyledText.concat(StyledText.of("\u200B", Style.NONE),
-                        StyledText.of("\u0301", bold)));
+                        StyledText.of("\u0301", bold)),
+                // A boundary between a format character and the base-less cluster the plain text
+                // keeps it in front of: the cluster is measured with the character, not without it.
+                StyledText.concat(StyledText.of("\uFE0F", bold),
+                        StyledText.of("\u0301", Style.NONE)),
+                StyledText.concat(StyledText.of("\u200D", Style.NONE),
+                        StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("ab\n", Style.NONE),
+                        StyledText.of("\uFE0F", bold), StyledText.of("\u0301x", Style.NONE)),
+                StyledText.concat(StyledText.of("a\u200B", Style.NONE),
+                        StyledText.of("\uFE0F", bold), StyledText.of("\u0301y", Style.NONE)));
         for (StyledText value : values) {
             StyledText plain = StyledText.plain(value.plainText());
             for (int cols = 1; cols <= 8; cols++) {

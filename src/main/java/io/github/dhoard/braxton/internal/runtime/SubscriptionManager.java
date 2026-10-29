@@ -65,7 +65,9 @@ public final class SubscriptionManager<Msg> {
         final long periodNanos;
         final Consumer<Object> emitter;
         final Consumer<String> diagnostics;
-        Timers.Handle handle;
+        private final Object timerLock = new Object();
+        private long scheduleGeneration;
+        private Timers.Handle handle;
 
         IntervalLive(Timers timers, SubscriptionId id, Duration period,
                 Function<Long, Msg> mapper, long epoch, Consumer<Object> emitter,
@@ -81,7 +83,14 @@ public final class SubscriptionManager<Msg> {
         }
 
         private void scheduleNext() {
-            handle = timers.schedule(periodNanos, () -> {
+            long generation;
+            synchronized (timerLock) {
+                if (mapper.get() == null) {
+                    return;
+                }
+                generation = ++scheduleGeneration;
+            }
+            Timers.Handle scheduled = timers.schedule(periodNanos, () -> {
                 Function<Long, Msg> current = mapper.get();
                 if (current == null) {
                     return;
@@ -106,13 +115,28 @@ public final class SubscriptionManager<Msg> {
                     scheduleNext();
                 }
             });
+            synchronized (timerLock) {
+                // Removal can finish while schedule is returning. A callback can also run and
+                // schedule its successor before its own handle returns; that older registration
+                // must not overwrite the successor that close needs to cancel.
+                if (mapper.get() != null && generation == scheduleGeneration) {
+                    handle = scheduled;
+                    return;
+                }
+            }
+            scheduled.cancel();
         }
 
         @Override
         void close() {
-            mapper.set(null);
-            if (handle != null) {
-                handle.cancel();
+            Timers.Handle scheduled;
+            synchronized (timerLock) {
+                mapper.set(null);
+                scheduled = handle;
+                handle = null;
+            }
+            if (scheduled != null) {
+                scheduled.cancel();
             }
         }
     }

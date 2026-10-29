@@ -65,7 +65,7 @@ under the distinct local version used by this project's POM:
 
 ```bash
 cd ../jline3
-TERM=xterm-256color ./mvx mvn -B -ntp -pl terminal-ffm -am -Dnisse.jgit.dynamicVersion=0.1.0-3601-SNAPSHOT -Djava.awt.headless=true clean install
+TERM=xterm-256color ./mvx mvn -B -ntp -pl terminal-ffm -am -Dnisse.jgit.dynamicVersion=0.1.0-jline-braxton -Djava.awt.headless=true clean install
 cd ../braxton
 ```
 
@@ -301,9 +301,11 @@ Subscription.source(id, configuration, emitter -> closeable, mapper);
 
 After every commit the runtime reconciles the description against the live set: unchanged
 identity/configuration keeps the resource and replaces only the message mapper, changed or removed
-sources are closed exactly once, and duplicate ids are rejected. Subscription ids are namespaced the
-same way as effect ids, and a child name must not contain the `/` separator: joining one would make
-two declared paths one id, which the duplicate check then rejects.
+sources are closed exactly once, and duplicate ids are rejected. Removing or replacing an interval
+cancels its queued timer even when scheduling overlaps closure; an unchanged id and period keep the
+timer and refresh only its mapper. Subscription ids are namespaced the same way as effect ids, and a
+child name must not contain the `/` separator: joining one would make two declared paths one id,
+which the duplicate check then rejects.
 
 ## The editor
 
@@ -421,6 +423,17 @@ it indefinitely. Input and resize request immediate presentation, and input bind
 from the latest committed model before routing. Orderly quit/end-of-input flushes a pending screen.
 An unchanged model does not request a frame. Pacing adds no rendering thread or recurring idle timer.
 
+Each nonempty frame is sent as one synchronized-output transaction (DEC private mode 2026)
+under the same output lock as clipboard and terminal controls. Supporting terminals can present
+that completed frame together. Terminals or multiplexers that ignore the mode still receive
+replacement rows before their unused suffix is erased, avoiding a deliberate clear-before-paint
+blank interval. Full-width rows are not erased after painting; cleared suffixes use default
+attributes. This does not change frame cadence or add idle output, capability queries, or a public
+option, and it does not promise atomic presentation on unsupported terminals. On output failure,
+Braxton attempts to end synchronization and flush without accepting the failed screen. Orderly
+restoration ends synchronization again before restoring modes; cleanup remains best-effort if
+output is broken, the terminal's synchronization watchdog expires, or the process is forcibly killed.
+
 Text wrapping and concatenation assemble whole styled runs rather than copying an immutable
 prefix for each grapheme. Immutable append chains normalize their spans on first read and release
 their intermediate operands afterward. Painting stops wrapping at the visible row limit, while
@@ -515,6 +528,11 @@ API surface.
 The build must stay warning-free under `-Xlint:all`, the core must confine JLine terminal dependencies to runtime/input integration, and the test suite must remain independent of a TTY, stdin, and raw mode. A headless
 test run does not replace a manual check of a real terminal session.
 
+JaCoCo measures the suite during `verify` and writes its report to `target/site/jacoco/index.html`.
+The coverage check keeps `AnsiEncoder` at 100% line and branch coverage and `RuntimeLoop` at or above
+88% line and 74% branch coverage. The runtime lines still uncovered by unit tests are the real-terminal
+FFM open path, which needs native access and an attached terminal; the PTY verifier below exercises it.
+
 MIT license headers are enforced by Spotless during `verify`. Dependency-update reports honor the
 pre-release filter in `.versions-rules.xml`:
 
@@ -566,7 +584,7 @@ the full project gate, and a terminal-emulation check when TUI code is touched.
 Interactive runs require `--enable-native-access=ALL-UNNAMED` on the classpath. A module-path
 launch must instead grant access to `org.jline.terminal.ffm`. Braxton checks permission before
 initializing the FFM provider, even on JDKs that otherwise only warn. Maven resolves the locally
-installed `0.1.0-3601-SNAPSHOT` version of the pinned
+installed `0.1.0-jline-braxton` version of the pinned
 `jline-terminal` and `jline-terminal-ffm` dependencies and their transitive support artifacts;
 JLine is not shaded or optional. A launch with only the Braxton jar on its classpath is insufficient.
 JLine still performs native integration and can use internal signal APIs as an upstream fallback.
@@ -576,7 +594,9 @@ JLine still performs native integration and can use internal signal APIs as an u
 The ordinary Maven suite uses owned JLine stream terminals and needs no real terminal or native
 access. Developer checks use owned PTYs and a private IPC channel to test the packaged MVU runtime:
 normalized Unicode/control/paste/wheel input, resizing, pyte output, large frames, idle-reader stop,
-immediate reopen, and restoration after quit, failure, JVM shutdown and SIGTERM. Prior native-backend
+immediate reopen, and restoration after quit, failure, JVM shutdown and SIGTERM. It also checks
+synchronized-frame ordering, overwrite-first rows, suffix erasure, and wide glyphs at the right edge
+across full-to-short-to-full refresh cycles. Prior native-backend
 platform checks do not establish support for this refactor. Forced process kill cannot guarantee restoration.
 
 Use Python with `pyte` and Java/javac on PATH:

@@ -230,6 +230,142 @@ def check_session(java_command, plain):
     print(f"PASS native input/UTF-8/resize/pyte/large output/idle close/reopen/restoration (plain={plain})")
 
 
+BSU = b"\x1b[?2026h"
+ESU = b"\x1b[?2026l"
+
+
+def wait_frame(child, start):
+    """Wait for a complete frame, not the control ACK sent before presentation."""
+    deadline = time.monotonic() + 15
+    while True:
+        data = bytes(child.output[start:])
+        if BSU in data and ESU in data[data.index(BSU) + len(BSU):]:
+            begin = data.index(BSU)
+            end = data.index(ESU, begin) + len(ESU)
+            frame = data[begin:end]
+            require(frame.count(BSU) == frame.count(ESU) == 1, "nested frame bracket")
+            require(begin == 0 and end == len(data), "output outside frame bracket")
+            return frame
+        require(time.monotonic() < deadline, "frame did not close synchronization")
+        require(child.process.poll() is None, "child exited during frame")
+        child.pump(0.1)
+
+
+def check_refresh(java_command, plain):
+    with PtyChild([*java_command, *(["--plain"] if plain else [])]) as child:
+        child.expect("READY " + JLINE_IDENTITY)
+        child.terminal_contains("Native 界")
+        # Drain startup (mode entry is deliberately not a frame).
+        while child.pump(0.1):
+            pass
+        start = len(child.output)
+        child.command("REFRESH")
+        child.expect("REFRESH_READY")
+        frame = wait_frame(child, start)
+        require(child.screen.display[0].startswith("REFRESH_FULL"), "full row missing")
+        require(child.screen.buffer[0][78].data == "界", "right-edge wide glyph was erased")
+        require(all(child.screen.buffer[0][col].bg == "000000" for col in range(79)),
+                "full row background mismatch")
+        require(child.screen.display[1] == "b" * 80, "full second row mismatch")
+        require(child.screen.display[23] == "z" * 80, "bottom-right write scrolled")
+        # Empty rows may legitimately use EL2; the full first row must not erase at all.
+        first_row = frame.split(b"\x1b[2;1H", 1)[0]
+        require(b"\x1b[2K" not in first_row and b"\x1b[0K" not in first_row,
+                "full row was cleared")
+        start = len(child.output)
+        child.command("REFRESH_SHORT")
+        child.expect("REFRESH_SHORT_READY")
+        frame = wait_frame(child, start)
+        require(child.screen.display[0].rstrip() == "short界", "short row mismatch")
+        require(all(child.screen.buffer[0][col].bg == "000000" for col in range(6)),
+                "short prefix background lost")
+        require(all(child.screen.buffer[0][col].bg == "default" for col in range(7, 80)),
+                "suffix inherited old background")
+        require(child.screen.display[1] == " " * 80, "nonempty-to-empty row retained content")
+        require(all(child.screen.buffer[1][col].bg == "default" for col in range(80)),
+                "empty row inherited background")
+        require(child.screen.display[23] == "bottom" + " " * 74, "bottom suffix not cleared")
+        require(frame.index("short界".encode()) < frame.index(b"\x1b[1;8H\x1b[0m\x1b[0K"),
+                "suffix erased before overwrite or at wrong column")
+        # Growing again must restore the full row, including both halves of the wide glyph.
+        start = len(child.output)
+        child.command("REFRESH")
+        child.expect("REFRESH_READY")
+        frame = wait_frame(child, start)
+        require(child.screen.display[0].startswith("REFRESH_FULL"), "regrown row missing")
+        require(child.screen.buffer[0][78].data == "界", "regrown right-edge wide glyph wrong")
+        first_row = frame.split(b"\x1b[2;1H", 1)[0]
+        require(b"\x1b[2K" not in first_row and b"\x1b[0K" not in first_row,
+                "regrown full row was cleared")
+        # A same-model ACK is idle: no synchronization or other output should follow.
+        start = len(child.output)
+        child.command("SIZE")
+        child.expect("SIZE 24 80")
+        deadline = time.monotonic() + 0.15
+        while time.monotonic() < deadline:
+            child.pump(0.02)
+        require(len(child.output) == start, "idle model emitted terminal traffic")
+        child.command("CLOSE")
+        child.expect("REOPENED " + JLINE_IDENTITY)
+        os.write(child.master, b"z")
+        child.expect("KEY z 7a")
+        child.finish()
+    print(f"PASS synchronized overwrite-first/wide-edge/background/suffix/idle refresh (plain={plain})")
+
+
+def check_refresh_wide(java_command, plain):
+    """A wide glyph at the right edge must survive a full row and split cleanly when narrowed."""
+    with PtyChild([*java_command, *(["--plain"] if plain else [])]) as child:
+        child.expect("READY " + JLINE_IDENTITY)
+        child.terminal_contains("Native 界")
+        while child.pump(0.1):
+            pass
+        start = len(child.output)
+        child.command("REFRESH_WIDE")
+        child.expect("REFRESH_WIDE_READY")
+        frame = wait_frame(child, start)
+        require(child.screen.buffer[0][78].data == "界", "wide glyph missing at the right edge")
+        require(child.screen.buffer[0][78].bg == "000000", "wide glyph background lost")
+        require(child.screen.buffer[0][79].bg == "000000", "wide glyph continuation background lost")
+        require(child.screen.display[0].rstrip() == "w" * 78 + "界", "wide row content mismatch")
+        require(child.screen.display[1] == "b" * 80, "wide second row mismatch")
+        first_row = frame.split(b"\x1b[2;1H", 1)[0]
+        require(b"\x1b[2K" not in first_row and b"\x1b[0K" not in first_row,
+                "full wide row was cleared")
+        start = len(child.output)
+        child.command("REFRESH_WIDE_SHORT")
+        child.expect("REFRESH_WIDE_SHORT_READY")
+        frame = wait_frame(child, start)
+        require(child.screen.buffer[0][78].data == "y", "narrow replacement missing")
+        require(child.screen.buffer[0][79].data == " ",
+                "stale second half of the wide glyph survived")
+        require(child.screen.buffer[0][79].bg == "default",
+                "stale wide background survived")
+        require(child.screen.display[0].rstrip() == "w" * 78 + "y", "narrow row content mismatch")
+        payload = ("w" * 78 + "y").encode()
+        erase = b"\x1b[1;80H\x1b[0m\x1b[0K"
+        require(erase in frame, "suffix erase missing or at the wrong column")
+        require(frame.index(payload) < frame.index(erase),
+                "suffix erased before the replacement was painted")
+        require(child.screen.display[1] == " " * 80, "second row not cleared")
+        require(all(child.screen.buffer[1][col].bg == "default" for col in range(80)),
+                "cleared second row inherited background")
+        start = len(child.output)
+        child.command("REFRESH_WIDE")
+        child.expect("REFRESH_WIDE_READY")
+        frame = wait_frame(child, start)
+        require(child.screen.buffer[0][78].data == "界", "regrown wide glyph missing")
+        require(child.screen.buffer[0][79].data == "", "regrown wide glyph not continuous")
+        first_row = frame.split(b"\x1b[2;1H", 1)[0]
+        require(b"\x1b[0K" not in first_row, "regrown full wide row was cleared")
+        child.command("CLOSE")
+        child.expect("REOPENED " + JLINE_IDENTITY)
+        os.write(child.master, b"z")
+        child.expect("KEY z 7a")
+        child.finish()
+    print(f"PASS synchronized wide-edge survival/split/regrow refresh (plain={plain})")
+
+
 def check_pending_escape(java_command):
     """Strict reproducer for the published provider's pending-poll/reopen race."""
     with PtyChild(java_command) as child:
@@ -306,6 +442,9 @@ def main():
                 cases.append((f"pending Escape / immediate reopen {attempt+1}", lambda: check_pending_escape(java_command)))
             cases.append((f"normal modes / reopen {attempt+1}", lambda: check_session(java_command, False)))
             cases.append((f"plain modes / reopen {attempt+1}", lambda: check_session(java_command, True)))
+        for plain in (False, True):
+            cases.append((f"refresh plain={plain}", lambda plain=plain: check_refresh(java_command, plain)))
+            cases.append((f"refresh-wide plain={plain}", lambda plain=plain: check_refresh_wide(java_command, plain)))
         for command, code in (("EXCEPTION", 1), ("SHUTDOWN", 0), ("SIGTERM", 143)):
             cases.append((command, lambda command=command, code=code: check_cleanup(java_command, command, code)))
         if args.harness:

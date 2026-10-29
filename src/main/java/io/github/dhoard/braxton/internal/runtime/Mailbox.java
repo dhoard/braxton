@@ -30,7 +30,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.input.InputEvent;
-import io.github.dhoard.braxton.layout.Size;
 
 /**
  * Bounded hand-off between producers (input, effects, timers, sources) and the runtime owner.
@@ -43,16 +42,13 @@ import io.github.dhoard.braxton.layout.Size;
 public final class Mailbox {
 
     /** One item in the hand-off queue. */
-    public sealed interface Envelope permits AppMessage, Input, Resize, Close {}
+    public sealed interface Envelope permits AppMessage, Input, Close {}
 
     /** An application message produced by routing, a command, or a source. */
     public record AppMessage(Object payload) implements Envelope {}
 
     /** Raw normalized input, routed later against the latest committed view. */
     public record Input(InputEvent event) implements Envelope {}
-
-    /** A measured terminal resize. */
-    public record Resize(Size size) implements Envelope {}
 
     /** A request to stop the runtime; generated inside the runtime or by a backend. */
     public record Close(ExitResult result) implements Envelope {}

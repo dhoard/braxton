@@ -601,7 +601,13 @@ public final class LayoutEngine {
         // or wider by the time it ends. Testing the width it started with gave up on a cell that
         // the row was measured to hold - a wide base whose U+FE0E arrives in the next span is one
         // column, not two.
-        StringBuilder cell = null;
+        // A cell that nothing joins paints the cluster that opened it, so it keeps that cluster as
+        // its text and no builder is allocated for it. A run is only assembled when a continuation
+        // or an invisible cluster actually adds text to the cell, which is what a row of ordinary
+        // text never does: one builder and one copy per cell made the paint path allocate several
+        // objects for every column it filled.
+        String cellBase = null;
+        StringBuilder cellRun = null;
         StringBuilder leading = null;
         int cellCol = startCol;
         int cellWidth = 0;
@@ -614,15 +620,15 @@ public final class LayoutEngine {
                 // A cluster that claims a column or holds a mark or selector is the only kind a cell
                 // can be continued by; a format character that claims no column cannot be, and a run
                 // of them must not re-segment the growing cell.
-                if ((width > 0 || hasNoBase(grapheme)) && cell != null
-                        && continuesCluster(cell, grapheme)) {
+                if ((width > 0 || hasNoBase(grapheme)) && cellBase != null
+                        && continuesCluster(cellText(cellBase, cellRun), grapheme)) {
                     // A span boundary can split one cluster the measurement read as one: the mark
                     // or selector in its own span continues the cell painted before it instead of
                     // claiming a cell of its own. Giving it one painted a column the plain text
                     // never counted, which pushed the rest of the row - a frame's right edge
                     // included - past the width the value was measured at.
-                    cell.append(grapheme);
-                    cellWidth = TextMeasure.clusterColumns(cell.toString(), policy);
+                    cellRun = joinCell(cellBase, cellRun, grapheme);
+                    cellWidth = TextMeasure.clusterColumns(cellRun.toString(), policy);
                     continue;
                 }
                 if (width == 0) {
@@ -630,8 +636,8 @@ public final class LayoutEngine {
                     // already painted instead of starting one of their own. One that leads the row
                     // is held for the cell that follows it: the plain text keeps it in that cluster,
                     // and a style boundary must not paint different content from the same value.
-                    if (cell != null) {
-                        cell.append(grapheme);
+                    if (cellBase != null) {
+                        cellRun = joinCell(cellBase, cellRun, grapheme);
                     } else {
                         if (leading == null) {
                             leading = new StringBuilder();
@@ -640,7 +646,7 @@ public final class LayoutEngine {
                     }
                     continue;
                 }
-                if (cell != null) {
+                if (cellBase != null) {
                     // This cluster does not continue the cell before it, so that cell is whole and
                     // its final width is the width the row was charged for. It is the cell the row
                     // has room for or not, and a cell that has none is not painted half: the rest of
@@ -648,8 +654,8 @@ public final class LayoutEngine {
                     if (nextCol + cellWidth > limit) {
                         return;
                     }
-                    screen.put(row, cellCol, paintedText(cell, leading), cellStyle, cellLink,
-                            cellWidth);
+                    screen.put(row, cellCol, paintedText(cellText(cellBase, cellRun), leading),
+                            cellStyle, cellLink, cellWidth);
                     nextCol = cellCol + cellWidth;
                     leading = null;
                 }
@@ -657,12 +663,25 @@ public final class LayoutEngine {
                 cellWidth = width;
                 cellStyle = span.style();
                 cellLink = span.link();
-                cell = new StringBuilder(grapheme);
+                cellBase = grapheme;
+                cellRun = null;
             }
         }
-        if (cell != null && nextCol + cellWidth <= limit) {
-            screen.put(row, cellCol, paintedText(cell, leading), cellStyle, cellLink, cellWidth);
+        if (cellBase != null && nextCol + cellWidth <= limit) {
+            screen.put(row, cellCol, paintedText(cellText(cellBase, cellRun), leading),
+                    cellStyle, cellLink, cellWidth);
         }
+    }
+
+    /** The plain text of the cell being assembled. */
+    private static CharSequence cellText(String base, StringBuilder run) {
+        return run == null ? base : run;
+    }
+
+    /** Adds a cluster to the cell, opening its run only when the cell has more than its base. */
+    private static StringBuilder joinCell(String base, StringBuilder run, String grapheme) {
+        StringBuilder joined = run == null ? new StringBuilder(base) : run;
+        return joined.append(grapheme);
     }
 
     /**
@@ -680,7 +699,24 @@ public final class LayoutEngine {
      * plain text, so only a cluster the measurement reads as one may join the cell before it.
      */
     private static boolean continuesCluster(CharSequence cell, String cluster) {
+        // The overwhelmingly common cell and cluster are a single printable ASCII character each.
+        // No grapheme break rule joins two characters in that range - none of them is a carriage
+        // return, line feed, extend, format, spacing mark, regional indicator, hangul element or
+        // pictograph - so the gap between them is a boundary whatever the rest of the text holds,
+        // and the answer needs neither a copy of the cell nor a segmentation of it. The same fact
+        // is what TextMeasure answers caret questions with; see TextMeasureBoundaryCostTest.
+        if (cluster.length() == 1 && cell.length() > 0) {
+            char before = cell.charAt(cell.length() - 1);
+            char after = cluster.charAt(0);
+            if (isPrintableAscii(before) && isPrintableAscii(after)) {
+                return false;
+            }
+        }
         return TextMeasure.graphemeCount(cell.toString() + cluster) == 1;
+    }
+
+    private static boolean isPrintableAscii(char value) {
+        return value >= 0x20 && value <= 0x7E;
     }
 
     /**
@@ -725,12 +761,21 @@ public final class LayoutEngine {
         LineBuilder current = new LineBuilder();
         int used = 0;
         boolean softWrapped = false;
+        // A run of clusters that claim no column - invisible format characters. The plain text may
+        // keep the tail of such a run inside the cluster that follows it, and a span boundary can
+        // cut the two apart, so the run waits here: the columns of the cell that cluster starts are
+        // only known with the run measured inside it rather than beside it.
+        List<Piece> pending = null;
         ClusterCursor cursor = new ClusterCursor(text, policy);
         while (cursor.next()) {
             String raw = cursor.text();
             Style style = cursor.style();
             String link = cursor.link();
             if ("\n".equals(raw)) {
+                // A newline is a cluster boundary whatever the run holds, so it all stays on the
+                // line it was read on.
+                commitRun(current, pending);
+                pending = null;
                 lines.add(current.build());
                 if (lines.size() >= maxLines) {
                     return lines;
@@ -741,9 +786,13 @@ public final class LayoutEngine {
                 continue;
             }
             if (" ".equals(raw) && softWrapped) {
+                commitRun(current, pending);
+                pending = null;
                 continue;
             }
             if ("\t".equals(raw)) {
+                commitRun(current, pending);
+                pending = null;
                 // The stop reaches the line as spaces, so that row's own plain text re-segments
                 // them together with the clusters that follow the tab: the last space of the stop
                 // is a cell those clusters continue, exactly as a typed space would be. A cluster
@@ -801,8 +850,14 @@ public final class LayoutEngine {
                 // columns it measured, and a leading one has no cell to join. A selector that does
                 // widen the character it follows was already placed with that cell, which looked at
                 // the clusters continuing it before it committed them to a line - a tab stop's last
-                // space being the one cell not placed by the loop below, and charged here.
-                current.append(raw, style, link);
+                // space being the one cell not placed by the loop below, and charged here. The run
+                // waits here instead of reaching the line at once because the plain text may keep
+                // its tail inside the cluster that comes next; the loop below decides which part of
+                // the run that is, and writes it into the cell that cluster starts.
+                if (pending == null) {
+                    pending = new ArrayList<>(2);
+                }
+                pending.add(new Piece(raw, style, link));
                 softWrapped = false;
                 continue;
             }
@@ -814,11 +869,53 @@ public final class LayoutEngine {
             // as the text the row will hold, not as the cluster it started from: a cluster with no
             // base of its own is written with the dotted circle that stands in for that base, and
             // that circle is part of the cell's columns.
-            boolean baseless = hasNoBase(raw);
-            String cellStart = baseless ? TextMeasure.DOTTED_CIRCLE + raw : raw;
+            // The tail of an invisible run that the plain text keeps inside this cluster belongs to
+            // the cell as well, and it can be the character that decides the cell's width: the
+            // U+FE0F a span boundary splits from a bare combining mark is what makes the dotted
+            // circle's cell two columns instead of one. Measured without it, the same plain text
+            // paints one column narrower than every measurement of it and shifts every cell behind
+            // it a column left. The head of the run continues nothing, so it stays where it stands.
+            List<Piece> attached = null;
+            if (pending != null) {
+                int joins = joinsRun(pending, raw);
+                for (int i = 0; i < joins; i++) {
+                    Piece piece = pending.get(i);
+                    current.append(piece.text(), piece.style(), piece.link());
+                }
+                if (joins < pending.size()) {
+                    attached = pending.subList(joins, pending.size());
+                }
+                pending = null;
+            }
+            String prefix = "";
+            if (attached != null) {
+                StringBuilder held = new StringBuilder();
+                for (Piece piece : attached) {
+                    held.append(piece.text());
+                }
+                prefix = held.toString();
+            }
+            // The dotted circle and the held run only become part of the cell when they exist, so a
+            // cell that is just the cluster the cursor read is not copied out of it first.
+            boolean baseless = prefix.isEmpty() ? hasNoBase(raw) : hasNoBase(prefix + raw);
+            String circle = baseless ? TextMeasure.DOTTED_CIRCLE : "";
+            String cellStart = circle.isEmpty()
+                    ? (prefix.isEmpty() ? raw : prefix + raw)
+                    : circle + prefix + raw;
             String cellPlain = cellStart;
             int cellWidth = baseless ? TextMeasure.clusterColumns(cellPlain, policy) : width;
             List<Piece> pieces = null;
+            if (attached != null) {
+                // Each attached cluster keeps the style and link of the span it arrived in, and the
+                // dotted circle is written where the whole cluster starts.
+                pieces = new ArrayList<>(attached.size() + 2);
+                for (int i = 0; i < attached.size(); i++) {
+                    Piece piece = attached.get(i);
+                    pieces.add(new Piece(i == 0 ? circle + piece.text() : piece.text(),
+                            piece.style(), piece.link()));
+                }
+                pieces.add(new Piece(raw, style, link));
+            }
             for (String following = cursor.peek(); following != null
                     && continuesCluster(cellPlain, following); following = cursor.peek()) {
                 cursor.next();
@@ -860,12 +957,42 @@ public final class LayoutEngine {
             used += cellWidth;
             softWrapped = false;
         }
+        // A run the value ends with continues nothing, so it closes the line it was read on.
+        commitRun(current, pending);
         lines.add(current.build());
         return lines;
     }
 
     /** One span-sized piece of a cell that a style boundary split into several pieces. */
     private record Piece(String text, Style style, String link) {
+    }
+
+    /** Writes a run of invisible clusters to the line it was read on; it continues no cell. */
+    private static void commitRun(LineBuilder line, List<Piece> run) {
+        if (run == null) {
+            return;
+        }
+        for (Piece piece : run) {
+            line.append(piece.text(), piece.style(), piece.link());
+        }
+    }
+
+    /**
+     * The index in {@code run} where the part that continues {@code cluster} begins: the plain text
+     * keeps that part of the run inside the cluster the cell paints, while the clusters before the
+     * index stand on their own. The gaps are tested from the one nearest the cluster outwards, so a
+     * run that joins nothing - a run of zero-width spaces - costs one test rather than one per
+     * character, and the run is never copied or re-segmented as it grows.
+     */
+    private static int joinsRun(List<Piece> run, String cluster) {
+        String grown = cluster;
+        for (int i = run.size() - 1; i >= 0; i--) {
+            if (!continuesCluster(run.get(i).text(), grown)) {
+                return i + 1;
+            }
+            grown = run.get(i).text() + grown;
+        }
+        return 0;
     }
 
     /**

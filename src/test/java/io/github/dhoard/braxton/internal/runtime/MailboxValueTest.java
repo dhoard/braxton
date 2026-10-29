@@ -26,7 +26,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.dhoard.braxton.layout.Size;
 
 /** Mailbox accessors and a negative timeout (treated as no wait). */
 class MailboxValueTest {
@@ -44,6 +43,5 @@ class MailboxValueTest {
         assertThat(mailbox.isClosed()).isTrue();
         assertThat(mailbox.poll(-1L)).isNull();
         assertThat(mailbox.poll(0L)).isNull();
-        assertThat(new Mailbox.Resize(new Size(1, 1)).size()).isEqualTo(new Size(1, 1));
     }
 }

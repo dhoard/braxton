@@ -83,6 +83,9 @@ public final class TerminalProbe {
                                     + model.size().cols()));
                 case "WRITE" ->
                     Transition.next(new Model("verified", model.size(), false), report("WROTE"));
+                case "REFRESH", "REFRESH_SHORT", "REFRESH_WIDE", "REFRESH_WIDE_SHORT" ->
+                    Transition.next(new Model(message.command(), model.size(), false),
+                            report(message.command() + "_READY"));
                 case "WRITE_LARGE" ->
                     Transition.next(
                             new Model("x".repeat(200000), model.size(), false),
@@ -112,6 +115,28 @@ public final class TerminalProbe {
                             Views.text("Native 界"),
                             Views.text("verified", Style.NONE.withForeground(new Color(255, 0, 0))))
                     : Views.text(model.text());
+            if (model.text().startsWith("REFRESH_WIDE")) {
+                boolean wide = model.text().equals("REFRESH_WIDE");
+                int cols = viewport.cols();
+                var rows = new ArrayList<View<Message>>();
+                rows.add(Views.text("w".repeat(Math.max(0, cols - 2)) + (wide ? "界" : "y"),
+                        Style.bg(Colors.BLACK).withBold()));
+                rows.add(Views.text(wide ? "b".repeat(cols) : "", Style.bg(new Color(255, 0, 0))));
+                for (int row = 2; row < viewport.rows() - 1; row++) rows.add(Views.text(""));
+                rows.add(Views.text(wide ? "z".repeat(cols) : "bottom"));
+                content = Views.column(rows);
+            } else if (model.text().startsWith("REFRESH")) {
+                boolean full = model.text().equals("REFRESH");
+                var rows = new ArrayList<View<Message>>();
+                rows.add(Views.text(full
+                        ? "REFRESH_FULL" + "x".repeat(viewport.cols() - 14) + "界"
+                        : "short界", Style.bg(Colors.BLACK).withBold()));
+                rows.add(Views.text(full ? "b".repeat(viewport.cols()) : "",
+                        Style.bg(new Color(255, 0, 0))));
+                for (int row = 2; row < viewport.rows() - 1; row++) rows.add(Views.text(""));
+                rows.add(Views.text(full ? "z".repeat(viewport.cols()) : "bottom"));
+                content = Views.column(rows);
+            }
             return Views.focus(
                     ElementId.of("input"),
                     true,

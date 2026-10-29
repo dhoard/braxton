@@ -62,7 +62,9 @@ import io.github.dhoard.braxton.view.View;
  * touches the model: routing, {@code update}, command interpretation, subscription reconciliation,
  * layout, and output. Input, timers, tasks, and sources only enqueue immutable envelopes. Rendering
  * coalesces application changes with a minimum 16 ms gap between presentations. Input, resize,
- * and orderly exit flush dirty state immediately; an idle application performs no view work.</p>
+ * and orderly exit flush dirty state immediately; an idle application performs no view work.
+ * Nonempty frames use JLine synchronized output under the same lock as control output and
+ * restoration; screen state is accepted only after bracket closure and output error checking.</p>
  *
  * <p>The owner is the caller's thread. A virtual input worker enqueues normalized events.
  * The owner samples JLine sizes after nonblocking signal notifications and on a bounded fallback
@@ -218,12 +220,67 @@ public final class RuntimeLoop<M, Msg> {
         }
     }
 
+    /** Present one frame atomically where supported, with a single flush after closing the update. */
+    private void writeFrame(String data) {
+        synchronized (outputLock) {
+            if (stopping) throw new IllegalStateException("runtime is stopping");
+            writeSynchronized(data);
+        }
+    }
+
+    private void writeSynchronized(String data) {
+        Throwable failure = null;
+        try {
+            terminal.beginSynchronizedUpdate();
+            terminal.writer().write(data);
+        } catch (RuntimeException | Error primary) {
+            failure = primary;
+            throw primary;
+        } finally {
+            closeSynchronizedOutput(failure);
+        }
+    }
+
+    /** Always end and flush, preserving the primary failure if either cleanup step fails. */
+    private void closeSynchronizedOutput(Throwable primary) {
+        Throwable failure = null;
+        try {
+            terminal.endSynchronizedUpdate();
+        } catch (RuntimeException | Error ending) {
+            failure = ending;
+        }
+        try {
+            var writer = terminal.writer();
+            writer.flush();
+            if (writer.checkError()) throw new IllegalStateException("terminal output failed");
+        } catch (RuntimeException | Error flushing) {
+            if (failure == null) failure = flushing;
+            else failure.addSuppressed(flushing);
+        }
+        if (failure == null) return;
+        if (primary != null) {
+            primary.addSuppressed(failure);
+            return;
+        }
+        throw unchecked(failure);
+    }
+
     /** Called only with outputLock held, including the final restoration operation. */
     private void flushOutput(String data) {
-        terminal.writer().write(data);
-        terminal.writer().flush();
-        if (terminal.writer().checkError())
-            throw new IllegalStateException("terminal output failed");
+        var writer = terminal.writer();
+        writer.write(data);
+        writer.flush();
+        if (writer.checkError()) throw new IllegalStateException("terminal output failed");
+    }
+
+    /**
+     * Rethrows a cleanup failure without changing its type: an existing runtime exception or error
+     * keeps its identity, and any other throwable is wrapped.
+     */
+    static RuntimeException unchecked(Throwable failure) {
+        if (failure instanceof RuntimeException runtime) return runtime;
+        if (failure instanceof Error error) throw error;
+        return new IllegalStateException(failure);
     }
 
     /** JLine's ordered shutdown task: close admission before restoring application modes. */
@@ -246,7 +303,19 @@ public final class RuntimeLoop<M, Msg> {
             exit.append(AnsiEncoder.RESET).append(AnsiEncoder.SHOW_CURSOR);
             if (options.terminal().alternateScreen() && capabilities.alternateScreen())
                 exit.append(AnsiEncoder.ALT_SCREEN_OFF);
-            flushOutput(exit.toString());
+            Throwable failure = null;
+            try {
+                terminal.endSynchronizedUpdate();
+            } catch (RuntimeException | Error ending) {
+                failure = ending;
+            }
+            try {
+                flushOutput(exit.toString());
+            } catch (RuntimeException | Error restoring) {
+                if (failure != null) restoring.addSuppressed(failure);
+                throw restoring;
+            }
+            if (failure != null) throw unchecked(failure);
         }
     }
 
@@ -302,7 +371,7 @@ public final class RuntimeLoop<M, Msg> {
                 nextResizeAt = now + TimeUnit.MILLISECONDS.toNanos(RESIZE_POLL_MILLIS);
                 Size size = terminalSize();
                 if (size.rows() != viewport.rows() || size.cols() != viewport.cols())
-                    applyResize(size);
+                    applyResize();
             }
             if (effects.quitRequested()) {
                 return ExitResult.quit(effects.quitStatus());
@@ -334,12 +403,9 @@ public final class RuntimeLoop<M, Msg> {
                 applyMessage(message);
             } else if (envelope instanceof Mailbox.Input input) {
                 applyInput(input);
-            } else if (envelope instanceof Mailbox.Resize resize) {
-                applyResize(resize.size());
             }
             if (viewDirty
                     && (envelope instanceof Mailbox.Input
-                            || envelope instanceof Mailbox.Resize
                             || effects.quitRequested()
                             || frameReady())) {
                 present();
@@ -390,11 +456,10 @@ public final class RuntimeLoop<M, Msg> {
         return event;
     }
 
-    private void applyResize(Size size) {
-        Size current = terminalSize();
-        Size effective = current.rows() > 0 && current.cols() > 0 ? current : size;
-        viewport = new Viewport(effective.rows(), effective.cols());
-        subscriptions.notifyResize(effective);
+    private void applyResize() {
+        Size measured = terminalSize();
+        viewport = new Viewport(measured.rows(), measured.cols());
+        subscriptions.notifyResize(measured);
         viewDirty = true;
     }
 
@@ -410,12 +475,21 @@ public final class RuntimeLoop<M, Msg> {
     }
 
     private void present() {
+        // The frame has to fit the terminal it is written to. A resize that lands after the sample
+        // which chose this viewport leaves the layout a column or more wider than the screen, and
+        // every full row then wraps its tail into the row below. Re-sample here, the last point
+        // before the layout, so the presented frame is always laid out for the width JLine reports
+        // now.
+        Size size = terminalSize();
+        if (size.rows() != viewport.rows() || size.cols() != viewport.cols()) {
+            applyResize();
+        }
         View<Msg> view = program.view(model, viewport);
         LayoutEngine.Layout layout = engine.layout(view, viewport.bounds());
         Screen screen = layout.screen();
         String output = AnsiEncoder.diff(currentScreen, screen, capabilities.color());
         if (!output.isEmpty()) {
-            writeOutput(output);
+            writeFrame(output);
         }
         currentView = view;
         currentScreen = screen;
