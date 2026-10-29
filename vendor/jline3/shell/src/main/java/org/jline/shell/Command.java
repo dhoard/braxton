@@ -1,0 +1,142 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.shell;
+
+import java.util.List;
+import java.util.Map;
+
+import org.jline.reader.Completer;
+
+/**
+ * Represents a single executable command in the shell.
+ * <p>
+ * A {@code Command} encapsulates everything about a command in one object:
+ * its name, aliases, description, execution logic, and completion support.
+ * <p>
+ * Example:
+ * <pre>
+ * Command echo = new AbstractCommand("echo") {
+ *     &#64;Override
+ *     public Object execute(CommandSession session, String[] args) {
+ *         session.out().println(String.join(" ", args));
+ *         return null;
+ *     }
+ * };
+ * </pre>
+ *
+ * @see CommandGroup
+ * @see CommandDispatcher
+ * @see CommandSession
+ * @since 4.0
+ */
+public interface Command {
+
+    /**
+     * Returns the primary name of this command.
+     *
+     * @return the command name, never null
+     */
+    String name();
+
+    /**
+     * Returns alternative names for this command.
+     * <p>
+     * The default implementation returns an empty list.
+     *
+     * @return the list of aliases, never null
+     */
+    default List<String> aliases() {
+        return List.of();
+    }
+
+    /**
+     * Returns a short, one-line description of this command.
+     * <p>
+     * Used for help listings and completion candidates.
+     *
+     * @return the description, or empty string if none
+     */
+    default String description() {
+        return "";
+    }
+
+    /**
+     * Returns a detailed description of this command for the given arguments.
+     * <p>
+     * This is used by widgets to display context-sensitive help in the
+     * terminal status bar.
+     *
+     * @param args the command arguments (args[0] is typically the command name)
+     * @return the command description, or null if not available
+     */
+    default CommandDescription describe(List<String> args) {
+        return null;
+    }
+
+    /**
+     * Executes this command with the given session and arguments.
+     *
+     * @param session the current command session
+     * @param args the command arguments (does not include the command name)
+     * @return the result of the command execution, or null
+     * @throws Exception if command execution fails
+     */
+    Object execute(CommandSession session, String[] args) throws Exception;
+
+    /**
+     * Returns the completers for this command's arguments.
+     * <p>
+     * The default implementation returns an empty list, meaning no custom completion.
+     * <p>
+     * These completers are position-based: the first completer handles the first argument,
+     * the second handles the second argument, etc. For commands that need non-positional
+     * completion (e.g., picocli commands where options can appear in any order), override
+     * {@link #completer()} instead.
+     *
+     * @return the list of completers
+     * @see #completer()
+     */
+    default List<Completer> completers() {
+        return List.of();
+    }
+
+    /**
+     * Returns a single completer for this command's arguments.
+     * <p>
+     * This method is called by the dispatcher to get the completer for this command.
+     * The default implementation builds a completer from {@link #completers()}.
+     * <p>
+     * Override this method when position-based completion is not appropriate,
+     * for example with picocli commands where options and arguments can appear
+     * in any order.
+     *
+     * @return the completer, or null for no completion
+     * @see #completers()
+     */
+    default Completer completer() {
+        return null;
+    }
+
+    /**
+     * Returns the subcommands of this command.
+     * <p>
+     * When a command has subcommands, the dispatcher will check if the first
+     * argument matches a subcommand name and route execution accordingly.
+     * For example, a "git" command with a "commit" subcommand would handle
+     * {@code git commit -m msg} by routing to the "commit" subcommand with
+     * args {@code [-m, msg]}.
+     * <p>
+     * The default implementation returns an empty map, meaning no subcommands.
+     *
+     * @return a map from subcommand name to command, never null
+     */
+    default Map<String, Command> subcommands() {
+        return Map.of();
+    }
+}

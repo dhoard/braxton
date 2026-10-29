@@ -1,0 +1,338 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.terminal.impl;
+
+import java.io.FileDescriptor;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.nio.charset.Charset;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.IntConsumer;
+import java.util.function.IntUnaryOperator;
+
+import org.jline.terminal.Attributes;
+import org.jline.terminal.Cursor;
+import org.jline.terminal.Size;
+import org.jline.terminal.Sized;
+import org.jline.terminal.spi.SystemStream;
+import org.jline.terminal.spi.TerminalProvider;
+import org.jline.utils.FastBufferedOutputStream;
+import org.jline.utils.NonBlocking;
+import org.jline.utils.NonBlockingInputStream;
+import org.jline.utils.NonBlockingReader;
+import org.jline.utils.NonCloseableInputStream;
+import org.jline.utils.NonCloseableOutputStream;
+import org.jline.utils.ShutdownHooks;
+import org.jline.utils.ShutdownHooks.Task;
+
+import static org.jline.terminal.TerminalBuilder.PROP_SOFTWARE_SIGNALS;
+
+/**
+ * Base class for flattened POSIX system terminals that bypass the PTY abstraction.
+ *
+ * <p>Subclasses only need to implement four methods for platform-specific
+ * attribute and size operations:</p>
+ * <ul>
+ *   <li>{@link #doGetAttributes()}</li>
+ *   <li>{@link #doSetAttributes(Attributes)}</li>
+ *   <li>{@link #doGetSize()}</li>
+ *   <li>{@link #doSetSize(Sized)}</li>
+ * </ul>
+ *
+ * <p>The call chain is reduced from 7 layers to 4:</p>
+ * <pre>
+ *   Terminal → AbstractTerminal → AbstractUnixSysTerminal → subclass → native call
+ * </pre>
+ *
+ * <p><strong>Important:</strong> the underlying system streams ({@code FileDescriptor.in},
+ * {@code FileDescriptor.out}/{@code err}) are wrapped in {@link NonCloseableInputStream} /
+ * {@link NonCloseableOutputStream}. Closing the terminal will shut down the pump thread and
+ * release resources, but will <em>not</em> close the shared file descriptors. This prevents
+ * breaking {@code System.in}/{@code System.out} for the rest of the JVM.</p>
+ */
+public abstract class AbstractUnixSysTerminal extends AbstractTerminal {
+
+    protected static final int STDIN_FD = 0;
+    protected static final int STDOUT_FD = 1;
+    protected static final int STDERR_FD = 2;
+
+    private final TerminalProvider provider;
+    private final SystemStream systemStream;
+    private final Attributes originalAttributes;
+    private final boolean nativeSignals;
+    private final NonBlockingInputStream input;
+    private final OutputStream output;
+    private final NonBlockingReader reader;
+    private final PrintWriter writer;
+    final Map<Signal, Object> nativeHandlers = new ConcurrentHashMap<>();
+    private volatile Attributes cachedAttributes;
+    private final Task closer;
+    private final boolean pollAvailable;
+
+    @SuppressWarnings({"this-escape", "squid:S107"})
+    protected AbstractUnixSysTerminal(
+            TerminalProvider provider,
+            SystemStream systemStream,
+            String name,
+            String type,
+            Charset encoding,
+            Charset inputEncoding,
+            Charset outputEncoding,
+            boolean nativeSignals,
+            SignalHandler signalHandler,
+            Attributes originalAttributes)
+            throws IOException {
+        super(name, type, encoding, inputEncoding, outputEncoding, signalHandler);
+        this.provider = provider;
+        this.systemStream = systemStream;
+        this.originalAttributes = originalAttributes;
+        this.nativeSignals = nativeSignals;
+        boolean softwareSignals = Boolean.parseBoolean(System.getProperty(PROP_SOFTWARE_SIGNALS, "true"));
+
+        InputStream stdin = new NonCloseableInputStream(new FileInputStream(FileDescriptor.in));
+        InputStream wrappedStdin =
+                softwareSignals ? new SignalInterceptingInputStream(stdin, () -> cachedAttributes, this::raise) : stdin;
+        this.input = NonBlocking.nonBlocking(getName(), wrappedStdin);
+        IntUnaryOperator pollFn = createPollFunction();
+        if (pollFn != null) {
+            this.input.setPollFunction(pollFn);
+            this.pollAvailable = true;
+        } else {
+            this.pollAvailable = false;
+        }
+        cachedAttributes = new Attributes(originalAttributes);
+        FileDescriptor outFd;
+        if (systemStream == SystemStream.Output) {
+            outFd = FileDescriptor.out;
+        } else if (systemStream == SystemStream.Error) {
+            outFd = FileDescriptor.err;
+        } else {
+            throw new IllegalArgumentException("Invalid system stream for output: " + systemStream);
+        }
+        this.output = new FastBufferedOutputStream(new NonCloseableOutputStream(new FileOutputStream(outFd)));
+        this.reader = NonBlocking.nonBlocking(getName(), input, inputEncoding());
+        this.writer = new PrintWriter(new OutputStreamWriter(output, outputEncoding()));
+
+        parseInfoCmp();
+
+        registerNativeSignals(signalHandler);
+
+        closer = this::close;
+        ShutdownHooks.add(closer);
+    }
+
+    private void registerNativeSignals(SignalHandler signalHandler) {
+        if (nativeSignals) {
+            for (Signal signal : Signal.values()) {
+                Object nativeHandler;
+                if (signalHandler == SignalHandler.SIG_DFL) {
+                    nativeHandler = provider.registerDefaultSignal(signal.name());
+                } else {
+                    nativeHandler = provider.registerSignal(signal.name(), () -> raise(signal));
+                }
+                // Registration returns null for platform-unsupported signals; ConcurrentHashMap rejects null values
+                if (nativeHandler != null) {
+                    nativeHandlers.put(signal, nativeHandler);
+                }
+            }
+        }
+    }
+
+    @Override
+    public SignalHandler handle(Signal signal, SignalHandler handler) {
+        SignalHandler prev = super.handle(signal, handler);
+        if (nativeSignals && prev != handler) {
+            Object previousNative = nativeHandlers.remove(signal);
+            if (previousNative != null) {
+                provider.unregisterSignal(signal.name(), previousNative);
+            }
+            Object nativeHandler;
+            if (handler == SignalHandler.SIG_DFL) {
+                nativeHandler = provider.registerDefaultSignal(signal.name());
+            } else {
+                nativeHandler = provider.registerSignal(signal.name(), () -> raise(signal));
+            }
+            // See constructor — skip null for unsupported signals
+            if (nativeHandler != null) {
+                nativeHandlers.put(signal, nativeHandler);
+            }
+        }
+        return prev;
+    }
+
+    protected abstract Attributes doGetAttributes();
+
+    protected abstract void doSetAttributes(Attributes attr);
+
+    protected abstract Size doGetSize();
+
+    protected abstract void doSetSize(Sized size);
+
+    /**
+     * Creates a poll function that checks stdin for input readiness using
+     * {@code poll(2)}.
+     *
+     * <p>When non-null, the returned function is passed to
+     * {@link NonBlockingInputStream#setPollFunction(IntUnaryOperator)} so the
+     * pump thread can use short-timeout polls instead of an indefinite blocking
+     * read.  This prevents the pump from stealing keystrokes from subprocesses
+     * that share the same tty fd
+     * (see <a href="https://github.com/jline/jline3/issues/2219">#2219</a>).</p>
+     *
+     * <p>Subclasses should override to provide a platform-specific binding
+     * (FFM or JNI).  The default returns {@code null}, which falls back to
+     * blocking reads and preserves backward compatibility.</p>
+     *
+     * @return {@code (timeoutMs) → poll result}: positive if data is ready,
+     *         0 on timeout, negative on error; or {@code null} if poll is
+     *         not available
+     */
+    protected IntUnaryOperator createPollFunction() {
+        return null;
+    }
+
+    @Override
+    protected boolean hasPollSupport() {
+        return pollAvailable;
+    }
+
+    @Override
+    public Attributes getAttributes() {
+        checkClosed();
+        Attributes attr = doGetAttributes();
+        cachedAttributes = attr;
+        return attr;
+    }
+
+    @Override
+    public void setAttributes(Attributes attr) {
+        checkClosed();
+        doSetAttributes(attr);
+        cachedAttributes = new Attributes(attr);
+    }
+
+    @Override
+    public Size getSize() {
+        checkClosed();
+        return doGetSize();
+    }
+
+    @Override
+    public void setSize(Sized size) {
+        checkClosed();
+        doSetSize(size);
+    }
+
+    @Override
+    public NonBlockingReader reader() {
+        checkClosed();
+        return reader;
+    }
+
+    @Override
+    public PrintWriter writer() {
+        checkClosed();
+        return writer;
+    }
+
+    @Override
+    public InputStream input() {
+        checkClosed();
+        return input;
+    }
+
+    @Override
+    public OutputStream output() {
+        checkClosed();
+        return output;
+    }
+
+    @Override
+    public TerminalProvider getProvider() {
+        return provider;
+    }
+
+    @Override
+    public SystemStream getSystemStream() {
+        return systemStream;
+    }
+
+    @Override
+    public Cursor getCursorPosition(IntConsumer discarded) {
+        return CursorSupport.getCursorPosition(this, discarded);
+    }
+
+    @Override
+    protected void doClose() throws IOException {
+        writer.flush();
+        ShutdownHooks.remove(closer);
+        try {
+            for (Map.Entry<Signal, Object> entry : nativeHandlers.entrySet()) {
+                try {
+                    provider.unregisterSignal(entry.getKey().name(), entry.getValue());
+                } catch (Exception ignore) {
+                    // best-effort cleanup during close
+                }
+            }
+        } finally {
+            try {
+                super.doClose();
+            } finally {
+                try {
+                    input.close();
+                } finally {
+                    try {
+                        doSetAttributes(originalAttributes);
+                    } finally {
+                        reader.close();
+                    }
+                }
+            }
+        }
+    }
+
+    @Override
+    public int getDefaultForegroundColor() {
+        try {
+            writer().write("\033]10;?\033\\");
+            writer().flush();
+            return ColorSupport.parseColorResponse(reader(), 10);
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+
+    @Override
+    public int getDefaultBackgroundColor() {
+        try {
+            writer().write("\033]11;?\033\\");
+            writer().flush();
+            return ColorSupport.parseColorResponse(reader(), 11);
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+
+    @Override
+    public String toString() {
+        Size size;
+        try {
+            size = doGetSize();
+        } catch (Exception e) {
+            size = null;
+        }
+        return getKind() + "[" + "name='" + name + '\'' + ", type='" + type + '\'' + ", size='" + size + '\'' + ']';
+    }
+}

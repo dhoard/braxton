@@ -1,0 +1,77 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.demo.examples;
+
+import java.util.Collections;
+
+import org.jline.reader.LineReader;
+import org.jline.reader.LineReaderBuilder;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
+import org.jline.utils.AttributedStringBuilder;
+import org.jline.utils.AttributedStyle;
+import org.jline.utils.Status;
+
+/**
+ * Example demonstrating multi-segment status line in JLine.
+ */
+public class MultiSegmentStatusExample {
+
+    // SNIPPET_START: MultiSegmentStatusExample
+    /**
+     * Demonstrates creating a multi-segment status line (left, centered padding, right) and running a simple REPL that exits on "exit".
+     *
+     * Sets up a Terminal and LineReader, obtains a Status for the terminal, builds a colored status line with a left
+     * segment ("Server: Connected"), a centered padding region, and a right segment ("Users: 42"), updates the status,
+     * then reads lines from the user printing each entry until "exit" is entered.
+     *
+     * @param args command-line arguments
+     * @throws Exception if terminal or reader creation or I/O operations fail
+     */
+    public static void main(String[] args) throws Exception {
+        Terminal terminal = TerminalBuilder.builder().build();
+        LineReader reader = LineReaderBuilder.builder().terminal(terminal).build();
+
+        // Create a Status instance
+        Status status = Status.getStatus(terminal);
+
+        if (status != null) {
+            // Create a multi-segment status line
+            AttributedStringBuilder asb = new AttributedStringBuilder();
+
+            // Left-aligned segment
+            asb.style(AttributedStyle.DEFAULT.foreground(AttributedStyle.BLUE)).append("Server: Connected");
+
+            // Center segment (with padding)
+            int width = terminal.getColumns();
+            int leftLen = "Server: Connected".length();
+            int rightLen = "Users: 42".length();
+            int padding = (width - leftLen - rightLen) / 2;
+            for (int i = 0; i < padding; i++) {
+                asb.append(" ");
+            }
+
+            // Right-aligned segment
+            asb.style(AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN)).append("Users: 42");
+
+            status.update(Collections.singletonList(asb.toAttributedString()));
+        }
+
+        // Read input normally
+        while (true) {
+            String line = reader.readLine("prompt> ");
+            System.out.println("You entered: " + line);
+
+            if (line.equals("exit")) {
+                break;
+            }
+        }
+    }
+    // SNIPPET_END: MultiSegmentStatusExample
+}

@@ -1,0 +1,592 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.builtins.ssh;
+
+import java.io.*;
+import java.net.SocketAddress;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.PublicKey;
+import java.util.*;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+import org.apache.sshd.client.SshClient;
+import org.apache.sshd.client.auth.keyboard.UserInteraction;
+import org.apache.sshd.client.channel.ChannelShell;
+import org.apache.sshd.client.channel.ClientChannel;
+import org.apache.sshd.client.channel.ClientChannelEvent;
+import org.apache.sshd.client.future.ConnectFuture;
+import org.apache.sshd.client.keyverifier.AcceptAllServerKeyVerifier;
+import org.apache.sshd.client.keyverifier.KnownHostsServerKeyVerifier;
+import org.apache.sshd.client.keyverifier.ServerKeyVerifier;
+import org.apache.sshd.client.session.ClientSession;
+import org.apache.sshd.common.NamedResource;
+import org.apache.sshd.common.channel.PtyMode;
+import org.apache.sshd.common.config.keys.FilePasswordProvider;
+import org.apache.sshd.common.config.keys.KeyUtils;
+import org.apache.sshd.common.session.SessionContext;
+import org.apache.sshd.common.util.io.input.NoCloseInputStream;
+import org.apache.sshd.common.util.io.output.NoCloseOutputStream;
+import org.apache.sshd.scp.server.ScpCommandFactory;
+import org.apache.sshd.server.SshServer;
+import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider;
+import org.apache.sshd.server.session.ServerSession;
+import org.apache.sshd.sftp.server.SftpSubsystemFactory;
+import org.jline.builtins.Options;
+import org.jline.builtins.Options.HelpException;
+import org.jline.reader.LineReader;
+import org.jline.terminal.Attributes;
+import org.jline.terminal.Size;
+import org.jline.terminal.Terminal;
+
+public class Ssh {
+
+    public static final String[] functions = {"ssh", "sshd"};
+
+    public static class ShellParams {
+        private final Map<String, String> env;
+        private final Terminal terminal;
+        private final Runnable closer;
+        private final ServerSession session;
+
+        public ShellParams(Map<String, String> env, ServerSession session, Terminal terminal, Runnable closer) {
+            this.env = env;
+            this.session = session;
+            this.terminal = terminal;
+            this.closer = closer;
+        }
+
+        public Map<String, String> getEnv() {
+            return env;
+        }
+
+        public ServerSession getSession() {
+            return session;
+        }
+
+        public Terminal getTerminal() {
+            return terminal;
+        }
+
+        public Runnable getCloser() {
+            return closer;
+        }
+    }
+
+    public static class ExecuteParams {
+        private final String command;
+        private final Map<String, String> env;
+        private final ServerSession session;
+        private final InputStream in;
+        private final OutputStream out;
+        private final OutputStream err;
+
+        public ExecuteParams(
+                String command,
+                Map<String, String> env,
+                ServerSession session,
+                InputStream in,
+                OutputStream out,
+                OutputStream err) {
+            this.command = command;
+            this.session = session;
+            this.env = env;
+            this.in = in;
+            this.out = out;
+            this.err = err;
+        }
+
+        public String getCommand() {
+            return command;
+        }
+
+        public Map<String, String> getEnv() {
+            return env;
+        }
+
+        public ServerSession getSession() {
+            return session;
+        }
+
+        public InputStream getIn() {
+            return in;
+        }
+
+        public OutputStream getOut() {
+            return out;
+        }
+
+        public OutputStream getErr() {
+            return err;
+        }
+    }
+
+    private static final int defaultPort = 2022;
+
+    private final Consumer<ShellParams> shell;
+    private final Consumer<ExecuteParams> execute;
+    private final Supplier<SshServer> serverBuilder;
+    private final Supplier<SshClient> clientBuilder;
+    private SshServer server;
+    private int port;
+    private String ip;
+
+    public Ssh(
+            Consumer<ShellParams> shell,
+            Consumer<ExecuteParams> execute,
+            Supplier<SshServer> serverBuilder,
+            Supplier<SshClient> clientBuilder) {
+        this.shell = shell;
+        this.execute = execute;
+        this.serverBuilder = serverBuilder;
+        this.clientBuilder = clientBuilder;
+    }
+
+    /**
+     * Connects to an SSH server and either executes a remote command or opens an interactive shell.
+     *
+     * Parses connection target from argv (optionally containing user and port), establishes an SSH
+     * client session, and forwards local stdin/stdout/stderr to the remote side. In interactive mode
+     * configures a PTY from the provided Terminal, installs signal handlers for window changes and
+     * job-control signals, and restores terminal state on exit.
+     *
+     * @param terminal the Terminal used for raw-mode control, PTY geometry, and signal handling
+     * @param reader   a LineReader used for user interaction (passwords/prompts)
+     * @param user     the default username to use if not specified in argv
+     * @param stdin    input stream to forward to the remote session
+     * @param stdout   output stream to receive remote standard output
+     * @param stderr   output stream to receive remote standard error and interaction errors
+     * @param argv     command-line arguments; first positional is target ([user@]host[:port]) and
+     *                 remaining tokens form an optional remote command; supports --help
+     * @throws Exception for SSH, authentication, or I/O errors that occur while connecting or during
+     *                   remote command/shell execution
+     */
+    public void ssh(
+            Terminal terminal,
+            LineReader reader,
+            String user,
+            InputStream stdin,
+            PrintStream stdout,
+            PrintStream stderr,
+            String[] argv)
+            throws Exception {
+        final String[] usage = {
+            "ssh - connect to a server using ssh",
+            "Usage: ssh [user@]hostname [command]",
+            "  -A --forward-agent       forward the authentication agent connection",
+            "  -? --help                show help"
+        };
+
+        Options opt = Options.compile(usage).parse(argv, true);
+        List<String> args = opt.args();
+
+        if (opt.isSet("help") || args.isEmpty()) {
+            throw new HelpException(opt.usage());
+        }
+
+        String username = user;
+        String hostname = args.remove(0);
+        int port = this.port;
+        String command = null;
+        int idx = hostname.indexOf('@');
+        if (idx >= 0) {
+            username = hostname.substring(0, idx);
+            hostname = hostname.substring(idx + 1);
+        }
+        idx = hostname.indexOf(':');
+        if (idx >= 0) {
+            port = Integer.parseInt(hostname.substring(idx + 1));
+            hostname = hostname.substring(0, idx);
+        }
+        if (!args.isEmpty()) {
+            command = String.join(" ", args);
+        }
+
+        try (SshClient client = clientBuilder.get()) {
+            JLineUserInteraction ui = new JLineUserInteraction(terminal, reader, stderr);
+            client.setFilePasswordProvider(ui);
+            client.setUserInteraction(ui);
+            setupServerKeyVerifier(
+                    client, reader, stderr, Paths.get(System.getProperty("user.home"), ".ssh", "known_hosts"));
+            client.start();
+
+            try (ClientSession sshSession =
+                    connectWithRetries(terminal.writer(), client, username, hostname, port, 3)) {
+                sshSession.auth().verify();
+                if (command != null) {
+                    ClientChannel channel = sshSession.createChannel("exec", command + "\n");
+                    channel.setIn(new ByteArrayInputStream(new byte[0]));
+                    channel.setOut(new NoCloseOutputStream(stdout));
+                    channel.setErr(new NoCloseOutputStream(stderr));
+                    channel.open().verify();
+                    channel.waitFor(EnumSet.of(ClientChannelEvent.CLOSED), 0);
+                } else {
+                    final ChannelShell channel = sshSession.createShellChannel();
+                    Attributes attributes = terminal.enterRawMode();
+                    try {
+                        Map<PtyMode, Integer> modes = new HashMap<>();
+                        // Control chars
+                        setMode(modes, PtyMode.VINTR, attributes.getControlChar(Attributes.ControlChar.VINTR));
+                        setMode(modes, PtyMode.VQUIT, attributes.getControlChar(Attributes.ControlChar.VQUIT));
+                        setMode(modes, PtyMode.VERASE, attributes.getControlChar(Attributes.ControlChar.VERASE));
+                        setMode(modes, PtyMode.VKILL, attributes.getControlChar(Attributes.ControlChar.VKILL));
+                        setMode(modes, PtyMode.VEOF, attributes.getControlChar(Attributes.ControlChar.VEOF));
+                        setMode(modes, PtyMode.VEOL, attributes.getControlChar(Attributes.ControlChar.VEOL));
+                        setMode(modes, PtyMode.VEOL2, attributes.getControlChar(Attributes.ControlChar.VEOL2));
+                        setMode(modes, PtyMode.VSTART, attributes.getControlChar(Attributes.ControlChar.VSTART));
+                        setMode(modes, PtyMode.VSTOP, attributes.getControlChar(Attributes.ControlChar.VSTOP));
+                        setMode(modes, PtyMode.VSUSP, attributes.getControlChar(Attributes.ControlChar.VSUSP));
+                        setMode(modes, PtyMode.VDSUSP, attributes.getControlChar(Attributes.ControlChar.VDSUSP));
+                        setMode(modes, PtyMode.VREPRINT, attributes.getControlChar(Attributes.ControlChar.VREPRINT));
+                        setMode(modes, PtyMode.VWERASE, attributes.getControlChar(Attributes.ControlChar.VWERASE));
+                        setMode(modes, PtyMode.VLNEXT, attributes.getControlChar(Attributes.ControlChar.VLNEXT));
+                        setMode(modes, PtyMode.VSTATUS, attributes.getControlChar(Attributes.ControlChar.VSTATUS));
+                        setMode(modes, PtyMode.VDISCARD, attributes.getControlChar(Attributes.ControlChar.VDISCARD));
+                        // Input flags
+                        setMode(modes, PtyMode.IGNPAR, getFlag(attributes, Attributes.InputFlag.IGNPAR));
+                        setMode(modes, PtyMode.PARMRK, getFlag(attributes, Attributes.InputFlag.PARMRK));
+                        setMode(modes, PtyMode.INPCK, getFlag(attributes, Attributes.InputFlag.INPCK));
+                        setMode(modes, PtyMode.ISTRIP, getFlag(attributes, Attributes.InputFlag.ISTRIP));
+                        setMode(modes, PtyMode.INLCR, getFlag(attributes, Attributes.InputFlag.INLCR));
+                        setMode(modes, PtyMode.IGNCR, getFlag(attributes, Attributes.InputFlag.IGNCR));
+                        setMode(modes, PtyMode.ICRNL, getFlag(attributes, Attributes.InputFlag.ICRNL));
+                        setMode(modes, PtyMode.IXON, getFlag(attributes, Attributes.InputFlag.IXON));
+                        setMode(modes, PtyMode.IXANY, getFlag(attributes, Attributes.InputFlag.IXANY));
+                        setMode(modes, PtyMode.IXOFF, getFlag(attributes, Attributes.InputFlag.IXOFF));
+                        // Local flags
+                        setMode(modes, PtyMode.ISIG, getFlag(attributes, Attributes.LocalFlag.ISIG));
+                        setMode(modes, PtyMode.ICANON, getFlag(attributes, Attributes.LocalFlag.ICANON));
+                        setMode(modes, PtyMode.ECHO, getFlag(attributes, Attributes.LocalFlag.ECHO));
+                        setMode(modes, PtyMode.ECHOE, getFlag(attributes, Attributes.LocalFlag.ECHOE));
+                        setMode(modes, PtyMode.ECHOK, getFlag(attributes, Attributes.LocalFlag.ECHOK));
+                        setMode(modes, PtyMode.ECHONL, getFlag(attributes, Attributes.LocalFlag.ECHONL));
+                        setMode(modes, PtyMode.NOFLSH, getFlag(attributes, Attributes.LocalFlag.NOFLSH));
+                        setMode(modes, PtyMode.TOSTOP, getFlag(attributes, Attributes.LocalFlag.TOSTOP));
+                        setMode(modes, PtyMode.IEXTEN, getFlag(attributes, Attributes.LocalFlag.IEXTEN));
+                        // Output flags
+                        setMode(modes, PtyMode.OPOST, getFlag(attributes, Attributes.OutputFlag.OPOST));
+                        setMode(modes, PtyMode.ONLCR, getFlag(attributes, Attributes.OutputFlag.ONLCR));
+                        setMode(modes, PtyMode.OCRNL, getFlag(attributes, Attributes.OutputFlag.OCRNL));
+                        setMode(modes, PtyMode.ONOCR, getFlag(attributes, Attributes.OutputFlag.ONOCR));
+                        setMode(modes, PtyMode.ONLRET, getFlag(attributes, Attributes.OutputFlag.ONLRET));
+                        channel.setPtyModes(modes);
+                        channel.setPtyColumns(terminal.getColumns());
+                        channel.setPtyLines(terminal.getRows());
+                        channel.setAgentForwarding(opt.isSet("forward-agent"));
+                        channel.setEnv("TERM", terminal.getType());
+                        // TODO: channel.setEnv("LC_CTYPE", terminal.encoding().toString());
+                        channel.setIn(new NoCloseInputStream(stdin));
+                        channel.setOut(new NoCloseOutputStream(stdout));
+                        channel.setErr(new NoCloseOutputStream(stderr));
+                        channel.open().verify();
+                        Terminal.SignalHandler prevWinchHandler = terminal.handle(Terminal.Signal.WINCH, signal -> {
+                            try {
+                                Size size = terminal.getSize();
+                                channel.sendWindowChange(size.getColumns(), size.getRows());
+                            } catch (IOException e) {
+                                // Ignore
+                            }
+                        });
+                        Terminal.SignalHandler prevQuitHandler = terminal.handle(Terminal.Signal.QUIT, signal -> {
+                            try {
+                                channel.getInvertedIn().write(attributes.getControlChar(Attributes.ControlChar.VQUIT));
+                                channel.getInvertedIn().flush();
+                            } catch (IOException e) {
+                                // Ignore
+                            }
+                        });
+                        Terminal.SignalHandler prevIntHandler = terminal.handle(Terminal.Signal.INT, signal -> {
+                            try {
+                                channel.getInvertedIn().write(attributes.getControlChar(Attributes.ControlChar.VINTR));
+                                channel.getInvertedIn().flush();
+                            } catch (IOException e) {
+                                // Ignore
+                            }
+                        });
+                        Terminal.SignalHandler prevStopHandler = terminal.handle(Terminal.Signal.TSTP, signal -> {
+                            try {
+                                channel.getInvertedIn().write(attributes.getControlChar(Attributes.ControlChar.VDSUSP));
+                                channel.getInvertedIn().flush();
+                            } catch (IOException e) {
+                                // Ignore
+                            }
+                        });
+                        try {
+                            channel.waitFor(EnumSet.of(ClientChannelEvent.CLOSED), 0);
+                        } finally {
+                            terminal.handle(Terminal.Signal.WINCH, prevWinchHandler);
+                            terminal.handle(Terminal.Signal.INT, prevIntHandler);
+                            terminal.handle(Terminal.Signal.TSTP, prevStopHandler);
+                            terminal.handle(Terminal.Signal.QUIT, prevQuitHandler);
+                        }
+                    } finally {
+                        terminal.setAttributes(attributes);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Property key stored on the client to track that this class installed a
+     * {@link KnownHostsServerKeyVerifier}. Used to detect when a caller explicitly
+     * reconfigures the verifier after our setup (even back to
+     * {@link AcceptAllServerKeyVerifier#INSTANCE}).
+     */
+    static final String VERIFIER_INSTALLED_PROP = "jline.ssh.verifierInstalled";
+
+    /**
+     * Installs an OpenSSH-style host key check when the client is still on the library's
+     * accept-everything default: a key recorded in the known-hosts file is matched, an unknown key
+     * must be confirmed by the user before it is recorded, and a changed key is refused. A verifier
+     * explicitly configured by the caller — including {@link AcceptAllServerKeyVerifier#INSTANCE}
+     * set after a previous {@code setupServerKeyVerifier} call — is left in place.
+     */
+    static void setupServerKeyVerifier(SshClient client, LineReader reader, PrintStream stderr, Path knownHosts) {
+        ServerKeyVerifier current = client.getServerKeyVerifier();
+        if (current != null && current != AcceptAllServerKeyVerifier.INSTANCE) {
+            return;
+        }
+        // AcceptAllServerKeyVerifier.INSTANCE is MINA SSHD's default.  However, if
+        // this method previously installed a KnownHostsServerKeyVerifier and the
+        // caller explicitly reverted to AcceptAll, that is a deliberate choice.
+        if (current == AcceptAllServerKeyVerifier.INSTANCE
+                && Boolean.TRUE.equals(client.getProperties().get(VERIFIER_INSTALLED_PROP))) {
+            return;
+        }
+        Path knownHostsDir = knownHosts.getParent();
+        if (knownHostsDir != null && !Files.isDirectory(knownHostsDir)) {
+            try {
+                Files.createDirectories(knownHostsDir);
+            } catch (IOException e) {
+                // best-effort — KnownHostsServerKeyVerifier will fail later with
+                // a clearer message if the path is truly unusable
+            }
+        }
+        KnownHostsServerKeyVerifier verifier = new KnownHostsServerKeyVerifier(
+                (session, address, key) -> confirmUnknownKey(reader, address, key), knownHosts);
+        verifier.setModifiedServerKeyAcceptor((session, address, entry, expected, actual) -> {
+            stderr.println("WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!");
+            stderr.println("The " + KeyUtils.getKeyType(actual) + " key sent by " + address + " is "
+                    + KeyUtils.getFingerPrint(actual) + ", but " + KeyUtils.getFingerPrint(expected)
+                    + " was expected. Refusing to connect.");
+            stderr.flush();
+            return false;
+        });
+        client.setServerKeyVerifier(verifier);
+        client.getProperties().put(VERIFIER_INSTALLED_PROP, Boolean.TRUE);
+    }
+
+    private static boolean confirmUnknownKey(LineReader reader, SocketAddress address, PublicKey key) {
+        try {
+            String answer = reader.readLine("The authenticity of host '" + address + "' can't be established.\n"
+                    + KeyUtils.getKeyType(key) + " key fingerprint is " + KeyUtils.getFingerPrint(key) + ".\n"
+                    + "Are you sure you want to continue connecting (yes/no)? ");
+            return answer != null && answer.trim().equalsIgnoreCase("yes");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static void setMode(Map<PtyMode, Integer> modes, PtyMode vintr, int attributes) {
+        if (attributes >= 0) {
+            modes.put(vintr, attributes);
+        }
+    }
+
+    private static int getFlag(Attributes attributes, Attributes.InputFlag flag) {
+        return attributes.getInputFlag(flag) ? 1 : 0;
+    }
+
+    private static int getFlag(Attributes attributes, Attributes.OutputFlag flag) {
+        return attributes.getOutputFlag(flag) ? 1 : 0;
+    }
+
+    private static int getFlag(Attributes attributes, Attributes.LocalFlag flag) {
+        return attributes.getLocalFlag(flag) ? 1 : 0;
+    }
+
+    private ClientSession connectWithRetries(
+            PrintWriter stdout, SshClient client, String username, String host, int port, int maxAttempts)
+            throws Exception {
+        ClientSession session = null;
+        int retries = 0;
+        do {
+            ConnectFuture future = client.connect(username, host, port);
+            future.await();
+            try {
+                session = future.getSession();
+            } catch (Exception ex) {
+                if (retries++ < maxAttempts) {
+                    Thread.sleep(2 * 1000);
+                    stdout.println("retrying (attempt " + retries + ") ...");
+                } else {
+                    throw ex;
+                }
+            }
+        } while (session == null);
+        return session;
+    }
+
+    public void sshd(PrintStream stdout, PrintStream stderr, String[] argv) throws Exception {
+        final String[] usage = {
+            "sshd - start an ssh server",
+            "Usage: sshd [-i ip] [-p port] start | stop | status",
+            "  -i --ip=INTERFACE        listen interface (default=127.0.0.1)",
+            "  -p --port=PORT           listen port (default=" + defaultPort + ")",
+            "  -? --help                show help"
+        };
+
+        Options opt = Options.compile(usage).parse(argv, true);
+        List<String> args = opt.args();
+
+        if (opt.isSet("help") || args.isEmpty()) {
+            throw new HelpException(opt.usage());
+        }
+
+        String command = args.get(0);
+
+        if ("start".equals(command)) {
+            if (server != null) {
+                throw new IllegalStateException("sshd is already running on port " + port);
+            }
+            ip = opt.get("ip");
+            port = opt.getNumber("port");
+            start();
+            status(stdout);
+        } else if ("stop".equals(command)) {
+            if (server == null) {
+                throw new IllegalStateException("sshd is not running.");
+            }
+            stop();
+        } else if ("status".equals(command)) {
+            status(stdout);
+        } else {
+            throw opt.usageError("bad command: " + command);
+        }
+    }
+
+    private void status(PrintStream stdout) {
+        if (server != null) {
+            stdout.println("sshd is running on " + ip + ":" + port);
+        } else {
+            stdout.println("sshd is not running.");
+        }
+    }
+
+    private void start() throws IOException {
+        server = serverBuilder.get();
+        server.setPort(port);
+        server.setHost(ip);
+        server.setShellFactory(new ShellFactoryImpl(shell));
+        server.setCommandFactory(new ScpCommandFactory.Builder()
+                .withDelegate((channel, command) -> new ShellCommand(execute, command))
+                .build());
+        server.setSubsystemFactories(Collections.singletonList(new SftpSubsystemFactory.Builder().build()));
+        server.setKeyPairProvider(new SimpleGeneratorHostKeyProvider());
+        server.start();
+    }
+
+    private void stop() throws IOException {
+        try {
+            server.stop();
+        } finally {
+            server = null;
+        }
+    }
+
+    private static class JLineUserInteraction implements UserInteraction, FilePasswordProvider {
+        private final Terminal terminal;
+        private final LineReader reader;
+        private final PrintStream stderr;
+
+        public JLineUserInteraction(Terminal terminal, LineReader reader, PrintStream stderr) {
+            this.terminal = terminal;
+            this.reader = reader;
+            this.stderr = stderr;
+        }
+
+        @Override
+        public String getPassword(SessionContext session, NamedResource resourceKey, int retryIndex)
+                throws IOException {
+            return readLine("Enter password for " + resourceKey + ":", false);
+        }
+
+        @Override
+        public void welcome(ClientSession session, String banner, String lang) {
+            terminal.writer().println(printable(banner));
+        }
+
+        @Override
+        public String[] interactive(
+                ClientSession s, String name, String instruction, String lang, String[] prompt, boolean[] echo) {
+            String[] answers = new String[prompt.length];
+            try {
+                for (int i = 0; i < prompt.length; i++) {
+                    answers[i] = readLine(printable(prompt[i]), echo[i]);
+                }
+            } catch (Exception e) {
+                stderr.append(e.getClass().getSimpleName())
+                        .append(" while read prompts: ")
+                        .println(e.getMessage());
+            }
+            return answers;
+        }
+
+        @Override
+        public boolean isInteractionAllowed(ClientSession session) {
+            return true;
+        }
+
+        @Override
+        public void serverVersionInfo(ClientSession session, List<String> lines) {
+            for (String l : lines) {
+                terminal.writer().append('\t').println(printable(l));
+            }
+        }
+
+        @Override
+        public String getUpdatedPassword(ClientSession session, String prompt, String lang) {
+            try {
+                return readLine(printable(prompt), false);
+            } catch (Exception e) {
+                stderr.append(e.getClass().getSimpleName())
+                        .append(" while reading password: ")
+                        .println(e.getMessage());
+            }
+            return null;
+        }
+
+        /**
+         * Drops control characters from text the server chose. Identification lines, the welcome
+         * banner and keyboard-interactive prompts all reach the terminal before the session is
+         * authenticated, so the peer must not be able to smuggle escape sequences through them.
+         * Newlines ({@code \n}) and tabs are kept so multi-line banners still render;
+         * {@code \r} is stripped along with the other control characters.
+         */
+        private static String printable(String text) {
+            if (text == null) {
+                return null;
+            }
+            StringBuilder sb = new StringBuilder(text.length());
+            text.codePoints().forEach(cp -> {
+                if (cp == '\n' || cp == '\t' || !Character.isISOControl(cp)) {
+                    sb.appendCodePoint(cp);
+                }
+            });
+            return sb.toString();
+        }
+
+        private String readLine(String prompt, boolean echo) {
+            return reader.readLine(prompt + " ", echo ? null : '\0');
+        }
+    }
+}

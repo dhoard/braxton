@@ -1,0 +1,95 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+# Configuration for Release Drafter for jline-3.x branch
+# This configuration is specifically for the 3.x maintenance branch
+name-template: JLine $NEXT_PATCH_VERSION
+tag-template: jline-$NEXT_PATCH_VERSION
+version-template: $MAJOR.$MINOR.$PATCH
+commitish: jline-3.x
+filter-by-commitish: true
+
+# Emoji reference: https://gitmoji.carloscuesta.me/
+categories:
+  - type: pre-exclude
+    when:
+      labels:
+        - reverted
+        - no-changelog
+        - skip-changelog
+        - invalid
+  - title: ":boom: Breaking changes"
+    when:
+      label: breaking
+  - title: 🚨 Removed
+    when:
+      label: removed
+  - title: ":tada: Major features and improvements"
+    when:
+      labels:
+        - major-enhancement
+        - major-rfe
+  - title: 🐛 Major bug fixes
+    when:
+      label: major-bug
+  - title: ⚠️ Deprecated
+    when:
+      label: deprecated
+  - title: 🚀 New features and improvements
+    when:
+      labels:
+        - enhancement
+        - feature
+        - rfe
+  - title: 🐛 Bug Fixes
+    when:
+      labels:
+        - bug
+        - fix
+        - bugfix
+        - regression
+        - backport
+  - title: ":construction_worker: Changes for developers"
+    when:
+      label: developer
+  # Default label used by Dependabot
+  - title: 📦 Dependency updates
+    when:
+      label: dependencies
+  - title: 📝 Documentation updates
+    when:
+      label: documentation
+  - title: 👻 Maintenance
+    when:
+      labels:
+        - chore
+        - internal
+        - maintenance
+  - title: 🔧 Build
+    when:
+      label: build
+  - title: 🚦 Tests
+    when:
+      labels:
+        - test
+        - tests
+
+change-template: '- $TITLE ([#$NUMBER]($URL)) @$AUTHOR'
+
+template: |
+  <!-- Optional: add a release summary here -->
+  $CHANGES

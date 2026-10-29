@@ -1,0 +1,233 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.utils;
+
+import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
+
+public class NonBlockingPumpInputStream extends NonBlockingInputStream {
+
+    private static final int DEFAULT_BUFFER_SIZE = 4096;
+
+    // Read and write buffer are backed by the same array
+    private final ByteBuffer readBuffer;
+    private final ByteBuffer writeBuffer;
+
+    private final OutputStream output;
+
+    private boolean writerClosed;
+    private IOException ioException;
+
+    public NonBlockingPumpInputStream() {
+        this(DEFAULT_BUFFER_SIZE);
+    }
+
+    public NonBlockingPumpInputStream(int bufferSize) {
+        byte[] buf = new byte[bufferSize];
+        this.readBuffer = ByteBuffer.wrap(buf);
+        this.writeBuffer = ByteBuffer.wrap(buf);
+        this.output = new NbpOutputStream();
+        // There are no bytes available to read after initialization
+        readBuffer.limit(0);
+    }
+
+    public OutputStream getOutputStream() {
+        return this.output;
+    }
+
+    private int wait(ByteBuffer buffer, long timeout) throws IOException {
+        Timeout t = new Timeout(timeout);
+        while (!closed && !writerClosed && !buffer.hasRemaining() && !t.elapsed()) {
+            // Wake up waiting readers/writers
+            notifyAll();
+            try {
+                wait(t.timeout());
+                checkIoException();
+            } catch (InterruptedException e) {
+                checkIoException();
+                throw new InterruptedIOException();
+            }
+        }
+        if (buffer.hasRemaining()) {
+            return 0;
+        } else if (closed || writerClosed) {
+            return EOF;
+        } else {
+            return READ_EXPIRED;
+        }
+    }
+
+    private static boolean rewind(ByteBuffer buffer, ByteBuffer other) {
+        // Extend limit of other buffer if there is additional input/output available
+        if (buffer.position() > other.position()) {
+            other.limit(buffer.position());
+        }
+        // If we have reached the end of the buffer, rewind and set the new limit
+        if (buffer.position() == buffer.capacity()) {
+            buffer.rewind();
+            buffer.limit(other.position());
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public synchronized int available() {
+        int count = readBuffer.remaining();
+        if (writeBuffer.position() < readBuffer.position()) {
+            count += writeBuffer.position();
+        }
+        return count;
+    }
+
+    @Override
+    public synchronized int read(byte[] b, int off, int len) throws IOException {
+        if (b == null) {
+            throw new NullPointerException();
+        } else if (off < 0 || len < 0 || len > b.length - off) {
+            throw new IndexOutOfBoundsException();
+        } else if (len == 0) {
+            return 0;
+        }
+        checkClosed();
+        checkIoException();
+        return copyAvailable(b, off, len, 0L);
+    }
+
+    @Override
+    public synchronized int read(long timeout, boolean isPeek) throws IOException {
+        checkClosed();
+        checkIoException();
+        // Blocks until more input is available or the reader is closed.
+        int res = wait(readBuffer, timeout);
+        if (res >= 0) {
+            res = readBuffer.get() & 0x00FF;
+        }
+        rewind(readBuffer, writeBuffer);
+        return res;
+    }
+
+    @Override
+    public synchronized int readBuffered(byte[] b, int off, int len, long timeout) throws IOException {
+        if (b == null) {
+            throw new NullPointerException();
+        } else if (off < 0 || len < 0 || len > b.length - off) {
+            throw new IllegalArgumentException();
+        } else if (len == 0) {
+            return 0;
+        }
+        checkClosed();
+        checkIoException();
+        return copyAvailable(b, off, len, timeout);
+    }
+
+    /**
+     * Waits for data and copies available bytes from the circular buffer into {@code b}.
+     * Handles wrap-around by reading both segments when the read position crosses
+     * the end of the underlying array.
+     */
+    private int copyAvailable(byte[] b, int off, int len, long timeout) throws IOException {
+        int res = wait(readBuffer, timeout);
+        if (res >= 0) {
+            res = 0;
+            int count = Math.min(len, readBuffer.remaining());
+            readBuffer.get(b, off, count);
+            res += count;
+            // If we consumed the entire segment and the buffer wraps, read the second segment
+            if (rewind(readBuffer, writeBuffer) && res < len && readBuffer.hasRemaining()) {
+                count = Math.min(len - res, readBuffer.remaining());
+                readBuffer.get(b, off + res, count);
+                res += count;
+            }
+        }
+        rewind(readBuffer, writeBuffer);
+        return res;
+    }
+
+    public synchronized void setIoException(IOException exception) {
+        this.ioException = exception;
+        notifyAll();
+    }
+
+    protected synchronized void checkIoException() throws IOException {
+        if (ioException != null) {
+            throw ioException;
+        }
+    }
+
+    synchronized void write(byte[] cbuf, int off, int len) throws IOException {
+        if (writerClosed) {
+            throw new ClosedException();
+        }
+        while (len > 0) {
+            // Blocks until there is new space available for buffering or the
+            // reader is closed.
+            if (wait(writeBuffer, 0L) == EOF) {
+                throw new ClosedException();
+            }
+            // Copy as much characters as we can
+            int count = Math.min(len, writeBuffer.remaining());
+            writeBuffer.put(cbuf, off, count);
+            off += count;
+            len -= count;
+            // Update buffer states and rewind if necessary
+            rewind(writeBuffer, readBuffer);
+        }
+    }
+
+    synchronized void flush() {
+        // Avoid waking up readers when there is nothing to read
+        if (readBuffer.hasRemaining()) {
+            // Notify readers
+            notifyAll();
+        }
+    }
+
+    /**
+     * Signals that the write side has been closed and no more data will be written.
+     * Any buffered data can still be read; reads will return {@link #EOF} only after
+     * all buffered data has been consumed. This is analogous to closing the write end
+     * of a Unix pipe: the read end drains remaining data before seeing EOF.
+     */
+    public synchronized void closeWriter() {
+        this.writerClosed = true;
+        notifyAll();
+    }
+
+    @Override
+    public synchronized void close() throws IOException {
+        super.close(); // Use base class closed field
+        notifyAll();
+    }
+
+    private class NbpOutputStream extends OutputStream {
+
+        @Override
+        public void write(int b) throws IOException {
+            NonBlockingPumpInputStream.this.write(new byte[] {(byte) b}, 0, 1);
+        }
+
+        @Override
+        public void write(byte[] cbuf, int off, int len) throws IOException {
+            NonBlockingPumpInputStream.this.write(cbuf, off, len);
+        }
+
+        @Override
+        public void flush() throws IOException {
+            NonBlockingPumpInputStream.this.flush();
+        }
+
+        @Override
+        public void close() throws IOException {
+            NonBlockingPumpInputStream.this.closeWriter();
+        }
+    }
+}

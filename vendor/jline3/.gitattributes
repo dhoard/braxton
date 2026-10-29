@@ -1,0 +1,5 @@
+* text=auto
+*.dll binary
+*.so binary
+
+.mvn/nisse.properties export-subst

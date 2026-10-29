@@ -9,3 +9,10 @@ plans/
 .settings/
 .DS_Store
 .flattened-pom.xml
+
+# Vendored JLine (vendor/jline3) build output and scratch files. The vendored
+# tree has its own .gitignore; these rules are repeated here so a regenerated or
+# re-copied tree stays clean, and so patching backups never get committed.
+.inlined-pom.xml
+maven-wrapper.jar
+vendor/jline3/**/*.bak

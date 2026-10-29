@@ -1,0 +1,106 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.prompt.impl;
+
+import java.util.function.Function;
+
+import org.jline.prompt.NumberBuilder;
+import org.jline.prompt.PromptBuilder;
+
+/**
+ * Default implementation of NumberBuilder.
+ */
+public class DefaultNumberBuilder implements NumberBuilder {
+
+    private final PromptBuilder parent;
+    private String name;
+    private String message;
+    private String defaultValue;
+    private Double min;
+    private Double max;
+    private boolean allowDecimals = true;
+    private String invalidNumberMessage;
+    private String outOfRangeMessage;
+    private Function<String, String> transformer;
+    private Function<String, String> filter;
+
+    public DefaultNumberBuilder(PromptBuilder parent) {
+        this.parent = parent;
+    }
+
+    @Override
+    public NumberBuilder name(String name) {
+        this.name = name;
+        return this;
+    }
+
+    @Override
+    public NumberBuilder message(String message) {
+        this.message = message;
+        return this;
+    }
+
+    @Override
+    public NumberBuilder defaultValue(String defaultValue) {
+        this.defaultValue = defaultValue;
+        return this;
+    }
+
+    @Override
+    public NumberBuilder min(Double min) {
+        this.min = min;
+        return this;
+    }
+
+    @Override
+    public NumberBuilder max(Double max) {
+        this.max = max;
+        return this;
+    }
+
+    @Override
+    public NumberBuilder allowDecimals(boolean allowDecimals) {
+        this.allowDecimals = allowDecimals;
+        return this;
+    }
+
+    @Override
+    public NumberBuilder invalidNumberMessage(String message) {
+        this.invalidNumberMessage = message;
+        return this;
+    }
+
+    @Override
+    public NumberBuilder outOfRangeMessage(String message) {
+        this.outOfRangeMessage = message;
+        return this;
+    }
+
+    @Override
+    public NumberBuilder transformer(Function<String, String> transformer) {
+        this.transformer = transformer;
+        return this;
+    }
+
+    @Override
+    public NumberBuilder filter(Function<String, String> filter) {
+        this.filter = filter;
+        return this;
+    }
+
+    @Override
+    public PromptBuilder addPrompt() {
+        DefaultNumberPrompt prompt = new DefaultNumberPrompt(
+                name, message, min, max, allowDecimals, defaultValue, invalidNumberMessage, outOfRangeMessage);
+        prompt.setTransformer(transformer);
+        prompt.setFilter(filter);
+        parent.addPrompt(prompt);
+        return parent;
+    }
+}

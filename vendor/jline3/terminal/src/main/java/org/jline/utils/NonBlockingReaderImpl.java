@@ -1,0 +1,221 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.utils;
+
+import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.io.Reader;
+
+/**
+ * This class wraps a regular reader and allows it to appear as if it
+ * is non-blocking; that is, reads can be performed against it that timeout
+ * if no data is seen for a period of time.  This effect is achieved by having
+ * a separate thread perform all non-blocking read requests and then
+ * waiting on the thread to complete.
+ *
+ * <p>VERY IMPORTANT NOTES
+ * <ul>
+ *   <li> This class is not thread safe. It expects at most one reader.
+ *   <li> The {@link #shutdown()} method must be called in order to shut down
+ *          the thread that handles blocking I/O.
+ * </ul>
+ * @since 2.7
+ */
+public class NonBlockingReaderImpl extends NonBlockingReader {
+    public static final int READ_EXPIRED = -2;
+
+    private Reader in; // The actual input stream
+    private int ch = READ_EXPIRED; // Recently read character
+
+    private String name;
+    private IOException exception = null;
+    private final PumpThread pump;
+
+    /**
+     * Creates a <code>NonBlockingReader</code> out of a normal blocking
+     * reader. Note that this call also spawn a separate thread to perform the
+     * blocking I/O on behalf of the thread that is using this class. The
+     * {@link #shutdown()} method must be called in order to shut this thread down.
+     * @param name The reader name
+     * @param in The reader to wrap
+     */
+    @SuppressWarnings("this-escape")
+    public NonBlockingReaderImpl(String name, Reader in) {
+        this.in = in;
+        this.name = name;
+        this.pump = new PumpThread(this, 60_000);
+    }
+
+    public void shutdown() {
+        pump.shutdown();
+    }
+
+    @Override
+    public void close() throws IOException {
+        super.close();
+        try {
+            in.close();
+        } finally {
+            pump.shutdown();
+        }
+    }
+
+    @Override
+    public synchronized boolean ready() throws IOException {
+        return ch >= 0 || in.ready();
+    }
+
+    @Override
+    public int readBuffered(char[] b, int off, int len, long timeout) throws IOException {
+        if (b == null) {
+            throw new NullPointerException();
+        } else if (off < 0 || len < 0 || len > b.length - off) {
+            throw new IndexOutOfBoundsException();
+        } else if (len == 0) {
+            return 0;
+        } else if (exception != null) {
+            assert ch == READ_EXPIRED;
+            IOException toBeThrown = exception;
+            exception = null;
+            throw toBeThrown;
+        } else if (ch == EOF) {
+            // Preserve the terminal state so repeated buffered reads also return EOF.
+            return EOF;
+        } else if (ch >= 0) {
+            b[off] = (char) ch;
+            ch = READ_EXPIRED;
+            return 1;
+        } else if (!pump.isReading() && timeout <= 0) {
+            return in.read(b, off, len);
+        } else {
+            // TODO: rework implementation to read as much as possible
+            int c = read(timeout, false);
+            if (c >= 0) {
+                b[off] = (char) c;
+                return 1;
+            } else {
+                return c;
+            }
+        }
+    }
+
+    /**
+     * Attempts to read a character from the input stream for a specific
+     * period of time.
+     * @param timeout The amount of time to wait for the character
+     * @return The character read, -1 if EOF is reached, or -2 if the
+     *   read timed out.
+     */
+    protected synchronized int read(long timeout, boolean isPeek) throws IOException {
+        // Check if this reader has been closed
+        checkClosed();
+
+        /*
+         * If the thread hit an IOException, we report it.
+         */
+        if (exception != null) {
+            assert ch == READ_EXPIRED;
+            IOException toBeThrown = exception;
+            if (!isPeek) exception = null;
+            throw toBeThrown;
+        }
+
+        /*
+         * If there was a pending character from the thread, then
+         * we send it. If the timeout is 0L or the thread was shut down
+         * then do a local read.
+         */
+        if (ch >= -1) {
+            assert exception == null;
+        } else if (!isPeek && timeout <= 0L && !pump.isReading()) {
+            ch = in.read();
+        } else {
+            /*
+             * If the thread isn't reading already, then ask it to do so.
+             */
+            if (!pump.isReading()) {
+                pump.setReading(true);
+                pump.startIfNeeded(this::run, name);
+                notifyAll();
+            }
+
+            /*
+             * So the thread is currently doing the reading for us. So
+             * now we play the waiting game.
+             */
+            Timeout t = new Timeout(timeout);
+            while (!t.elapsed()) {
+                try {
+                    if (Thread.interrupted()) {
+                        throw new InterruptedException();
+                    }
+                    wait(t.timeout());
+                } catch (InterruptedException e) {
+                    exception = (IOException) new InterruptedIOException().initCause(e);
+                }
+
+                if (exception != null) {
+                    assert ch == READ_EXPIRED;
+
+                    IOException toBeThrown = exception;
+                    if (!isPeek) exception = null;
+                    throw toBeThrown;
+                }
+
+                if (ch >= -1) {
+                    assert exception == null;
+                    break;
+                }
+            }
+        }
+
+        /*
+         * ch is the character that was just read. Either we set it because
+         * a local read was performed or the read thread set it (or failed to
+         * change it).  We will return it's value, but if this was a peek
+         * operation, then we leave it in place.
+         */
+        int ret = ch;
+        if (!isPeek) {
+            ch = READ_EXPIRED;
+        }
+        return ret;
+    }
+
+    private void run() {
+        pump.runLoop(
+                in::read,
+                (value, failure) -> {
+                    exception = failure;
+                    ch = value;
+                },
+                "NonBlockingReader");
+    }
+
+    @Override
+    public synchronized int available() {
+        // If we have a buffered character from the pump thread, report 1.
+        // Otherwise, ask the underlying reader (best-effort; may return 0 even
+        // when data arrives momentarily, just like InputStream.available()).
+        if (ch >= 0) {
+            return 1;
+        }
+        try {
+            return in.ready() ? 1 : 0;
+        } catch (IOException e) {
+            return 0;
+        }
+    }
+
+    public synchronized void clear() throws IOException {
+        while (ready()) {
+            read();
+        }
+    }
+}

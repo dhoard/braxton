@@ -1,0 +1,269 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.terminal.impl.jni;
+
+import java.io.FileDescriptor;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.function.IntUnaryOperator;
+
+import org.jline.nativ.CLibrary;
+import org.jline.nativ.Kernel32;
+import org.jline.terminal.Attributes;
+import org.jline.terminal.Size;
+import org.jline.terminal.Sized;
+import org.jline.terminal.impl.AbstractPty;
+import org.jline.terminal.impl.TermiosData;
+import org.jline.terminal.impl.TermiosMapping;
+import org.jline.terminal.impl.jni.win.NativeWinSysTerminal;
+import org.jline.terminal.spi.Pty;
+import org.jline.terminal.spi.SystemStream;
+import org.jline.terminal.spi.TerminalProvider;
+import org.jline.utils.OSUtils;
+
+import static org.jline.terminal.impl.TermiosData.TCSANOW;
+
+public abstract class JniNativePty extends AbstractPty implements Pty {
+
+    private final int master;
+    private final int slave;
+    private final int slaveOut;
+    private final String name;
+    private final FileDescriptor masterFD;
+    private final FileDescriptor slaveFD;
+    private final FileDescriptor slaveOutFD;
+
+    public JniNativePty(
+            TerminalProvider provider,
+            SystemStream systemStream,
+            int master,
+            FileDescriptor masterFD,
+            int slave,
+            FileDescriptor slaveFD,
+            String name) {
+        this(provider, systemStream, master, masterFD, slave, slaveFD, slave, slaveFD, name);
+    }
+
+    public JniNativePty(
+            TerminalProvider provider,
+            SystemStream systemStream,
+            int master,
+            FileDescriptor masterFD,
+            int slave,
+            FileDescriptor slaveFD,
+            int slaveOut,
+            FileDescriptor slaveOutFD,
+            String name) {
+        super(provider, systemStream);
+        this.master = master;
+        this.slave = slave;
+        this.slaveOut = slaveOut;
+        this.name = name;
+        this.masterFD = masterFD;
+        this.slaveFD = slaveFD;
+        this.slaveOutFD = slaveOutFD;
+    }
+
+    protected static String ttyname(int fd) throws IOException {
+        String name = CLibrary.ttyname(fd);
+        if (name != null) {
+            name = name.trim();
+        }
+        if (name == null || name.isEmpty()) {
+            throw new IOException("Not a tty");
+        }
+        return name;
+    }
+
+    @Override
+    public void close() throws IOException {
+        if (master > 0) {
+            getMasterInput().close();
+        }
+        if (slave > 0) {
+            getSlaveInput().close();
+        }
+    }
+
+    @Override
+    protected IntUnaryOperator createSlavePollFunction() {
+        try {
+            // Verify the native method is available in the loaded library.
+            // Older pre-compiled binaries may not contain pollForInput yet.
+            CLibrary.pollForInput(slave, 0);
+        } catch (UnsatisfiedLinkError e) {
+            return null; // fall back to VMIN/VTIME heuristic
+        }
+        return timeoutMs -> CLibrary.pollForInput(slave, timeoutMs);
+    }
+
+    public int getMaster() {
+        return master;
+    }
+
+    public int getSlave() {
+        return slave;
+    }
+
+    public int getSlaveOut() {
+        return slaveOut;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public FileDescriptor getMasterFD() {
+        return masterFD;
+    }
+
+    public FileDescriptor getSlaveFD() {
+        return slaveFD;
+    }
+
+    public FileDescriptor getSlaveOutFD() {
+        return slaveOutFD;
+    }
+
+    public InputStream getMasterInput() {
+        return new FileInputStream(getMasterFD());
+    }
+
+    public OutputStream getMasterOutput() {
+        return new FileOutputStream(getMasterFD());
+    }
+
+    protected InputStream doGetSlaveInput() {
+        return new FileInputStream(getSlaveFD());
+    }
+
+    public OutputStream getSlaveOutput() {
+        return new FileOutputStream(getSlaveOutFD());
+    }
+
+    @Override
+    public Attributes getAttr() throws IOException {
+        CLibrary.Termios tios = new CLibrary.Termios();
+        CLibrary.tcgetattr(slave, tios);
+        return TermiosMapping.forCurrentPlatform().toAttributes(fromNativeTermios(tios));
+    }
+
+    @Override
+    protected void doSetAttr(Attributes attr) throws IOException {
+        CLibrary.Termios tios = new CLibrary.Termios();
+        CLibrary.tcgetattr(slave, tios);
+        applyAttributes(tios, attr);
+        CLibrary.tcsetattr(slave, TCSANOW, tios);
+    }
+
+    @Override
+    public Size getSize() throws IOException {
+        CLibrary.WinSize sz = new CLibrary.WinSize();
+        int res = CLibrary.ioctl(slave, CLibrary.TIOCGWINSZ, sz);
+        if (res != 0) {
+            throw new IOException("Error calling ioctl(TIOCGWINSZ): return code is " + res);
+        }
+        return Size.of(sz.ws_col, sz.ws_row);
+    }
+
+    @Override
+    public void setSize(Sized size) throws IOException {
+        CLibrary.WinSize sz = new CLibrary.WinSize((short) size.getRows(), (short) size.getColumns());
+        int res = CLibrary.ioctl(slave, CLibrary.TIOCSWINSZ, sz);
+        if (res != 0) {
+            throw new IOException("Error calling ioctl(TIOCSWINSZ): return code is " + res);
+        }
+    }
+
+    static TermiosData fromNativeTermios(CLibrary.Termios tios) {
+        TermiosData data = new TermiosData();
+        data.iflag(tios.c_iflag);
+        data.oflag(tios.c_oflag);
+        data.cflag(tios.c_cflag);
+        data.lflag(tios.c_lflag);
+        data.ispeed(tios.c_ispeed);
+        data.ospeed(tios.c_ospeed);
+        System.arraycopy(tios.c_cc, 0, data.cc(), 0, Math.min(tios.c_cc.length, data.cc().length));
+        return data;
+    }
+
+    static void copyTermiosDataToNative(TermiosData data, CLibrary.Termios tio) {
+        tio.c_iflag = data.iflag();
+        tio.c_oflag = data.oflag();
+        tio.c_cflag = data.cflag();
+        tio.c_lflag = data.lflag();
+        tio.c_ispeed = data.ispeed();
+        tio.c_ospeed = data.ospeed();
+        System.arraycopy(data.cc(), 0, tio.c_cc, 0, Math.min(data.cc().length, tio.c_cc.length));
+    }
+
+    static CLibrary.Termios toNativeTermiosData(TermiosData data) {
+        CLibrary.Termios tio = new CLibrary.Termios();
+        copyTermiosDataToNative(data, tio);
+        return tio;
+    }
+
+    static void applyAttributes(CLibrary.Termios tios, Attributes attr) {
+        TermiosData updated = TermiosMapping.forCurrentPlatform().toTermios(attr, fromNativeTermios(tios));
+        copyTermiosDataToNative(updated, tios);
+    }
+
+    protected static CLibrary.Termios toNativeTermios(Attributes t) {
+        return toNativeTermiosData(TermiosMapping.forCurrentPlatform().toTermios(t));
+    }
+
+    @Override
+    public String toString() {
+        return "NativePty[" + getName() + "]";
+    }
+
+    public static boolean isPosixSystemStream(SystemStream stream) {
+        return CLibrary.isatty(fd(stream)) == 1;
+    }
+
+    public static String posixSystemStreamName(SystemStream systemStream) {
+        return CLibrary.ttyname(fd(systemStream));
+    }
+
+    public static int systemStreamWidth(SystemStream systemStream) {
+        try {
+            if (OSUtils.IS_WINDOWS) {
+                Kernel32.CONSOLE_SCREEN_BUFFER_INFO info = new Kernel32.CONSOLE_SCREEN_BUFFER_INFO();
+                long outConsole = NativeWinSysTerminal.getConsole(systemStream);
+                Kernel32.GetConsoleScreenBufferInfo(outConsole, info);
+                return info.windowWidth();
+            } else {
+                CLibrary.WinSize sz = new CLibrary.WinSize();
+                int res = CLibrary.ioctl(fd(systemStream), CLibrary.TIOCGWINSZ, sz);
+                if (res != 0) {
+                    throw new IOException("Error calling ioctl(TIOCGWINSZ): return code is " + res);
+                }
+                return sz.ws_col;
+            }
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    private static int fd(SystemStream systemStream) {
+        switch (systemStream) {
+            case Input:
+                return 0;
+            case Output:
+                return 1;
+            case Error:
+                return 2;
+            default:
+                return -1;
+        }
+    }
+}

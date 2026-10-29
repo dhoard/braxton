@@ -1,0 +1,57 @@
+#
+# Release drafter
+#
+
+name: Release Drafter
+
+on:
+  push:
+    # branches to consider in the event; optional, defaults to all
+    branches:
+      - master
+      - jline-3.x
+  # pull_request event is required only for autolabeler
+  pull_request:
+    # Only following types are handled by the action, but one can default to all as well
+    types: [opened, reopened, synchronize]
+  # pull_request_target event is required for autolabeler to support PRs from forks
+  # pull_request_target:
+  #   types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  update_release_draft:
+    permissions:
+      # write permission is required to create a github release
+      contents: write
+      # write permission is required for autolabeler
+      # otherwise, read permission is required at least
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      # (Optional) GitHub Enterprise requires GHE_HOST variable set
+      #- name: Set GHE_HOST
+      #  run: |
+      #    echo "GHE_HOST=${GITHUB_SERVER_URL##https:\/\/}" >> $GITHUB_ENV
+
+      # Drafts your next Release notes as Pull Requests are merged into "master"
+      - name: Run release drafter for master branch
+        if: github.ref == 'refs/heads/master'
+        uses: release-drafter/release-drafter@v7.10.0
+        with:
+          # Only consider 4.x releases/tags for version calculation,
+          # ignoring 3.x tags (jline-3.x.y) that would confuse the version resolver
+          filter-by-range: ">=4.0.0"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Drafts your next Release notes as Pull Requests are merged into "jline-3.x"
+      - name: Run release drafter for jline-3.x branch
+        if: github.ref == 'refs/heads/jline-3.x'
+        uses: release-drafter/release-drafter@v7.10.0
+        with:
+          config-name: release-drafter-3x.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

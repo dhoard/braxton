@@ -1,0 +1,399 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.terminal.impl;
+
+import java.io.FileDescriptor;
+import java.io.FilterInputStream;
+import java.io.IOError;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InterruptedIOException;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.IntUnaryOperator;
+
+import org.jline.nativ.JLineLibrary;
+import org.jline.nativ.JLineNativeLoader;
+import org.jline.terminal.Attributes;
+import org.jline.terminal.spi.Pty;
+import org.jline.terminal.spi.SystemStream;
+import org.jline.terminal.spi.TerminalProvider;
+import org.jline.utils.NonBlockingInputStream;
+
+import static org.jline.terminal.TerminalBuilder.PROP_FILE_DESCRIPTOR_CREATION_MODE;
+import static org.jline.terminal.TerminalBuilder.PROP_FILE_DESCRIPTOR_CREATION_MODE_DEFAULT;
+import static org.jline.terminal.TerminalBuilder.PROP_FILE_DESCRIPTOR_CREATION_MODE_NATIVE;
+import static org.jline.terminal.TerminalBuilder.PROP_FILE_DESCRIPTOR_CREATION_MODE_REFLECTION;
+import static org.jline.terminal.TerminalBuilder.PROP_NON_BLOCKING_READS;
+
+/**
+ * Base implementation of the Pty interface.
+ *
+ * <p>
+ * The AbstractPty class provides a common foundation for pseudoterminal (PTY)
+ * implementations. It handles common functionality such as system stream management
+ * and provider access, while leaving platform-specific PTY operations to be
+ * implemented by concrete subclasses.
+ * </p>
+ *
+ * <p>
+ * This class serves as the base for various PTY implementations, including:
+ * </p>
+ * <ul>
+ *   <li>Native PTY implementations (JNI, JNA, FFM) for direct access to system PTYs</li>
+ *   <li>Exec PTY implementation that uses external commands</li>
+ * </ul>
+ *
+ * <p>
+ * The AbstractPty maintains information about the associated system stream and
+ * terminal provider, which are common to all PTY implementations regardless of
+ * the underlying mechanism used to interact with the terminal.
+ * </p>
+ *
+ * @see org.jline.terminal.spi.Pty
+ */
+public abstract class AbstractPty implements Pty {
+
+    protected final TerminalProvider provider;
+    protected final SystemStream systemStream;
+    private Attributes current;
+    private boolean skipNextLf;
+    private IntUnaryOperator cachedPollFn;
+    private boolean pollFnResolved;
+
+    public AbstractPty(TerminalProvider provider, SystemStream systemStream) {
+        this.provider = provider;
+        this.systemStream = systemStream;
+    }
+
+    @Override
+    public void setAttr(Attributes attr) throws IOException {
+        current = new Attributes(attr);
+        doSetAttr(attr);
+    }
+
+    @Override
+    public InputStream getSlaveInput() throws IOException {
+        InputStream si = doGetSlaveInput();
+        InputStream nsi = new FilterInputStream(si) {
+            @Override
+            public int read() throws IOException {
+                for (; ; ) {
+                    int c = super.read();
+                    if (current.getInputFlag(Attributes.InputFlag.INORMEOL)) {
+                        if (c == '\r') {
+                            skipNextLf = true;
+                            c = '\n';
+                        } else if (c == '\n') {
+                            if (skipNextLf) {
+                                skipNextLf = false;
+                                continue;
+                            }
+                        } else {
+                            skipNextLf = false;
+                        }
+                    }
+                    return c;
+                }
+            }
+        };
+        if (Boolean.parseBoolean(System.getProperty(PROP_NON_BLOCKING_READS, "true"))) {
+            return new PtyInputStream(nsi);
+        } else {
+            return nsi;
+        }
+    }
+
+    protected abstract void doSetAttr(Attributes attr) throws IOException;
+
+    protected abstract InputStream doGetSlaveInput() throws IOException;
+
+    protected void checkInterrupted() throws InterruptedIOException {
+        if (Thread.interrupted()) {
+            throw new InterruptedIOException();
+        }
+    }
+
+    @Override
+    public TerminalProvider getProvider() {
+        return provider;
+    }
+
+    @Override
+    public SystemStream getSystemStream() {
+        return systemStream;
+    }
+
+    /**
+     * Creates a poll function for the slave file descriptor.
+     *
+     * <p>When non-null, the returned function checks the slave fd for input
+     * readiness using an OS-level mechanism such as {@code poll(2)}.  This
+     * replaces the fragile VMIN/VTIME timing heuristic in {@link PtyInputStream}
+     * with a kernel-enforced timeout that works reliably on PTY file descriptors.</p>
+     *
+     * <p>Subclasses that have access to the slave fd number should override this
+     * to provide a platform-specific binding (FFM or JNI).  The default returns
+     * {@code null}, which falls back to the VMIN/VTIME heuristic for backward
+     * compatibility.</p>
+     *
+     * @return {@code (timeoutMs) → poll result}: positive if data is ready,
+     *         0 on timeout, negative on error; or {@code null} if poll is
+     *         not available
+     */
+    protected IntUnaryOperator createSlavePollFunction() {
+        return null;
+    }
+
+    /**
+     * Returns the cached poll function, resolving it on first call.
+     */
+    private IntUnaryOperator getSlavePollFunction() {
+        if (!pollFnResolved) {
+            cachedPollFn = createSlavePollFunction();
+            pollFnResolved = true;
+        }
+        return cachedPollFn;
+    }
+
+    /**
+     * Returns {@code true} if this PTY has {@code poll(2)} support for its
+     * slave file descriptor.  The result is cached after the first call.
+     */
+    boolean hasSlavePollSupport() {
+        return getSlavePollFunction() != null;
+    }
+
+    class PtyInputStream extends NonBlockingInputStream {
+        final InputStream in;
+        final IntUnaryOperator pollFn;
+        int c = 0;
+
+        PtyInputStream(InputStream in) {
+            this.in = in;
+            this.pollFn = getSlavePollFunction();
+        }
+
+        @Override
+        public int read(long timeout, boolean isPeek) throws IOException {
+            checkClosed();
+            checkInterrupted();
+            if (c != 0) {
+                int r = c;
+                if (!isPeek) {
+                    c = 0;
+                }
+                return r;
+            }
+            long timeoutNanos = timeout > 0 ? timeout * 1_000_000L : 0;
+            if (pollFn != null) {
+                return readWithPoll(timeoutNanos, isPeek);
+            } else {
+                return readWithVtime(timeoutNanos, isPeek);
+            }
+        }
+
+        /**
+         * Poll-based read: uses {@code poll(2)} to wait for data readiness,
+         * then reads without risk of blocking. No VMIN/VTIME manipulation
+         * needed — poll provides its own kernel-enforced timeout.
+         *
+         * @param timeoutNanos timeout in nanoseconds; {@code 0} means wait forever
+         */
+        private int readWithPoll(long timeoutNanos, boolean isPeek) throws IOException {
+            long deadline = timeoutNanos > 0 ? System.nanoTime() + timeoutNanos : 0;
+            while (true) {
+                long remainingNanos = timeoutNanos > 0 ? Math.max(1_000_000L, deadline - System.nanoTime()) : 0;
+                int remainingMs = timeoutNanos > 0
+                        ? (int) Math.min((remainingNanos + 999_999) / 1_000_000, Integer.MAX_VALUE)
+                        : 100;
+                int pollResult = doPoll(remainingMs);
+                if (pollResult > 0) {
+                    return readAvailable(isPeek);
+                } else if (pollResult < 0) {
+                    return -1; // poll error → EOF
+                }
+                // pollResult == 0: timeout — check if we should keep waiting
+                checkInterrupted();
+                if (timeoutNanos > 0 && System.nanoTime() >= deadline) {
+                    return NonBlockingInputStream.READ_EXPIRED;
+                }
+                // timeoutNanos <= 0 means "wait forever" — loop again
+            }
+        }
+
+        /** Calls poll(2) on the slave fd, converting exceptions to EOF (-1). */
+        private int doPoll(int timeoutMs) {
+            try {
+                return pollFn.applyAsInt(timeoutMs);
+            } catch (RuntimeException e) {
+                return -1;
+            }
+        }
+
+        /** Reads one byte from the underlying stream, handling peek. */
+        private int readAvailable(boolean isPeek) throws IOException {
+            int r = in.read();
+            if (r >= 0 && isPeek) {
+                c = r;
+            }
+            return r >= 0 ? r : -1;
+        }
+
+        /**
+         * Legacy VMIN/VTIME-based read for terminals without poll(2) support.
+         * Uses a timing heuristic: real EOF returns from {@code read()} in
+         * under 50ms, while a VTIME=1 timeout takes ~100ms.
+         *
+         * @param timeoutNanos timeout in nanoseconds; {@code 0} means wait forever
+         */
+        private int readWithVtime(long timeoutNanos, boolean isPeek) throws IOException {
+            setNonBlocking();
+            long deadline = timeoutNanos > 0 ? System.nanoTime() + timeoutNanos : 0;
+            while (true) {
+                long readStart = System.nanoTime();
+                int r = in.read();
+                if (r >= 0) {
+                    if (isPeek) {
+                        c = r;
+                    }
+                    return r;
+                }
+                // r == -1: could be real EOF or VMIN=0/VTIME=1 timeout on a real PTY.
+                // With VTIME=1 (100ms), a timeout takes ~100ms to return -1.
+                // Real EOF (pipe closed, PTY slave closed) returns -1 instantly.
+                long readElapsedNanos = System.nanoTime() - readStart;
+                if (readElapsedNanos < 50_000_000L) {
+                    return -1;
+                }
+                checkInterrupted();
+                if (timeoutNanos > 0 && System.nanoTime() >= deadline) {
+                    return NonBlockingInputStream.READ_EXPIRED;
+                }
+            }
+        }
+
+        private void setNonBlocking() {
+            if (current == null
+                    || current.getControlChar(Attributes.ControlChar.VMIN) != 0
+                    || current.getControlChar(Attributes.ControlChar.VTIME) != 1) {
+                try {
+                    Attributes attr = getAttr();
+                    attr.setControlChar(Attributes.ControlChar.VMIN, 0);
+                    attr.setControlChar(Attributes.ControlChar.VTIME, 1);
+                    setAttr(attr);
+                } catch (IOException e) {
+                    throw new IOError(e);
+                }
+            }
+        }
+    }
+
+    private static FileDescriptorCreator fileDescriptorCreator;
+
+    protected static FileDescriptor newDescriptor(int fd) {
+        if (fileDescriptorCreator == null) {
+            String str =
+                    System.getProperty(PROP_FILE_DESCRIPTOR_CREATION_MODE, PROP_FILE_DESCRIPTOR_CREATION_MODE_DEFAULT);
+            String[] modes = str.split(",");
+            List<Throwable> failures = new ArrayList<>();
+            for (String mode : modes) {
+                try {
+                    switch (mode) {
+                        case PROP_FILE_DESCRIPTOR_CREATION_MODE_NATIVE:
+                            fileDescriptorCreator = new NativeFileDescriptorCreator();
+                            break;
+                        case PROP_FILE_DESCRIPTOR_CREATION_MODE_REFLECTION:
+                            fileDescriptorCreator = new ReflectionFileDescriptorCreator();
+                            break;
+                    }
+                } catch (Throwable t) {
+                    failures.add(t);
+                }
+                if (fileDescriptorCreator != null) {
+                    break;
+                }
+            }
+            if (fileDescriptorCreator == null) {
+                IllegalStateException ise = new IllegalStateException("Unable to create FileDescriptor");
+                failures.forEach(ise::addSuppressed);
+                throw ise;
+            }
+        }
+        return fileDescriptorCreator.newDescriptor(fd);
+    }
+
+    interface FileDescriptorCreator {
+        FileDescriptor newDescriptor(int fd);
+    }
+
+    /*
+     * Class that could be used on OpenJDK 17.  However, it requires the following JVM option
+     *   --add-exports java.base/jdk.internal.access=org.jline.terminal
+     * so the benefit does not seem important enough to warrant the problems caused
+     * by access the jdk.internal.access package at compile time, which itself requires
+     * custom compiler options and a different maven module, or at least a different compile
+     * phase with a JDK 17 compiler.
+     * So, just keep the ReflectionFileDescriptorCreator for now.
+     *
+    static class Jdk17FileDescriptorCreator implements FileDescriptorCreator {
+        private final jdk.internal.access.JavaIOFileDescriptorAccess fdAccess;
+        Jdk17FileDescriptorCreator() {
+            fdAccess = jdk.internal.access.SharedSecrets.getJavaIOFileDescriptorAccess();
+        }
+
+        @Override
+        public FileDescriptor newDescriptor(int fd) {
+            FileDescriptor descriptor = new FileDescriptor();
+            fdAccess.set(descriptor, fd);
+            return descriptor;
+        }
+    }
+     */
+
+    /**
+     * Reflection based file descriptor creator.
+     * This requires the following option
+     *   --add-opens java.base/java.io=org.jline.terminal
+     */
+    static class ReflectionFileDescriptorCreator implements FileDescriptorCreator {
+        private final Field fileDescriptorField;
+
+        ReflectionFileDescriptorCreator() throws Exception {
+            Field field = FileDescriptor.class.getDeclaredField("fd");
+            field.setAccessible(true);
+            fileDescriptorField = field;
+        }
+
+        @Override
+        public FileDescriptor newDescriptor(int fd) {
+            FileDescriptor descriptor = new FileDescriptor();
+            try {
+                fileDescriptorField.set(descriptor, fd);
+            } catch (IllegalAccessException e) {
+                // This should not happen as the field has been set accessible
+                throw new IllegalStateException(e);
+            }
+            return descriptor;
+        }
+    }
+
+    static class NativeFileDescriptorCreator implements FileDescriptorCreator {
+        NativeFileDescriptorCreator() {
+            // Force load the library
+            JLineNativeLoader.initialize();
+        }
+
+        @Override
+        public FileDescriptor newDescriptor(int fd) {
+            return JLineLibrary.newFileDescriptor(fd);
+        }
+    }
+}

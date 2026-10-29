@@ -1,0 +1,135 @@
+---
+sidebar_position: 1
+---
+
+# Getting Started with JLine
+
+JLine is a Java library that brings advanced console input handling capabilities to your applications. It provides functionality similar to BSD editline and GNU readline, while offering additional features that rival the sophisticated ZSH line editor.
+
+:::tip API Documentation
+For detailed API documentation, check out the [JLine Javadoc](/javadoc).
+:::
+
+## Overview
+
+JLine enhances your command-line applications with:
+
+- Rich command-line editing capabilities
+- Customizable tab completion
+- History management with search
+- Syntax highlighting
+- Multi-line editing
+- Unicode support
+- Platform-independent implementation
+- Flexible keyboard mapping
+- Advanced line editing features (cut/paste, word movement, etc.)
+
+## Requirements
+
+JLine 4.x requires **Java 11 or higher** as the minimum runtime version.
+
+:::note Version Requirements
+- **JLine 3.x**: Supports Java 8+, Maven 3.x+
+- **JLine 4.x**: Requires Java 11+, Maven 3.9+
+:::
+
+## Installation
+
+### Maven Dependency
+
+Add JLine to your project using Maven:
+
+```xml
+<dependency>
+    <groupId>org.jline</groupId>
+    <artifactId>jline</artifactId>
+    <version>%%JLINE_VERSION%%</version>
+</dependency>
+```
+
+### Gradle Dependency
+
+Or if you're using Gradle:
+
+```groovy
+implementation 'org.jline:jline:%%JLINE_VERSION%%'
+```
+
+### Java 11-21 Compatibility (JDK11 Classifier)
+
+:::info JDK11 Classifier for Java 11-21
+If you're using Java 11-21 and encounter class file version errors (e.g., `UnsupportedClassVersionError` or build errors about Java 22 bytecode), use the `jdk11` classifier. This variant excludes the FFM terminal provider which requires Java 22+.
+
+Note: JLine 4.x requires Java 11+ as the minimum runtime version. For Java 8 support, use JLine 3.x with the `jdk8` classifier.
+:::
+
+**Maven:**
+
+```xml
+<dependency>
+    <groupId>org.jline</groupId>
+    <artifactId>jline</artifactId>
+    <version>%%JLINE_VERSION%%</version>
+    <classifier>jdk11</classifier>
+</dependency>
+```
+
+**Gradle:**
+
+```groovy
+implementation 'org.jline:jline:%%JLINE_VERSION%%:jdk11'
+```
+
+The `jdk11` classifier artifact:
+
+- Contains all JLine functionality
+- Excludes the FFM terminal provider (`org.jline.terminal.impl.ffm.*` classes compiled with Java 22)
+- Uses JNI or Exec providers for native terminal access instead
+- Compatible with Java 11-21
+- See [Terminal Providers](./modules/terminal-providers.md) for more information
+
+## Basic Usage
+
+Here's a simple example to get you started with JLine:
+
+import CodeSnippet from '@site/src/components/CodeSnippet';
+
+<CodeSnippet name="JLineExample" />
+
+This simple example demonstrates how to:
+
+1. Create a terminal instance
+2. Build a line reader
+3. Read input from the user with a custom prompt
+
+## Next Steps
+
+Now that you have a basic understanding of JLine, here's a recommended learning path:
+
+1. **Terminal Handling**: Learn how to [create and configure terminals](./terminal.md) for different environments
+
+2. **Line Reading**: Explore the [LineReader](./line-reader.md) capabilities for advanced input handling
+
+3. **Tab Completion**: Add [tab completion](./tab-completion.md) to provide suggestions as users type
+
+4. **Command History**: Implement [history](./history.md) to allow users to recall previous commands
+
+5. **Advanced Features**: Dive into advanced topics like:
+   - [Syntax highlighting](./advanced/syntax-highlighting.md)
+   - [Key bindings](./advanced/key-bindings.md)
+   - [Attributed strings](./advanced/attributed-strings.md)
+   - [Mouse support](./advanced/mouse-support.md)
+
+6. **Shell**: Build interactive command-line applications with the [Shell module](./shell-getting-started.md)
+   - Commands, pipelines, aliases, job control, syntax highlighting
+
+7. **Modules**: Explore JLine's specialized modules:
+   - [Terminal providers](./modules/terminal-providers.md)
+   - [Builtins](./modules/builtins.md)
+   - [Style](./modules/style.md)
+   - [Console](./modules/repl-console.md)
+   - [Console UI](./modules/console-ui.md)
+
+8. **Troubleshooting**: Refer to the [troubleshooting guide](./troubleshooting.md) if you encounter issues
+
+JLine offers a rich set of features to create sophisticated command-line interfaces. The examples in this documentation will help you leverage these capabilities in your applications.

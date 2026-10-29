@@ -1,0 +1,82 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.keymap;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
+import org.jline.reader.Binding;
+import org.jline.reader.Reference;
+import org.jline.reader.impl.ReaderTestSupport.EofPipedInputStream;
+import org.jline.terminal.Size;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.impl.DumbTerminal;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+class BindingReaderTest {
+
+    protected Terminal terminal;
+    protected EofPipedInputStream in;
+    protected ByteArrayOutputStream out;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        in = new EofPipedInputStream();
+        out = new ByteArrayOutputStream();
+        terminal = new DumbTerminal("dumb", "dumb", in, out, StandardCharsets.UTF_8);
+        terminal.setSize(Size.of(160, 80));
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        if (terminal != null) {
+            terminal.close();
+        }
+    }
+
+    @Test
+    void testBindingReaderNoUnicode() {
+        in.setIn(new ByteArrayInputStream("\uD834\uDD21abc".getBytes(StandardCharsets.UTF_8)));
+        BindingReader reader = new BindingReader(terminal.reader());
+        KeyMap<Binding> keyMap = new KeyMap<>();
+        keyMap.bind(new Reference("foo"), "b");
+        assertEquals(new Reference("foo"), reader.readBinding(keyMap));
+        assertEquals("b", reader.getLastBinding());
+        assertNull(reader.readBinding(keyMap));
+    }
+
+    @Test
+    void testBindingReaderUnicode() {
+        in.setIn(new ByteArrayInputStream("\uD834\uDD21abc".getBytes(StandardCharsets.UTF_8)));
+        BindingReader reader = new BindingReader(terminal.reader());
+        KeyMap<Binding> keyMap = new KeyMap<>();
+        keyMap.setUnicode(new Reference("insert"));
+        keyMap.bind(new Reference("foo"), "b");
+        assertEquals(new Reference("insert"), reader.readBinding(keyMap));
+        assertEquals("\uD834\uDD21", reader.getLastBinding());
+        assertEquals(new Reference("foo"), reader.readBinding(keyMap));
+        assertEquals("b", reader.getLastBinding());
+        assertNull(reader.readBinding(keyMap));
+    }
+
+    @Test
+    void testBindingReaderReadString() {
+        in.setIn(new ByteArrayInputStream("\uD834\uDD21abc0123456789defg".getBytes(StandardCharsets.UTF_8)));
+        BindingReader reader = new BindingReader(terminal.reader());
+        String str = reader.readStringUntil("fg");
+        assertEquals("\uD834\uDD21abc0123456789de", str);
+    }
+}

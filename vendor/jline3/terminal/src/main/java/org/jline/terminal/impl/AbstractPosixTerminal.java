@@ -1,0 +1,181 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.terminal.impl;
+
+import java.io.IOError;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.util.Objects;
+import java.util.function.IntConsumer;
+
+import org.jline.terminal.Attributes;
+import org.jline.terminal.Cursor;
+import org.jline.terminal.Size;
+import org.jline.terminal.Sized;
+import org.jline.terminal.spi.Pty;
+import org.jline.terminal.spi.SystemStream;
+import org.jline.terminal.spi.TerminalProvider;
+
+/**
+ * Base implementation for terminals on POSIX-compliant systems.
+ *
+ * <p>
+ * The AbstractPosixTerminal class provides a foundation for terminal implementations
+ * on POSIX-compliant systems such as Linux, macOS, and other Unix-like operating
+ * systems. It builds on the AbstractTerminal class and adds POSIX-specific
+ * functionality, particularly related to pseudoterminal (PTY) handling.
+ * </p>
+ *
+ * <p>
+ * This class manages the interaction with the underlying PTY, handling terminal
+ * attributes, size changes, and other POSIX-specific terminal operations. It
+ * provides implementations for many of the abstract methods defined in
+ * AbstractTerminal, leaving only a few methods to be implemented by concrete
+ * subclasses.
+ * </p>
+ *
+ * <p>
+ * Key features provided by this class include:
+ * </p>
+ * <ul>
+ *   <li>PTY management and interaction</li>
+ *   <li>Terminal attribute preservation and restoration</li>
+ *   <li>Size handling and window change signals</li>
+ *   <li>Cursor position detection</li>
+ * </ul>
+ *
+ * <p>
+ * This class is designed to be extended by concrete implementations that target
+ * specific POSIX platforms or environments.
+ * </p>
+ *
+ * @see org.jline.terminal.impl.AbstractTerminal
+ * @see org.jline.terminal.spi.Pty
+ */
+public abstract class AbstractPosixTerminal extends AbstractTerminal {
+
+    protected final Pty pty;
+    protected final Attributes originalAttributes;
+
+    public AbstractPosixTerminal(String name, String type, Pty pty) throws IOException {
+        this(name, type, pty, null, SignalHandler.SIG_DFL);
+    }
+
+    public AbstractPosixTerminal(String name, String type, Pty pty, Charset encoding, SignalHandler signalHandler)
+            throws IOException {
+        this(name, type, pty, encoding, encoding, encoding, signalHandler);
+    }
+
+    public AbstractPosixTerminal(
+            String name,
+            String type,
+            Pty pty,
+            Charset encoding,
+            Charset inputEncoding,
+            Charset outputEncoding,
+            SignalHandler signalHandler)
+            throws IOException {
+        super(name, type, encoding, inputEncoding, outputEncoding, signalHandler);
+        Objects.requireNonNull(pty);
+        this.pty = pty;
+        this.originalAttributes = this.pty.getAttr();
+    }
+
+    public Pty getPty() {
+        return pty;
+    }
+
+    public Attributes getAttributes() {
+        checkClosed();
+        try {
+            return pty.getAttr();
+        } catch (IOException e) {
+            throw new IOError(e);
+        }
+    }
+
+    public void setAttributes(Attributes attr) {
+        checkClosed();
+        try {
+            pty.setAttr(attr);
+        } catch (IOException e) {
+            throw new IOError(e);
+        }
+    }
+
+    public Size getSize() {
+        checkClosed();
+        try {
+            return pty.getSize();
+        } catch (IOException e) {
+            throw new IOError(e);
+        }
+    }
+
+    public void setSize(Sized size) {
+        checkClosed();
+        try {
+            pty.setSize(size);
+        } catch (IOException e) {
+            throw new IOError(e);
+        }
+    }
+
+    protected void doClose() throws IOException {
+        super.doClose();
+        pty.setAttr(originalAttributes);
+        pty.close();
+    }
+
+    @Override
+    public Cursor getCursorPosition(IntConsumer discarded) {
+        return CursorSupport.getCursorPosition(this, discarded);
+    }
+
+    @Override
+    public TerminalProvider getProvider() {
+        return getPty().getProvider();
+    }
+
+    @Override
+    public SystemStream getSystemStream() {
+        return getPty().getSystemStream();
+    }
+
+    @Override
+    public String toString() {
+        return getKind() + "[" + "name='"
+                + name + '\'' + ", pty='"
+                + pty + '\'' + ", type='"
+                + type + '\'' + ", size='"
+                + getSize() + '\'' + ']';
+    }
+
+    @Override
+    public int getDefaultForegroundColor() {
+        try {
+            writer().write("\033]10;?\033\\");
+            writer().flush();
+            return ColorSupport.parseColorResponse(reader(), 10);
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+
+    @Override
+    public int getDefaultBackgroundColor() {
+        try {
+            writer().write("\033]11;?\033\\");
+            writer().flush();
+            return ColorSupport.parseColorResponse(reader(), 11);
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+}

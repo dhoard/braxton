@@ -1,0 +1,11 @@
+*.i??
+target
+.classpath
+.project
+.settings/
+.idea
+build.rc
+
+.mvn/wrapper/maven-wrapper.jar
+.dependency-reduced-pom.xml
+.inlined-pom.xml

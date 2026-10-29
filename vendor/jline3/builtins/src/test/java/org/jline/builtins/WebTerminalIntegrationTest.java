@@ -1,0 +1,434 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.builtins;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.Socket;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+
+import org.jline.reader.LineReader;
+import org.jline.reader.LineReaderBuilder;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Integration tests for WebTerminal that exercise the HTTP interface.
+ * These tests start a real HTTP server and verify that the terminal
+ * responds correctly to browser-like HTTP requests.
+ */
+class WebTerminalIntegrationTest {
+
+    private WebTerminal terminal;
+    private String baseUrl;
+
+    @BeforeEach
+    void setUp() throws IOException {
+        // Use port 0 to get a random available port
+        terminal = new WebTerminal("localhost", 0, 80, 24);
+        terminal.start();
+        baseUrl = terminal.getUrl();
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        if (terminal != null) {
+            terminal.stop();
+            terminal.close();
+        }
+    }
+
+    @Test
+    void testServerStartsOnRandomPort() {
+        assertTrue(terminal.isRunning());
+        // Port should not be 0 since the OS assigns one
+        assertFalse(baseUrl.endsWith(":0"), "URL should have actual port, got: " + baseUrl);
+    }
+
+    @Test
+    void testGetMainPage() throws IOException {
+        HttpURLConnection conn = (HttpURLConnection) new URL(baseUrl + "/").openConnection();
+        conn.setRequestMethod("GET");
+        try {
+            assertEquals(200, conn.getResponseCode());
+            String contentType = conn.getHeaderField("Content-Type");
+            assertTrue(contentType.contains("text/html"), "Should serve HTML, got: " + contentType);
+
+            String body = new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(body.contains("<!DOCTYPE html>"), "Should be a full HTML page");
+            assertTrue(body.contains("/terminal"), "Should contain the AJAX endpoint URL");
+            assertTrue(body.contains("sendKey"), "Should contain the keyboard handler function");
+        } finally {
+            conn.disconnect();
+        }
+    }
+
+    @Test
+    void testPollReturnsScreenContent() throws IOException {
+        // Write something to the terminal first
+        terminal.write("Hello Web");
+
+        // Poll for screen content (like the browser does)
+        String response = postToTerminal("f=1");
+        assertNotNull(response);
+        assertFalse(response.isEmpty(), "Poll response should not be empty");
+        assertTrue(response.contains("<div>"), "Response should be HTML");
+        assertTrue(response.contains("<pre"), "Response should contain pre tag");
+        assertTrue(response.contains("Hello Web"), "Response should contain written text");
+    }
+
+    @Test
+    void testPollWithNoChangesReturnsContent() throws IOException {
+        // Force update should always return content
+        String response = postToTerminal("f=1");
+        assertNotNull(response);
+        assertFalse(response.isEmpty(), "Force poll should always return content");
+        assertTrue(response.contains("<div>"), "Response should be HTML");
+    }
+
+    @Test
+    void testSendKeyboardInput() throws Exception {
+        // Start a LineReader in a background thread
+        CountDownLatch readerReady = new CountDownLatch(1);
+        CountDownLatch lineRead = new CountDownLatch(1);
+        AtomicReference<String> readLine = new AtomicReference<>();
+
+        Thread readerThread = new Thread(() -> {
+            try {
+                LineReader reader =
+                        LineReaderBuilder.builder().terminal(terminal).build();
+                readerReady.countDown();
+                String line = reader.readLine("$ ");
+                readLine.set(line);
+                lineRead.countDown();
+            } catch (Exception e) {
+                // terminal closed
+            }
+        });
+        readerThread.setDaemon(true);
+        readerThread.start();
+
+        assertTrue(readerReady.await(5, TimeUnit.SECONDS), "LineReader should be ready");
+        awaitPrompt();
+
+        // Send "hi" followed by Enter
+        postToTerminal("k=" + urlEncode("h"));
+        postToTerminal("k=" + urlEncode("i"));
+        postToTerminal("k=" + urlEncode("\r"));
+
+        assertTrue(lineRead.await(5, TimeUnit.SECONDS), "LineReader should have read a line");
+        assertEquals("hi", readLine.get(), "Should have read 'hi'");
+    }
+
+    @Test
+    void testSpecialKeysAreSentCorrectly() throws Exception {
+        // Start a LineReader
+        CountDownLatch readerReady = new CountDownLatch(1);
+        CountDownLatch lineRead = new CountDownLatch(1);
+        AtomicReference<String> readLine = new AtomicReference<>();
+
+        Thread readerThread = new Thread(() -> {
+            try {
+                LineReader reader =
+                        LineReaderBuilder.builder().terminal(terminal).build();
+                readerReady.countDown();
+                String line = reader.readLine("$ ");
+                readLine.set(line);
+                lineRead.countDown();
+            } catch (Exception e) {
+                // terminal closed
+            }
+        });
+        readerThread.setDaemon(true);
+        readerThread.start();
+
+        assertTrue(readerReady.await(5, TimeUnit.SECONDS));
+        awaitPrompt();
+
+        // Type "abc", then backspace to delete 'c', then Enter
+        postToTerminal("k=" + urlEncode("a"));
+        postToTerminal("k=" + urlEncode("b"));
+        postToTerminal("k=" + urlEncode("c"));
+        postToTerminal("k=" + urlEncode("\u007f")); // DEL (backspace)
+        postToTerminal("k=" + urlEncode("\r"));
+
+        assertTrue(lineRead.await(5, TimeUnit.SECONDS), "LineReader should have read a line");
+        assertEquals("ab", readLine.get(), "Backspace should have deleted 'c'");
+    }
+
+    @Test
+    void testTabCompletion() throws Exception {
+        // Start a LineReader with a completer
+        CountDownLatch readerReady = new CountDownLatch(1);
+
+        Thread readerThread = new Thread(() -> {
+            try {
+                LineReader reader = LineReaderBuilder.builder()
+                        .terminal(terminal)
+                        .completer(new org.jline.reader.impl.completer.StringsCompleter("hello", "help", "world"))
+                        .build();
+                readerReady.countDown();
+                reader.readLine("$ ");
+            } catch (Exception e) {
+                // terminal closed
+            }
+        });
+        readerThread.setDaemon(true);
+        readerThread.start();
+
+        assertTrue(readerReady.await(5, TimeUnit.SECONDS));
+        awaitPrompt();
+
+        // Type "hel" then Tab
+        postToTerminal("k=" + urlEncode("h"));
+        postToTerminal("k=" + urlEncode("e"));
+        postToTerminal("k=" + urlEncode("l"));
+        postToTerminal("k=" + urlEncode("\t"));
+
+        // After "hel" + Tab, the common prefix "hel" should be shown,
+        // and completions "hello" and "help" should appear
+        await().atMost(5, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(50)).untilAsserted(() -> {
+            String response = postToTerminal("f=1");
+            assertTrue(
+                    response.contains("hello") || response.contains("help") || response.contains("hel"),
+                    "Tab completion should show candidates: " + response);
+        });
+    }
+
+    @Test
+    void testArrowKeysForEditing() throws Exception {
+        CountDownLatch readerReady = new CountDownLatch(1);
+        CountDownLatch lineRead = new CountDownLatch(1);
+        AtomicReference<String> readLine = new AtomicReference<>();
+
+        Thread readerThread = new Thread(() -> {
+            try {
+                LineReader reader =
+                        LineReaderBuilder.builder().terminal(terminal).build();
+                readerReady.countDown();
+                String line = reader.readLine("$ ");
+                readLine.set(line);
+                lineRead.countDown();
+            } catch (Exception e) {
+                // terminal closed
+            }
+        });
+        readerThread.setDaemon(true);
+        readerThread.start();
+
+        assertTrue(readerReady.await(5, TimeUnit.SECONDS));
+        awaitPrompt();
+
+        // Type "ac", move left, insert "b", then Enter
+        // Result should be "abc"
+        postToTerminal("k=" + urlEncode("a"));
+        postToTerminal("k=" + urlEncode("c"));
+        postToTerminal("k=" + urlEncode("~D")); // Left arrow
+        postToTerminal("k=" + urlEncode("b"));
+        postToTerminal("k=" + urlEncode("\r"));
+
+        assertTrue(lineRead.await(5, TimeUnit.SECONDS), "LineReader should have read a line");
+        assertEquals("abc", readLine.get(), "Arrow key editing should produce 'abc'");
+    }
+
+    @Test
+    void testScreenContentAfterRefresh() throws IOException {
+        // Write content
+        terminal.write("Persistent content");
+
+        // First poll
+        String response1 = postToTerminal("f=1");
+        assertTrue(response1.contains("Persistent content"));
+
+        // Second poll (simulates page refresh) should still show content
+        String response2 = postToTerminal("f=1");
+        assertTrue(response2.contains("Persistent content"), "Content should persist across polls");
+    }
+
+    @Test
+    void testGzipCompression() throws IOException {
+        terminal.write("Some content for compression test");
+
+        HttpURLConnection conn = (HttpURLConnection) new URL(baseUrl + "/terminal").openConnection();
+        conn.setRequestMethod("POST");
+        conn.setDoOutput(true);
+        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+        conn.setRequestProperty("Accept-Encoding", "gzip");
+
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write("f=1".getBytes(StandardCharsets.UTF_8));
+        }
+
+        assertEquals(200, conn.getResponseCode());
+        // For small content, gzip may not be used (threshold is 100 chars)
+        // but the server should still respond successfully
+        conn.disconnect();
+    }
+
+    @Test
+    void test404ForUnknownPaths() throws IOException {
+        HttpURLConnection conn = (HttpURLConnection) new URL(baseUrl + "/nonexistent").openConnection();
+        conn.setRequestMethod("GET");
+        try {
+            assertEquals(404, conn.getResponseCode());
+        } finally {
+            conn.disconnect();
+        }
+    }
+
+    @Test
+    void testStaticHandlerDoesNotServeArbitraryClasspathResources() throws IOException {
+        // A bundled resource that exists on the classpath but is not a web asset.
+        assertEquals(404, getStatus("/static/org/jline/builtins/less-help.txt"));
+        // A compiled class on the classpath.
+        assertEquals(404, getStatus("/static/org/jline/builtins/WebTerminal.class"));
+        // Traversal back to the classpath root.
+        assertEquals(404, getStatus("/static/..%2f..%2forg/jline/builtins/less-help.txt"));
+    }
+
+    private int getStatus(String pathAndQuery) throws IOException {
+        HttpURLConnection conn = (HttpURLConnection) new URL(baseUrl + pathAndQuery).openConnection();
+        conn.setRequestMethod("GET");
+        try {
+            return conn.getResponseCode();
+        } finally {
+            conn.disconnect();
+        }
+    }
+
+    @Test
+    void testMethodNotAllowed() throws IOException {
+        // GET on /terminal should be 405
+        HttpURLConnection conn = (HttpURLConnection) new URL(baseUrl + "/terminal").openConnection();
+        conn.setRequestMethod("GET");
+        try {
+            assertEquals(405, conn.getResponseCode());
+        } finally {
+            conn.disconnect();
+        }
+    }
+
+    @Test
+    void testCrossOriginPostIsRejected() throws Exception {
+        // A page on another origin can submit a form to /terminal without a preflight,
+        // so the keystrokes would otherwise be typed into the session.
+        CountDownLatch readerReady = new CountDownLatch(1);
+        CountDownLatch lineRead = new CountDownLatch(1);
+        AtomicReference<String> readLine = new AtomicReference<>();
+
+        Thread readerThread = new Thread(() -> {
+            try {
+                LineReader reader =
+                        LineReaderBuilder.builder().terminal(terminal).build();
+                readerReady.countDown();
+                String line = reader.readLine("$ ");
+                readLine.set(line);
+                lineRead.countDown();
+            } catch (Exception e) {
+                // terminal closed
+            }
+        });
+        readerThread.setDaemon(true);
+        readerThread.start();
+
+        assertTrue(readerReady.await(5, TimeUnit.SECONDS));
+        awaitPrompt();
+
+        assertEquals(403, postWithOrigin("k=" + urlEncode("x"), "http://evil.example"));
+        assertEquals(403, postWithOrigin("k=" + urlEncode("\r"), "http://evil.example"));
+        // An opaque origin (sandboxed iframe, data: URL) is not the server either.
+        assertEquals(403, postWithOrigin("k=" + urlEncode("x"), "null"));
+
+        assertFalse(lineRead.await(1, TimeUnit.SECONDS), "Cross-origin keys must not reach the reader");
+
+        // The page served by this terminal still works.
+        assertEquals(200, postWithOrigin("k=" + urlEncode("h"), baseUrl));
+        assertEquals(200, postWithOrigin("k=" + urlEncode("i"), baseUrl));
+        assertEquals(200, postWithOrigin("k=" + urlEncode("\r"), baseUrl));
+
+        assertTrue(lineRead.await(5, TimeUnit.SECONDS), "Same-origin keys should reach the reader");
+        assertEquals("hi", readLine.get());
+    }
+
+    /**
+     * Helper: POST form data to the /terminal endpoint carrying an Origin header, as a browser
+     * does for a cross-site form submission, and return the status code. HttpURLConnection
+     * refuses to set Origin, so the request is written directly on the socket.
+     */
+    private int postWithOrigin(String formData, String origin) throws IOException {
+        URL url = new URL(baseUrl);
+        byte[] body = formData.getBytes(StandardCharsets.UTF_8);
+        String authority = url.getHost() + ":" + url.getPort();
+        String request = "POST /terminal HTTP/1.1\r\n" + "Host: "
+                + authority + "\r\n" + "Origin: "
+                + origin + "\r\n" + "Content-Type: application/x-www-form-urlencoded\r\n" + "Content-Length: "
+                + body.length + "\r\n" + "Connection: close\r\n\r\n";
+
+        try (Socket socket = new Socket(url.getHost(), url.getPort())) {
+            socket.setSoTimeout(5000);
+            OutputStream os = socket.getOutputStream();
+            os.write(request.getBytes(StandardCharsets.US_ASCII));
+            os.write(body);
+            os.flush();
+
+            BufferedReader in =
+                    new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            String status = in.readLine();
+            assertNotNull(status, "server closed the connection without a response");
+            return Integer.parseInt(status.split(" ")[1]);
+        }
+    }
+
+    /**
+     * Helper: POST form data to the /terminal endpoint and return the response body.
+     */
+    private String postToTerminal(String formData) throws IOException {
+        HttpURLConnection conn = (HttpURLConnection) new URL(baseUrl + "/terminal").openConnection();
+        conn.setRequestMethod("POST");
+        conn.setDoOutput(true);
+        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(formData.getBytes(StandardCharsets.UTF_8));
+        }
+
+        assertEquals(200, conn.getResponseCode());
+        String response = new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        conn.disconnect();
+        return response;
+    }
+
+    /**
+     * Helper: poll the screen until the reader has entered readLine() and displayed its prompt.
+     */
+    private void awaitPrompt() {
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(Duration.ofMillis(50))
+                .untilAsserted(() -> assertTrue(postToTerminal("f=1").contains("$"), "Prompt should be visible"));
+    }
+
+    /**
+     * URL-encode a string for use in form data.
+     */
+    private String urlEncode(String s) {
+        return java.net.URLEncoder.encode(s, StandardCharsets.UTF_8);
+    }
+}

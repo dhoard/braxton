@@ -1,0 +1,844 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.builtins;
+
+import java.awt.*;
+import java.awt.event.*;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.swing.*;
+
+import org.jline.terminal.Size;
+import org.jline.terminal.Sized;
+import org.jline.terminal.impl.LineDisciplineTerminal;
+import org.jline.utils.Curses;
+import org.jline.utils.InfoCmp;
+import org.jline.utils.ScreenTerminal;
+import org.jline.utils.ScreenTerminalOutputStream;
+
+/**
+ * A Swing-based terminal implementation that extends LineDisciplineTerminal.
+ * <p>
+ * This class provides a proper JLine Terminal implementation that can be embedded in Swing applications
+ * to display a terminal interface. It renders terminal content using Java 2D graphics and handles
+ * keyboard and mouse input with proper terminal capabilities.
+ * </p>
+ *
+ * <p>Features:</p>
+ * <ul>
+ *   <li>Full JLine Terminal interface implementation</li>
+ *   <li>Custom painting for terminal characters and attributes</li>
+ *   <li>ANSI color support with configurable color palette</li>
+ *   <li>Font configuration with monospace font support</li>
+ *   <li>Keyboard input handling with proper terminal capabilities</li>
+ *   <li>Mouse support for cursor positioning</li>
+ *   <li>Scrollback buffer support</li>
+ *   <li>Cursor blinking</li>
+ * </ul>
+ */
+public class SwingTerminal extends LineDisciplineTerminal {
+
+    private final TerminalComponent component;
+    private Thread inputThread;
+
+    /**
+     * Creates a new SwingTerminal with the specified dimensions.
+     *
+     * @param columns the number of columns
+     * @param rows    the number of rows
+     * @throws IOException if an I/O error occurs during initialization
+     */
+    public SwingTerminal(int columns, int rows) throws IOException {
+        this("SwingTerminal", columns, rows);
+    }
+
+    /**
+     * Creates a new SwingTerminal with default dimensions (80x24).
+     *
+     * @throws IOException if an I/O error occurs during initialization
+     */
+    public SwingTerminal() throws IOException {
+        this("SwingTerminal", 80, 24);
+    }
+
+    /**
+     * Creates a new SwingTerminal with the specified name and dimensions.
+     *
+     * @param name    the terminal name
+     * @param columns the number of columns
+     * @param rows    the number of rows
+     * @throws IOException if an I/O error occurs during initialization
+     */
+    public SwingTerminal(String name, int columns, int rows) throws IOException {
+        this(name, columns, rows, new ScreenTerminalOutputStream.DelegateOutputStream());
+    }
+
+    @SuppressWarnings("this-escape")
+    private SwingTerminal(String name, int columns, int rows, ScreenTerminalOutputStream.DelegateOutputStream delegate)
+            throws IOException {
+        super(name, "screen-256color", delegate, StandardCharsets.UTF_8);
+
+        // Create the terminal component and wire the feedback loop
+        this.component = new TerminalComponent(columns, rows);
+        setSize(Size.of(columns, rows));
+        ScreenTerminal.wireTerminal(
+                component.getScreenTerminal(), this, delegate, () -> SwingUtilities.invokeLater(component::repaint));
+        component.setTerminal(this);
+
+        // Start a thread to read from SwingTerminal and process input
+        inputThread = new Thread(
+                () -> {
+                    try {
+                        while (!closed) {
+                            String input = component.takeInput();
+                            if (input != null && !closed) {
+                                processInputBytes(input.getBytes(StandardCharsets.UTF_8));
+                            }
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } catch (IOException e) {
+                        // Terminal closed, normal termination
+                    }
+                },
+                "SwingTerminal-Input");
+        inputThread.setDaemon(true);
+        inputThread.start();
+    }
+
+    /**
+     * Gets the Swing component that renders the terminal.
+     *
+     * @return the terminal component
+     */
+    public TerminalComponent getComponent() {
+        return component;
+    }
+
+    /**
+     * Creates a JFrame containing the terminal component.
+     *
+     * @param title the frame title
+     * @return the created frame
+     */
+    public JFrame createFrame(String title) {
+        JFrame frame = new JFrame(title);
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.add(component);
+        frame.pack();
+        frame.setLocationRelativeTo(null);
+        frame.setVisible(true);
+        component.requestFocusInWindow();
+        return frame;
+    }
+
+    /**
+     * Gets input from the terminal component (non-blocking).
+     *
+     * @return the next input string, or null if none available
+     */
+    public String pollInput() {
+        return component.pollInput();
+    }
+
+    /**
+     * Gets input from the terminal component (blocking).
+     *
+     * @return the next input string
+     * @throws InterruptedException if interrupted while waiting
+     */
+    public String takeInput() throws InterruptedException {
+        return component.takeInput();
+    }
+
+    /**
+     * Processes input bytes through the terminal's line discipline.
+     *
+     * @param input the input bytes to process
+     * @throws IOException if an I/O error occurs
+     */
+    public void processInputBytes(byte[] input) throws IOException {
+        super.processInputBytes(input);
+    }
+
+    /**
+     * Writes text to the terminal component.
+     *
+     * @param text the text to write
+     */
+    public void write(String text) {
+        component.write(text);
+    }
+
+    /**
+     * Dumps the terminal screen data.
+     *
+     * @param screen the screen data array to fill
+     * @param x the starting x coordinate
+     * @param y the starting y coordinate
+     * @param height the height to dump
+     * @param width the width to dump
+     * @param cursor the cursor position array to fill
+     */
+    public void dump(long[] screen, int x, int y, int height, int width, int[] cursor) {
+        component.dump(screen, x, y, height, width, cursor);
+    }
+
+    /**
+     * Dumps the terminal screen data with scrollback.
+     *
+     * @param timeout the number of scrollback lines
+     * @param forceUpdate whether to include scrollback
+     * @return the screen data
+     * @throws InterruptedException if interrupted while waiting
+     */
+    public String dump(long timeout, boolean forceUpdate) throws InterruptedException {
+        return component.dump(timeout, forceUpdate);
+    }
+
+    /**
+     * Checks if the terminal is dirty (needs repainting).
+     *
+     * @return true if dirty
+     */
+    public boolean isDirty() {
+        return component.isDirty();
+    }
+
+    @Override
+    protected void doClose() throws IOException {
+        super.doClose();
+        dispose();
+    }
+
+    /**
+     * Disposes of the terminal resources.
+     *
+     * @deprecated Use {@link #close()} instead, which properly handles all cleanup
+     *     including disposing of resources. This method will be made package-private
+     *     or removed in a future major release.
+     */
+    @Deprecated
+    public void dispose() {
+        if (inputThread != null) {
+            inputThread.interrupt();
+        }
+        component.dispose();
+    }
+
+    @Override
+    public void setSize(Sized sz) {
+        checkClosed();
+        if (component.setSize(sz)) {
+            super.setSize(component);
+        }
+    }
+
+    /**
+     * JComponent that renders the terminal display.
+     * This is the inner class that contains the original ScreenTerminal-based implementation.
+     */
+    public static class TerminalComponent extends JComponent implements KeyListener, Sized {
+
+        private static final long serialVersionUID = 1L;
+
+        private transient SwingTerminal terminal;
+        private final transient ScreenTerminal screenTerminal;
+        private Font terminalFont;
+        private FontMetrics fontMetrics;
+        private int charWidth;
+        private int charHeight;
+        private int charAscent;
+
+        private final Color defaultForeground = Color.WHITE;
+        private final Color defaultBackground = Color.BLACK;
+
+        private final transient BlockingQueue<String> inputQueue = new LinkedBlockingQueue<>();
+        private final AtomicBoolean cursorVisible = new AtomicBoolean(true);
+        private transient Timer cursorTimer;
+
+        /**
+         * Create a TerminalComponent for rendering and capturing input for a terminal with the specified
+         * character grid size.
+         *
+         * @param columns the number of character columns in the terminal
+         * @param rows    the number of character rows in the terminal
+         */
+        @SuppressWarnings("this-escape")
+        public TerminalComponent(int columns, int rows) {
+            this.screenTerminal = new ScreenTerminal(columns, rows);
+
+            // Set up font directly to avoid this-escape warning
+            this.terminalFont = new Font(Font.MONOSPACED, Font.PLAIN, 14);
+
+            // Initialize the component after construction
+            initializeComponent();
+        }
+
+        /**
+         * Initializes the component after construction to avoid this-escape issues.
+         */
+        private void initializeComponent() {
+            // Initialize font metrics
+            initializeFontMetrics();
+
+            // Set up component properties
+            setFocusable(true);
+            setBackground(defaultBackground);
+            setForeground(defaultForeground);
+
+            // Disable focus traversal for Tab key so we can handle it ourselves
+            setFocusTraversalKeysEnabled(false);
+
+            // Add listeners - this is done after construction to avoid this-escape
+            addKeyListener(this);
+            addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    requestFocusInWindow();
+                }
+            });
+
+            // Start cursor blinking timer
+            startCursorTimer();
+
+            // Update preferred size
+            updatePreferredSize();
+        }
+
+        /**
+         * Sets the terminal reference after construction to avoid this-escape issues.
+         *
+         * @param terminal the SwingTerminal instance
+         */
+        public void setTerminal(SwingTerminal terminal) {
+            this.terminal = terminal;
+        }
+
+        /**
+         * Starts the cursor blinking timer.
+         */
+        private void startCursorTimer() {
+            cursorTimer = new Timer(500, e -> {
+                cursorVisible.set(!cursorVisible.get());
+                repaint();
+            });
+            cursorTimer.start();
+        }
+
+        /**
+         * Initializes font metrics for the current font.
+         */
+        void initializeFontMetrics() {
+            if (terminalFont != null) {
+                this.fontMetrics = getFontMetrics(terminalFont);
+                // Use getMaxAdvance() for proper character cell width to prevent overlap
+                // Fall back to 'M' width if getMaxAdvance() returns -1 (unknown)
+                int maxAdvance = fontMetrics.getMaxAdvance();
+                this.charWidth = (maxAdvance > 0) ? maxAdvance : fontMetrics.charWidth('M');
+                this.charHeight = fontMetrics.getHeight();
+                this.charAscent = fontMetrics.getAscent();
+                updatePreferredSize();
+            }
+        }
+
+        /**
+         * Sets the font used for terminal display.
+         *
+         * @param font the font to use (should be monospace)
+         */
+        public void setTerminalFont(Font font) {
+            this.terminalFont = font;
+            initializeFontMetrics();
+            revalidate();
+            repaint();
+        }
+
+        /**
+         * Gets the current terminal font.
+         *
+         * @return the current font
+         */
+        public Font getTerminalFont() {
+            return terminalFont;
+        }
+
+        /**
+         * Updates this component's preferred size to match the terminal grid.
+         *
+         * Calculates width as `columns * charWidth` and height as `rows * charHeight`
+         * using the associated ScreenTerminal's column/row counts and the current
+         * character cell dimensions, then sets the preferred size accordingly.
+         */
+        private void updatePreferredSize() {
+            int width = screenTerminal.getColumns() * charWidth;
+            int height = screenTerminal.getRows() * charHeight;
+            setPreferredSize(new Dimension(width, height));
+        }
+
+        /**
+         * Resize the terminal to the specified columns and rows.
+         *
+         * @param size the new Size whose columns and rows will be applied
+         * @return true if the size was set successfully, false otherwise
+         */
+        public boolean setSize(Sized size) {
+            if (screenTerminal.setSize(size)) {
+                updatePreferredSize();
+                revalidate();
+                repaint();
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public int getColumns() {
+            return screenTerminal.getColumns();
+        }
+
+        @Override
+        public int getRows() {
+            return screenTerminal.getRows();
+        }
+
+        /**
+         * Paints this Swing component and its terminal contents.
+         *
+         * <p>Prepares a Graphics2D context with high-quality text rendering and the component's terminal font,
+         * then delegates actual terminal rendering to the paintTerminalContent method.
+         */
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+
+            Graphics2D g2d = (Graphics2D) g.create();
+            try {
+                // Enable antialiasing for better text rendering
+                g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+
+                // Set font
+                g2d.setFont(terminalFont);
+
+                // Paint terminal content
+                paintTerminalContent(g2d);
+
+            } finally {
+                g2d.dispose();
+            }
+        }
+
+        /**
+         * Render the terminal's current screen buffer onto the given Graphics2D, painting each cell and the cursor.
+         */
+        private void paintTerminalContent(Graphics2D g2d) {
+            int cols = screenTerminal.getColumns();
+            int rows = screenTerminal.getRows();
+
+            // Get terminal screen data
+            long[] screenData = new long[cols * rows];
+            int[] cursor = new int[2];
+            screenTerminal.dump(screenData, cursor);
+
+            // Paint each character
+            for (int y = 0; y < rows; y++) {
+                for (int x = 0; x < cols; x++) {
+                    int index = y * cols + x;
+                    if (index < screenData.length) {
+                        long cell = screenData[index];
+                        paintCell(g2d, x, y, cell, cursor[0] == x && cursor[1] == y);
+                    }
+                }
+            }
+        }
+
+        private void paintCell(Graphics2D g2d, int x, int y, long cell, boolean isCursor) {
+            // Extract character (full Unicode code point) and attributes from cell
+            int cp = (int) (cell & 0xffffffffL);
+            long attr = cell >>> 32;
+
+            // Continuation cells for wide characters (cp == 0):
+            // Paint background to clear any stale content, but don't draw a glyph
+            if (cp == 0) {
+                int cbg = (int) (attr & 0x0fff);
+                boolean cbgset = (attr & 0x20000000L) != 0;
+                if (!cbgset) {
+                    cbg = 0;
+                }
+                g2d.setColor(getAnsiColor(cbg));
+                g2d.fillRect(x * charWidth, y * charHeight, charWidth, charHeight);
+                return;
+            }
+
+            // Resolve effective colors (handles defaults, inverse, conceal, dim, cursor)
+            int[] colors = resolveColors(attr, isCursor, cursorVisible.get());
+            int fg = colors[0];
+            int bg = colors[1];
+            boolean underline = (attr & 0x01000000L) != 0;
+
+            // Calculate position
+            int cellX = x * charWidth;
+            int cellY = y * charHeight;
+
+            // Determine character width (wide chars span 2 cells)
+            int cellSpan = isWideCharacter(cp) ? 2 : 1;
+
+            // Paint background (spanning multiple cells for wide chars)
+            g2d.setColor(getAnsiColor(bg));
+            g2d.fillRect(cellX, cellY, charWidth * cellSpan, charHeight);
+
+            // Paint character if not space
+            if (cp != ' ') {
+                g2d.setColor(getAnsiColor(fg));
+                g2d.setFont(terminalFont.deriveFont(resolveFontStyle(attr)));
+
+                // Draw character using code point for proper non-BMP support
+                String str = new String(Character.toChars(cp));
+                g2d.drawString(str, cellX, cellY + charAscent);
+
+                // Draw underline if needed
+                if (underline) {
+                    int underlineY = cellY + charAscent + 1;
+                    g2d.drawLine(cellX, underlineY, cellX + charWidth * cellSpan - 1, underlineY);
+                }
+            }
+        }
+
+        private static boolean isWideCharacter(int cp) {
+            // CJK Unified Ideographs and related blocks
+            return (cp >= 0x1100 && cp <= 0x115F)
+                    || (cp >= 0x2E80 && cp <= 0xA4CF && cp != 0x303F)
+                    || (cp >= 0xAC00 && cp <= 0xD7A3)
+                    || (cp >= 0xF900 && cp <= 0xFAFF)
+                    || (cp >= 0xFE10 && cp <= 0xFE6F)
+                    || (cp >= 0xFF01 && cp <= 0xFF60)
+                    || (cp >= 0xFFE0 && cp <= 0xFFE6)
+                    || (cp >= 0x20000 && cp <= 0x2FFFD)
+                    || (cp >= 0x30000 && cp <= 0x3FFFD);
+        }
+
+        /**
+         * Resolves the effective foreground and background colors from cell attributes,
+         * accounting for default colors, inverse video, concealed text, and dim mode.
+         *
+         * @param attr the 32-bit attribute value (upper half of the cell long, already right-shifted)
+         * @param isCursor true if this cell is at the cursor position
+         * @param cursorVisible true if the cursor is currently visible
+         * @return a two-element array: [0] = foreground color (12-bit RGB), [1] = background color (12-bit RGB)
+         */
+        static int[] resolveColors(long attr, boolean isCursor, boolean cursorVisible) {
+            int bg = (int) ((attr) & 0x0fff);
+            int fg = (int) ((attr >>> 12) & 0x0fff);
+            boolean inverse = (attr & 0x02000000L) != 0;
+            boolean conceal = (attr & 0x04000000L) != 0;
+            boolean fgset = (attr & 0x10000000L) != 0;
+            boolean bgset = (attr & 0x20000000L) != 0;
+            boolean dim = (attr & 0x40000000L) != 0;
+
+            if (!fgset) {
+                fg = 0x0fff; // Default white foreground
+            }
+            if (!bgset) {
+                bg = 0; // Default black background
+            }
+
+            if (inverse) {
+                int temp = fg;
+                fg = bg;
+                bg = temp;
+            }
+
+            if (conceal) {
+                fg = bg;
+            } else if (dim) {
+                fg = dimColor(fg);
+            }
+
+            if (isCursor && cursorVisible) {
+                bg = 0x0fff;
+                fg = 0;
+            }
+
+            return new int[] {fg, bg};
+        }
+
+        /**
+         * Reduces the intensity of a 12-bit RGB color by halving each 4-bit channel.
+         *
+         * @param color the 12-bit RGB color value (0x000–0xfff)
+         * @return the dimmed color with each channel halved
+         */
+        static int dimColor(int color) {
+            return (((color >> 8) & 0x0f) >> 1) << 8 | (((color >> 4) & 0x0f) >> 1) << 4 | ((color & 0x0f) >> 1);
+        }
+
+        /**
+         * Determines the AWT font style flags from cell attributes.
+         *
+         * @param attr the 32-bit attribute value (upper half of the cell long, already right-shifted)
+         * @return a combination of {@link Font#PLAIN}, {@link Font#BOLD}, and {@link Font#ITALIC}
+         */
+        static int resolveFontStyle(long attr) {
+            boolean bold = (attr & 0x08000000L) != 0;
+            boolean italic = (attr & 0x80000000L) != 0;
+            int style = Font.PLAIN;
+            if (bold) {
+                style |= Font.BOLD;
+            }
+            if (italic) {
+                style |= Font.ITALIC;
+            }
+            return style;
+        }
+
+        /**
+         * Converts a 12-bit packed color value to a {@link Color}.
+         * <p>
+         * Each 4-bit nibble (red, green, blue) is expanded to 8 bits using the
+         * standard duplication method: {@code (nibble << 4) | nibble}. This maps
+         * the full nibble range {@code 0x0–0xF} to {@code 0x00–0xFF}, matching
+         * CSS shorthand color expansion (e.g. {@code #FFF → #FFFFFF}).
+         *
+         * @param color a 12-bit packed RGB value (bits 11–8 = red, 7–4 = green, 3–0 = blue)
+         * @return the corresponding {@link Color}
+         */
+        static Color getAnsiColor(int color) {
+            int rn = (color >> 8) & 0x0f;
+            int gn = (color >> 4) & 0x0f;
+            int bn = (color >> 0) & 0x0f;
+            return new Color((rn << 4) | rn, (gn << 4) | gn, (bn << 4) | bn);
+        }
+
+        /**
+         * Gets the next input from the input queue.
+         *
+         * @return the next input string, or null if none available
+         */
+        public String pollInput() {
+            return inputQueue.poll();
+        }
+
+        /**
+         * Gets the next input from the input queue, blocking if necessary.
+         *
+         * @return the next input string
+         * @throws InterruptedException if interrupted while waiting
+         */
+        public String takeInput() throws InterruptedException {
+            return inputQueue.take();
+        }
+
+        /**
+         * Writes text to the terminal component.
+         *
+         * @param text the text to write
+         */
+        public void write(String text) {
+            screenTerminal.write(text);
+            SwingUtilities.invokeLater(this::repaint);
+        }
+
+        /**
+         * Dumps the terminal screen data.
+         *
+         * @param screen the screen data array to fill
+         * @param x the starting x coordinate
+         * @param y the starting y coordinate
+         * @param height the height to dump
+         * @param width the width to dump
+         * @param cursor the cursor position array to fill
+         */
+        public void dump(long[] screen, int x, int y, int height, int width, int[] cursor) {
+            screenTerminal.dump(screen, x, y, height, width, cursor);
+        }
+
+        /**
+         * Dumps the terminal screen data with scrollback.
+         *
+         * @param timeout
+         * @param forceUpdate
+         * @return the screen data
+         * @throws InterruptedException if interrupted while waiting
+         */
+        public String dump(long timeout, boolean forceUpdate) throws InterruptedException {
+            return screenTerminal.dump(timeout, forceUpdate);
+        }
+
+        /**
+         * Checks if the terminal is dirty (needs repainting).
+         *
+         * @return true if dirty
+         */
+        public boolean isDirty() {
+            return screenTerminal.isDirty();
+        }
+
+        public ScreenTerminal getScreenTerminal() {
+            return screenTerminal;
+        }
+
+        // KeyListener implementation
+        @Override
+        public void keyTyped(KeyEvent e) {
+            char ch = e.getKeyChar();
+            // Filter out characters already handled by keyPressed (Enter, Backspace, Escape, Tab)
+            // to avoid duplicate input into the line discipline
+            if (ch != '\t'
+                    && ch != '\n'
+                    && ch != '\r'
+                    && ch != '\b'
+                    && ch != '\u007f'
+                    && ch != '\u001b'
+                    && ch != KeyEvent.CHAR_UNDEFINED
+                    && !e.isControlDown()) {
+                inputQueue.offer(String.valueOf(ch));
+            }
+        }
+
+        @Override
+        public void keyPressed(KeyEvent e) {
+            String input = null;
+
+            switch (e.getKeyCode()) {
+                case KeyEvent.VK_ENTER:
+                    input = "\r";
+                    break;
+                case KeyEvent.VK_BACK_SPACE:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_backspace, "\u007f");
+                    break;
+                case KeyEvent.VK_TAB:
+                    if (e.isShiftDown()) {
+                        input = getCapabilitySequence(InfoCmp.Capability.key_btab, "\t");
+                    } else {
+                        input = "\t";
+                    }
+                    break;
+                case KeyEvent.VK_UP:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_up, "\u001b[A");
+                    break;
+                case KeyEvent.VK_DOWN:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_down, "\u001b[B");
+                    break;
+                case KeyEvent.VK_RIGHT:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_right, "\u001b[C");
+                    break;
+                case KeyEvent.VK_LEFT:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_left, "\u001b[D");
+                    break;
+                case KeyEvent.VK_HOME:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_home, "\u001b[H");
+                    break;
+                case KeyEvent.VK_END:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_end, "\u001b[F");
+                    break;
+                case KeyEvent.VK_PAGE_UP:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_ppage, "\u001b[5~");
+                    break;
+                case KeyEvent.VK_PAGE_DOWN:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_npage, "\u001b[6~");
+                    break;
+                case KeyEvent.VK_INSERT:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_ic, "\u001b[2~");
+                    break;
+                case KeyEvent.VK_DELETE:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_dc, "\u001b[3~");
+                    break;
+                case KeyEvent.VK_F1:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_f1, "\u001bOP");
+                    break;
+                case KeyEvent.VK_F2:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_f2, "\u001bOQ");
+                    break;
+                case KeyEvent.VK_F3:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_f3, "\u001bOR");
+                    break;
+                case KeyEvent.VK_F4:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_f4, "\u001bOS");
+                    break;
+                case KeyEvent.VK_F5:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_f5, "\u001b[15~");
+                    break;
+                case KeyEvent.VK_F6:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_f6, "\u001b[17~");
+                    break;
+                case KeyEvent.VK_F7:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_f7, "\u001b[18~");
+                    break;
+                case KeyEvent.VK_F8:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_f8, "\u001b[19~");
+                    break;
+                case KeyEvent.VK_F9:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_f9, "\u001b[20~");
+                    break;
+                case KeyEvent.VK_F10:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_f10, "\u001b[21~");
+                    break;
+                case KeyEvent.VK_F11:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_f11, "\u001b[23~");
+                    break;
+                case KeyEvent.VK_F12:
+                    input = getCapabilitySequence(InfoCmp.Capability.key_f12, "\u001b[24~");
+                    break;
+                case KeyEvent.VK_ESCAPE:
+                    input = "\u001b";
+                    break;
+                default:
+                    // Handle Ctrl+key combinations
+                    if (e.isControlDown() && e.getKeyChar() != KeyEvent.CHAR_UNDEFINED) {
+                        char ch = e.getKeyChar();
+                        if (ch >= 'a' && ch <= 'z') {
+                            input = String.valueOf((char) (ch - 'a' + 1));
+                        } else if (ch >= 'A' && ch <= 'Z') {
+                            input = String.valueOf((char) (ch - 'A' + 1));
+                        }
+                    }
+                    break;
+            }
+
+            if (input != null) {
+                inputQueue.offer(input);
+                e.consume();
+            }
+        }
+
+        /**
+         * Gets the terminal capability sequence for the specified capability,
+         * falling back to a default sequence if the capability is not available.
+         *
+         * @param capability the terminal capability
+         * @param defaultSequence the default sequence to use if capability is not available
+         * @return the capability sequence or default sequence
+         */
+        private String getCapabilitySequence(InfoCmp.Capability capability, String defaultSequence) {
+            if (terminal != null) {
+                String sequence = terminal.getStringCapability(capability);
+                return sequence != null ? Curses.tputs(sequence) : defaultSequence;
+            }
+            return defaultSequence;
+        }
+
+        @Override
+        public void keyReleased(KeyEvent e) {
+            // Not used
+        }
+
+        /**
+         * Stops the cursor timer and cleans up resources.
+         */
+        public void dispose() {
+            if (cursorTimer != null) {
+                cursorTimer.stop();
+            }
+        }
+    }
+}

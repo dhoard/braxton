@@ -1,0 +1,357 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.terminal.impl.ffm;
+
+import java.io.BufferedWriter;
+import java.io.IOError;
+import java.io.IOException;
+import java.io.Writer;
+import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
+import java.nio.charset.Charset;
+import java.util.function.IntConsumer;
+
+import org.jline.terminal.Cursor;
+import org.jline.terminal.Size;
+import org.jline.terminal.impl.AbstractWindowsTerminal;
+import org.jline.terminal.spi.SystemStream;
+import org.jline.terminal.spi.TerminalProvider;
+import org.jline.utils.OSUtils;
+
+import static org.jline.terminal.impl.ffm.Kernel32.*;
+import static org.jline.terminal.impl.ffm.Kernel32.GetConsoleMode;
+import static org.jline.terminal.impl.ffm.Kernel32.GetConsoleScreenBufferInfo;
+import static org.jline.terminal.impl.ffm.Kernel32.GetStdHandle;
+import static org.jline.terminal.impl.ffm.Kernel32.INPUT_RECORD;
+import static org.jline.terminal.impl.ffm.Kernel32.INVALID_HANDLE_VALUE;
+import static org.jline.terminal.impl.ffm.Kernel32.KEY_EVENT_RECORD;
+import static org.jline.terminal.impl.ffm.Kernel32.MOUSE_EVENT_RECORD;
+import static org.jline.terminal.impl.ffm.Kernel32.STD_ERROR_HANDLE;
+import static org.jline.terminal.impl.ffm.Kernel32.STD_INPUT_HANDLE;
+import static org.jline.terminal.impl.ffm.Kernel32.STD_OUTPUT_HANDLE;
+import static org.jline.terminal.impl.ffm.Kernel32.SetConsoleMode;
+import static org.jline.terminal.impl.ffm.Kernel32.WaitForSingleObject;
+import static org.jline.terminal.impl.ffm.Kernel32.getLastErrorMessage;
+import static org.jline.terminal.impl.ffm.Kernel32.readConsoleInputHelper;
+
+public class NativeWinSysTerminal extends AbstractWindowsTerminal<MemorySegment> {
+
+    public static NativeWinSysTerminal createTerminal(
+            TerminalProvider provider,
+            SystemStream systemStream,
+            String name,
+            String type,
+            boolean ansiPassThrough,
+            Charset encoding,
+            boolean nativeSignals,
+            SignalHandler signalHandler,
+            boolean paused)
+            throws IOException {
+        return createTerminal(
+                provider,
+                systemStream,
+                name,
+                type,
+                ansiPassThrough,
+                encoding,
+                encoding,
+                encoding,
+                nativeSignals,
+                signalHandler,
+                paused);
+    }
+
+    public static NativeWinSysTerminal createTerminal(
+            TerminalProvider provider,
+            SystemStream systemStream,
+            String name,
+            String type,
+            boolean ansiPassThrough,
+            Charset encoding,
+            Charset inputEncoding,
+            Charset outputEncoding,
+            boolean nativeSignals,
+            SignalHandler signalHandler,
+            boolean paused)
+            throws IOException {
+        try (Arena arena = Arena.ofConfined()) {
+            // Get input console mode
+            MemorySegment consoleIn = GetStdHandle(STD_INPUT_HANDLE);
+            MemorySegment inMode = allocateInt(arena);
+            if (GetConsoleMode(consoleIn, inMode) == 0) {
+                throw new IOException("Failed to get console mode: " + getLastErrorMessage());
+            }
+            // Get output console and mode
+            MemorySegment console;
+            switch (systemStream) {
+                case Output:
+                    console = GetStdHandle(STD_OUTPUT_HANDLE);
+                    break;
+                case Error:
+                    console = GetStdHandle(STD_ERROR_HANDLE);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unsupported stream for console: " + systemStream);
+            }
+            MemorySegment outMode = allocateInt(arena);
+            if (GetConsoleMode(console, outMode) == 0) {
+                throw new IOException("Failed to get console mode: " + getLastErrorMessage());
+            }
+            // Create writer
+            Writer writer;
+            if (ansiPassThrough) {
+                type = type != null ? type : OSUtils.IS_CONEMU ? TYPE_WINDOWS_CONEMU : TYPE_WINDOWS;
+                writer = new NativeWinConsoleWriter();
+            } else {
+                int m = outMode.get(ValueLayout.JAVA_INT, 0);
+                if (enableVtp(console, m)) {
+                    type = type != null ? type : TYPE_WINDOWS_VTP;
+                    writer = new NativeWinConsoleWriter();
+                } else if (OSUtils.IS_CONEMU) {
+                    type = type != null ? type : TYPE_WINDOWS_CONEMU;
+                    writer = new NativeWinConsoleWriter();
+                } else {
+                    type = type != null ? type : TYPE_WINDOWS;
+                    writer = new WindowsAnsiWriter(new BufferedWriter(new NativeWinConsoleWriter()));
+                }
+            }
+            // Create terminal
+            NativeWinSysTerminal terminal = new NativeWinSysTerminal(
+                    provider,
+                    systemStream,
+                    writer,
+                    name,
+                    type,
+                    encoding,
+                    inputEncoding,
+                    outputEncoding,
+                    nativeSignals,
+                    signalHandler,
+                    consoleIn,
+                    inMode.get(ValueLayout.JAVA_INT, 0),
+                    console,
+                    outMode.get(ValueLayout.JAVA_INT, 0));
+            // Start input pump thread
+            if (!paused) {
+                terminal.resume();
+            }
+            return terminal;
+        }
+    }
+
+    private static boolean enableVtp(MemorySegment console, int m) {
+        return SetConsoleMode(console, m | AbstractWindowsTerminal.ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
+    }
+
+    public static boolean isWindowsSystemStream(SystemStream stream) {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment console;
+            MemorySegment mode = allocateInt(arena);
+            switch (stream) {
+                case Input:
+                    console = GetStdHandle(STD_INPUT_HANDLE);
+                    break;
+                case Output:
+                    console = GetStdHandle(STD_OUTPUT_HANDLE);
+                    break;
+                case Error:
+                    console = GetStdHandle(STD_ERROR_HANDLE);
+                    break;
+                default:
+                    return false;
+            }
+            return GetConsoleMode(console, mode) != 0;
+        }
+    }
+
+    private static MemorySegment allocateInt(Arena arena) {
+        return arena.allocate(ValueLayout.JAVA_INT);
+    }
+
+    NativeWinSysTerminal(
+            TerminalProvider provider,
+            SystemStream systemStream,
+            Writer writer,
+            String name,
+            String type,
+            Charset encoding,
+            boolean nativeSignals,
+            SignalHandler signalHandler,
+            MemorySegment inConsole,
+            int inConsoleMode,
+            MemorySegment outConsole,
+            int outConsoleMode)
+            throws IOException {
+        this(
+                provider,
+                systemStream,
+                writer,
+                name,
+                type,
+                encoding,
+                encoding,
+                encoding,
+                nativeSignals,
+                signalHandler,
+                inConsole,
+                inConsoleMode,
+                outConsole,
+                outConsoleMode);
+    }
+
+    NativeWinSysTerminal(
+            TerminalProvider provider,
+            SystemStream systemStream,
+            Writer writer,
+            String name,
+            String type,
+            Charset encoding,
+            Charset inputEncoding,
+            Charset outputEncoding,
+            boolean nativeSignals,
+            SignalHandler signalHandler,
+            MemorySegment inConsole,
+            int inConsoleMode,
+            MemorySegment outConsole,
+            int outConsoleMode)
+            throws IOException {
+        super(
+                provider,
+                systemStream,
+                writer,
+                name,
+                type,
+                encoding,
+                inputEncoding,
+                outputEncoding,
+                nativeSignals,
+                signalHandler,
+                inConsole,
+                inConsoleMode,
+                outConsole,
+                outConsoleMode);
+    }
+
+    @Override
+    protected int getConsoleMode(MemorySegment console) {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment mode = arena.allocate(ValueLayout.JAVA_INT);
+            if (GetConsoleMode(console, mode) == 0) {
+                return -1;
+            }
+            return mode.get(ValueLayout.JAVA_INT, 0);
+        }
+    }
+
+    @Override
+    protected void setConsoleMode(MemorySegment console, int mode) {
+        SetConsoleMode(console, mode);
+    }
+
+    public Size getSize() {
+        try (Arena arena = Arena.ofConfined()) {
+            CONSOLE_SCREEN_BUFFER_INFO info = new CONSOLE_SCREEN_BUFFER_INFO(arena);
+            GetConsoleScreenBufferInfo(outConsole, info);
+            return Size.of(info.windowWidth(), info.windowHeight());
+        }
+    }
+
+    @Override
+    public Size getBufferSize() {
+        try (Arena arena = Arena.ofConfined()) {
+            CONSOLE_SCREEN_BUFFER_INFO info = new CONSOLE_SCREEN_BUFFER_INFO(arena);
+            GetConsoleScreenBufferInfo(outConsole, info);
+            return Size.of(info.size().x(), info.size().y());
+        }
+    }
+
+    protected boolean processConsoleInput() throws IOException {
+        try (Arena arena = Arena.ofConfined()) {
+            INPUT_RECORD[] events;
+            if (inConsole != null
+                    && inConsole.address() != INVALID_HANDLE_VALUE
+                    && WaitForSingleObject(inConsole, 100) == 0) {
+                events = readConsoleInputHelper(arena, inConsole, 1, false);
+            } else {
+                return false;
+            }
+
+            boolean flush = false;
+            for (INPUT_RECORD event : events) {
+                int eventType = event.eventType();
+                if (eventType == KEY_EVENT) {
+                    KEY_EVENT_RECORD keyEvent = event.keyEvent();
+                    processKeyEvent(
+                            keyEvent.keyDown(), keyEvent.keyCode(), keyEvent.uchar(), keyEvent.controlKeyState());
+                    flush = true;
+                } else if (eventType == WINDOW_BUFFER_SIZE_EVENT) {
+                    raise(Signal.WINCH);
+                } else if (eventType == MOUSE_EVENT) {
+                    processMouseEvent(event.mouseEvent());
+                    flush = true;
+                } else if (eventType == FOCUS_EVENT) {
+                    processFocusEvent(event.focusEvent().setFocus());
+                }
+            }
+
+            return flush;
+        }
+    }
+
+    private final char[] focus = new char[] {'\033', '[', ' '};
+
+    private void processFocusEvent(boolean hasFocus) throws IOException {
+        if (focusTracking) {
+            focus[2] = hasFocus ? 'I' : 'O';
+            slaveInputPipe.write(focus);
+        }
+    }
+
+    private void processMouseEvent(MOUSE_EVENT_RECORD mouseEvent) throws IOException {
+        processMouseEvent(
+                mouseEvent.eventFlags(),
+                mouseEvent.buttonState(),
+                mouseEvent.mousePosition().x(),
+                mouseEvent.mousePosition().y());
+    }
+
+    @Override
+    public Cursor getCursorPosition(IntConsumer discarded) {
+        try (Arena arena = Arena.ofConfined()) {
+            CONSOLE_SCREEN_BUFFER_INFO info = new CONSOLE_SCREEN_BUFFER_INFO(arena);
+            if (GetConsoleScreenBufferInfo(outConsole, info) == 0) {
+                throw new IOError(new IOException("Could not get the cursor position: " + getLastErrorMessage()));
+            }
+            return new Cursor(info.cursorPosition().x(), info.cursorPosition().y());
+        }
+    }
+
+    @Override
+    public int getDefaultForegroundColor() {
+        try (Arena arena = Arena.ofConfined()) {
+            CONSOLE_SCREEN_BUFFER_INFO info = new CONSOLE_SCREEN_BUFFER_INFO(arena);
+            if (GetConsoleScreenBufferInfo(outConsole, info) == 0) {
+                return -1;
+            }
+            return convertAttributeToRgb(info.attributes() & 0x0F, true);
+        }
+    }
+
+    @Override
+    public int getDefaultBackgroundColor() {
+        try (Arena arena = Arena.ofConfined()) {
+            CONSOLE_SCREEN_BUFFER_INFO info = new CONSOLE_SCREEN_BUFFER_INFO(arena);
+            if (GetConsoleScreenBufferInfo(outConsole, info) == 0) {
+                return -1;
+            }
+            return convertAttributeToRgb((info.attributes() & 0xF0) >> 4, false);
+        }
+    }
+}

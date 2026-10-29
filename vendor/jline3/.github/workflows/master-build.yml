@@ -1,0 +1,154 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, ubuntu-22.04, windows-latest, macos-latest ]
+        java: [ '22', '25' ]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v6.1.0
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ matrix.java }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-${{ matrix.java }}-
+            ${{ runner.os }}-maven-
+
+      - name: Cache mvx tools
+        uses: actions/cache@v6
+        with:
+          path: ~/.mvx/tools
+          key: ${{ runner.os }}-mvx-tools-${{ hashFiles('.mvx/config.json5', '.mvx/mvx.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-mvx-tools-
+
+
+
+      - name: Verify macOS native signatures
+        if: matrix.os == 'macos-latest'
+        run: |
+          set -e
+          NATIVE_DIR=native/src/main/resources/org/jline/nativ/Mac
+          for arch in x86 x86_64 arm64; do
+            LIB="$NATIVE_DIR/$arch/libjlinenative.jnilib"
+            if [ ! -f "$LIB" ]; then
+              echo "::error::$LIB not found"
+              exit 1
+            fi
+            echo "Checking $LIB ..."
+            codesign --verify --strict --verbose "$LIB" 2>&1
+            INFO=$(codesign --display --verbose=4 "$LIB" 2>&1)
+            echo "$INFO"
+            if ! echo "$INFO" | grep -q "Authority=Developer ID Application:"; then
+              echo "::error::$LIB is not signed with a Developer ID Application certificate"
+              exit 1
+            fi
+            echo "✓ $LIB is signed with Developer ID"
+          done
+          echo "All macOS native libraries are signed ✓"
+
+      - name: Build with maven
+        run: ./mvx mvn --no-transfer-progress verify
+        env:
+          MVX_USE_SYSTEM_JAVA: true
+          MVX_PARALLEL_DOWNLOADS: 1
+          MVX_DOWNLOAD_TIMEOUT: 300
+          MVX_HTTP_TIMEOUT: 300
+        if: matrix.os != 'windows-latest'
+
+      - name: Build with maven
+        run: |
+          set PATH=%JAVA_HOME%\bin;C:\Windows\System32\WindowsPowerShell\v1.0\
+          mvx.cmd mvn --no-transfer-progress verify
+        env:
+          MVX_USE_SYSTEM_JAVA: true
+          MVX_PARALLEL_DOWNLOADS: 1
+          MVX_DOWNLOAD_TIMEOUT: 300
+          MVX_HTTP_TIMEOUT: 300
+        shell: cmd
+        if: matrix.os == 'windows-latest'
+
+  native-image:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+        profile: [ native-image-jni, native-image-ffm ]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm-community'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-graalvm-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-graalvm-
+            ${{ runner.os }}-maven-
+
+      - name: Cache mvx tools
+        uses: actions/cache@v6
+        with:
+          path: ~/.mvx/tools
+          key: ${{ runner.os }}-mvx-tools-${{ hashFiles('.mvx/config.json5', '.mvx/mvx.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-mvx-tools-
+
+      - name: Build project
+        run: ./mvx mvn -B --no-transfer-progress install -DskipTests
+        env:
+          MVX_USE_SYSTEM_JAVA: true
+          MVX_PARALLEL_DOWNLOADS: 1
+          MVX_DOWNLOAD_TIMEOUT: 300
+          MVX_HTTP_TIMEOUT: 300
+
+      - name: Build and verify native image
+        run: ./mvx mvn -B --no-transfer-progress verify -pl graal -P${{ matrix.profile }}
+        env:
+          MVX_USE_SYSTEM_JAVA: true
+          MVX_PARALLEL_DOWNLOADS: 1
+          MVX_DOWNLOAD_TIMEOUT: 300
+          MVX_HTTP_TIMEOUT: 300

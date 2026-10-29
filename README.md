@@ -60,14 +60,25 @@ Platform support is described in [Compatibility](#compatibility).
 
 ## Build from source
 
-From a Braxton checkout beside the patched JLine checkout (`../jline3`), first install its three required modules
-under the distinct local version used by this project's POM:
+The patched JLine sources are vendored in `vendor/jline3`. `./build.sh` installs its three
+required modules under the distinct local version used by this project's POM and then runs the
+Maven wrapper with the arguments you pass; with no arguments it runs the `clean install` quality
+gate:
 
 ```bash
-cd ../jline3
-TERM=xterm-256color ./mvx mvn -B -ntp -pl terminal-ffm -am -Dnisse.jgit.dynamicVersion=0.1.0-jline-braxton -Djava.awt.headless=true clean install
-cd ../braxton
+./build.sh                        # install vendored JLine, then ./mvnw clean install
+./build.sh clean verify           # install vendored JLine, then ./mvnw clean verify
+./build.sh clean install -DskipTests
+./build.sh clean                  # remove target/ for Braxton and vendor/jline3
 ```
+
+The vendored JLine version is derived from the Braxton version: `0.1.0-SNAPSHOT` builds
+`0.1.0-jline-braxton`. `./build.sh` refuses to build when `pom.xml` `<jline.version>` or
+`vendor/jline3/.mvn/maven.config` disagree with that derivation, and it skips the JLine build when
+the installed artifacts are newer than the vendored sources. A `clean` goal removes the vendored
+JLine build output as well, so the next build compiles JLine from scratch; installed artifacts stay
+in the local repository, as `./mvnw clean` leaves Braxton's installed artifact alone. `./mvnw` on
+its own does not build JLine; the `0.1.0-jline-braxton` artifacts must already be installed.
 
 This local JLine build serializes a closed-stream check and byte consumption after native poll completion, preventing a
 closed input pump from consuming the next application's first key. Published Maven 4.4.8 does not
@@ -75,20 +86,22 @@ contain this fix. The local version is not a Central release and must be install
 Braxton or using its Maven artifact on another machine.
 
 ```bash
-./mvnw clean verify     # compile, run the test suite, build the jar
-./run-ai-harness.sh     # package, then launch the bundled AI Harness example
+./build.sh clean verify    # install vendored JLine, compile, run the suite, build the jar
+./run-ai-harness.sh        # package, then launch the bundled AI Harness example
 ```
 
 `./run-ai-harness.sh` runs `./mvnw clean package` and starts the harness from the packaged
 `target/braxton-*.jar`; pass `--no-build` to reuse an existing jar. Gson and its annotation
 companion are copied to `target/showcase-lib` and are never bundled in the Braxton jar.
 
-On Windows, use a local Maven 3.9.16+ installation (`mvn clean verify`); the Bash launcher and the
-`mvnw` script are Unix-only. The local JLine build uses the FFM provider exclusively; JNI, exec, and dumb fallback are disabled.
+On Windows, use a local Maven 3.9.16+ installation (`mvn clean verify`); the Bash launcher,
+`build.sh`, and the `mvnw` script are Unix-only, so install the vendored JLine artifacts from
+`vendor/jline3` separately before building. The local JLine build uses the FFM provider
+exclusively; JNI, exec, and dumb fallback are disabled.
 
 **Maven coordinates:** `io.github.dhoard:braxton` (automatic module name
 `io.github.dhoard.braxton`). Braxton is pre-1.0 and is not yet published to a public repository;
-build it from source or install it locally with `./mvnw clean install`.
+build it from source or install it locally with `./build.sh`.
 
 ## Quick start
 
@@ -521,7 +534,7 @@ API surface.
 ## Testing and quality gates
 
 ```bash
-./mvnw -B clean verify     # compile with -Xlint:all, run the suite, build the jar
+./build.sh clean verify    # install vendored JLine, compile with -Xlint:all, run the suite
 ./run-ai-harness.sh        # package and run the bundled example
 ```
 
@@ -602,7 +615,7 @@ platform checks do not establish support for this refactor. Forced process kill 
 Use Python with `pyte` and Java/javac on PATH:
 
 ```bash
-./mvnw clean install
+./build.sh clean install
 python3 tools/terminal/verify_terminal.py --repeat 10 --pending-escape --harness  # owns its PTYs
 ```
 
@@ -651,7 +664,7 @@ Issues and pull requests are welcome at
 
 Before opening a pull request:
 
-1. Run `./mvnw -B clean verify` and keep the build warning-free.
+1. Run `./build.sh clean verify` and keep the build warning-free.
 2. Keep the automated suite TTY-free — no terminal, stdin, raw mode, or external services.
 3. Preserve the public contracts: immutable values, typed messages, pure `update`/`view`, explicit
    effects, and structural routing.

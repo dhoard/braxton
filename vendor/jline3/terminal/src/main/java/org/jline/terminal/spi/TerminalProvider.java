@@ -1,0 +1,459 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.terminal.spi;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.jline.terminal.Attributes;
+import org.jline.terminal.Size;
+import org.jline.terminal.Terminal;
+import org.jline.utils.Signals;
+
+/**
+ * Service provider interface for terminal implementations.
+ *
+ * <p>
+ * The TerminalProvider interface defines the contract for classes that can create
+ * and manage terminal instances on specific platforms. Each provider implements
+ * platform-specific terminal functionality, allowing JLine to work across different
+ * operating systems and environments.
+ * </p>
+ *
+ * <p>
+ * JLine includes several built-in terminal providers:
+ * </p>
+ * <ul>
+ *   <li>FFM - Foreign Function Memory (Java 22+) based implementation</li>
+ *   <li>JNI - Java Native Interface based implementation</li>
+ *   <li>Exec - Implementation using external commands</li>
+ *   <li>Dumb - Fallback-only implementation with limited capabilities (not included in default provider order)</li>
+ * </ul>
+ *
+ * <p>
+ * Terminal providers are loaded dynamically using the {@link #load(String)} method,
+ * which looks up provider implementations in the classpath based on their name.
+ * </p>
+ *
+ * @see Terminal
+ * @see org.jline.terminal.TerminalBuilder
+ */
+public interface TerminalProvider {
+
+    /**
+     * Returns the name of this terminal provider.
+     *
+     * <p>
+     * The provider name is a unique identifier that can be used to request this
+     * specific provider when creating terminals. Common provider names include
+     * "ffm", "jni", "exec", and "dumb".
+     * </p>
+     *
+     * @return the name of this terminal provider
+     */
+    String name();
+
+    /**
+     * Creates a terminal connected to a system stream.
+     *
+     * <p>
+     * This method creates a terminal that is connected to one of the standard
+     * system streams (standard input, standard output, or standard error). Such
+     * terminals typically represent the actual terminal window or console that
+     * the application is running in.
+     * </p>
+     *
+     * @param name the name of the terminal
+     * @param type the terminal type (e.g., "xterm", "dumb")
+     * @param ansiPassThrough whether to pass through ANSI escape sequences (only used on Windows)
+     * @param encoding the general character encoding to use
+     * @param inputEncoding the character encoding to use for input
+     * @param outputEncoding the character encoding to use for output
+     * @param nativeSignals whether to use native signal handling
+     * @param signalHandler the signal handler to use
+     * @param paused whether the terminal should start in a paused state (only used on Windows)
+     * @param systemStream the system stream to connect to
+     * @return a new terminal connected to the specified system stream
+     * @throws IOException if an I/O error occurs
+     */
+    Terminal sysTerminal(
+            String name,
+            String type,
+            boolean ansiPassThrough,
+            Charset encoding,
+            Charset inputEncoding,
+            Charset outputEncoding,
+            boolean nativeSignals,
+            Terminal.SignalHandler signalHandler,
+            boolean paused,
+            SystemStream systemStream)
+            throws IOException;
+
+    /**
+     * Creates a terminal connected to the controlling terminal device ({@code /dev/tty}).
+     *
+     * <p>
+     * This method creates a terminal using the process's controlling terminal,
+     * bypassing the standard system streams (stdin, stdout, stderr). This is useful
+     * when all standard streams are redirected (e.g., when running via Maven's
+     * {@code exec-maven-plugin} with the {@code exec:exec} goal) but the controlling
+     * terminal is still available.
+     * </p>
+     *
+     * <p>
+     * The default implementation throws {@link UnsupportedOperationException}.
+     * Providers that support this functionality (e.g., the exec provider on
+     * POSIX systems) should override this method.
+     * </p>
+     *
+     * @param name the name of the terminal
+     * @param type the terminal type (e.g., "xterm", "dumb")
+     * @param ansiPassThrough whether to pass through ANSI escape sequences (only used on Windows)
+     * @param encoding the general character encoding to use
+     * @param inputEncoding the character encoding to use for input
+     * @param outputEncoding the character encoding to use for output
+     * @param nativeSignals whether to use native signal handling
+     * @param signalHandler the signal handler to use
+     * @param paused whether the terminal should start in a paused state (only used on Windows)
+     * @return a new terminal connected to the controlling terminal
+     * @throws IOException if an I/O error occurs
+     * @throws UnsupportedOperationException if this provider does not support
+     *         creating a terminal from the controlling terminal device
+     */
+    default Terminal sysTerminal(
+            String name,
+            String type,
+            boolean ansiPassThrough,
+            Charset encoding,
+            Charset inputEncoding,
+            Charset outputEncoding,
+            boolean nativeSignals,
+            Terminal.SignalHandler signalHandler,
+            boolean paused)
+            throws IOException {
+        throw new UnsupportedOperationException(
+                "Provider " + name() + " does not support creating a terminal from /dev/tty");
+    }
+
+    /**
+     * Creates a new terminal with custom input and output streams.
+     *
+     * <p>
+     * This method creates a terminal that is connected to the specified input and
+     * output streams. Such terminals can be used for various purposes, such as
+     * connecting to remote terminals over network connections or creating virtual
+     * terminals for testing.
+     * </p>
+     *
+     * @param name the name of the terminal
+     * @param type the terminal type (e.g., "xterm", "dumb")
+     * @param masterInput the input stream to read from
+     * @param masterOutput the output stream to write to
+     * @param encoding the general character encoding to use
+     * @param inputEncoding the character encoding to use for input
+     * @param outputEncoding the character encoding to use for output
+     * @param signalHandler the signal handler to use
+     * @param paused whether the terminal should start in a paused state
+     * @param attributes the initial terminal attributes
+     * @param size the initial terminal size
+     * @return a new terminal connected to the specified streams
+     * @throws IOException if an I/O error occurs
+     */
+    Terminal newTerminal(
+            String name,
+            String type,
+            InputStream masterInput,
+            OutputStream masterOutput,
+            Charset encoding,
+            Charset inputEncoding,
+            Charset outputEncoding,
+            Terminal.SignalHandler signalHandler,
+            boolean paused,
+            Attributes attributes,
+            Size size)
+            throws IOException;
+
+    /**
+     * Checks if the specified system stream is available on this platform.
+     *
+     * <p>
+     * This method determines whether the specified system stream (standard input,
+     * standard output, or standard error) is available for use on the current
+     * platform. Some platforms or environments may restrict access to certain
+     * system streams.
+     * </p>
+     *
+     * @param stream the system stream to check
+     * @return {@code true} if the system stream is available, {@code false} otherwise
+     */
+    boolean isSystemStream(SystemStream stream);
+
+    /**
+     * Returns the name of the specified system stream on this platform.
+     *
+     * <p>
+     * This method returns a platform-specific name or identifier for the specified
+     * system stream. The name may be used for display purposes or for accessing
+     * the stream through platform-specific APIs.
+     * </p>
+     *
+     * @param stream the system stream
+     * @return the name of the system stream on this platform
+     */
+    String systemStreamName(SystemStream stream);
+
+    /**
+     * Returns the width (number of columns) of the specified system stream.
+     *
+     * <p>
+     * This method determines the width of the terminal associated with the specified
+     * system stream. The width is measured in character cells and represents the
+     * number of columns available for display.
+     * </p>
+     *
+     * @param stream the system stream
+     * @return the width of the system stream in character columns
+     */
+    int systemStreamWidth(SystemStream stream);
+
+    /**
+     * Retrieve the Windows console output code page.
+     *
+     * On Windows this returns the console output code page; on non-Windows platforms or when the code page
+     * cannot be determined this returns {@code -1}.
+     *
+     * @return the console output code page, or {@code -1} if not available
+     */
+    default int getConsoleCodepage() {
+        return -1;
+    }
+
+    /**
+     * Registers a handler for the specified signal.
+     *
+     * Providers may override this to use platform-specific signal handling.
+     *
+     * @param signal the signal name (e.g., "INT", "WINCH")
+     * @param handler the callback to run when the signal is received
+     * @return an opaque registration object suitable for use with {@link #unregisterSignal(String, Object)}
+     */
+    default Object registerSignal(String signal, Runnable handler) {
+        return Signals.register(signal, handler);
+    }
+
+    /**
+     * Registers the default handler for the specified signal.
+     *
+     * @param signal the signal name (e.g., "INT", "WINCH")
+     * @return an opaque registration object for use with {@link #unregisterSignal}
+     */
+    default Object registerDefaultSignal(String signal) {
+        return Signals.registerDefault(signal);
+    }
+
+    /**
+     * Unregisters a previously registered signal handler, restoring the prior handler.
+     *
+     * @param signal the signal name
+     * @param registration the object returned by {@link #registerSignal} or {@link #registerDefaultSignal}
+     */
+    default void unregisterSignal(String signal, Object registration) {
+        Signals.unregister(signal, registration);
+    }
+
+    /**
+     * Loads a terminal provider with the specified name using the default classloader
+     * resolution strategy.
+     *
+     * <p>
+     * This is equivalent to calling {@link #load(String, ClassLoader) load(name, null)}.
+     * </p>
+     *
+     * @param name the name of the provider to load (e.g., "ffm", "jni", "exec", "dumb")
+     * @return the loaded terminal provider
+     * @throws IOException if the provider cannot be loaded or is not found
+     * @see #load(String, ClassLoader)
+     */
+    static TerminalProvider load(String name) throws IOException {
+        return load(name, null);
+    }
+
+    /**
+     * Loads a terminal provider with the specified name, using an optional explicit classloader.
+     *
+     * <h2>Provider Discovery Mechanism</h2>
+     * <p>
+     * This method loads a terminal provider implementation based on its name by reading
+     * a provider-specific resource file at {@code META-INF/jline/providers/[name]} which
+     * contains the fully qualified class name of the provider implementation.
+     * </p>
+     *
+     * <p>
+     * This on-demand loading approach is used instead of {@link java.util.ServiceLoader}
+     * because it allows loading a specific provider by name without instantiating all
+     * available providers. This is critical for providers that may fail to initialize
+     * due to missing native libraries (JNI, FFM) or other platform-specific dependencies.
+     * </p>
+     *
+     * <h2>Classloader Resolution</h2>
+     * <p>
+     * The classloader used for provider discovery is resolved in this order:
+     * </p>
+     * <ol>
+     *   <li>The explicit {@code classLoader} parameter, if non-null</li>
+     *   <li>The thread's {@linkplain Thread#getContextClassLoader() context classloader}</li>
+     *   <li>The classloader that loaded the {@code TerminalProvider} class itself</li>
+     * </ol>
+     * <p>
+     * Each classloader is tried in order until the provider resource file is found. This
+     * fallback chain ensures provider discovery works in environments with non-standard
+     * classloader hierarchies, such as OSGi containers, application servers, and plugin
+     * systems that load JLine through a child classloader that is not the thread's context
+     * classloader.
+     * </p>
+     * <p>
+     * The explicit classloader can be set via
+     * {@link org.jline.terminal.TerminalBuilder#classLoader(ClassLoader)}.
+     * </p>
+     *
+     * <h2>Dual-Purpose Service Files</h2>
+     * <p>
+     * JLine maintains two types of service registration files:
+     * </p>
+     * <ul>
+     *   <li><b>{@code META-INF/services/org.jline.terminal.spi.TerminalProvider}</b> -
+     *       Standard Java SPI files required by jlink and JPMS module tools to discover
+     *       service implementations and establish proper module dependencies. These files
+     *       are not used at runtime by JLine.</li>
+     *   <li><b>{@code META-INF/jline/providers/[name]}</b> -
+     *       Provider-specific files used by this method for efficient runtime loading.
+     *       Each file contains the class name of a single provider and allows loading
+     *       by provider name without scanning all available providers.</li>
+     * </ul>
+     *
+     * <h2>File Format</h2>
+     * <p>
+     * The provider file format follows standard Java SPI conventions:
+     * </p>
+     * <ul>
+     *   <li>One fully qualified class name per line</li>
+     *   <li>Comments start with {@code #} and extend to end of line</li>
+     *   <li>Blank lines and whitespace are ignored</li>
+     * </ul>
+     *
+     * <p><b>Example:</b> {@code META-INF/jline/providers/ffm}</p>
+     * <pre>
+     * # JLine FFM Terminal Provider
+     * org.jline.terminal.impl.ffm.FfmTerminalProvider
+     * </pre>
+     *
+     * @param name the name of the provider to load (e.g., "ffm", "jni", "exec", "dumb")
+     * @param classLoader an explicit classloader to try first, or {@code null} to use the
+     *                    default resolution strategy (context classloader, then JLine's own classloader)
+     * @return the loaded terminal provider
+     * @throws IOException if the provider cannot be loaded or is not found
+     */
+    static TerminalProvider load(String name, ClassLoader classLoader) throws IOException {
+        // Try classloaders in priority order:
+        //   1. Explicit classloader (if provided)
+        //   2. Thread context classloader
+        //   3. The classloader that loaded TerminalProvider itself
+        // This fallback chain handles plugin systems and OSGi containers where
+        // JLine JARs are loaded by a classloader that is not the thread's context classloader.
+        ClassLoader contextCl = Thread.currentThread().getContextClassLoader();
+        ClassLoader jlineCl = TerminalProvider.class.getClassLoader();
+
+        // Deduplicate: in a standard setup the context classloader and JLine's
+        // own classloader are often the same instance — skip redundant lookups.
+        List<ClassLoader> candidates = new ArrayList<>(3);
+        if (classLoader != null) {
+            candidates.add(classLoader);
+        }
+        if (contextCl != null && contextCl != classLoader) {
+            candidates.add(contextCl);
+        }
+        if (jlineCl != null && jlineCl != classLoader && jlineCl != contextCl) {
+            candidates.add(jlineCl);
+        }
+
+        String providerResource = "META-INF/jline/providers/" + name;
+        IOException loadError = null;
+
+        for (ClassLoader cl : candidates) {
+            try {
+                TerminalProvider result = tryLoadProvider(cl, providerResource, name);
+                if (result != null) {
+                    return result;
+                }
+            } catch (IOException e) {
+                loadError = e;
+            } catch (RuntimeException e) {
+                // Tolerate misbehaving classloaders (e.g., SecurityException from
+                // OSGi/plugin systems) so remaining candidates still get a chance.
+                loadError = new IOException(
+                        "Unable to search classloader " + cl + " for provider " + name + ": " + e.getMessage(), e);
+            }
+        }
+
+        if (loadError != null) {
+            throw loadError;
+        }
+        throw new IOException("Unable to find terminal provider " + name
+                + ". The provider resource file " + providerResource
+                + " was not found by any classloader. If JLine is loaded by a custom classloader"
+                + " (e.g., OSGi, plugin system), configure the builder with"
+                + " TerminalBuilder.builder().classLoader(loader) to specify"
+                + " a classloader that can access the JLine provider JARs.");
+    }
+
+    /**
+     * Attempts to load a provider using a single classloader.
+     *
+     * @return the loaded provider, or {@code null} if the resource was not found by this classloader
+     * @throws IOException if the resource was found but the provider class could not be loaded
+     */
+    private static TerminalProvider tryLoadProvider(ClassLoader cl, String providerResource, String name)
+            throws IOException {
+        InputStream is = cl.getResourceAsStream(providerResource);
+        if (is == null) {
+            return null;
+        }
+        try (is) {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                // Remove comments and trim whitespace
+                int commentIndex = line.indexOf('#');
+                if (commentIndex >= 0) {
+                    line = line.substring(0, commentIndex);
+                }
+                line = line.trim();
+                if (line.isEmpty()) {
+                    continue;
+                }
+
+                // Found a provider class name, try to load it
+                try {
+                    Class<?> providerClass = cl.loadClass(line);
+                    return (TerminalProvider) providerClass.getConstructor().newInstance();
+                } catch (Exception | LinkageError e) {
+                    throw new IOException("Unable to load terminal provider " + name + ": " + e.getMessage(), e);
+                }
+            }
+        }
+        return null;
+    }
+}

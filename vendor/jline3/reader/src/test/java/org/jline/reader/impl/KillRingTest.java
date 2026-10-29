@@ -1,0 +1,201 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.reader.impl;
+
+import org.junit.jupiter.api.Test;
+
+import static org.jline.reader.LineReader.BACKWARD_KILL_WORD;
+import static org.jline.reader.LineReader.BACKWARD_WORD;
+import static org.jline.reader.LineReader.KILL_WHOLE_LINE;
+import static org.jline.reader.LineReader.KILL_WORD;
+import static org.jline.reader.LineReader.YANK;
+import static org.jline.reader.LineReader.YANK_POP;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+/**
+ * Tests for the {@link KillRing}.
+ */
+class KillRingTest extends ReaderTestSupport {
+
+    @Test
+    void testEmptyKillRing() {
+        KillRing killRing = new KillRing();
+        assertNull(killRing.yank());
+    }
+
+    @Test
+    void testOneElementKillRing() {
+        KillRing killRing = new KillRing();
+        killRing.add("foo");
+        String yanked = killRing.yank();
+        assertNotNull(yanked);
+        assertEquals("foo", yanked);
+    }
+
+    @Test
+    void testKillKill() {
+        // A kill followed by another kill will be saved in the same
+        // slot.
+        KillRing killRing = new KillRing();
+        killRing.add("foo");
+        killRing.add(" bar");
+        String yanked = killRing.yank();
+        assertNotNull(yanked);
+        assertEquals("foo bar", yanked);
+    }
+
+    @Test
+    void testYankTwice() {
+        // A yank followed by another yank should yield the same
+        // string.
+        KillRing killRing = new KillRing();
+        killRing.add("foo");
+        killRing.resetLastKill();
+        killRing.add("bar");
+
+        String yanked = killRing.yank();
+        assertNotNull(yanked);
+        assertEquals("bar", yanked);
+
+        yanked = killRing.yank();
+        assertNotNull(yanked);
+        assertEquals("bar", yanked);
+    }
+
+    @Test
+    void testYankPopNoPreviousYank() {
+        // A yank-pop without a previous yank should return null.
+        KillRing killRing = new KillRing();
+        killRing.add("foo");
+        String yanked = killRing.yankPop();
+        assertNull(yanked);
+    }
+
+    @Test
+    void testYankPopWithOneSlot() {
+        // Verifies that the ring works fine with one element.
+        KillRing killRing = new KillRing();
+        killRing.add("foo");
+
+        String yanked = killRing.yank();
+        assertNotNull(yanked);
+        assertEquals("foo", yanked);
+        //
+        yanked = killRing.yankPop();
+        assertNotNull(yanked);
+        assertEquals("foo", yanked);
+        //
+        yanked = killRing.yankPop();
+        assertNotNull(yanked);
+        assertEquals("foo", yanked);
+    }
+
+    @Test
+    void testYankPop() {
+        // Verifies that the ring actually works like that, ie, a
+        // series of yank-pop commands should eventually start
+        // repeating.
+        KillRing killRing = new KillRing();
+        killRing.add("foo");
+        killRing.resetLastKill();
+        killRing.add("bar");
+        killRing.resetLastKill();
+        killRing.add("baz");
+
+        String yanked = killRing.yank();
+        assertNotNull(yanked);
+        assertEquals("baz", yanked);
+        //
+        yanked = killRing.yankPop();
+        assertNotNull(yanked);
+        assertEquals("bar", yanked);
+        //
+        yanked = killRing.yankPop();
+        assertNotNull(yanked);
+        assertEquals("foo", yanked);
+        // Back to the beginning.
+        yanked = killRing.yankPop();
+        assertNotNull(yanked);
+        assertEquals("baz", yanked);
+    }
+
+    @Test
+    void testYankPopOnEmptyRingDoesNotThrow() {
+        // When the ring is empty, yank() sets lastYank=true and returns null.
+        // A subsequent yankPop() calls prev() which sets head to -1 when all
+        // slots are null. Without a bounds check this would throw
+        // ArrayIndexOutOfBoundsException.
+        KillRing killRing = new KillRing();
+        killRing.yank(); // sets lastYank = true, returns null
+        String yanked = killRing.yankPop();
+        assertNull(yanked);
+
+        // After yankPop() returns null on empty ring, head must be restored
+        // to a valid index so that a subsequent yank() does not throw.
+        yanked = killRing.yank();
+        assertNull(yanked); // still null (ring is empty), but no exception
+    }
+
+    // Those tests are run using a buffer.
+
+    @Test
+    void testBufferEmptyRing() throws Exception {
+        TestBuffer b = new TestBuffer("This is a test");
+        assertBuffer("This is a test", b = b.op(BACKWARD_WORD));
+        assertBuffer("This is a test", b = b.op(YANK));
+    }
+
+    @Test
+    void testBufferWordRuboutOnce() throws Exception {
+        TestBuffer b = new TestBuffer("This is a test");
+        assertBuffer("This is a ", b = b.op(BACKWARD_KILL_WORD));
+        assertBuffer("This is a test", b = b.op(YANK));
+    }
+
+    @Test
+    void testBufferWordRuboutTwice() throws Exception {
+        TestBuffer b = new TestBuffer("This is a test");
+        assertBuffer("This is a ", b = b.op(BACKWARD_KILL_WORD));
+        assertBuffer("This is ", b = b.op(BACKWARD_KILL_WORD));
+        assertBuffer("This is a test", b = b.op(YANK));
+    }
+
+    @Test
+    void testBufferYankPop() throws Exception {
+        TestBuffer b = new TestBuffer("This is a test");
+        b = b.op(BACKWARD_WORD);
+        b = b.op(BACKWARD_WORD);
+        assertBuffer("This a test", b = b.op(BACKWARD_KILL_WORD));
+        assertBuffer("This a test", b = b.op(BACKWARD_WORD));
+        assertBuffer(" a test", b = b.op(KILL_WORD));
+        assertBuffer("This a test", b = b.op(YANK));
+        assertBuffer("is  a test", b = b.op(YANK_POP));
+    }
+
+    @Test
+    void testBufferMixedKillsAndYank() throws Exception {
+        TestBuffer b = new TestBuffer("This is a test");
+        b = b.op(BACKWARD_WORD);
+        b = b.op(BACKWARD_WORD);
+        assertBuffer("This is  test", b = b.op(KILL_WORD));
+        assertBuffer("This  test", b = b.op(BACKWARD_KILL_WORD));
+        assertBuffer("This ", b = b.op(KILL_WORD));
+        assertBuffer("", b = b.op(BACKWARD_KILL_WORD));
+        assertBuffer("This is a test", b = b.op(YANK));
+    }
+
+    @Test
+    void testKillWholeLine() throws Exception {
+        TestBuffer b = new TestBuffer("b");
+        assertBuffer("", b = b.op(KILL_WHOLE_LINE));
+        assertBuffer("b", b = b.op(YANK));
+    }
+}

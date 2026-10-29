@@ -1,0 +1,755 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.terminal.impl.ffm;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
+import java.lang.foreign.*;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.invoke.VarHandle;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import org.jline.terminal.Attributes;
+import org.jline.terminal.Size;
+import org.jline.terminal.Sized;
+import org.jline.terminal.impl.TermiosData;
+import org.jline.terminal.impl.TermiosMapping;
+import org.jline.terminal.spi.Pty;
+import org.jline.terminal.spi.TerminalProvider;
+import org.jline.utils.OSUtils;
+
+@SuppressWarnings("restricted")
+class CLibrary {
+
+    private static final Logger logger = System.getLogger("org.jline");
+
+    // Window sizes.
+    // @see <a href="http://man7.org/linux/man-pages/man4/tty_ioctl.4.html">IOCTL_TTY(2) man-page</a>
+    static class winsize {
+        static final GroupLayout LAYOUT;
+        private static final VarHandle ws_col;
+        private static final VarHandle ws_row;
+
+        static {
+            LAYOUT = MemoryLayout.structLayout(
+                    ValueLayout.JAVA_SHORT.withName("ws_row"),
+                    ValueLayout.JAVA_SHORT.withName("ws_col"),
+                    ValueLayout.JAVA_SHORT,
+                    ValueLayout.JAVA_SHORT);
+            ws_row = FfmTerminalProvider.lookupVarHandle(LAYOUT, MemoryLayout.PathElement.groupElement("ws_row"));
+            ws_col = FfmTerminalProvider.lookupVarHandle(LAYOUT, MemoryLayout.PathElement.groupElement("ws_col"));
+        }
+
+        private final MemorySegment seg;
+
+        winsize(Arena arena) {
+            seg = arena.allocate(LAYOUT);
+        }
+
+        winsize(Arena arena, short ws_col, short ws_row) {
+            this(arena);
+            ws_col(ws_col);
+            ws_row(ws_row);
+        }
+
+        MemorySegment segment() {
+            return seg;
+        }
+
+        short ws_col() {
+            return (short) ws_col.get(seg);
+        }
+
+        void ws_col(short col) {
+            ws_col.set(seg, col);
+        }
+
+        short ws_row() {
+            return (short) ws_row.get(seg);
+        }
+
+        void ws_row(short row) {
+            ws_row.set(seg, row);
+        }
+    }
+
+    // termios structure for termios functions, describing a general terminal interface that is
+    // provided to control asynchronous communications ports
+    // @see <a href="http://man7.org/linux/man-pages/man3/termios.3.html">TERMIOS(3) man-page</a>
+    static class termios {
+        static final GroupLayout LAYOUT;
+        private static final VarHandle c_iflag;
+        private static final VarHandle c_oflag;
+        private static final VarHandle c_cflag;
+        private static final VarHandle c_lflag;
+        private static final long c_cc_offset;
+        private static final int c_cc_used;
+        private static final VarHandle c_ispeed;
+        private static final VarHandle c_ospeed;
+
+        static {
+            if (OSUtils.IS_OSX) {
+                LAYOUT = MemoryLayout.structLayout(
+                        ValueLayout.JAVA_LONG.withName("c_iflag"),
+                        ValueLayout.JAVA_LONG.withName("c_oflag"),
+                        ValueLayout.JAVA_LONG.withName("c_cflag"),
+                        ValueLayout.JAVA_LONG.withName("c_lflag"),
+                        MemoryLayout.sequenceLayout(32, ValueLayout.JAVA_BYTE).withName("c_cc"),
+                        ValueLayout.JAVA_LONG.withName("c_ispeed"),
+                        ValueLayout.JAVA_LONG.withName("c_ospeed"));
+                c_cc_used = 20;
+            } else if (OSUtils.IS_LINUX) {
+                LAYOUT = MemoryLayout.structLayout(
+                        ValueLayout.JAVA_INT.withName("c_iflag"),
+                        ValueLayout.JAVA_INT.withName("c_oflag"),
+                        ValueLayout.JAVA_INT.withName("c_cflag"),
+                        ValueLayout.JAVA_INT.withName("c_lflag"),
+                        ValueLayout.JAVA_BYTE.withName("c_line"),
+                        MemoryLayout.sequenceLayout(32, ValueLayout.JAVA_BYTE).withName("c_cc"),
+                        MemoryLayout.paddingLayout(3),
+                        ValueLayout.JAVA_INT.withName("c_ispeed"),
+                        ValueLayout.JAVA_INT.withName("c_ospeed"));
+                c_cc_used = 20;
+            } else if (OSUtils.IS_AIX) {
+                LAYOUT = MemoryLayout.structLayout(
+                        ValueLayout.JAVA_INT.withName("c_iflag"),
+                        ValueLayout.JAVA_INT.withName("c_oflag"),
+                        ValueLayout.JAVA_INT.withName("c_cflag"),
+                        ValueLayout.JAVA_INT.withName("c_lflag"),
+                        MemoryLayout.sequenceLayout(16, ValueLayout.JAVA_BYTE).withName("c_cc"));
+                c_cc_used = 16;
+            } else {
+                throw new IllegalStateException("Unsupported system!");
+            }
+            c_iflag = adjustIntHandle(
+                    FfmTerminalProvider.lookupVarHandle(LAYOUT, MemoryLayout.PathElement.groupElement("c_iflag")));
+            c_oflag = adjustIntHandle(
+                    FfmTerminalProvider.lookupVarHandle(LAYOUT, MemoryLayout.PathElement.groupElement("c_oflag")));
+            c_cflag = adjustIntHandle(
+                    FfmTerminalProvider.lookupVarHandle(LAYOUT, MemoryLayout.PathElement.groupElement("c_cflag")));
+            c_lflag = adjustIntHandle(
+                    FfmTerminalProvider.lookupVarHandle(LAYOUT, MemoryLayout.PathElement.groupElement("c_lflag")));
+            c_cc_offset = LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement("c_cc"));
+            if (OSUtils.IS_AIX) {
+                c_ispeed = null;
+                c_ospeed = null;
+            } else {
+                c_ispeed = adjustIntHandle(
+                        FfmTerminalProvider.lookupVarHandle(LAYOUT, MemoryLayout.PathElement.groupElement("c_ispeed")));
+                c_ospeed = adjustIntHandle(
+                        FfmTerminalProvider.lookupVarHandle(LAYOUT, MemoryLayout.PathElement.groupElement("c_ospeed")));
+            }
+        }
+
+        private static VarHandle adjustIntHandle(VarHandle v) {
+            if (OSUtils.IS_LINUX || OSUtils.IS_AIX) {
+                MethodHandle id = MethodHandles.identity(int.class);
+                v = MethodHandles.filterValue(
+                        v,
+                        MethodHandles.explicitCastArguments(id, MethodType.methodType(int.class, long.class)),
+                        MethodHandles.explicitCastArguments(id, MethodType.methodType(long.class, int.class)));
+            }
+
+            return v;
+        }
+
+        private final MemorySegment seg;
+
+        termios(Arena arena) {
+            seg = arena.allocate(LAYOUT);
+        }
+
+        termios(Arena arena, Attributes t) {
+            this(arena);
+            apply(t);
+        }
+
+        TermiosData toTermiosData() {
+            TermiosData data = new TermiosData();
+            data.iflag(c_iflag());
+            data.oflag(c_oflag());
+            data.cflag(c_cflag());
+            data.lflag(c_lflag());
+            data.ispeed(c_ispeed());
+            data.ospeed(c_ospeed());
+            byte[] cc = c_cc().toArray(ValueLayout.JAVA_BYTE);
+            System.arraycopy(cc, 0, data.cc(), 0, cc.length);
+            return data;
+        }
+
+        void apply(Attributes t) {
+            TermiosData data = TermiosMapping.forCurrentPlatform().toTermios(t, toTermiosData());
+            c_iflag(data.iflag());
+            c_oflag(data.oflag());
+            c_cflag(data.cflag());
+            c_lflag(data.lflag());
+            c_ispeed(data.ispeed());
+            c_ospeed(data.ospeed());
+            c_cc().copyFrom(MemorySegment.ofArray(data.cc()).asSlice(0, c_cc_used));
+        }
+
+        MemorySegment segment() {
+            return seg;
+        }
+
+        long c_iflag() {
+            return (long) c_iflag.get(seg);
+        }
+
+        void c_iflag(long f) {
+            c_iflag.set(seg, f);
+        }
+
+        long c_oflag() {
+            return (long) c_oflag.get(seg);
+        }
+
+        void c_oflag(long f) {
+            c_oflag.set(seg, f);
+        }
+
+        long c_cflag() {
+            return (long) c_cflag.get(seg);
+        }
+
+        void c_cflag(long f) {
+            c_cflag.set(seg, f);
+        }
+
+        long c_lflag() {
+            return (long) c_lflag.get(seg);
+        }
+
+        void c_lflag(long f) {
+            c_lflag.set(seg, f);
+        }
+
+        MemorySegment c_cc() {
+            return seg.asSlice(c_cc_offset, c_cc_used);
+        }
+
+        long c_ispeed() {
+            return c_ispeed != null ? (long) c_ispeed.get(seg) : 0;
+        }
+
+        void c_ispeed(long f) {
+            if (c_ispeed != null) c_ispeed.set(seg, f);
+        }
+
+        long c_ospeed() {
+            return c_ospeed != null ? (long) c_ospeed.get(seg) : 0;
+        }
+
+        void c_ospeed(long f) {
+            if (c_ospeed != null) c_ospeed.set(seg, f);
+        }
+
+        /**
+         * Converts this native termios structure to JLine {@link Attributes}
+         * using the platform-specific {@link TermiosMapping}.
+         *
+         * @return a new {@link Attributes} instance reflecting the current terminal settings
+         */
+        public Attributes asAttributes() {
+            return TermiosMapping.forCurrentPlatform().toAttributes(toTermiosData());
+        }
+    }
+
+    // ── poll(2) support ──────────────────────────────────────────────────
+
+    /**
+     * {@code struct pollfd} layout (POSIX).
+     * <pre>
+     *   int   fd;       // file descriptor
+     *   short events;   // requested events
+     *   short revents;  // returned events
+     * </pre>
+     */
+    static class PollFd {
+        static final GroupLayout LAYOUT = MemoryLayout.structLayout(
+                ValueLayout.JAVA_INT.withName("fd"),
+                ValueLayout.JAVA_SHORT.withName("events"),
+                ValueLayout.JAVA_SHORT.withName("revents"));
+        private static final VarHandle FD =
+                FfmTerminalProvider.lookupVarHandle(LAYOUT, MemoryLayout.PathElement.groupElement("fd"));
+        private static final VarHandle EVENTS =
+                FfmTerminalProvider.lookupVarHandle(LAYOUT, MemoryLayout.PathElement.groupElement("events"));
+        private static final VarHandle REVENTS =
+                FfmTerminalProvider.lookupVarHandle(LAYOUT, MemoryLayout.PathElement.groupElement("revents"));
+
+        private PollFd() {}
+    }
+
+    /** POSIX POLLIN constant (0x0001 on all supported platforms). */
+    static final short POLLIN = 0x0001;
+
+    /** POSIX EINTR constant (4 on all supported UNIX platforms). */
+    private static final int EINTR = 4;
+
+    private static final StructLayout CAPTURED_STATE_LAYOUT = Linker.Option.captureStateLayout();
+    private static final VarHandle ERRNO_HANDLE =
+            CAPTURED_STATE_LAYOUT.varHandle(MemoryLayout.PathElement.groupElement("errno"));
+
+    static final MethodHandle pollHandle;
+
+    static final MethodHandle ioctl;
+    static final MethodHandle isatty;
+    static final MethodHandle openptyHandle;
+    static final MethodHandle tcsetattr;
+    static final MethodHandle tcgetattr;
+    static final MethodHandle ttyname_r;
+    static LinkageError openptyError;
+
+    static {
+        // methods
+        Linker linker = Linker.nativeLinker();
+        SymbolLookup lookup = SymbolLookup.loaderLookup().or(linker.defaultLookup());
+        // https://man7.org/linux/man-pages/man2/poll.2.html
+        // nfds_t is unsigned long on Linux/AIX, unsigned int on macOS/FreeBSD
+        ValueLayout nfdsLayout = (OSUtils.IS_LINUX || OSUtils.IS_AIX) ? ValueLayout.JAVA_LONG : ValueLayout.JAVA_INT;
+        pollHandle = linker.downcallHandle(
+                lookup.find("poll").get(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, nfdsLayout, ValueLayout.JAVA_INT),
+                Linker.Option.captureCallState("errno"));
+        // https://man7.org/linux/man-pages/man2/ioctl.2.html
+        ioctl = linker.downcallHandle(
+                lookup.find("ioctl").get(),
+                FunctionDescriptor.of(
+                        ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS),
+                Linker.Option.firstVariadicArg(2));
+        // https://www.man7.org/linux/man-pages/man3/isatty.3.html
+        isatty = linker.downcallHandle(
+                lookup.find("isatty").get(), FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
+        // https://man7.org/linux/man-pages/man3/tcsetattr.3p.html
+        tcsetattr = linker.downcallHandle(
+                lookup.find("tcsetattr").get(),
+                FunctionDescriptor.of(
+                        ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+        // https://man7.org/linux/man-pages/man3/tcgetattr.3p.html
+        tcgetattr = linker.downcallHandle(
+                lookup.find("tcgetattr").get(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+        // https://man7.org/linux/man-pages/man3/ttyname.3.html
+        ttyname_r = linker.downcallHandle(
+                lookup.find("ttyname_r").get(),
+                FunctionDescriptor.of(
+                        ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG));
+        // https://man7.org/linux/man-pages/man3/openpty.3.html
+        LinkageError error = null;
+        Optional<MemorySegment> openPtyAddr = lookup.find("openpty");
+        if (openPtyAddr.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("Unable to find openpty native method in static libraries and unable to load the util library.");
+            List<Throwable> suppressed = new ArrayList<>();
+            try {
+                System.loadLibrary("util");
+                openPtyAddr = lookup.find("openpty");
+            } catch (Throwable t) {
+                suppressed.add(t);
+            }
+            if (openPtyAddr.isEmpty()) {
+                String libUtilPath = System.getProperty("org.jline.ffm.libutil");
+                if (libUtilPath != null && !libUtilPath.isEmpty()) {
+                    try {
+                        System.load(libUtilPath);
+                        openPtyAddr = lookup.find("openpty");
+                    } catch (Throwable t) {
+                        suppressed.add(t);
+                    }
+                }
+            }
+            if (openPtyAddr.isEmpty() && OSUtils.IS_AIX) {
+                try {
+                    System.loadLibrary("bsd");
+                    openPtyAddr = lookup.find("openpty");
+                } catch (Throwable t) {
+                    suppressed.add(t);
+                }
+            }
+            // On glibc 2.34+, openpty was merged from libutil into libc.so.6.
+            // SymbolLookup.libraryLookup searches all exported symbols in the specified
+            // library, unlike defaultLookup() which only exposes C standard symbols.
+            if (openPtyAddr.isEmpty() && OSUtils.IS_LINUX) {
+                try {
+                    SymbolLookup libcLookup = SymbolLookup.libraryLookup("libc.so.6", Arena.global());
+                    openPtyAddr = libcLookup.find("openpty");
+                } catch (Throwable t) {
+                    suppressed.add(t);
+                }
+            }
+            // On older glibc (< 2.34), openpty is in a separate libutil.so.
+            if (openPtyAddr.isEmpty() && OSUtils.IS_LINUX) {
+                openPtyAddr = findVersionedLibutil(lookup, suppressed);
+            }
+            if (openPtyAddr.isEmpty()) {
+                for (Throwable t : suppressed) {
+                    sb.append("\n\t- ").append(t.toString());
+                }
+                error = new LinkageError(sb.toString());
+                suppressed.forEach(error::addSuppressed);
+                if (logger.isLoggable(Level.DEBUG)) {
+                    logger.log(Level.WARNING, error.getMessage(), error);
+                } else {
+                    logger.log(Level.WARNING, error.getMessage());
+                }
+            }
+        }
+        if (openPtyAddr.isPresent()) {
+            openptyHandle = linker.downcallHandle(
+                    openPtyAddr.get(),
+                    FunctionDescriptor.of(
+                            ValueLayout.JAVA_INT,
+                            ValueLayout.ADDRESS,
+                            ValueLayout.ADDRESS,
+                            ValueLayout.ADDRESS,
+                            ValueLayout.ADDRESS,
+                            ValueLayout.ADDRESS));
+            openptyError = null;
+        } else {
+            openptyHandle = null;
+            openptyError = error;
+        }
+    }
+
+    private static String readFully(InputStream in) throws IOException {
+        int readLen = 0;
+        ByteArrayOutputStream b = new ByteArrayOutputStream();
+        byte[] buf = new byte[32];
+        while ((readLen = in.read(buf, 0, buf.length)) >= 0) {
+            b.write(buf, 0, readLen);
+        }
+        return b.toString();
+    }
+
+    /**
+     * Searches for a versioned {@code libutil.so.*} in standard Linux library directories and
+     * returns the {@code openpty} symbol address if found.
+     *
+     * <p>Multiple directories are searched because the library location varies by distribution
+     * and by whether the system has completed the
+     * <a href="https://wiki.debian.org/UsrMerge">usrmerge</a>:
+     * <ul>
+     *   <li>Debian/Ubuntu multiarch: {@code /usr/lib/<arch>-linux-gnu/} and
+     *       {@code /lib/<arch>-linux-gnu/} (pre-usrmerge systems like Ubuntu 18 use {@code /lib})</li>
+     *   <li>RHEL/Fedora/CentOS 64-bit: {@code /usr/lib64/} and {@code /lib64/}</li>
+     *   <li>Generic fallback: {@code /usr/lib/} and {@code /lib/}</li>
+     * </ul>
+     *
+     * <p>Within each directory, versioned {@code libutil.so.*} files are tried in descending
+     * order (highest version first) so the newest library is preferred.
+     *
+     * @param lookup    the symbol lookup to query after loading the library
+     * @param suppressed list to collect any exceptions encountered during the search
+     * @return the {@code openpty} symbol address, or {@link Optional#empty()} if not found
+     */
+    private static Optional<MemorySegment> findVersionedLibutil(SymbolLookup lookup, List<Throwable> suppressed) {
+        List<Path> searchDirs = new ArrayList<>();
+
+        // Detect architecture for Debian/Ubuntu multiarch paths.
+        // Isolated so that a uname failure doesn't prevent searching the
+        // architecture-independent paths (RHEL/Fedora, generic).
+        try {
+            Process p = new ProcessBuilder("/usr/bin/uname", "-m").start();
+            try (InputStream in = p.getInputStream()) {
+                String hwName = readFully(in).trim();
+                String multiarchDir = hwName + "-linux-gnu";
+                // Debian/Ubuntu multiarch paths
+                searchDirs.add(Path.of("/usr/lib", multiarchDir));
+                searchDirs.add(Path.of("/lib", multiarchDir));
+            }
+            p.waitFor();
+        } catch (InterruptedException t) {
+            Thread.currentThread().interrupt();
+            suppressed.add(t);
+        } catch (Exception t) {
+            suppressed.add(t);
+        }
+
+        // RHEL/Fedora paths
+        searchDirs.add(Path.of("/usr/lib64"));
+        searchDirs.add(Path.of("/lib64"));
+        // Generic fallback
+        searchDirs.add(Path.of("/usr/lib"));
+        searchDirs.add(Path.of("/lib"));
+
+        for (Path libDir : searchDirs) {
+            if (!Files.isDirectory(libDir)) {
+                continue;
+            }
+            try (Stream<Path> stream = Files.list(libDir)) {
+                List<Path> libs = stream.filter(l -> l.getFileName().toString().startsWith("libutil.so."))
+                        .sorted(Comparator.comparing(Path::getFileName).reversed())
+                        .collect(Collectors.toList());
+                for (Path lib : libs) {
+                    try {
+                        System.load(lib.toString());
+                        Optional<MemorySegment> addr = lookup.find("openpty");
+                        if (addr.isPresent()) {
+                            return addr;
+                        }
+                    } catch (Throwable t) {
+                        suppressed.add(t);
+                    }
+                }
+            } catch (Throwable t) {
+                suppressed.add(t);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Polls a single file descriptor for input readability.
+     *
+     * <p>Uses {@link Linker.Option#captureCallState(String...)} to read
+     * {@code errno} after each call, retrying only on {@code EINTR}.</p>
+     *
+     * @param fd        file descriptor to poll (e.g. {@code STDIN_FILENO})
+     * @param timeoutMs timeout in milliseconds; 0 = immediate, −1 = infinite
+     * @return positive if data is ready, 0 on timeout, −1 on permanent error
+     */
+    static int pollForInput(int fd, int timeoutMs) {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment pfd = arena.allocate(PollFd.LAYOUT);
+            PollFd.FD.set(pfd, fd);
+            PollFd.EVENTS.set(pfd, POLLIN);
+
+            MemorySegment capturedState = arena.allocate(CAPTURED_STATE_LAYOUT);
+
+            if (timeoutMs <= 0) {
+                // Immediate (0) or infinite (-1): no deadline to track.
+                int rc;
+                do {
+                    PollFd.REVENTS.set(pfd, (short) 0);
+                    rc = platformPoll(capturedState, pfd, timeoutMs);
+                } while (rc < 0 && capturedErrno(capturedState) == EINTR);
+                return rc;
+            }
+
+            // Finite timeout: preserve deadline across EINTR retries.
+            long deadlineNanos = System.nanoTime() + timeoutMs * 1_000_000L;
+            int remaining = timeoutMs;
+            int rc;
+            do {
+                PollFd.REVENTS.set(pfd, (short) 0);
+                rc = platformPoll(capturedState, pfd, remaining);
+                if (rc >= 0) {
+                    return rc;
+                }
+                if (capturedErrno(capturedState) != EINTR) {
+                    return rc; // permanent error
+                }
+                remaining = (int) ((deadlineNanos - System.nanoTime()) / 1_000_000L);
+            } while (remaining > 0);
+            return 0; // deadline expired → timeout
+        } catch (Throwable e) {
+            throw new RuntimeException("Unable to call poll()", e);
+        }
+    }
+
+    /**
+     * Reads the captured {@code errno} value from the call-state segment.
+     */
+    private static int capturedErrno(MemorySegment capturedState) {
+        return (int) ERRNO_HANDLE.get(capturedState, 0L);
+    }
+
+    /**
+     * Invokes the platform-specific {@code poll()} downcall.
+     *
+     * <p>The leading {@code capturedState} segment is required by the
+     * {@link Linker.Option#captureCallState(String...)} option used when
+     * linking the handle — the JVM writes {@code errno} into it immediately
+     * after the native call returns.</p>
+     */
+    private static int platformPoll(MemorySegment capturedState, MemorySegment pfd, int timeoutMs) throws Throwable {
+        if (OSUtils.IS_LINUX || OSUtils.IS_AIX) {
+            return (int) pollHandle.invoke(capturedState, pfd, 1L, timeoutMs);
+        } else {
+            return (int) pollHandle.invoke(capturedState, pfd, 1, timeoutMs);
+        }
+    }
+
+    static Size getTerminalSize(int fd) {
+        try (Arena arena = Arena.ofConfined()) {
+            winsize ws = new winsize(arena);
+            int res = (int) ioctl.invoke(fd, (long) TIOCGWINSZ, ws.segment());
+            if (res != 0) {
+                throw new UncheckedIOException(new IOException("ioctl(TIOCGWINSZ) failed with return code " + res));
+            }
+            return Size.of(ws.ws_col(), ws.ws_row());
+        } catch (UncheckedIOException e) {
+            throw e;
+        } catch (Throwable e) {
+            throw new RuntimeException("Unable to call ioctl(TIOCGWINSZ)", e);
+        }
+    }
+
+    static void setTerminalSize(int fd, Sized size) {
+        try (Arena arena = Arena.ofConfined()) {
+            winsize ws = new winsize(arena);
+            ws.ws_row((short) size.getRows());
+            ws.ws_col((short) size.getColumns());
+            int res = (int) ioctl.invoke(fd, TIOCSWINSZ, ws.segment());
+            if (res != 0) {
+                throw new UncheckedIOException(new IOException("ioctl(TIOCSWINSZ) failed with return code " + res));
+            }
+        } catch (UncheckedIOException e) {
+            throw e;
+        } catch (Throwable e) {
+            throw new RuntimeException("Unable to call ioctl(TIOCSWINSZ)", e);
+        }
+    }
+
+    static Attributes getAttributes(int fd) {
+        try (Arena arena = Arena.ofConfined()) {
+            termios t = new termios(arena);
+            int res = (int) tcgetattr.invoke(fd, t.segment());
+            if (res != 0) {
+                throw new UncheckedIOException(new IOException("tcgetattr() failed with return code " + res));
+            }
+            return t.asAttributes();
+        } catch (UncheckedIOException e) {
+            throw e;
+        } catch (Throwable e) {
+            throw new RuntimeException("Unable to call tcgetattr()", e);
+        }
+    }
+
+    static void setAttributes(int fd, Attributes attr) {
+        try (Arena arena = Arena.ofConfined()) {
+            termios t = new termios(arena);
+            int res = (int) tcgetattr.invoke(fd, t.segment());
+            if (res != 0) {
+                // Best-effort: tcgetattr may fail when the fd is no longer a
+                // valid terminal (e.g. during close).  Log and return early
+                // rather than applying attributes onto uninitialised data.
+                logger.log(Level.DEBUG, "tcgetattr() returned " + res + " for fd " + fd);
+                return;
+            }
+            t.apply(attr);
+            res = (int) tcsetattr.invoke(fd, TermiosData.TCSANOW, t.segment());
+            if (res != 0) {
+                logger.log(Level.DEBUG, "tcsetattr() returned " + res + " for fd " + fd);
+            }
+        } catch (Throwable e) {
+            throw new RuntimeException("Unable to call tcsetattr()", e);
+        }
+    }
+
+    static boolean isTty(int fd) {
+        try {
+            return (int) isatty.invoke(fd) == 1;
+        } catch (Throwable e) {
+            throw new RuntimeException("Unable to call isatty()", e);
+        }
+    }
+
+    static String ttyName(int fd) {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment buf = arena.allocate(64);
+            int res = (int) ttyname_r.invoke(fd, buf, buf.byteSize());
+            if (res != 0) {
+                throw new UncheckedIOException(new IOException("ttyname_r() failed with return code " + res));
+            }
+            byte[] data = buf.toArray(ValueLayout.JAVA_BYTE);
+            int len = 0;
+            while (data[len] != 0) {
+                len++;
+            }
+            return new String(data, 0, len);
+        } catch (UncheckedIOException e) {
+            throw e;
+        } catch (Throwable e) {
+            throw new RuntimeException("Unable to call ttyname_r()", e);
+        }
+    }
+
+    static Pty openpty(TerminalProvider provider, Attributes attr, Size size) {
+        if (openptyError != null) {
+            throw openptyError;
+        }
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment buf = arena.allocate(64);
+            MemorySegment master = arena.allocate(ValueLayout.JAVA_INT);
+            MemorySegment slave = arena.allocate(ValueLayout.JAVA_INT);
+            int res = (int) openptyHandle.invoke(
+                    master,
+                    slave,
+                    buf,
+                    attr != null ? new termios(arena, attr).segment() : MemorySegment.NULL,
+                    size != null
+                            ? new winsize(arena, (short) size.getColumns(), (short) size.getRows()).segment()
+                            : MemorySegment.NULL);
+            if (res != 0) {
+                throw new UncheckedIOException(new IOException("Unable to call openpty(): return code " + res));
+            }
+            byte[] str = buf.toArray(ValueLayout.JAVA_BYTE);
+            int len = 0;
+            while (str[len] != 0) {
+                len++;
+            }
+            String device = new String(str, 0, len);
+            return new FfmNativePty(
+                    provider, null, master.get(ValueLayout.JAVA_INT, 0), slave.get(ValueLayout.JAVA_INT, 0), device);
+        } catch (UncheckedIOException e) {
+            throw e;
+        } catch (Throwable e) {
+            throw new RuntimeException("Unable to call openpty()", e);
+        }
+    }
+
+    // CONSTANTS
+
+    private static final int TIOCGWINSZ;
+    private static final int TIOCSWINSZ;
+
+    static {
+        String osName = System.getProperty("os.name");
+        if (osName.startsWith("Linux")) {
+            String arch = System.getProperty("os.arch");
+            boolean isMipsPpcOrSparc = arch.equals("mips")
+                    || arch.equals("mips64")
+                    || arch.equals("mipsel")
+                    || arch.equals("mips64el")
+                    || arch.startsWith("ppc")
+                    || arch.startsWith("sparc");
+            TIOCGWINSZ = isMipsPpcOrSparc ? 0x40087468 : 0x00005413;
+            TIOCSWINSZ = isMipsPpcOrSparc ? 0x80087467 : 0x00005414;
+        } else if (osName.startsWith("Solaris") || osName.startsWith("SunOS")) {
+            int _TIOC = ('T' << 8);
+            TIOCGWINSZ = (_TIOC | 104);
+            TIOCSWINSZ = (_TIOC | 103);
+        } else if (osName.startsWith("Mac") || osName.startsWith("Darwin")) {
+            TIOCGWINSZ = 0x40087468;
+            TIOCSWINSZ = 0x80087467;
+        } else if (osName.startsWith("FreeBSD")) {
+            TIOCGWINSZ = 0x40087468;
+            TIOCSWINSZ = 0x80087467;
+        } else if (osName.contains("AIX")) {
+            TIOCGWINSZ = 0x40087468;
+            TIOCSWINSZ = 0x80087467;
+        } else {
+            throw new UnsupportedOperationException();
+        }
+    }
+}

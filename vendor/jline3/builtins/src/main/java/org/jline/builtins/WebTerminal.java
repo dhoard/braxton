@@ -1,0 +1,606 @@
+/*
+ * Copyright (c) the original author(s).
+ *
+ * This software is distributable under the BSD license. See the terms of the
+ * BSD license in the documentation provided with this software.
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ */
+package org.jline.builtins;
+
+import java.io.*;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.GZIPOutputStream;
+
+import org.jline.terminal.Size;
+import org.jline.terminal.Sized;
+import org.jline.terminal.impl.LineDisciplineTerminal;
+import org.jline.utils.ScreenTerminal;
+import org.jline.utils.ScreenTerminalOutputStream;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
+
+/**
+ * A web-based terminal implementation that extends LineDisciplineTerminal.
+ * <p>
+ * This class provides a web interface for terminal interaction using an embedded HTTP server.
+ * It serves an HTML page with JavaScript that communicates with the terminal via HTTP requests.
+ * The terminal supports ANSI escape sequences and renders them as HTML with CSS styling.
+ * </p>
+ *
+ * <p>Features:</p>
+ * <ul>
+ *   <li>HTTP server using JDK's built-in HttpServer</li>
+ *   <li>Real-time terminal updates via AJAX polling</li>
+ *   <li>ANSI escape sequence rendering in HTML/CSS</li>
+ *   <li>Keyboard input handling via JavaScript</li>
+ *   <li>GZIP compression support</li>
+ * </ul>
+ */
+public class WebTerminal extends LineDisciplineTerminal {
+
+    private static final int DEFAULT_PORT = 8080;
+    private static final String DEFAULT_HOST = "localhost";
+
+    private final WebTerminalComponent component;
+    private HttpServer server;
+    private ExecutorService executor;
+    private final int port;
+    private final String host;
+    private final AtomicBoolean running = new AtomicBoolean(false);
+
+    /**
+     * Creates a new WebTerminal with default settings (localhost:8080).
+     */
+    public WebTerminal() throws IOException {
+        this(DEFAULT_HOST, DEFAULT_PORT);
+    }
+
+    /**
+     * Creates a new WebTerminal with specified host and port.
+     *
+     * @param host the host to bind to
+     * @param port the port to bind to
+     */
+    public WebTerminal(String host, int port) throws IOException {
+        this(host, port, 80, 24);
+    }
+
+    /**
+     * Initialize a WebTerminal bound to the given host and port and configured with the specified columns and rows.
+     *
+     * @param host the host address to bind the embedded HTTP server to
+     * @param port the preferred port for the embedded HTTP server (use 0 to select an ephemeral port)
+     * @param columns the initial number of terminal columns
+     * @param rows the initial number of terminal rows
+     * @throws IOException if an I/O error occurs while initializing terminal resources
+     */
+    public WebTerminal(String host, int port, int columns, int rows) throws IOException {
+        this(host, port, columns, rows, new ScreenTerminalOutputStream.DelegateOutputStream());
+    }
+
+    @SuppressWarnings("this-escape")
+    private WebTerminal(
+            String host, int port, int columns, int rows, ScreenTerminalOutputStream.DelegateOutputStream delegate)
+            throws IOException {
+        super("WebTerminal", "screen-256color", delegate, StandardCharsets.UTF_8);
+        this.host = host;
+        this.port = port;
+
+        // Create the terminal component and wire the feedback loop
+        this.component = new WebTerminalComponent(columns, rows);
+        this.component.setWebTerminal(this);
+        setSize(Size.of(columns, rows));
+        ScreenTerminal.wireTerminal(this.component, this, delegate);
+    }
+
+    /**
+     * Gets the web terminal component.
+     *
+     * @return the WebTerminalComponent instance
+     */
+    public WebTerminalComponent getComponent() {
+        return component;
+    }
+
+    /**
+     * Gets the URL where the web terminal is accessible.
+     *
+     * @return the web terminal URL
+     */
+    public String getUrl() {
+        if (server != null) {
+            return "http://" + host + ":" + server.getAddress().getPort();
+        }
+        return "http://" + host + ":" + port;
+    }
+
+    /**
+     * Starts the HTTP server and begins serving the web terminal.
+     *
+     * @throws IOException if the server cannot be started
+     */
+    public void start() throws IOException {
+        if (running.get()) {
+            throw new IllegalStateException("WebTerminal is already running");
+        }
+
+        ThreadFactory daemonFactory = r -> {
+            Thread t = new Thread(r);
+            t.setDaemon(true);
+            t.setName("WebTerminal-" + t.getId());
+            return t;
+        };
+        executor = Executors.newCachedThreadPool(daemonFactory);
+        server = HttpServer.create(new InetSocketAddress(host, port), 0);
+        server.createContext("/", new TerminalHandler());
+        server.createContext("/terminal", new TerminalAjaxHandler());
+        server.setExecutor(executor);
+        server.start();
+        running.set(true);
+    }
+
+    @Override
+    protected void doClose() throws IOException {
+        super.doClose();
+        stop();
+    }
+
+    /**
+     * Stops the HTTP server.
+     */
+    public void stop() {
+        if (server != null && running.get()) {
+            server.stop(0);
+            if (executor != null) {
+                executor.shutdownNow();
+            }
+            running.set(false);
+        }
+    }
+
+    /**
+     * Returns whether the web terminal is currently running.
+     *
+     * @return true if running, false otherwise
+     */
+    public boolean isRunning() {
+        return running.get();
+    }
+
+    // Delegation methods to the component
+
+    /**
+     * Writes text to the terminal.
+     *
+     * @param text the text to write
+     * @return true if successful
+     */
+    public boolean write(String text) {
+        return component.write(text);
+    }
+
+    /**
+     * Reads and processes input through the terminal.
+     *
+     * @param input the input to process
+     * @return the processed input
+     */
+    public String pipe(String input) {
+        return component.pipe(input);
+    }
+
+    public String read() {
+        return component.read();
+    }
+
+    /**
+     * Dumps the terminal content as HTML.
+     *
+     * @param timeout maximum time to wait for changes in milliseconds
+     * @param forceUpdate whether to force an update even if screen is not dirty
+     * @return the terminal content as HTML, or null if no update
+     * @throws InterruptedException if interrupted
+     */
+    public String dump(long timeout, boolean forceUpdate) throws InterruptedException {
+        return component.dump(timeout, forceUpdate);
+    }
+
+    @Override
+    public void setSize(Sized sz) {
+        checkClosed();
+        if (component.setSize(sz)) {
+            super.setSize(component);
+        }
+    }
+
+    /**
+     * Set the terminal dimensions in columns and rows.
+     *
+     * @param columns the new number of columns
+     * @param rows the new number of rows
+     * @return `true` if the terminal was resized, `false` otherwise
+     * @deprecated Use {@link #setSize(Sized)} instead.
+     */
+    @Deprecated
+    @SuppressWarnings("java:S1133")
+    public boolean setSize(int columns, int rows) {
+        checkClosed();
+        if (component.setSize(Size.of(columns, rows))) {
+            super.setSize(component);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * HTTP handler for serving the main terminal page.
+     */
+    private class TerminalHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String method = exchange.getRequestMethod();
+
+            if ("GET".equals(method)) {
+                String path = exchange.getRequestURI().getPath();
+
+                if ("/".equals(path) || "/index.html".equals(path)) {
+                    serveTerminalPage(exchange);
+                } else {
+                    send404(exchange);
+                }
+            } else {
+                send405(exchange);
+            }
+        }
+
+        private void serveTerminalPage(HttpExchange exchange) throws IOException {
+            String html = getTerminalHtml();
+            byte[] response = html.getBytes(StandardCharsets.UTF_8);
+
+            exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+            exchange.sendResponseHeaders(200, response.length);
+
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response);
+            }
+        }
+
+        private void send404(HttpExchange exchange) throws IOException {
+            byte[] response = "404 Not Found".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(404, response.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response);
+            }
+        }
+
+        private void send405(HttpExchange exchange) throws IOException {
+            byte[] response = "405 Method Not Allowed".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(405, response.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response);
+            }
+        }
+    }
+
+    /**
+     * HTTP handler for AJAX terminal communication.
+     */
+    private class TerminalAjaxHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"POST".equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(405, -1);
+                return;
+            }
+
+            if (!isSameOrigin(exchange)) {
+                exchange.sendResponseHeaders(403, -1);
+                return;
+            }
+
+            // Parse form data
+            Map<String, String> params = parseFormData(exchange);
+
+            String keyInput = params.get("k");
+            boolean hasInput = keyInput != null && !keyInput.isEmpty();
+
+            // Process input through the terminal's line discipline
+            if (hasInput) {
+                String processedInput = component.pipe(keyInput);
+                try {
+                    processInputBytes(processedInput.getBytes(StandardCharsets.UTF_8));
+                } catch (IOException e) {
+                    // Terminal closed
+                }
+            }
+
+            // Get terminal output - use longer timeout after input to let echo propagate,
+            // and always force dump so the browser always gets the current screen state
+            try {
+                String output = dump(hasInput ? 100 : 10, true);
+                sendResponse(exchange, output != null ? output : "");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                sendResponse(exchange, "");
+            }
+        }
+
+        /**
+         * Tells whether a request was issued by the page this terminal serves.
+         * <p>
+         * Browsers attach {@code Origin} to every cross-origin POST, so a value that does not
+         * match the requested authority identifies a form or fetch coming from a foreign page.
+         * Clients that are not browsers send no {@code Origin} and keep working as before.
+         * </p>
+         * <p>
+         * The comparison assumes the server is reached directly on the address it binds. A
+         * reverse proxy or TLS terminator that rewrites {@code Host} to something other than the
+         * authority the browser used would make same-origin requests fail this check.
+         * </p>
+         */
+        private boolean isSameOrigin(HttpExchange exchange) {
+            String origin = exchange.getRequestHeaders().getFirst("Origin");
+            if (origin == null) {
+                return true;
+            }
+            String host = exchange.getRequestHeaders().getFirst("Host");
+            if (host == null) {
+                return false;
+            }
+            String authority;
+            try {
+                authority = URI.create(origin).getAuthority();
+            } catch (IllegalArgumentException e) {
+                return false;
+            }
+            return authority != null && host.equalsIgnoreCase(authority);
+        }
+
+        private Map<String, String> parseFormData(HttpExchange exchange) throws IOException {
+            Map<String, String> params = new HashMap<>();
+
+            byte[] bodyBytes;
+            try (InputStream is = exchange.getRequestBody()) {
+                bodyBytes = is.readAllBytes();
+            }
+            String formData = new String(bodyBytes, StandardCharsets.UTF_8);
+
+            if (!formData.isEmpty()) {
+                String[] pairs = formData.split("&");
+                for (String pair : pairs) {
+                    String[] keyValue = pair.split("=", 2);
+                    String key = URLDecoder.decode(keyValue[0], StandardCharsets.UTF_8);
+                    String value = keyValue.length == 2 ? URLDecoder.decode(keyValue[1], StandardCharsets.UTF_8) : "";
+                    params.put(key, value);
+                }
+            }
+
+            return params;
+        }
+
+        private void sendResponse(HttpExchange exchange, String content) throws IOException {
+            String encoding = exchange.getRequestHeaders().getFirst("Accept-Encoding");
+            boolean supportsGzip = encoding != null && encoding.toLowerCase().contains("gzip");
+
+            byte[] response;
+            if (supportsGzip && content.length() > 100) {
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                try (GZIPOutputStream gzos = new GZIPOutputStream(baos)) {
+                    gzos.write(content.getBytes(StandardCharsets.UTF_8));
+                }
+                response = baos.toByteArray();
+                exchange.getResponseHeaders().set("Content-Encoding", "gzip");
+            } else {
+                response = content.getBytes(StandardCharsets.UTF_8);
+            }
+
+            exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+            exchange.sendResponseHeaders(200, response.length);
+
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response);
+            }
+        }
+    }
+
+    /**
+     * The inner WebTerminalComponent that contains the original ScreenTerminal-based implementation.
+     * This is the inner class that contains the original ScreenTerminal-based implementation.
+     */
+    public static class WebTerminalComponent extends ScreenTerminal {
+
+        private transient WebTerminal webTerminal;
+
+        /**
+         * Creates a new WebTerminalComponent with the specified dimensions.
+         *
+         * @param columns the number of columns
+         * @param rows the number of rows
+         */
+        public WebTerminalComponent(int columns, int rows) {
+            super(columns, rows);
+        }
+
+        /**
+         * Sets the web terminal reference after construction to avoid this-escape issues.
+         *
+         * @param webTerminal the WebTerminal instance
+         */
+        public void setWebTerminal(WebTerminal webTerminal) {
+            this.webTerminal = webTerminal;
+        }
+
+        /**
+         * Writes text to the terminal.
+         *
+         * @param text the text to write
+         * @return true if successful
+         */
+        public boolean write(String text) {
+            return super.write(text);
+        }
+
+        /**
+         * Reads and processes input through the terminal.
+         * Delegates to the ScreenTerminal pipe method which handles
+         * all special key sequences and terminal modes.
+         *
+         * @param input the input to process
+         * @return the processed input
+         */
+        @Override
+        public String pipe(String input) {
+            return super.pipe(input);
+        }
+
+        /**
+         * Set the terminal size to the given columns and rows if they are within allowed bounds.
+         *
+         * @param columns the new number of columns; must be between 10 and 200 inclusive
+         * @param rows the new number of rows; must be between 5 and 100 inclusive
+         * @return true if the size was applied, false if the provided dimensions are out of range
+         * @deprecated Use {@link #setSize(Sized)} instead.
+         */
+        @Override
+        @Deprecated
+        @SuppressWarnings("deprecation")
+        public synchronized boolean setSize(int columns, int rows) {
+            if (columns < 10 || rows < 5 || columns > MAX_SIZE || rows > MAX_SIZE) {
+                return false;
+            }
+            return super.setSize(columns, rows);
+        }
+    }
+
+    /**
+     * Generates the HTML page for the web terminal.
+     */
+    private String getTerminalHtml() {
+        return "<!DOCTYPE html>\n"
+                + "<html lang=\"en\">\n"
+                + "<head>\n"
+                + "    <meta charset=\"UTF-8\">\n"
+                + "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+                + "    <title>JLine Web Terminal</title>\n"
+                + "    <style>\n"
+                + "        body {\n"
+                + "            margin: 0;\n"
+                + "            padding: 20px;\n"
+                + "            background-color: #000;\n"
+                + "            color: #fff;\n"
+                + "            font-family: 'Courier New', monospace;\n"
+                + "            overflow: hidden;\n"
+                + "        }\n"
+                + "        \n"
+                + "        #terminal {\n"
+                + "            width: 100%;\n"
+                + "            height: calc(100vh - 40px);\n"
+                + "            background-color: #000;\n"
+                + "            border: 1px solid #333;\n"
+                + "            padding: 10px;\n"
+                + "            box-sizing: border-box;\n"
+                + "            overflow: auto;\n"
+                + "            white-space: pre;\n"
+                + "            font-size: 14px;\n"
+                + "            line-height: 1.2;\n"
+                + "        }\n"
+                + "        \n"
+                + "        .term { margin: 0; }\n"
+                + "    </style>\n"
+                + "</head>\n"
+                + "<body>\n"
+                + "    <div id=\"terminal\" tabindex=\"0\"></div>\n"
+                + "    \n"
+                + "    <script>\n"
+                + "        var term = document.getElementById('terminal');\n"
+                + "        var polling = false;\n"
+                + "        \n"
+                + "        function sendKey(key) {\n"
+                + "            var xhr = new XMLHttpRequest();\n"
+                + "            xhr.open('POST', '/terminal', true);\n"
+                + "            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');\n"
+                + "            xhr.onload = function() {\n"
+                + "                if (xhr.responseText) term.innerHTML = xhr.responseText;\n"
+                + "            };\n"
+                + "            xhr.send('k=' + encodeURIComponent(key));\n"
+                + "        }\n"
+                + "        \n"
+                + "        function poll() {\n"
+                + "            if (polling) return;\n"
+                + "            polling = true;\n"
+                + "            var xhr = new XMLHttpRequest();\n"
+                + "            xhr.open('POST', '/terminal', true);\n"
+                + "            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');\n"
+                + "            xhr.onload = function() {\n"
+                + "                if (xhr.responseText) term.innerHTML = xhr.responseText;\n"
+                + "                polling = false;\n"
+                + "                setTimeout(poll, 100);\n"
+                + "            };\n"
+                + "            xhr.onerror = function() {\n"
+                + "                polling = false;\n"
+                + "                setTimeout(poll, 1000);\n"
+                + "            };\n"
+                + "            xhr.send('f=1');\n"
+                + "        }\n"
+                + "        \n"
+                + "        document.addEventListener('keydown', function(e) {\n"
+                + "            var key = '';\n"
+                + "            switch (e.key) {\n"
+                + "                case 'Enter':     key = '\\r'; break;\n"
+                + "                case 'Backspace': key = '\\u007f'; break;\n"
+                + "                case 'Tab':       key = '\\t'; break;\n"
+                + "                case 'Escape':    key = '\\u001b'; break;\n"
+                + "                case 'ArrowUp':   key = '~A'; break;\n"
+                + "                case 'ArrowDown': key = '~B'; break;\n"
+                + "                case 'ArrowRight':key = '~C'; break;\n"
+                + "                case 'ArrowLeft': key = '~D'; break;\n"
+                + "                case 'Home':      key = '~H'; break;\n"
+                + "                case 'End':       key = '~F'; break;\n"
+                + "                case 'PageUp':    key = '~1'; break;\n"
+                + "                case 'PageDown':  key = '~2'; break;\n"
+                + "                case 'Insert':    key = '~3'; break;\n"
+                + "                case 'Delete':    key = '~4'; break;\n"
+                + "                case 'F1':  key = '~a'; break;\n"
+                + "                case 'F2':  key = '~b'; break;\n"
+                + "                case 'F3':  key = '~c'; break;\n"
+                + "                case 'F4':  key = '~d'; break;\n"
+                + "                case 'F5':  key = '~e'; break;\n"
+                + "                case 'F6':  key = '~f'; break;\n"
+                + "                case 'F7':  key = '~g'; break;\n"
+                + "                case 'F8':  key = '~h'; break;\n"
+                + "                case 'F9':  key = '~i'; break;\n"
+                + "                case 'F10': key = '~j'; break;\n"
+                + "                case 'F11': key = '~k'; break;\n"
+                + "                case 'F12': key = '~l'; break;\n"
+                + "                default:\n"
+                + "                    if (e.ctrlKey && e.key.length === 1) {\n"
+                + "                        key = String.fromCharCode(e.key.charCodeAt(0) & 0x1f);\n"
+                + "                    } else if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) {\n"
+                + "                        key = e.key;\n"
+                + "                    }\n"
+                + "                    break;\n"
+                + "            }\n"
+                + "            if (key) {\n"
+                + "                e.preventDefault();\n"
+                + "                sendKey(key);\n"
+                + "            }\n"
+                + "        });\n"
+                + "        \n"
+                + "        poll();\n"
+                + "    </script>\n"
+                + "</body>\n"
+                + "</html>";
+    }
+}

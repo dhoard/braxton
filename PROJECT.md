@@ -2,9 +2,12 @@
 
 ## Validation
 
-- The final quality gate is `./mvnw clean install`, run from the repository root.
-  Configure external SDLC validation to run this command. It validates and installs
-  the current library artifact for local consumers.
+- The final quality gate is `./build.sh`, run from the repository root. It installs the
+  vendored JLine artifacts at the version derived from the Braxton version, then runs
+  `./mvnw clean install` (any Maven goals or `-D` properties you pass are forwarded).
+  A `clean` goal also removes the vendored JLine build output, so the gate builds both
+  from scratch. Configure external SDLC validation to run `./build.sh`. It validates and
+  installs the current library artifact for local consumers.
 - After code changes, run `./mvnw spotless:apply` and inspect its diff before the final
   gate. Preserve unrelated edits if formatting touches other files.
 - If TUI code changes, also use pyte to verify the relevant terminal behavior. Use a
@@ -12,7 +15,8 @@
   environment during an authorized implementation stage. Do not claim terminal
   verification based solely on headless assertions or Maven success.
 - Keep benchmarks opt-in. Terminal integration uses locally built JLine
-  `0.1.0-jline-braxton` with the FFM provider only;
+  `0.1.0-jline-braxton` with the FFM provider only; the patched sources live in
+  `vendor/jline3`, and `./build.sh` keeps their version matched to the Braxton version;
   no compatibility facade, alternate provider, or custom native backend is retained. Keep JLine
   and internal engine/service types out of the public MVU API. Verify historical memory against
   current source and tests; old native-backend platform evidence does not verify JLine.
