@@ -327,7 +327,15 @@
                                 <goal>report</goal>
                             </goals>
                             <configuration>
-                                <xml>true</xml>
+                                <!--
+                                  `formats` replaced the removed `html`/`xml`/`csv` flags; list
+                                  them explicitly so the HTML site and the XML report stay
+                                  stable instead of following the plugin defaults.
+                                -->
+                                <formats>
+                                    <format>HTML</format>
+                                    <format>XML</format>
+                                </formats>
                             </configuration>
                         </execution>
                         <execution>

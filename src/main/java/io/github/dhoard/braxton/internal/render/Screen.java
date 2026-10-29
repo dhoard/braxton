@@ -38,10 +38,20 @@ import io.github.dhoard.braxton.style.Style;
  */
 public final class Screen {
 
+    /**
+     * How many (style, background) pairs of inherited styles one screen remembers. A frame paints a
+     * run of columns with one style over one background, so a handful of remembered pairs covers
+     * the styles a frame actually mixes.
+     */
+    private static final int INHERITED_CAP = 4;
+
     private final int rows;
     private final int cols;
     private final Cell[] cells;
     private final boolean[] continuation;
+    /** Remembered results of {@link #inherit(Style, Color)}, oldest slot overwritten first. */
+    private final Inherited[] inherited = new Inherited[INHERITED_CAP];
+    private int inheritedSlot;
 
     public Screen(int rows, int cols) {
         this.rows = Math.max(0, rows);
@@ -149,7 +159,34 @@ public final class Screen {
             return safe;
         }
         Color beneath = cells[index(row, col)].style().background();
-        return beneath == null ? safe : safe.withBackground(beneath);
+        return beneath == null ? safe : inherit(safe, beneath);
+    }
+
+    /**
+     * {@code style} with {@code background} behind it.
+     *
+     * <p>Every column painted over a background fill needs that merged style, so deriving it per
+     * column allocates a style for every column of text painted over that fill - as many objects as
+     * the frame writes cells. {@link Style} is an immutable record compared by value, so a cell
+     * cannot tell a remembered merge from a freshly built one, and the encoder emits the same SGR
+     * parameters either way. The table holds a fixed number of pairs and overwrites one when a frame
+     * mixes more, so it never outlives the screen it belongs to.</p>
+     */
+    private Style inherit(Style style, Color background) {
+        for (Inherited known : inherited) {
+            if (known != null && known.style().equals(style)
+                    && known.background().equals(background)) {
+                return known.merged();
+            }
+        }
+        Style merged = style.withBackground(background);
+        inherited[inheritedSlot] = new Inherited(style, background, merged);
+        inheritedSlot = (inheritedSlot + 1) % INHERITED_CAP;
+        return merged;
+    }
+
+    /** One remembered {@link #inherit(Style, Color)} result. */
+    private record Inherited(Style style, Color background, Style merged) {
     }
 
     /** Drops a continuation flag whose wide glyph was just overwritten by a narrower one. */
@@ -174,9 +211,10 @@ public final class Screen {
             Cell previous = cells[index(row, col - 1)];
             // The cleared half keeps its ancestor's background and stays a blank that occupies
             // its column; an empty cell would silently drop a column from the row.
-            Cell blank = previous.style().background() == null
+            Color beneath = previous.style().background();
+            Cell blank = beneath == null
                     ? Cell.EMPTY
-                    : new Cell(" ", Style.NONE.withBackground(previous.style().background()), null);
+                    : new Cell(" ", inherit(Style.NONE, beneath), null);
             cells[index(row, col - 1)] = blank;
             cells[index(row, col)] = blank;
             continuation[index(row, col)] = false;
