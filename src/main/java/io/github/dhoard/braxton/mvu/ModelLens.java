@@ -20,19 +20,30 @@
  * SOFTWARE.
  */
 
-package io.github.dhoard.braxton.widget;
+package io.github.dhoard.braxton.mvu;
 
-/** The result of applying one {@link EditorAction}: new state plus an optional intent. */
-public record EditorResult(EditorState state, EditorIntent intent) {
+import java.util.Objects;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
-    public EditorResult {
-        if (state == null) {
-            throw new IllegalArgumentException("state is required");
-        }
-        intent = intent == null ? new EditorIntent.None() : intent;
+/**
+ * Pure access and replacement of one child model inside an explicit parent aggregate.
+ *
+ * <p>Replacement must preserve every unrelated parent field: it replaces exactly the child slot
+ * selected by {@link #get()}. Neither function may mutate the parent or the child.</p>
+ *
+ * @param get reads the current child model from the parent model
+ * @param replace returns the parent model with that child slot replaced
+ * @param <P> the parent model type
+ * @param <C> the child model type
+ */
+public record ModelLens<P, C>(Function<P, C> get, BiFunction<P, C, P> replace) {
+    public ModelLens {
+        Objects.requireNonNull(get, "get");
+        Objects.requireNonNull(replace, "replace");
     }
 
-    public static EditorResult unchanged(EditorState state) {
-        return new EditorResult(state, new EditorIntent.None());
+    public static <P, C> ModelLens<P, C> of(Function<P, C> get, BiFunction<P, C, P> replace) {
+        return new ModelLens<>(get, replace);
     }
 }

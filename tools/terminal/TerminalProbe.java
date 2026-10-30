@@ -5,6 +5,7 @@ import io.github.dhoard.braxton.app.*;
 import io.github.dhoard.braxton.effect.*;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.layout.*;
+import io.github.dhoard.braxton.mvu.*;
 import io.github.dhoard.braxton.style.*;
 import io.github.dhoard.braxton.view.*;
 
@@ -26,7 +27,7 @@ public final class TerminalProbe {
 
     private static Command<Message> report(String line) {
         return Command.task(
-                EffectId.of("report/" + line),
+                EffectId.of("report-" + line),
                 () -> {
                     synchronized (reports) {
                         reports.println(line);
@@ -40,7 +41,7 @@ public final class TerminalProbe {
                 });
     }
 
-    private static final class ProbeProgram implements Program<Model, Message> {
+    private static final class ProbeProgram implements Component<Model, Message, Never> {
         private final boolean second;
         private final String identity;
 
@@ -49,14 +50,14 @@ public final class TerminalProbe {
             this.identity = identity;
         }
 
-        public Transition<Model, Message> init(InitContext facts) {
+        public Update<Model, Message, Never> init(InitContext facts) {
             var size = new Size(facts.viewport().rows(), facts.viewport().cols());
-            return Transition.next(
+            return Update.next(
                     new Model("Native 界", size, false),
                     report((second ? "REOPENED " : "READY ") + identity));
         }
 
-        public Transition<Model, Message> update(Model model, Message message) {
+        public Update<Model, Message, Never> update(Model model, Message message) {
             if (message.input() != null) {
                 String line = message.input() instanceof InputEvent.PasteInput paste
                         ? "PASTE " + paste.text()
@@ -66,50 +67,51 @@ public final class TerminalProbe {
                                                 .formatHex(
                                                         key.text().getBytes(StandardCharsets.UTF_8))
                                 : "INPUT";
-                return Transition.next(
+                return Update.next(
                         model,
                         second
                                 ? report(line).map(ignored -> new Message("CLOSE", null, null))
                                 : report(line));
             }
             if (message.size() != null)
-                return Transition.next(new Model(model.text(), message.size(), false));
+                return Update.next(new Model(model.text(), message.size(), false));
             return switch (message.command()) {
-                case "ACK" -> Transition.next(model);
+                case "ACK" -> Update.next(model);
                 case "SIZE" ->
-                    Transition.next(
-                            model,
-                            report("SIZE " + model.size().rows() + " "
-                                    + model.size().cols()));
+                        Update.next(
+                                model,
+                                report("SIZE " + model.size().rows() + " " + model.size().cols()));
                 case "WRITE" ->
-                    Transition.next(new Model("verified", model.size(), false), report("WROTE"));
+                        Update.next(new Model("verified", model.size(), false), report("WROTE"));
                 case "REFRESH", "REFRESH_SHORT", "REFRESH_WIDE", "REFRESH_WIDE_SHORT" ->
-                    Transition.next(new Model(message.command(), model.size(), false),
-                            report(message.command() + "_READY"));
+                        Update.next(
+                                new Model(message.command(), model.size(), false),
+                                report(message.command() + "_READY"));
                 case "WRITE_LARGE" ->
-                    Transition.next(
-                            new Model("x".repeat(200000), model.size(), false),
-                            report("WROTE_LARGE"));
+                        Update.next(
+                                new Model("x".repeat(200000), model.size(), false),
+                                report("WROTE_LARGE"));
                 case "EXCEPTION" -> throw new IllegalStateException("intentional probe failure");
                 case "SHUTDOWN" ->
-                    Transition.next(
-                            model,
-                            Command.task(
-                                    EffectId.of("shutdown"),
-                                    () -> {
-                                        System.exit(0);
-                                        return message;
-                                    },
-                                    v -> v,
-                                    f -> message));
-                case "CLOSE_IDLE" -> Transition.next(model, report("WAITING"));
+                        Update.next(
+                                model,
+                                Command.task(
+                                        EffectId.of("shutdown"),
+                                        () -> {
+                                            System.exit(0);
+                                            return message;
+                                        },
+                                        v -> v,
+                                        f -> message));
+                case "CLOSE_IDLE" -> Update.next(model, report("WAITING"));
                 case "CLOSE" ->
-                    Transition.next(new Model(model.text(), model.size(), true), Command.quit());
+                        Update.next(new Model(model.text(), model.size(), true), Command.quit());
                 default -> throw new IllegalArgumentException(message.command());
             };
         }
 
-        public View<Message> view(Model model, Viewport viewport) {
+        public View<Message> view(Model model, ViewContext context) {
+            Viewport viewport = context.viewport();
             View<Message> content = model.text().equals("verified")
                     ? Views.column(
                             Views.text("Native 界"),
@@ -180,19 +182,22 @@ public final class TerminalProbe {
 
     public static void main(String[] args) throws Exception {
         if (args.length > 0 && args[0].equals("--bootstrap")) {
-            var result = Application.run(new Program<Integer, String>() {
-                public Transition<Integer, String> init(InitContext facts) {
-                    return Transition.next(0, Command.quit());
-                }
+            var result =
+                    Application.run(
+                            new Component<Integer, String, Never>() {
+                                public Update<Integer, String, Never> init(InitContext facts) {
+                                    return Update.next(0, Command.quit());
+                                }
 
-                public Transition<Integer, String> update(Integer model, String message) {
-                    return Transition.next(model);
-                }
+                                public Update<Integer, String, Never> update(
+                                        Integer model, String message) {
+                                    return Update.next(model);
+                                }
 
-                public View<String> view(Integer model, Viewport viewport) {
-                    return Views.text("bootstrap");
-                }
-            });
+                                public View<String> view(Integer model, ViewContext context) {
+                                    return Views.text("bootstrap");
+                                }
+                            });
             if (result.failure() != null) result.failure().printStackTrace(System.err);
             System.exit(result.status());
         }

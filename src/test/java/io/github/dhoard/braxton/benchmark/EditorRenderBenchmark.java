@@ -22,7 +22,7 @@
 
 package io.github.dhoard.braxton.benchmark;
 
-import java.util.concurrent.TimeUnit;
+import io.github.dhoard.braxton.widget.Editor;
 
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -37,10 +37,7 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
 
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.widget.Editor;
-import io.github.dhoard.braxton.widget.EditorOptions;
-import io.github.dhoard.braxton.widget.EditorState;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Editor rendering: the draft a composer repaints on every keystroke. The 4096-character draft
@@ -60,13 +57,13 @@ public class EditorRenderBenchmark {
     @Param({"256", "4096"})
     public int draftLength;
 
-    private EditorState state;
-    private EditorOptions options;
+    private Editor.Model state;
+    private Editor.Config options;
 
     @Setup
     public void setup() {
-        state = EditorState.of(BenchCorpus.build(corpus, draftLength));
-        options = EditorOptions.defaults();
+        state = Editor.Model.of(BenchCorpus.build(corpus, draftLength));
+        options = Editor.Config.defaults();
     }
 
     @Benchmark
@@ -81,7 +78,12 @@ public class EditorRenderBenchmark {
 
     @Benchmark
     public void buildView(Blackhole sink) {
-        sink.consume(Editor.<Object>view(ElementId.of("composer"), state, options, true,
-                action -> action));
+        sink.consume(
+                new Editor(options)
+                        .view(
+                                (state).withFocus(true),
+                                new io.github.dhoard.braxton.mvu.ViewContext(
+                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                        .map(action -> action));
     }
 }

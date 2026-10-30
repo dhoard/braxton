@@ -23,14 +23,15 @@
 package io.github.dhoard.braxton.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
-import java.time.Duration;
-
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.dhoard.braxton.clipboard.ClipboardConfig;
 import io.github.dhoard.braxton.internal.input.InputDecoder;
 import io.github.dhoard.braxton.internal.input.PasteDecoder;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
 
 /**
  * The defaults table in the README is a published contract ("Defaults are configuration, not hidden
@@ -44,13 +45,27 @@ class DocumentedDefaultsTest {
         assertThat(RuntimeOptions.DEFAULT_MAILBOX_CAPACITY).as("mailbox capacity").isEqualTo(4_096);
         assertThat(RuntimeOptions.DEFAULT_MAX_EFFECTS).as("one-shot effects").isEqualTo(64);
         assertThat(RuntimeOptions.DEFAULT_MAX_SUBSCRIPTIONS).as("ongoing sources").isEqualTo(64);
-        assertThat(RuntimeOptions.DEFAULT_SHUTDOWN_GRACE).as("shutdown grace")
+        assertThat(RuntimeOptions.DEFAULT_SHUTDOWN_GRACE)
+                .as("shutdown grace")
                 .isEqualTo(Duration.ofSeconds(2));
 
         RuntimeOptions defaults = RuntimeOptions.defaults();
         assertThat(defaults.mailboxCapacity()).isEqualTo(4_096);
         assertThat(defaults.maxConcurrentEffects()).isEqualTo(64);
         assertThat(defaults.maxSubscriptions()).isEqualTo(64);
+        assertThat(defaults.maxComponents()).isEqualTo(4_096);
+        assertThat(defaults.maxComponentDepth()).isEqualTo(64);
+        assertThat(defaults.maxLocalDispatchesPerTurn()).isEqualTo(1_024);
+        assertThat(defaults.withComponentLimits(8, 2, 16).maxComponents()).isEqualTo(8);
+        assertThatThrownBy(() -> defaults.withComponentLimits(0, 1, 1))
+                .as("component count limit")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> defaults.withComponentLimits(1, 0, 1))
+                .as("component depth limit")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> defaults.withComponentLimits(1, 1, 0))
+                .as("local dispatch limit")
+                .isInstanceOf(IllegalArgumentException.class);
         assertThat(defaults.shutdownGrace()).isEqualTo(Duration.ofSeconds(2));
     }
 

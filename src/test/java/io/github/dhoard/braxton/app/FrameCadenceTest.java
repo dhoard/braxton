@@ -23,9 +23,26 @@
 package io.github.dhoard.braxton.app;
 
 import static io.github.dhoard.braxton.internal.runtime.JLineTestTerminal.run;
-import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
-import io.github.dhoard.braxton.internal.runtime.ManualTimers;
+
 import static org.assertj.core.api.Assertions.assertThat;
+
+import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.effect.EffectId;
+import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.effect.SubscriptionId;
+import io.github.dhoard.braxton.input.Binding;
+import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
+import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.mvu.Component;
+import io.github.dhoard.braxton.mvu.InitContext;
+import io.github.dhoard.braxton.mvu.Never;
+import io.github.dhoard.braxton.mvu.Update;
+import io.github.dhoard.braxton.mvu.ViewContext;
+import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.view.Views;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,20 +50,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
-import io.github.dhoard.braxton.effect.Command;
-import io.github.dhoard.braxton.effect.EffectId;
-import io.github.dhoard.braxton.effect.Subscription;
-import io.github.dhoard.braxton.effect.SubscriptionId;
-import io.github.dhoard.braxton.input.Binding;
-import io.github.dhoard.braxton.layout.Size;
-import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
 
 @Timeout(15)
 class FrameCadenceTest {
@@ -56,34 +59,49 @@ class FrameCadenceTest {
     void aBurstAppliesEveryStateAndEffectInOrderButPresentsFewerFrames() {
         AtomicInteger views = new AtomicInteger();
         List<Integer> effects = new ArrayList<>();
-        Program<Integer, String> program = new Program<>() {
-            public Transition<Integer, String> init(InitContext context) {
-                return Transition.next(0);
-            }
-            public Transition<Integer, String> update(Integer model, String message) {
-                if (!"inc".equals(message)) {
-                    return Transition.next(model);
-                }
-                int next = model + 1;
-                Command<String> effect = Command.task(EffectId.of("effect/" + next), () -> {
-                    effects.add(next);
-                    return next;
-                }, value -> "ack", failure -> "failure");
-                return Transition.next(next, next == 200 ? Command.batch(effect, Command.quit(7)) : effect);
-            }
-            public View<String> view(Integer model, Viewport viewport) {
-                views.incrementAndGet();
-                return Views.text("count=" + model);
-            }
-            public Subscription<String> subscriptions(Integer model) {
-                return Subscription.source(SubscriptionId.of("burst"), "burst", emitter -> {
-                    for (int i = 0; i < 200; i++) {
-                        emitter.accept("inc");
+        Component<Integer, String, Never> program =
+                new Component<>() {
+                    public Update<Integer, String, Never> init(InitContext context) {
+                        return Update.next(0);
                     }
-                    return () -> { };
-                }, value -> (String) value);
-            }
-        };
+
+                    public Update<Integer, String, Never> update(Integer model, String message) {
+                        if (!"inc".equals(message)) {
+                            return Update.next(model);
+                        }
+                        int next = model + 1;
+                        Command<String> effect =
+                                Command.task(
+                                        EffectId.of("effect-" + next),
+                                        () -> {
+                                            effects.add(next);
+                                            return next;
+                                        },
+                                        value -> "ack",
+                                        failure -> "failure");
+                        return Update.next(
+                                next,
+                                next == 200 ? Command.batch(effect, Command.quit(7)) : effect);
+                    }
+
+                    public View<String> view(Integer model, ViewContext context) {
+                        views.incrementAndGet();
+                        return Views.text("count=" + model);
+                    }
+
+                    public Subscription<String> subscriptions(Integer model) {
+                        return Subscription.source(
+                                SubscriptionId.of("burst"),
+                                "burst",
+                                emitter -> {
+                                    for (int i = 0; i < 200; i++) {
+                                        emitter.accept("inc");
+                                    }
+                                    return () -> {};
+                                },
+                                value -> (String) value);
+                    }
+                };
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 20));
         ExitResult result = run(program, options(), terminal);
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.QUIT);
@@ -98,7 +116,7 @@ class FrameCadenceTest {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 20));
         CountDownLatch painted = new CountDownLatch(1);
         AtomicReference<ExitResult> result = new AtomicReference<>();
-        Program<Integer, String> program = singleUpdate(painted, null);
+        Component<Integer, String, Never> program = singleUpdate(painted, null);
         Thread owner = Thread.ofVirtual().start(() -> result.set(run(program, options(), terminal)));
         try {
             assertThat(painted.await(5, TimeUnit.SECONDS)).isTrue();
@@ -129,28 +147,36 @@ class FrameCadenceTest {
         assertThat(terminal.outputText()).contains("count=1");
     }
 
-    private static Program<Integer, String> singleUpdate(CountDownLatch painted, CountDownLatch updated) {
-        return new Program<>() {
-            public Transition<Integer, String> init(InitContext context) {
-                return Transition.next(0);
+    private static Component<Integer, String, Never> singleUpdate(
+            CountDownLatch painted, CountDownLatch updated) {
+        return new Component<>() {
+            public Update<Integer, String, Never> init(InitContext context) {
+                return Update.next(0);
             }
-            public Transition<Integer, String> update(Integer model, String message) {
+
+            public Update<Integer, String, Never> update(Integer model, String message) {
                 if (updated != null) {
                     updated.countDown();
                 }
-                return Transition.next(1);
+                return Update.next(1);
             }
-            public View<String> view(Integer model, Viewport viewport) {
+
+            public View<String> view(Integer model, ViewContext context) {
                 if (model == 1 && painted != null) {
                     painted.countDown();
                 }
                 return Views.text("count=" + model);
             }
+
             public Subscription<String> subscriptions(Integer model) {
-                return Subscription.source(SubscriptionId.of("one"), "one", emitter -> {
-                    emitter.accept("inc");
-                    return () -> { };
-                }, value -> (String) value);
+                return Subscription.source(
+                        SubscriptionId.of("one"),
+                        "one",
+                        emitter -> {
+                            emitter.accept("inc");
+                            return () -> {};
+                        },
+                        value -> (String) value);
             }
         };
     }
@@ -160,28 +186,38 @@ class FrameCadenceTest {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 20));
         CountDownLatch switched = new CountDownLatch(1);
         AtomicReference<ExitResult> result = new AtomicReference<>();
-        Program<Integer, String> program = new Program<>() {
-            public Transition<Integer, String> init(InitContext context) {
-                return Transition.next(0);
-            }
-            public Transition<Integer, String> update(Integer model, String message) {
-                if ("switch".equals(message)) {
-                    switched.countDown();
-                    return Transition.next(1);
-                }
-                return Transition.next(model, Command.quit(9));
-            }
-            public View<String> view(Integer model, Viewport viewport) {
-                return Views.keyed(List.of(Binding.of(model == 0 ? "a" : "b", "quit")),
-                        Views.text("state=" + model), List.of());
-            }
-            public Subscription<String> subscriptions(Integer model) {
-                return Subscription.source(SubscriptionId.of("switch"), "switch", emitter -> {
-                    emitter.accept("switch");
-                    return () -> { };
-                }, value -> (String) value);
-            }
-        };
+        Component<Integer, String, Never> program =
+                new Component<>() {
+                    public Update<Integer, String, Never> init(InitContext context) {
+                        return Update.next(0);
+                    }
+
+                    public Update<Integer, String, Never> update(Integer model, String message) {
+                        if ("switch".equals(message)) {
+                            switched.countDown();
+                            return Update.next(1);
+                        }
+                        return Update.next(model, Command.quit(9));
+                    }
+
+                    public View<String> view(Integer model, ViewContext context) {
+                        return Views.keyed(
+                                List.of(Binding.of(model == 0 ? "a" : "b", "quit")),
+                                Views.text("state=" + model),
+                                List.of());
+                    }
+
+                    public Subscription<String> subscriptions(Integer model) {
+                        return Subscription.source(
+                                SubscriptionId.of("switch"),
+                                "switch",
+                                emitter -> {
+                                    emitter.accept("switch");
+                                    return () -> {};
+                                },
+                                value -> (String) value);
+                    }
+                };
         Thread owner = Thread.ofVirtual().start(() -> result.set(run(program, options(), terminal)));
         try {
             assertThat(switched.await(5, TimeUnit.SECONDS)).isTrue();

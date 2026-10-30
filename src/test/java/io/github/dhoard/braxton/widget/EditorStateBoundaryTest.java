@@ -31,10 +31,10 @@ class EditorStateBoundaryTest {
     void caretAndBothSelectionEndsRoundDownInsideWholeClusters() {
         String[] clusters = {"e\u0301", "\uD83D\uDE00", "\uD83D\uDC69\u200D\uD83D\uDCBB", "\uD83C\uDDFA\uD83C\uDDF8"};
         for (String cluster : clusters) {
-            EditorState original = EditorState.of("a" + cluster + "z");
+            Editor.Model original = Editor.Model.of("a" + cluster + "z");
             for (int inside = 1; inside < cluster.length(); inside++) {
                 int offset = 1 + inside;
-                EditorState caret = original.withCaret(offset);
+                Editor.Model caret = original.withCaret(offset);
                 assertThat(caret.caret()).as("inside %s at %d", cluster, offset).isEqualTo(1);
                 assertThat(caret.anchor()).isEqualTo(1);
                 assertThat(original.withSelection(offset, original.text().length()).selection())

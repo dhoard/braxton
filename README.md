@@ -72,13 +72,13 @@ gate:
 ./build.sh clean                  # remove target/ for Braxton and vendor/jline3
 ```
 
-The vendored JLine version is derived from the Braxton version: `0.1.0-SNAPSHOT` builds
-`0.1.0-jline-braxton`. `./build.sh` refuses to build when `pom.xml` `<jline.version>` or
+The vendored JLine version is derived from the Braxton version: `0.2.0-SNAPSHOT` builds
+`0.2.0-jline-braxton`. `./build.sh` refuses to build when `pom.xml` `<jline.version>` or
 `vendor/jline3/.mvn/maven.config` disagree with that derivation, and it skips the JLine build when
 the installed artifacts are newer than the vendored sources. A `clean` goal removes the vendored
 JLine build output as well, so the next build compiles JLine from scratch; installed artifacts stay
 in the local repository, as `./mvnw clean` leaves Braxton's installed artifact alone. `./mvnw` on
-its own does not build JLine; the `0.1.0-jline-braxton` artifacts must already be installed.
+its own does not build JLine; the `0.2.0-jline-braxton` artifacts must already be installed.
 
 This local JLine build serializes a closed-stream check and byte consumption after native poll completion, preventing a
 closed input pump from consuming the next application's first key. Published Maven 4.4.8 does not
@@ -105,116 +105,139 @@ build it from source or install it locally with `./build.sh`.
 
 ## Quick start
 
-A complete program is a model, a message type, an `update` function, and a `view` function.
+A root and its children implement the same `Component<Model, Msg, Out>` contract. This complete
+example mounts two counters. Press **a** or **b** to update only that child; its output becomes a
+parent message after the child model commits. Save it as `demo/Counters.java`.
 
 ```java
 package demo;
 
 import java.util.List;
-
 import io.github.dhoard.braxton.app.Application;
-import io.github.dhoard.braxton.app.InitContext;
-import io.github.dhoard.braxton.app.Program;
-import io.github.dhoard.braxton.app.Transition;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.input.Binding;
-import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.mvu.*;
+import io.github.dhoard.braxton.view.*;
 
-public final class HelloProgram implements Program<HelloProgram.Model, HelloProgram.Msg> {
-
-    public record Model(int count) {}
-
+public final class Counters implements Component<Counters.Model, Counters.Msg, Never> {
+    public record Model(Integer left, Integer right, int lastOutput) { }
     public sealed interface Msg {
-        record Increment() implements Msg {}
-        record Quit() implements Msg {}
+        record Left(Counter.Msg value) implements Msg { }
+        record Right(Counter.Msg value) implements Msg { }
+        record Changed(int value) implements Msg { }
+        record Quit() implements Msg { }
     }
-
-    @Override
-    public Transition<Model, Msg> init(InitContext context) {
-        return Transition.next(new Model(0));
+    public static final class Counter implements Component<Integer, Counter.Msg, Integer> {
+        public enum Msg { INCREMENT }
+        public Update<Integer, Msg, Integer> init(InitContext context) { return Update.next(0); }
+        public Update<Integer, Msg, Integer> update(Integer model, Msg message) {
+            return Update.emit(model + 1, model + 1);
+        }
+        public View<Msg> view(Integer model, ViewContext context) { return Views.text("count: " + model); }
     }
+    private static final Mount<Model, Msg, Never, Integer, Counter.Msg, Integer> LEFT = Mount.of(
+            ComponentId.of("left"), new Counter(),
+            ModelLens.of(Model::left, (p, c) -> new Model(c, p.right(), p.lastOutput())),
+            Msg.Left::new, OutputRoute.toMessage(Msg.Changed::new));
+    private static final Mount<Model, Msg, Never, Integer, Counter.Msg, Integer> RIGHT = Mount.of(
+            ComponentId.of("right"), new Counter(),
+            ModelLens.of(Model::right, (p, c) -> new Model(p.left(), c, p.lastOutput())),
+            Msg.Right::new, OutputRoute.toMessage(Msg.Changed::new));
 
-    @Override
-    public Transition<Model, Msg> update(Model model, Msg message) {
+    public Update<Model, Msg, Never> init(InitContext context) {
+        var left = LEFT.initialize(context);
+        var right = RIGHT.initialize(context);
+        return Update.next(new Model(left.model(), right.model(), 0),
+                Command.batch(left.command(), right.command()));
+    }
+    public Update<Model, Msg, Never> update(Model model, Msg message) {
         return switch (message) {
-            case Msg.Increment ignored -> Transition.next(new Model(model.count() + 1));
-            case Msg.Quit ignored -> Transition.next(model, Command.quit());
+            case Msg.Left left -> LEFT.update(model, left.value());
+            case Msg.Right right -> RIGHT.update(model, right.value());
+            case Msg.Changed changed -> Update.next(new Model(model.left(), model.right(), changed.value()));
+            case Msg.Quit quit -> Update.next(model, Command.quit());
         };
     }
-
-    @Override
-    public View<Msg> view(Model model, Viewport viewport) {
-        return Views.keyed(
-                List.of(
-                        Binding.of("space", new Msg.Increment()),
-                        Binding.of("ctrl+c", new Msg.Quit())),
-                Views.column(
-                        Views.text("Hello, terminal", Style.NONE.withBold()),
-                        Views.text("count: " + model.count())),
-                List.of());
+    public ComponentTree children(Model model) { return ComponentTree.of(LEFT.tree(model), RIGHT.tree(model)); }
+    public View<Msg> view(Model model, ViewContext context) {
+        return Views.keyed(List.of(
+                Binding.of("a", new Msg.Left(Counter.Msg.INCREMENT)),
+                Binding.of("b", new Msg.Right(Counter.Msg.INCREMENT)),
+                Binding.of("ctrl+c", new Msg.Quit())),
+                Views.column(LEFT.view(model, context), RIGHT.view(model, context),
+                        Views.text("last output: " + model.lastOutput())), List.of());
     }
-
-    public static void main(String[] args) {
-        Application.run(new HelloProgram());
-    }
+    public static void main(String[] args) { Application.run(new Counters()); }
 }
 ```
 
 ```bash
-./mvnw -q compile dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=target/showcase-lib
-java --enable-native-access=ALL-UNNAMED -cp "target/classes:target/showcase-lib/*" demo.HelloProgram
+./build.sh package
+./mvnw -q dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=target/showcase-lib
+javac -cp target/classes -d target/classes demo/Counters.java
+java --enable-native-access=ALL-UNNAMED -cp "target/classes:target/showcase-lib/*" demo.Counters
 ```
-
-The only bundled application is the [AI Harness](#ai-harness); it is a complete, production-shaped
-example of the same API.
 
 ## Core concepts
 
-```text
-input / resize / timers / task results
-                │
-          runtime envelopes
-                │
-      scoped input routing → Msg
-                │
-       update(model, msg) → Transition
-                │
-     immutable model + Command
-                │
-      view(model, viewport) → View<Msg>
-                │
-   layout → styled cells → diff → terminal
-```
+`mvu.Component<M, Msg, Out>` owns pure `init`, `update`, `view`, `subscriptions`, and `children`
+functions. `Update<M, Msg, Out>` contains a non-null model, inert command, and an immutable ordered
+list of non-null outputs. `Never` has no values and is the only root output type accepted by
+`Application.run`. Definitions hold immutable configuration; models hold application state.
+`InitContext` carries startup viewport/capability facts; `ViewContext` carries the current viewport.
+No component gets a terminal, executor, clock, or runtime handle. Time and I/O arrive as messages.
 
-The contract is deliberately small:
+A `ModelLens` reads/replaces one child in an explicit aggregate. `Mount` initializes a child, replaces
+its returned model while preserving siblings, maps its messages, and scopes the child's commands,
+subscriptions, focus IDs and descendant paths. If the child returns its incoming model reference,
+the mount keeps the parent reference too, without suppressing commands or outputs.
+Use `OutputRoute.toMessage` for a parent reaction or `toOutput` to lift an event further upward.
+Neither route calls a parent update from the child stack.
+A message routed from an output belongs to the parent, so it is dispatched in the parent's scope: it
+still arrives when the same update unmounts the child. Initialization returns `Initialization`:
+construct the aggregate model before returning its lifted commands and outputs. If children emit
+upward during initialization, include those outputs in the parent's `Update`, not just their
+commands.
 
-```java
-public interface Program<M, Msg> {
-    Transition<M, Msg> init(InitContext context);
-    Transition<M, Msg> update(M model, Msg message);
-    View<Msg> view(M model, Viewport viewport);
-    default Subscription<Msg> subscriptions(M model) {
-        return Subscription.none();
-    }
-}
+Declare every active mount with `children(model)`, including invisible/effect-only children, and
+include its `subscriptions(model)` in the parent's subscription batch. A mount is not implicitly
+active because it is visible. Mounts defer descendant discovery so tree validation can enforce
+bounds before descending. Dynamic children use explicit stable domain keys converted to
+`ComponentId`; list position and component object identity do not own lifetimes. Reordering keeps
+resources; removal invalidates the path, closes sources and cancels effects. Reinserting that path
+creates a fresh epoch, suppressing results already queued by the old instance.
 
-public record Transition<M, Msg>(M model, Command<Msg> command) {}
-```
+`ComponentId` and local effect/source/element IDs reject blank, slash-containing, control, dot,
+dot-dot and over-128-UTF-16-unit segments; conversion never silently normalizes keys.
+`ComponentPath` stores immutable segments, not parsed namespace strings. Mounts prepend paths
+structurally; siblings can reuse local `load`, `tick` and `input` IDs safely. The `scoped` value
+operations support composition; application code normally needs only mounts and local factories.
 
-Rules the runtime relies on:
+The owner validates the candidate tree and subscription descriptors before installing the model,
+invalidates removed scopes before starting new resources, reconciles subscriptions, and interprets
+commands. Duplicate paths or subscriptions fail before new resources activate. A failure during
+resource startup still fails the run and triggers cleanup; it is not an automatic fallback model.
 
-1. **`init`, `update`, `view`, and `subscriptions` are pure.** No I/O, clock reads, terminal
-   access, or mutation of their arguments. `InitContext` carries already-captured values
-   (viewport and terminal capabilities). Application configuration belongs in the program constructor; time arrives through explicit effects/messages.
-2. **Messages are application-owned.** A sealed interface of records keeps dispatch exhaustive
-   and lets child features map their messages into a parent without casts.
-3. **Effects are data.** Return a `Command`; the runtime interprets it after the model commits.
-4. **Views are descriptions.** Building or drawing a view never mutates state.
-5. **One owner.** The runtime serializes routing, `update`, command interpretation, subscription
-   reconciliation, layout, and output. Background workers only enqueue messages.
+`Command.dispatch(message)` appends to an owner-local FIFO after commit. One initialization or
+external envelope plus all its local messages is a **turn**. Local messages drain before the next
+external envelope; view work is coalesced until the turn ends. Dispatch never re-enters `update`.
+Batches retain declaration order. **Quit is terminal:** it stops the batch and discards every
+queued-but-undrained local message. A cycle fails at the configured per-turn dispatch limit rather
+than starving input. Unchanged model references still reconcile resources and interpret commands.
+
+A command is interpreted against the scope that produced it. When the very update that returned a
+child's command also unmounts that child, the command is void: it is discarded, with a diagnostic,
+instead of failing the run — the component no longer exists, so its effects and its own messages
+must not run. A command naming a path no component ever declared is still a run failure.
+
+Nested failures report `ComponentFailure.path()` and `phase()` (`INIT`, `UPDATE`, `VIEW`,
+`SUBSCRIPTIONS`, `CHILDREN`, `OUTPUT_ROUTE`). A declaration the framework rejects — an exceeded
+component count or depth, an invalid subscription declaration, or a command scoped to an undeclared
+component — also states its structural reason in the message and in `ComponentFailure.detail()`,
+so the reason is visible without unwrapping the cause. The original throwable remains the cause, and cleanup failures remain
+separate in `ExitResult`. Fatal `Error`s (for example `StackOverflowError`) are rethrown unchanged
+rather than wrapped. Diagnostic messages do not render model/message payloads; application
+exceptions can still contain sensitive data, so handle their causes accordingly.
 
 ## Views and layout
 
@@ -261,10 +284,9 @@ topmost modal scope
 The first consumer wins, so a consumed shortcut never also inserts text. Duplicate bindings in one
 phase are rejected when the view is built.
 
-Focus is model data: `FocusState` holds an `ElementId`, and `ElementId.child("name")` namespaces a
-child feature. A child name must not contain the `/` separator, because joining one would forge an
-identity that another parent already owns. Focus survives view rebuilds and sibling reordering; a
-target that disappears simply receives nothing.
+Focus is model data: `FocusState` holds an `ElementId`. Local IDs are automatically scoped by
+mounts, so rebuilding or reordering siblings does not merge targets. A removed target receives no
+input; the next view is routed against the latest committed model.
 
 Normalized input is one of `KeyInput`, `PasteInput`, or `ResizeInput`. Printable keys carry their
 text exactly once, and bracketed paste arrives as one atomic event that never triggers Enter or a
@@ -291,16 +313,16 @@ arrives later may be the next key the user pressed.
 | `Command.none()` / `Command.batch(...)` | Nothing / ordered batch |
 | `Command.delay(id, duration, message, rejected)` | Deliver a message later |
 | `Command.task(id, work, onSuccess, onFailure)` | Run application work on the effect executor |
-| `Command.cancel(id)` / `Command.cancelNamespace(ns)` | Invalidate effects |
+| `Command.cancel(id)` / `Command.cancelAll()` | Invalidate effects |
 | `Command.copy(text, mapper)` | Write the clipboard and report a `ClipboardResult` |
 | `Command.readClipboard(mapper)` | Read the session's in-process clipboard buffer |
-| `Command.quit()` | End the program |
+| `Command.dispatch(message)` | Bounded local FIFO message after commit |
+| `Command.quit()` | End the application and discard queued local messages |
 
-Effects are epoch-guarded: replacing or canceling an id means a late completion can never reach the
-model. Effect ids are namespaced too, and, like a focus target, a child name must not contain the
-`/` separator: joining one would forge an id another parent already owns, so the two features would
-register as one effect and the later would replace and cancel the earlier. Task results, timer
-ticks, and clipboard reports arrive as ordinary messages, so `update` is never re-entered.
+Effects are epoch-guarded and component-scoped. Individual cancellation affects a local ID;
+`cancelAll()` invalidates work in the current scope and descendants, never siblings. Removing a
+component invalidates queued async messages even if a task ignores interruption. Task results,
+timer ticks and clipboard reports arrive as ordinary messages, so update is never re-entered.
 `Command.task` bodies are the documented impure boundary — they must not touch the terminal,
 mutate captured state, or call `update`.
 
@@ -316,26 +338,34 @@ After every commit the runtime reconciles the description against the live set: 
 identity/configuration keeps the resource and replaces only the message mapper, changed or removed
 sources are closed exactly once, and duplicate ids are rejected. Removing or replacing an interval
 cancels its queued timer even when scheduling overlaps closure; an unchanged id and period keep the
-timer and refresh only its mapper. Subscription ids are namespaced the same way as effect ids, and a
-child name must not contain the `/` separator: joining one would make two declared paths one id,
-which the duplicate check then rejects.
+timer and refresh only its mapper. Mounts scope source IDs structurally; duplicate local IDs in
+one scope remain an error, while the same ID in different children is independent. A source mapper
+may return `null` to decline an emission; message mapping through mounts preserves that decision
+without invoking parent message mappers.
 
 ## The editor
 
-`Editor` is a pure reducer plus a declarative view. The draft lives in your model:
+`Editor` is a component with nested immutable `Model`, sealed `Msg`/`Output`, and immutable
+`Config`. Mount it exactly like a domain component. Configuration holds editing/rendering policy;
+model data holds text, caret, selection, preferred visual column and focus.
 
 ```java
-EditorResult result = Editor.update(model.draft(), options, action);
+var editor = new Editor(Editor.Config.defaults().withMaxLength(4096));
+var initialized = editor.init(new InitContext(null, null));
+var edited = editor.update(initialized.model(), new Editor.Msg.Insert("hello"));
+var submitted = editor.update(edited.model(), new Editor.Msg.Submit());
+// submitted.outputs() contains Editor.Output.Submit("hello"); no I/O occurred.
 ```
 
-`EditorAction` covers insertion, paste, deletion, movement, selection, submit, copy, and paste
-requests. The result is a new `EditorState` plus an `EditorIntent`, so the application decides what
-submission, copying, or pasting means.
-
-```java
-View<Msg> composer = Editor.view(ElementId.of("composer"), state.draft(), options,
-        focused, action -> new Msg.Editor(action));
-```
+Submission, copy and paste requests are semantic outputs consumed by the parent. To clear an
+accepted draft send `Editor.Msg.Clear`; to change focus use immutable `Model.withFocus`, which
+returns the same instance when focus is unchanged. An action that changes nothing returns the
+incoming model instance, so the runtime's unchanged-reference repaint rule holds. Navigation and
+editing remain messages, and `Editor.render` remains a pure text renderer. `Selector` and
+`TableSelector` follow the same component/model/message/output/config pattern, with chosen and
+cancelled outputs, the same `Model.focused` state and the same no-op reference rule. Empty
+selections emit no synthetic choice. Their `Config.defaults()` provides empty initial data and
+standard styles; configure options/table data explicitly for initialization.
 
 Guarantees:
 
@@ -352,12 +382,12 @@ Guarantees:
 
 ## Widgets, assets, and clipboard
 
-Widgets are pure factories producing immutable `StyledText`/`View` values, and rendering one
-mutates nothing. Two assembly styles exist for the multi-part widgets. `ProgressBar` is an
+Stateful widgets are components; stateless widgets are pure factories producing immutable
+`StyledText`/`View` values. Rendering either mutates nothing. Two assembly styles exist for the multi-part widgets. `ProgressBar` is an
 immutable value: every setter returns a new instance. `Table`, `Box`, `Badge`, `Quote`,
 `ImageView`, and `Logo` are assembled with a small mutable builder whose setters return the same
 instance, so build one inside `view` (or a factory) instead of sharing it across frames. Widget
-state you own - `Selector.State`, `EditorState` - is a value in your model:
+state you own - `Selector.Model`, `Editor.Model` - is a value in your model:
 
 | Type | Purpose |
 | --- | --- |
@@ -386,7 +416,7 @@ already gone. Pass `StyledText.plain(LineBreaks.normalize(raw))` to a styled-inp
 as `Badge`, or flatten the raw text when a one-row value is intended. The helpers are stateless:
 a CR at the end of one call and the LF at the start of the next are two independent breaks, so
 assemble the value first. `PasteSanitizer` and editor insertion normalize before their own
-filtering and truncation. `EditorState` normalizes the draft it is given - by its constructor,
+filtering and truncation. `Editor.Model` normalizes the draft it is given - by its constructor,
 `of(...)`, or `withText(...)` - and carries the caller's caret and anchor offsets onto the prepared
 text, so a draft restored from CRLF data never holds a character that the caret's column arithmetic
 counts while the painted row omits its cell. `Box.title(String)` flattens its raw title before the
@@ -403,7 +433,7 @@ accepted a payload. Copy sequences share the frame output owner and cannot split
 
 ## Runtime and terminal
 
-`Application.run(program)` owns a JLine FFM `Terminal`, raw mode, alternate-screen/cursor,
+`Application.run(component)` owns a JLine FFM `Terminal`, raw mode, alternate-screen/cursor,
 paste/mouse modes, input, sizing, and cleanup. It requires an attached process terminal and explicit
 native access. It returns a structured failure when those prerequisites are missing. There is no
 Braxton terminal backend/session SPI, alternate provider, or implicit `/dev/tty`/plain-output fallback.
@@ -422,6 +452,8 @@ Defaults are configuration, not hidden constants:
 | Mailbox capacity | 4,096 non-coalescible envelopes |
 | Concurrent one-shot effects (tasks + delays) | 64 |
 | Ongoing sources | 64 |
+| Active components (including root) / child depth | 4,096 / 64 |
+| Local dispatches per turn | 1,024 |
 | Paste payload / idle timeout / escape timeout / CSI length | 1 MiB / 250 ms / 30 ms / 64 bytes |
 | Shutdown grace | 2 s |
 
@@ -467,7 +499,12 @@ trailing bytes. Input content still passes through Braxton's normalization and r
 
 ## AI Harness
 
-`examples.harness.ai.HarnessProgram` is a complete application built on the public API:
+`examples.harness.ai.Harness` is a hierarchical application built on the public API.
+`Harness.Model` embeds independent `Session.Model` and `Editor.Model` values. The session owns
+transcript loading/history/metadata/replay/scroll; the editor owns the composer draft and gestures.
+The root coordinates cross-component workflow and consumes editor outputs through local dispatch.
+Mounted child views use the same production renderer as the headless projection tests:
+
 
 - transcript loading is a task command;
 - response pacing is a delayed message guarded by generation and ordinal;
@@ -500,7 +537,9 @@ responses, with no model, provider, network, or user-session access.
 
 | Package | Responsibility |
 | --- | --- |
-| `io.github.dhoard.braxton.app` | `Program`, `Transition`, `Application`, runtime options, immutable startup facts and terminal presentation choices |
+| `io.github.dhoard.braxton.app` | `Application`, runtime options and terminal presentation choices |
+| `io.github.dhoard.braxton.mvu` | `Component`, `Update`, contexts, mounts/lenses, output routes, identity/tree and failure values |
+| `io.github.dhoard.braxton.testing` | Pure `ComponentDriver`, inert effect inspection and headless rendering |
 | `io.github.dhoard.braxton.effect` | `Command`, `Subscription`, effect and source identities |
 | `io.github.dhoard.braxton.input` | Value keys, modifiers, normalized events, bindings |
 | `io.github.dhoard.braxton.view` | Immutable views, `Views`, `ElementId`, `FocusState`, `ScreenRenderer` |
@@ -532,6 +571,13 @@ API surface.
   automated suite is TTY-free.
 
 ## Testing and quality gates
+
+Consumers can call pure component functions directly or use `ComponentDriver.initialize(component,
+context)`, then `send(message)`, `model()`, `latest()`, `subscriptions()`, `children()` and
+`screen(viewContext)`. The driver does **not** interpret commands (including dispatch/quit), start
+sources or emulate a runtime. Inspect returned commands/outputs and send local dispatch messages
+explicitly when testing a composed update sequence. It uses production component/view/layout code
+without JLine access or a test-framework dependency.
 
 ```bash
 ./build.sh clean verify    # install vendored JLine, compile with -Xlint:all, run the suite
@@ -597,7 +643,7 @@ the full project gate, and a terminal-emulation check when TUI code is touched.
 Interactive runs require `--enable-native-access=ALL-UNNAMED` on the classpath. A module-path
 launch must instead grant access to `org.jline.terminal.ffm`. Braxton checks permission before
 initializing the FFM provider, even on JDKs that otherwise only warn. Maven resolves the locally
-installed `0.1.0-jline-braxton` version of the pinned
+installed `0.2.0-jline-braxton` version of the pinned
 `jline-terminal` and `jline-terminal-ffm` dependencies and their transitive support artifacts;
 JLine is not shaded or optional. A launch with only the Braxton jar on its classpath is insufficient.
 JLine still performs native integration and can use internal signal APIs as an upstream fallback.
@@ -633,13 +679,19 @@ python tools/terminal/verify_windows_terminal.py
 The Windows driver uses developer-only Python ctypes for ConPTY and console-mode snapshots;
 it is not part of the published library. Run the corresponding checks on each named platform before
 claiming its terminal behavior is verified. Test outcomes and remaining gaps are recorded in
-[the implementation record](plans/jline4-mvu-refactor.impl.md#9-execution-record-and-handoff).
+[the implementation record](plans/hierarchical-mvu-refactor.impl.md#9-execution-record-and-handoff).
 
-The JLine refactor intentionally breaks the previous bootstrap/infrastructure API: backend/session
-interfaces and backend-taking run overloads are removed; terminal value imports move to `app`;
-`InitContext` exposes facts only; `RuntimeOptions.withEnvironment` and `Transition.stay` are removed.
-Use `Transition.next(model)` for a transition without work and `next(model, command)` for work.
-Headless callers consume immutable `RenderedScreen`, rather than internal mutable engine objects.
+### Source migration to 0.2
+
+This is an intentional source/binary break, with no adapters, aliases or deprecated forwarders.
+Replace the flat two-generic application contract/result with `Component<M, Msg, Out>` and
+`Update<M, Msg, Out>`; root output is `Never`. Import contexts from `mvu`, and use `ViewContext`
+instead of passing a viewport directly. Split feature state/messages into child components, embed
+their models explicitly, and compose via lenses, mounts and typed output routes. Declare active
+children and lifted subscriptions. Replace manual slash IDs and namespace cancellation with local
+IDs and scope-local `cancelAll()`. Migrate stateful widgets to their nested component types and
+instance methods. Recompile consumers; old binaries are unsupported. The renderer/terminal provider,
+module name, coordinates, Unicode policy and offline fixture remain unchanged.
 
 ## Limitations
 
@@ -686,7 +738,7 @@ Before opening a pull request:
 
 ## Project status and versioning
 
-Braxton is **pre-1.0** (`0.1.0-SNAPSHOT`). The public API is stabilizing but may change between minor
+Braxton is **pre-1.0** (`0.2.0-SNAPSHOT`). The public API is stabilizing but may change between minor
 releases; `internal` packages are never part of the supported surface. Releases follow semantic
 versioning once 1.0 is reached.
 

@@ -22,20 +22,20 @@
 
 package io.github.dhoard.braxton.internal.runtime;
 
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.effect.SubscriptionId;
+import io.github.dhoard.braxton.layout.Size;
+
+import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.effect.Subscription;
-import io.github.dhoard.braxton.effect.SubscriptionId;
-import io.github.dhoard.braxton.layout.Size;
-import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 
 /** Source reconciliation: identity, mapping refresh, epochs, and limits. */
 class SubscriptionManagerTest {
@@ -248,9 +248,12 @@ class SubscriptionManagerTest {
     void aResizeMapperThatReturnsNullEmitsNoMessage() throws Exception {
         // A mapper may decline a size it does not care about, exactly like an interval or source
         // mapper: null is not a message value, so nothing is enqueued for the owner. Enqueuing it
-        // would hand Program.update a null instead of a value from the application's message type.
-        manager.reconcile(Subscription.resize(SubscriptionId.of("resize"),
-                size -> size.rows() > 2 ? "big:" + size.rows() : null));
+        // would hand Component.update a null instead of a value from the application's message
+        // type.
+        manager.reconcile(
+                Subscription.resize(
+                        SubscriptionId.of("resize"),
+                        size -> size.rows() > 2 ? "big:" + size.rows() : null));
         manager.notifyResize(new Size(1, 4));
         assertThat(mailbox.poll(0)).as("a null mapper result is not a message").isNull();
         manager.notifyResize(new Size(3, 4));
@@ -341,8 +344,14 @@ class SubscriptionManagerTest {
         }
         SubscriptionManager<Child> childManager =
                 new SubscriptionManager<>(mailbox, timers, 4, diagnostics::add);
-        childManager.reconcile(Subscription.interval(SubscriptionId.of("c").child("tick"),
-                Duration.ofMillis(10), time -> new Child("tick")));
+        childManager.reconcile(
+                Subscription.interval(
+                        SubscriptionId.of("tick")
+                                .scoped(
+                                        io.github.dhoard.braxton.mvu.ComponentPath.ROOT.append(
+                                                io.github.dhoard.braxton.mvu.ComponentId.of("c"))),
+                        Duration.ofMillis(10),
+                        time -> new Child("tick")));
         timers.advance(10_000_000L);
         Mailbox.AppMessage message = (Mailbox.AppMessage) mailbox.poll(20);
         assertThat(message.payload()).isEqualTo(new Child("tick"));

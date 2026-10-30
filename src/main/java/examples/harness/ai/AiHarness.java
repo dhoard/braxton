@@ -22,19 +22,19 @@
 
 package examples.harness.ai;
 
-import java.io.File;
-import java.nio.file.Path;
-import java.util.List;
-
 import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.app.RuntimeOptions;
 import io.github.dhoard.braxton.app.TerminalOptions;
 
+import java.io.File;
+import java.nio.file.Path;
+import java.util.List;
+
 /**
  * Entry point for the native-Braxton AI Harness.
  *
- * <p>The whole application is {@link HarnessProgram}: one immutable model, one update function, one
+ * <p>The whole application is {@link Harness}: one immutable model, one update function, one
  * view tree. This class only supplies launch-time data and translates the runtime's result into a
  * process status. It performs no terminal I/O of its own.</p>
  */
@@ -64,8 +64,8 @@ public final class AiHarness {
     }
 
     /** The production harness program, used directly and as an embedded feature by the showcase. */
-    public static HarnessProgram createProgram() {
-        return new HarnessProgram(TranscriptLoader::load, projectPath(), List.of());
+    public static Harness createProgram() {
+        return new Harness(TranscriptLoader::load, projectPath(), List.of());
     }
 
     public static String projectPath() {

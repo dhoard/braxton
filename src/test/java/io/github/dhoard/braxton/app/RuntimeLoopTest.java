@@ -23,53 +23,58 @@
 package io.github.dhoard.braxton.app;
 
 import static io.github.dhoard.braxton.internal.runtime.JLineTestTerminal.run;
-import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
-import io.github.dhoard.braxton.internal.runtime.ManualTimers;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
-import io.github.dhoard.braxton.internal.runtime.Timers;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
 import io.github.dhoard.braxton.input.Binding;
+import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
+import io.github.dhoard.braxton.internal.runtime.ManualTimers;
+import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
+import io.github.dhoard.braxton.internal.runtime.Timers;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.app.TerminalCapabilities;
-import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
+import io.github.dhoard.braxton.mvu.Component;
+import io.github.dhoard.braxton.mvu.ComponentFailure;
+import io.github.dhoard.braxton.mvu.InitContext;
+import io.github.dhoard.braxton.mvu.Never;
+import io.github.dhoard.braxton.mvu.Update;
+import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** End-to-end runtime behaviour over an in-memory terminal: one owner, no native access. */
 class RuntimeLoopTest {
 
     /** Increments on "a", quits on "q", and renders the count. */
-    private record Counter() implements Program<Integer, String> {
+    private record Counter() implements Component<Integer, String, Never> {
 
         @Override
-        public Transition<Integer, String> init(InitContext context) {
-            return Transition.next(0);
+        public Update<Integer, String, Never> init(InitContext context) {
+            return Update.next(0);
         }
 
         @Override
-        public Transition<Integer, String> update(Integer model, String message) {
+        public Update<Integer, String, Never> update(Integer model, String message) {
             return switch (message) {
-                case "inc" -> Transition.next(model + 1);
-                case "quit" -> Transition.next(model, Command.quit(3));
-                default -> Transition.next(model);
+                case "inc" -> Update.next(model + 1);
+                case "quit" -> Update.next(model, Command.quit(3));
+                default -> Update.next(model);
             };
         }
 
         @Override
-        public View<String> view(Integer model, Viewport viewport) {
+        public View<String> view(Integer model, ViewContext context) {
             return Views.keyed(List.of(
                     Binding.of("a", "inc"),
                     Binding.of("space", "inc"),
@@ -89,20 +94,21 @@ class RuntimeLoopTest {
     }
 
     /** Renders the viewport it was given, so a resize is visible in the output. */
-    private record Measured() implements Program<Integer, String> {
+    private record Measured() implements Component<Integer, String, Never> {
 
         @Override
-        public Transition<Integer, String> init(InitContext context) {
-            return Transition.next(0);
+        public Update<Integer, String, Never> init(InitContext context) {
+            return Update.next(0);
         }
 
         @Override
-        public Transition<Integer, String> update(Integer model, String message) {
-            return Transition.next(model);
+        public Update<Integer, String, Never> update(Integer model, String message) {
+            return Update.next(model);
         }
 
         @Override
-        public View<String> view(Integer model, Viewport viewport) {
+        public View<String> view(Integer model, ViewContext context) {
+            Viewport viewport = context.viewport();
             return Views.text("size: " + viewport.rows() + "x" + viewport.cols());
         }
     }
@@ -144,30 +150,34 @@ class RuntimeLoopTest {
         // sealed-message dispatch throw and ends the run with a failure.
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
         RuntimeOptions options = options();
-        Program<Integer, ResizeMessage> program = new Program<>() {
-            @Override
-            public Transition<Integer, ResizeMessage> init(InitContext context) {
-                return Transition.next(0);
-            }
+        Component<Integer, ResizeMessage, Never> program =
+                new Component<>() {
+                    @Override
+                    public Update<Integer, ResizeMessage, Never> init(InitContext context) {
+                        return Update.next(0);
+                    }
 
-            @Override
-            public Transition<Integer, ResizeMessage> update(Integer model, ResizeMessage message) {
-                return switch (message) {
-                    case SizeChanged changed -> Transition.next(changed.size().rows());
+                    @Override
+                    public Update<Integer, ResizeMessage, Never> update(
+                            Integer model, ResizeMessage message) {
+                        return switch (message) {
+                            case SizeChanged changed -> Update.next(changed.size().rows());
+                        };
+                    }
+
+                    @Override
+                    public View<ResizeMessage> view(Integer model, ViewContext context) {
+                        Viewport viewport = context.viewport();
+                        return Views.text("size: " + viewport.rows() + "x" + viewport.cols());
+                    }
+
+                    @Override
+                    public Subscription<ResizeMessage> subscriptions(Integer model) {
+                        return Subscription.resize(
+                                SubscriptionId.of("resize"),
+                                size -> size.rows() > 4 ? new SizeChanged(size) : null);
+                    }
                 };
-            }
-
-            @Override
-            public View<ResizeMessage> view(Integer model, Viewport viewport) {
-                return Views.text("size: " + viewport.rows() + "x" + viewport.cols());
-            }
-
-            @Override
-            public Subscription<ResizeMessage> subscriptions(Integer model) {
-                return Subscription.resize(SubscriptionId.of("resize"),
-                        size -> size.rows() > 4 ? new SizeChanged(size) : null);
-            }
-        };
         java.util.concurrent.atomic.AtomicReference<ExitResult> result =
                 new java.util.concurrent.atomic.AtomicReference<>();
         Thread run = Thread.ofVirtual().name("declining-resize")
@@ -241,17 +251,17 @@ class RuntimeLoopTest {
     }
 
     /** Blocks its first update until the test releases it, so the owner is busy at end-of-input. */
-    private static final class SlowStart implements Program<Integer, String> {
+    private static final class SlowStart implements Component<Integer, String, Never> {
         private final CountDownLatch entered = new CountDownLatch(1);
         private final CountDownLatch release = new CountDownLatch(1);
 
         @Override
-        public Transition<Integer, String> init(InitContext context) {
-            return Transition.next(0);
+        public Update<Integer, String, Never> init(InitContext context) {
+            return Update.next(0);
         }
 
         @Override
-        public Transition<Integer, String> update(Integer model, String message) {
+        public Update<Integer, String, Never> update(Integer model, String message) {
             if ("a".equals(message)) {
                 entered.countDown();
                 try {
@@ -260,11 +270,11 @@ class RuntimeLoopTest {
                     Thread.currentThread().interrupt();
                 }
             }
-            return Transition.next(model + 1);
+            return Update.next(model + 1);
         }
 
         @Override
-        public View<String> view(Integer model, Viewport viewport) {
+        public View<String> view(Integer model, ViewContext context) {
             return Views.keyed(List.of(Binding.of("a", "a"), Binding.of("b", "b"),
                     Binding.of("c", "c")), Views.text("count: " + model), List.of());
         }
@@ -408,29 +418,30 @@ class RuntimeLoopTest {
     }
 
     /** Fails during init, so the run ends in a failure that must not poison the next one. */
-    private record Exploding() implements Program<Integer, String> {
+    private record Exploding() implements Component<Integer, String, Never> {
 
         @Override
-        public Transition<Integer, String> init(InitContext context) {
+        public Update<Integer, String, Never> init(InitContext context) {
             throw new IllegalStateException("boom");
         }
 
         @Override
-        public Transition<Integer, String> update(Integer model, String message) {
-            return Transition.next(model);
+        public Update<Integer, String, Never> update(Integer model, String message) {
+            return Update.next(model);
         }
 
         @Override
-        public View<String> view(Integer model, Viewport viewport) {
+        public View<String> view(Integer model, ViewContext context) {
             return Views.text("never");
         }
     }
 
     /** Starts a task that ignores interruption, then asks to quit after one tick. */
-    private record HangingEffect(CountDownLatch started) implements Program<Integer, String> {
+    private record HangingEffect(CountDownLatch started)
+            implements Component<Integer, String, Never> {
 
         @Override
-        public Transition<Integer, String> init(InitContext context) {
+        public Update<Integer, String, Never> init(InitContext context) {
             Command<String> work = Command.task(EffectId.of("work"), () -> {
                 started.countDown();
                 while (true) {
@@ -441,14 +452,12 @@ class RuntimeLoopTest {
                     }
                 }
             }, value -> "done", failure -> "failed");
-            return Transition.next(0, work);
+            return Update.next(0, work);
         }
 
         @Override
-        public Transition<Integer, String> update(Integer model, String message) {
-            return "tick".equals(message)
-                    ? Transition.next(model, Command.quit())
-                    : Transition.next(model);
+        public Update<Integer, String, Never> update(Integer model, String message) {
+            return "tick".equals(message) ? Update.next(model, Command.quit()) : Update.next(model);
         }
 
         @Override
@@ -458,7 +467,7 @@ class RuntimeLoopTest {
         }
 
         @Override
-        public View<String> view(Integer model, Viewport viewport) {
+        public View<String> view(Integer model, ViewContext context) {
             return Views.text("hanging");
         }
     }
@@ -487,23 +496,23 @@ class RuntimeLoopTest {
     }
 
     /** Throws from update on "boom" and from view while the model says "explode". */
-    private record Crashing() implements Program<String, String> {
+    private record Crashing() implements Component<String, String, Never> {
 
         @Override
-        public Transition<String, String> init(InitContext context) {
-            return Transition.next("ok");
+        public Update<String, String, Never> init(InitContext context) {
+            return Update.next("ok");
         }
 
         @Override
-        public Transition<String, String> update(String model, String message) {
+        public Update<String, String, Never> update(String model, String message) {
             if ("boom".equals(message)) {
                 throw new IllegalStateException("update failed");
             }
-            return Transition.next("explode".equals(message) ? "explode" : model);
+            return Update.next("explode".equals(message) ? "explode" : model);
         }
 
         @Override
-        public View<String> view(String model, Viewport viewport) {
+        public View<String> view(String model, ViewContext context) {
             if ("explode".equals(model)) {
                 throw new IllegalStateException("view failed");
             }
@@ -537,22 +546,23 @@ class RuntimeLoopTest {
 
     @Test
     void anEmptyProgramStillPresentsOneFrame() {
-        Program<Integer, String> empty = new Program<>() {
-            @Override
-            public Transition<Integer, String> init(InitContext context) {
-                return Transition.next(0);
-            }
+        Component<Integer, String, Never> empty =
+                new Component<>() {
+                    @Override
+                    public Update<Integer, String, Never> init(InitContext context) {
+                        return Update.next(0);
+                    }
 
-            @Override
-            public Transition<Integer, String> update(Integer model, String message) {
-                return Transition.next(model);
-            }
+                    @Override
+                    public Update<Integer, String, Never> update(Integer model, String message) {
+                        return Update.next(model);
+                    }
 
-            @Override
-            public View<String> view(Integer model, Viewport viewport) {
-                return Views.text("hello");
-            }
-        };
+                    @Override
+                    public View<String> view(Integer model, ViewContext context) {
+                        return Views.text("hello");
+                    }
+                };
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 10));
         terminal.endInput();
         ExitResult result = run(empty, options(), terminal);
@@ -571,25 +581,28 @@ class RuntimeLoopTest {
                 new java.util.concurrent.atomic.AtomicInteger();
         java.util.concurrent.atomic.AtomicInteger views =
                 new java.util.concurrent.atomic.AtomicInteger();
-        Program<Integer, String> program = new Program<>() {
-            @Override
-            public Transition<Integer, String> init(InitContext context) {
-                return Transition.next(0);
-            }
+        Component<Integer, String, Never> program =
+                new Component<>() {
+                    @Override
+                    public Update<Integer, String, Never> init(InitContext context) {
+                        return Update.next(0);
+                    }
 
-            @Override
-            public Transition<Integer, String> update(Integer model, String message) {
-                updates.incrementAndGet();
-                return Transition.next(model + 1);
-            }
+                    @Override
+                    public Update<Integer, String, Never> update(Integer model, String message) {
+                        updates.incrementAndGet();
+                        return Update.next(model + 1);
+                    }
 
-            @Override
-            public View<String> view(Integer model, Viewport viewport) {
-                views.incrementAndGet();
-                return Views.keyed(List.of(Binding.of("a", "inc")),
-                        Views.text("idle " + model), List.of());
-            }
-        };
+                    @Override
+                    public View<String> view(Integer model, ViewContext context) {
+                        views.incrementAndGet();
+                        return Views.keyed(
+                                List.of(Binding.of("a", "inc")),
+                                Views.text("idle " + model),
+                                List.of());
+                    }
+                };
         Thread run = Thread.ofVirtual().name("idle-test")
                 .start(() -> run(program, options(), terminal));
         // The owner writes its first frame after buildView returns, so waiting for the write
@@ -619,26 +632,29 @@ class RuntimeLoopTest {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 20));
         Thread caller = Thread.currentThread();
         List<Thread> callbacks = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
-        Program<Integer, String> program = new Program<>() {
-            @Override
-            public Transition<Integer, String> init(InitContext context) {
-                callbacks.add(Thread.currentThread());
-                return Transition.next(0);
-            }
+        Component<Integer, String, Never> program =
+                new Component<>() {
+                    @Override
+                    public Update<Integer, String, Never> init(InitContext context) {
+                        callbacks.add(Thread.currentThread());
+                        return Update.next(0);
+                    }
 
-            @Override
-            public Transition<Integer, String> update(Integer model, String message) {
-                callbacks.add(Thread.currentThread());
-                return Transition.next(model + 1);
-            }
+                    @Override
+                    public Update<Integer, String, Never> update(Integer model, String message) {
+                        callbacks.add(Thread.currentThread());
+                        return Update.next(model + 1);
+                    }
 
-            @Override
-            public View<String> view(Integer model, Viewport viewport) {
-                callbacks.add(Thread.currentThread());
-                return Views.keyed(List.of(Binding.of("a", "inc")), Views.text("n " + model),
-                        List.of());
-            }
-        };
+                    @Override
+                    public View<String> view(Integer model, ViewContext context) {
+                        callbacks.add(Thread.currentThread());
+                        return Views.keyed(
+                                List.of(Binding.of("a", "inc")),
+                                Views.text("n " + model),
+                                List.of());
+                    }
+                };
         terminal.feed("a");
         terminal.endInput();
         ExitResult result = run(program, options(), terminal);
@@ -662,35 +678,43 @@ class RuntimeLoopTest {
         java.util.concurrent.CountDownLatch finished = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.atomic.AtomicInteger updates =
                 new java.util.concurrent.atomic.AtomicInteger();
-        Program<Integer, String> program = new Program<>() {
-            @Override
-            public Transition<Integer, String> init(InitContext context) {
-                return Transition.next(0, Command.task(EffectId.of("stubborn"), () -> {
-                    started.countDown();
-                    while (true) {
-                        try {
-                            release.await();
-                            break;
-                        } catch (InterruptedException ignored) {
-                            // Deliberately uncooperative: the runtime must not force it.
-                        }
+        Component<Integer, String, Never> program =
+                new Component<>() {
+                    @Override
+                    public Update<Integer, String, Never> init(InitContext context) {
+                        return Update.next(
+                                0,
+                                Command.task(
+                                        EffectId.of("stubborn"),
+                                        () -> {
+                                            started.countDown();
+                                            while (true) {
+                                                try {
+                                                    release.await();
+                                                    break;
+                                                } catch (InterruptedException ignored) {
+                                                    // Deliberately uncooperative: the runtime must
+                                                    // not force it.
+                                                }
+                                            }
+                                            finished.countDown();
+                                            return "late";
+                                        },
+                                        value -> "done",
+                                        failure -> "failed"));
                     }
-                    finished.countDown();
-                    return "late";
-                }, value -> "done", failure -> "failed"));
-            }
 
-            @Override
-            public Transition<Integer, String> update(Integer model, String message) {
-                updates.incrementAndGet();
-                return Transition.next(model);
-            }
+                    @Override
+                    public Update<Integer, String, Never> update(Integer model, String message) {
+                        updates.incrementAndGet();
+                        return Update.next(model);
+                    }
 
-            @Override
-            public View<String> view(Integer model, Viewport viewport) {
-                return Views.text("working");
-            }
-        };
+                    @Override
+                    public View<String> view(Integer model, ViewContext context) {
+                        return Views.text("working");
+                    }
+                };
         java.util.List<String> diagnostics =
                 java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         java.util.concurrent.ExecutorService executor =
@@ -701,9 +725,18 @@ class RuntimeLoopTest {
                 .withEffectExecutor(executor)
                 .withDiagnostics(diagnostics::add)
                 .withNanoTime(() -> 1_000L);
-        RuntimeOptions options = new RuntimeOptions(java.time.Duration.ofMillis(200), 32, 8, 8,
-                io.github.dhoard.braxton.clipboard.ClipboardConfig.defaults(),
-                io.github.dhoard.braxton.app.TerminalOptions.DEFAULT, null);
+        RuntimeOptions options =
+                new RuntimeOptions(
+                        java.time.Duration.ofMillis(200),
+                        32,
+                        8,
+                        8,
+                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
+                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
+                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
+                        io.github.dhoard.braxton.clipboard.ClipboardConfig.defaults(),
+                        io.github.dhoard.braxton.app.TerminalOptions.DEFAULT,
+                        null);
         java.util.concurrent.atomic.AtomicReference<ExitResult> result =
                 new java.util.concurrent.atomic.AtomicReference<>();
         Thread run = Thread.ofVirtual().name("grace-test")
@@ -747,30 +780,40 @@ class RuntimeLoopTest {
         java.util.concurrent.atomic.AtomicInteger tasks =
                 new java.util.concurrent.atomic.AtomicInteger();
         ManualTimers timers = new ManualTimers();
-        Program<Integer, String> program = new Program<>() {
-            @Override
-            public Transition<Integer, String> init(InitContext context) {
-                return Transition.next(0, Command.batch(
-                        Command.delay(EffectId.of("before"), java.time.Duration.ofSeconds(1),
-                                "before", "rejected"),
-                        Command.quit(5),
-                        Command.task(EffectId.of("after"), () -> {
-                            tasks.incrementAndGet();
-                            return "after";
-                        }, value -> "after", failure -> "after")));
-            }
+        Component<Integer, String, Never> program =
+                new Component<>() {
+                    @Override
+                    public Update<Integer, String, Never> init(InitContext context) {
+                        return Update.next(
+                                0,
+                                Command.batch(
+                                        Command.delay(
+                                                EffectId.of("before"),
+                                                java.time.Duration.ofSeconds(1),
+                                                "before",
+                                                "rejected"),
+                                        Command.quit(5),
+                                        Command.task(
+                                                EffectId.of("after"),
+                                                () -> {
+                                                    tasks.incrementAndGet();
+                                                    return "after";
+                                                },
+                                                value -> "after",
+                                                failure -> "after")));
+                    }
 
-            @Override
-            public Transition<Integer, String> update(Integer model, String message) {
-                updates.incrementAndGet();
-                return Transition.next(model);
-            }
+                    @Override
+                    public Update<Integer, String, Never> update(Integer model, String message) {
+                        updates.incrementAndGet();
+                        return Update.next(model);
+                    }
 
-            @Override
-            public View<String> view(Integer model, Viewport viewport) {
-                return Views.text("batch");
-            }
-        };
+                    @Override
+                    public View<String> view(Integer model, ViewContext context) {
+                        return Views.text("batch");
+                    }
+                };
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(3, 10));
         RuntimeOptions options = RuntimeOptions.defaults().withLimits(32, 8, 8)
                 ;
@@ -806,23 +849,30 @@ class RuntimeLoopTest {
                         .withEffectExecutor(Runnable::run)
                         .withNanoTime(() -> 1_000L);
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(3, 10));
-        Program<Integer, String> program = new Program<>() {
-            @Override
-            public Transition<Integer, String> init(InitContext context) {
-                return Transition.next(0, Command.delay(EffectId.of("slow"),
-                        java.time.Duration.ofSeconds(30), "late", "rejected"));
-            }
+        Component<Integer, String, Never> program =
+                new Component<>() {
+                    @Override
+                    public Update<Integer, String, Never> init(InitContext context) {
+                        return Update.next(
+                                0,
+                                Command.delay(
+                                        EffectId.of("slow"),
+                                        java.time.Duration.ofSeconds(30),
+                                        "late",
+                                        "rejected"));
+                    }
 
-            @Override
-            public Transition<Integer, String> update(Integer model, String message) {
-                throw new IllegalStateException("update broke");
-            }
+                    @Override
+                    public Update<Integer, String, Never> update(Integer model, String message) {
+                        throw new IllegalStateException("update broke");
+                    }
 
-            @Override
-            public View<String> view(Integer model, Viewport viewport) {
-                return Views.keyed(List.of(Binding.of("a", "inc")), Views.text("safe"), List.of());
-            }
-        };
+                    @Override
+                    public View<String> view(Integer model, ViewContext context) {
+                        return Views.keyed(
+                                List.of(Binding.of("a", "inc")), Views.text("safe"), List.of());
+                    }
+                };
         java.util.concurrent.atomic.AtomicReference<ExitResult> result = new java.util.concurrent.atomic.AtomicReference<>();
         Thread run = Thread.ofVirtual().name("cleanup-failure-test")
                 .start(() -> result.set(run(program, options, terminal, services)));
@@ -832,7 +882,11 @@ class RuntimeLoopTest {
         assertThat(run.isAlive()).isFalse();
         assertThat(result.get().kind()).as("a throwing update ends the run").isEqualTo(
                 ExitResult.Kind.FAILURE);
-        assertThat(result.get().failure()).as("the primary cause is not replaced")
+        assertThat(result.get().failure())
+                .isInstanceOf(ComponentFailure.class)
+                .hasCauseInstanceOf(IllegalStateException.class);
+        assertThat(result.get().failure().getCause())
+                .as("the primary cause is not replaced")
                 .hasMessage("update broke");
         assertThat(result.get().cleanupFailures()).as("the cleanup failure is still reported")
                 .anySatisfy(failure -> assertThat(failure).hasMessage("cancel failed"));
@@ -841,43 +895,45 @@ class RuntimeLoopTest {
     @Test
     void theSessionIsClosedEvenWhenStartupFails() {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 10));
-        Program<Integer, String> broken = new Program<>() {
-            @Override
-            public Transition<Integer, String> init(InitContext context) {
-                throw new IllegalStateException("boom");
-            }
+        Component<Integer, String, Never> broken =
+                new Component<>() {
+                    @Override
+                    public Update<Integer, String, Never> init(InitContext context) {
+                        throw new IllegalStateException("boom");
+                    }
 
-            @Override
-            public Transition<Integer, String> update(Integer model, String message) {
-                return Transition.next(model);
-            }
+                    @Override
+                    public Update<Integer, String, Never> update(Integer model, String message) {
+                        return Update.next(model);
+                    }
 
-            @Override
-            public View<String> view(Integer model, Viewport viewport) {
-                return Views.text("");
-            }
-        };
+                    @Override
+                    public View<String> view(Integer model, ViewContext context) {
+                        return Views.text("");
+                    }
+                };
         ExitResult result = run(broken, options(), terminal);
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
-        assertThat(result.failure()).hasMessageContaining("boom");
+        assertThat(result.failure()).isInstanceOf(ComponentFailure.class);
+        assertThat(result.failure().getCause()).hasMessageContaining("boom");
         assertThat(terminal.isOpen()).isFalse();
     }
 
     /** Quits as soon as it starts, so the only failure in the run is a cleanup failure. */
-    private record Quitting() implements Program<Integer, String> {
+    private record Quitting() implements Component<Integer, String, Never> {
 
         @Override
-        public Transition<Integer, String> init(InitContext context) {
-            return Transition.next(0, Command.quit());
+        public Update<Integer, String, Never> init(InitContext context) {
+            return Update.next(0, Command.quit());
         }
 
         @Override
-        public Transition<Integer, String> update(Integer model, String message) {
-            return Transition.next(model);
+        public Update<Integer, String, Never> update(Integer model, String message) {
+            return Update.next(model);
         }
 
         @Override
-        public View<String> view(Integer model, Viewport viewport) {
+        public View<String> view(Integer model, ViewContext context) {
             return Views.text("quit");
         }
     }
@@ -898,31 +954,33 @@ class RuntimeLoopTest {
     }
 
     /** Subscribes to a source that emits a burst from its own start function. */
-    private record Bursting(int emissions) implements Program<Integer, String> {
+    private record Bursting(int emissions) implements Component<Integer, String, Never> {
 
         @Override
-        public Transition<Integer, String> init(InitContext context) {
-            return Transition.next(0);
+        public Update<Integer, String, Never> init(InitContext context) {
+            return Update.next(0);
         }
 
         @Override
-        public Transition<Integer, String> update(Integer model, String message) {
-            return Transition.next(model + 1);
+        public Update<Integer, String, Never> update(Integer model, String message) {
+            return Update.next(model + 1);
         }
 
         @Override
-        public View<String> view(Integer model, Viewport viewport) {
+        public View<String> view(Integer model, ViewContext context) {
             return Views.text("burst: " + model);
         }
 
         @Override
         public Subscription<String> subscriptions(Integer model) {
-            return Subscription.source(new SubscriptionId("burst"), "config",
+            return Subscription.source(
+                    SubscriptionId.of("burst"),
+                    "config",
                     emitter -> {
                         for (int i = 0; i < emissions; i++) {
                             emitter.accept("tick" + i);
                         }
-                        return () -> { };
+                        return () -> {};
                     },
                     String::valueOf);
         }

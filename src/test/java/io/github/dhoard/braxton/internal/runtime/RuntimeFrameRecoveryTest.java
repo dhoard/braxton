@@ -24,19 +24,24 @@ package io.github.dhoard.braxton.internal.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Proxy;
-import java.util.ArrayList;
-import java.util.List;
+import io.github.dhoard.braxton.app.*;
+import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.mvu.Component;
+import io.github.dhoard.braxton.mvu.InitContext;
+import io.github.dhoard.braxton.mvu.Never;
+import io.github.dhoard.braxton.mvu.Update;
+import io.github.dhoard.braxton.mvu.ViewContext;
+import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.view.Views;
 
 import org.jline.terminal.Terminal;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-import io.github.dhoard.braxton.app.*;
-import io.github.dhoard.braxton.effect.Command;
-import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.view.*;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Regressions for frame behavior recovered from the installed Braxton artifact. */
 @Timeout(10)
@@ -123,17 +128,21 @@ class RuntimeFrameRecoveryTest {
                             throw failure.getCause();
                         }
                     });
-            Program<Integer, String> program = new Program<>() {
-                public Transition<Integer, String> init(InitContext context) {
-                    return Transition.next(0, Command.quit());
-                }
-                public Transition<Integer, String> update(Integer model, String message) {
-                    return Transition.next(model);
-                }
-                public View<String> view(Integer model, Viewport viewport) {
-                    return Views.text("ready");
-                }
-            };
+            Component<Integer, String, Never> program =
+                    new Component<>() {
+                        public Update<Integer, String, Never> init(InitContext context) {
+                            return Update.next(0, Command.quit());
+                        }
+
+                        public Update<Integer, String, Never> update(
+                                Integer model, String message) {
+                            return Update.next(model);
+                        }
+
+                        public View<String> view(Integer model, ViewContext context) {
+                            return Views.text("ready");
+                        }
+                    };
             return new RuntimeLoop<>(program, RuntimeOptions.defaults(), terminal,
                     RuntimeServices.system()).run();
         }

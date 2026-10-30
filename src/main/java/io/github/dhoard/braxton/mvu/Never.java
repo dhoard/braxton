@@ -20,14 +20,7 @@
  * SOFTWARE.
  */
 
-package io.github.dhoard.braxton.app;
+package io.github.dhoard.braxton.mvu;
 
-import io.github.dhoard.braxton.layout.Viewport;
-
-/** Immutable terminal facts captured before pure initialization. Application data belongs in the program constructor. */
-public record InitContext(Viewport viewport, TerminalCapabilities capabilities) {
-    public InitContext {
-        viewport = viewport == null ? Viewport.EMPTY : viewport;
-        capabilities = capabilities == null ? TerminalCapabilities.PLAIN : capabilities;
-    }
-}
+/** Uninhabited output type for a root component. */
+public enum Never {}

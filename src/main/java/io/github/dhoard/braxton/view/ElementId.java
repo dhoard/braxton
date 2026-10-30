@@ -22,54 +22,54 @@
 
 package io.github.dhoard.braxton.view;
 
+import io.github.dhoard.braxton.mvu.ComponentId;
+import io.github.dhoard.braxton.mvu.ComponentPath;
+
 import java.util.Objects;
-import java.util.Optional;
 
-/**
- * A stable, application-owned identity for a focus target.
- *
- * <p>Identities are strings, not list indexes, so focus survives view rebuilds, sibling reordering,
- * and content changes. Namespaces let a parent embed several copies of a child without collisions.</p>
- */
-public record ElementId(String value) {
+/** A validated local identity. Mounting adds a structural path, never a string namespace. */
+public final class ElementId {
+    private final String value;
+    private final ComponentPath path;
 
-    public ElementId {
-        Objects.requireNonNull(value, "value");
-        if (value.isBlank()) {
-            throw new IllegalArgumentException("element id must not be blank");
-        }
+    private ElementId(String value, ComponentPath path) {
+        this.value = ComponentId.of(value).value();
+        this.path = Objects.requireNonNull(path, "path");
     }
 
     public static ElementId of(String value) {
-        return new ElementId(value);
+        return new ElementId(value, ComponentPath.ROOT);
     }
 
-    /**
-     * A child identity in this element's namespace.
-     *
-     * @throws IllegalArgumentException when {@code name} is null, blank, or contains the {@code /}
-     *     namespace separator; joining any of them would forge an identity ("parent/null",
-     *     "parent/", "parent/child/grandchild") that collides with a real child name or with
-     *     another parent's child
-     */
-    public ElementId child(String name) {
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("child name must not be blank");
-        }
-        if (name.indexOf('/') >= 0) {
-            throw new IllegalArgumentException(
-                    "child name must not contain the '/' namespace separator");
-        }
-        return new ElementId(value + "/" + name);
+    public String value() {
+        return value;
+    }
+
+    public ComponentPath path() {
+        return path;
+    }
+
+    /** Composition operation used by mounts; prepends a structural scope. */
+    public ElementId scoped(ComponentPath prefix) {
+        return new ElementId(value, path.prepend(prefix));
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof ElementId id && value.equals(id.value) && path.equals(id.path);
+    }
+
+    @Override
+    public int hashCode() {
+        return 31 * path.hashCode() + value.hashCode();
     }
 
     @Override
     public String toString() {
-        return value;
+        return path.equals(ComponentPath.ROOT) ? value : path + ":" + value;
     }
 
-    /** Convenience for APIs that model "no focus". */
-    public Optional<ElementId> asOptional() {
-        return Optional.of(this);
+    public java.util.Optional<ElementId> asOptional() {
+        return java.util.Optional.of(this);
     }
 }

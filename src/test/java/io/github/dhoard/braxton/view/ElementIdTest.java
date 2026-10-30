@@ -22,52 +22,38 @@
 
 package io.github.dhoard.braxton.view;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
+
+import io.github.dhoard.braxton.mvu.ComponentId;
+import io.github.dhoard.braxton.mvu.ComponentPath;
 
 import org.junit.jupiter.api.Test;
 
-/** Focus identities are namespaced values; a child name must name something. */
 class ElementIdTest {
-
     @Test
-    void aChildNameIsNamespacedUnderItsParent() {
-        assertThat(ElementId.of("root").child("field").value()).isEqualTo("root/field");
-        assertThat(ElementId.of("root").child("field").child("inner").value())
-                .isEqualTo("root/field/inner");
+    void elementIdIsLocalAndStructurallyScoped() {
+        var local = ElementId.of("tick");
+        var a = ComponentPath.ROOT.append(ComponentId.of("a"));
+        var b = ComponentPath.ROOT.append(ComponentId.of("b"));
+        assertThat(local.value()).isEqualTo("tick");
+        assertThat(local.path()).isEqualTo(ComponentPath.ROOT);
+        assertThat(local.scoped(a)).isEqualTo(ElementId.of("tick").scoped(a));
+        assertThat(local.scoped(a)).isNotEqualTo(local.scoped(b));
+        assertThat(local.scoped(b).scoped(a).path()).isEqualTo(a.append(ComponentId.of("b")));
+        assertThat(local.scoped(a).hashCode()).isEqualTo(ElementId.of("tick").scoped(a).hashCode());
+        assertThat(local.toString()).isEqualTo("tick");
+        assertThat(local.scoped(a).toString()).isEqualTo("/a:tick");
+        for (String invalid :
+                new String[] {"", " ", ".", "..", "a/b", "/b", "b/", "a\u001bb", "x".repeat(129)}) {
+            assertThatThrownBy(() -> ElementId.of(invalid))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThatThrownBy(() -> ElementId.of(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> local.scoped(null)).isInstanceOf(NullPointerException.class);
     }
 
     @Test
-    void aChildNameMustNotBeNullOrBlank() {
-        // Both would join into a valid-looking identity ("root/null", "root/") that collides with
-        // a real child of that name, so two focus targets would share one id.
-        assertThatThrownBy(() -> ElementId.of("root").child(null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        assertThatThrownBy(() -> ElementId.of("root").child("   "))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-    }
-
-    @Test
-    void aChildNameMustNotCarryTheNamespaceSeparator() {
-        // The join is a namespace separator, not part of the name: "a" + "b/c" and "a/b" + "c"
-        // would both be "a/b/c", so two parents would own one focus target. The same rule that
-        // rejects null and blank rejects a name that forges a path through another namespace.
-        assertThatThrownBy(() -> ElementId.of("a").child("b/c"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        assertThatThrownBy(() -> ElementId.of("a").child("b/"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        assertThatThrownBy(() -> ElementId.of("a").child("/b"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        assertThat(ElementId.of("a/b").child("c").value()).isEqualTo("a/b/c");
-    }
-
-    @Test
-    void asOptionalIsAlwaysPresent() {
-        assertThat(ElementId.of("composer").asOptional()).contains(ElementId.of("composer"));
+    void optionalIsPresent() {
+        assertThat(ElementId.of("x").asOptional()).contains(ElementId.of("x"));
     }
 }

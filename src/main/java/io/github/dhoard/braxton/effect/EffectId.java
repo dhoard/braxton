@@ -22,52 +22,50 @@
 
 package io.github.dhoard.braxton.effect;
 
+import io.github.dhoard.braxton.mvu.ComponentId;
+import io.github.dhoard.braxton.mvu.ComponentPath;
+
 import java.util.Objects;
 
-/**
- * Identity of one-shot effect (task or delay). Ids are namespaced so composed features cannot
- * cancel each other's work accidentally.
- */
-public record EffectId(String value) {
+/** A validated local identity. Mounting adds a structural path, never a string namespace. */
+public final class EffectId {
+    private final String value;
+    private final ComponentPath path;
 
-    public EffectId {
-        Objects.requireNonNull(value, "value");
-        if (value.isBlank()) {
-            throw new IllegalArgumentException("effect id must not be blank");
-        }
+    private EffectId(String value, ComponentPath path) {
+        this.value = ComponentId.of(value).value();
+        this.path = Objects.requireNonNull(path, "path");
     }
 
     public static EffectId of(String value) {
-        return new EffectId(value);
+        return new EffectId(value, ComponentPath.ROOT);
     }
 
-    /**
-     * An id inside this namespace.
-     *
-     * @throws IllegalArgumentException when {@code name} is null, blank, or contains the {@code /}
-     *     namespace separator; joining any of them would forge an id ("parent/null", "parent/",
-     *     "parent/child/grandchild") that collides with a real child name or with another parent's
-     *     child, so one feature's effect would replace and cancel another's
-     */
-    public EffectId child(String name) {
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("child name must not be blank");
-        }
-        if (name.indexOf('/') >= 0) {
-            throw new IllegalArgumentException(
-                    "child name must not contain the '/' namespace separator");
-        }
-        return new EffectId(value + "/" + name);
+    public String value() {
+        return value;
     }
 
-    /** Namespace prefix, used by {@link Command.CancelNamespace}. */
-    public String namespace() {
-        int slash = value.indexOf('/');
-        return slash < 0 ? value : value.substring(0, slash);
+    public ComponentPath path() {
+        return path;
+    }
+
+    /** Composition operation used by mounts; prepends a structural scope. */
+    public EffectId scoped(ComponentPath prefix) {
+        return new EffectId(value, path.prepend(prefix));
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof EffectId id && value.equals(id.value) && path.equals(id.path);
+    }
+
+    @Override
+    public int hashCode() {
+        return 31 * path.hashCode() + value.hashCode();
     }
 
     @Override
     public String toString() {
-        return value;
+        return path.equals(ComponentPath.ROOT) ? value : path + ":" + value;
     }
 }

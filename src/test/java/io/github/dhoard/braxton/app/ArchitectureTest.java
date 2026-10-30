@@ -24,13 +24,16 @@ package io.github.dhoard.braxton.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.junit.jupiter.api.Test;
+
 import java.io.IOException;
+import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
-
-import org.junit.jupiter.api.Test;
+import java.util.Properties;
 
 /**
  * Architecture guard: one API, one engine, no legacy callback/session code, and no third-party
@@ -47,16 +50,17 @@ class ArchitectureTest {
      * design. Each must delegate conversion to {@code LineBreaks}; this list is explicit because a
      * test cannot discover an arbitrary future surface that reintroduces its own chain.
      */
-    private static final List<String> LINE_BREAK_OWNERS = List.of(
-            "io/github/dhoard/braxton/asset/ImageView.java",
-            "io/github/dhoard/braxton/widget/ProgressBar.java",
-            "io/github/dhoard/braxton/widget/Quote.java",
-            "io/github/dhoard/braxton/widget/Markup.java",
-            "io/github/dhoard/braxton/widget/TableSelector.java",
-            "io/github/dhoard/braxton/widget/EditorOptions.java",
-            "io/github/dhoard/braxton/widget/Selector.java",
-            "io/github/dhoard/braxton/widget/Badge.java",
-            "io/github/dhoard/braxton/widget/Box.java");
+    private static final List<String> LINE_BREAK_OWNERS =
+            List.of(
+                    "io/github/dhoard/braxton/asset/ImageView.java",
+                    "io/github/dhoard/braxton/widget/ProgressBar.java",
+                    "io/github/dhoard/braxton/widget/Quote.java",
+                    "io/github/dhoard/braxton/widget/Markup.java",
+                    "io/github/dhoard/braxton/widget/TableSelector.java",
+                    "io/github/dhoard/braxton/widget/Editor.java",
+                    "io/github/dhoard/braxton/widget/Selector.java",
+                    "io/github/dhoard/braxton/widget/Badge.java",
+                    "io/github/dhoard/braxton/widget/Box.java");
 
     private static List<Path> sources() throws IOException {
         try (var paths = Files.walk(MAIN)) {
@@ -176,32 +180,50 @@ class ArchitectureTest {
             throw new AssertionError(failure);
         }
     }
+
     @Test
     void terminalIntegrationHasOneOwnerAndNoNativeOrCompatibilityImplementation() throws Exception {
         for (Path source : sources()) {
             String relative = MAIN.relativize(source).toString().replace('\\', '/');
-            if (!relative.startsWith("io/github/dhoard/braxton/")) continue;
+            if (!relative.startsWith("io/github/dhoard/braxton/")) {
+                continue;
+            }
             String content = Files.readString(source);
-            assertThat(content).doesNotContain("java.lang.foreign", "sun.misc", "jdk.internal",
-                    "TerminalBackend", "TerminalSession", "org.jline.reader", "org.jline.utils.Display");
+            assertThat(content)
+                    .doesNotContain(
+                            "java.lang.foreign",
+                            "sun.misc",
+                            "jdk.internal",
+                            "TerminalBackend",
+                            "TerminalSession",
+                            "org.jline.reader",
+                            "org.jline.utils.Display");
             if (content.contains("import org.jline.")) {
                 assertThat(relative).matches(".*/internal/(runtime|input)/[^/]+\\.java");
             }
-            if (relative.contains("/internal/")) continue;
-            String className = relative.substring(0, relative.length()-5).replace('/', '.');
+            if (relative.contains("/internal/")) {
+                continue;
+            }
+            String className = relative.substring(0, relative.length() - 5).replace('/', '.');
             Class<?> type = Class.forName(className, false, getClass().getClassLoader());
-            var pending = new java.util.ArrayDeque<Class<?>>(); pending.add(type);
+            var pending = new ArrayDeque<Class<?>>();
+            pending.add(type);
             while (!pending.isEmpty()) {
                 Class<?> current = pending.removeFirst();
                 pending.addAll(List.of(current.getDeclaredClasses()));
                 for (var method : current.getDeclaredMethods()) {
-                    if (!java.lang.reflect.Modifier.isPublic(method.getModifiers())) continue;
-                    assertThat(method.toGenericString()).doesNotContain("org.jline.", "braxton.internal.");
+                    if (!Modifier.isPublic(method.getModifiers())) {
+                        continue;
+                    }
+                    assertThat(method.toGenericString())
+                            .doesNotContain("org.jline.", "braxton.internal.");
                 }
                 for (var constructor : current.getDeclaredConstructors()) {
-                    if (java.lang.reflect.Modifier.isPublic(constructor.getModifiers())) {
-                        assertThat(constructor.toGenericString()).doesNotContain("org.jline.", "braxton.internal.");
+                    if (!Modifier.isPublic(constructor.getModifiers())) {
+                        continue;
                     }
+                    assertThat(constructor.toGenericString())
+                            .doesNotContain("org.jline.", "braxton.internal.");
                 }
             }
         }
@@ -213,7 +235,8 @@ class ArchitectureTest {
             String path = "/META-INF/maven/org.jline/" + module + "/pom.properties";
             try (var input = getClass().getResourceAsStream(path)) {
                 assertThat(input).isNotNull();
-                var properties = new java.util.Properties(); properties.load(input);
+                var properties = new Properties();
+                properties.load(input);
                 assertThat(properties.getProperty("version")).isEqualTo("0.1.0-jline-braxton");
             }
         }

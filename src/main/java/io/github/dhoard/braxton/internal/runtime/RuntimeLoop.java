@@ -22,27 +22,9 @@
 
 package io.github.dhoard.braxton.internal.runtime;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import org.jline.terminal.Terminal;
-import org.jline.terminal.TerminalBuilder;
-import org.jline.terminal.impl.ffm.FfmTerminalProvider;
-import org.jline.terminal.spi.TerminalExt;
-import org.jline.utils.InfoCmp;
-import org.jline.utils.ShutdownHooks;
-
 import io.github.dhoard.braxton.app.ExitResult;
-import io.github.dhoard.braxton.app.InitContext;
-import io.github.dhoard.braxton.app.Program;
 import io.github.dhoard.braxton.app.RuntimeOptions;
 import io.github.dhoard.braxton.app.TerminalCapabilities;
-import io.github.dhoard.braxton.app.Transition;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.internal.clipboard.ClipboardService;
 import io.github.dhoard.braxton.internal.clipboard.TerminalEnvironment;
@@ -53,7 +35,29 @@ import io.github.dhoard.braxton.internal.render.LayoutEngine;
 import io.github.dhoard.braxton.internal.render.Screen;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.mvu.Component;
+import io.github.dhoard.braxton.mvu.ComponentFailure;
+import io.github.dhoard.braxton.mvu.ComponentPath;
+import io.github.dhoard.braxton.mvu.InitContext;
+import io.github.dhoard.braxton.mvu.Never;
+import io.github.dhoard.braxton.mvu.Update;
+import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.View;
+
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
+import org.jline.terminal.impl.ffm.FfmTerminalProvider;
+import org.jline.terminal.spi.TerminalExt;
+import org.jline.utils.InfoCmp;
+import org.jline.utils.ShutdownHooks;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The single runtime owner.
@@ -78,7 +82,7 @@ public final class RuntimeLoop<M, Msg> {
     private static final long FRAME_NANOS = TimeUnit.MILLISECONDS.toNanos(16L);
 
     private final AtomicBoolean started = new AtomicBoolean();
-    private final Program<M, Msg> program;
+    private final Component<M, Msg, Never> program;
     private final RuntimeOptions options;
     private final RuntimeServices services;
     private final Terminal suppliedTerminal;
@@ -102,6 +106,10 @@ public final class RuntimeLoop<M, Msg> {
     private SubscriptionManager<Msg> subscriptions;
     private ClipboardService clipboard;
 
+    private final ScopeManager scopes = new ScopeManager();
+    private final java.util.ArrayDeque<Mailbox.AppMessage> localMessages =
+            new java.util.ArrayDeque<>();
+    private int localDispatches;
     private M model;
     private View<Msg> currentView;
     private Screen currentScreen;
@@ -112,13 +120,13 @@ public final class RuntimeLoop<M, Msg> {
 
     private Thread inputThread;
 
-    public RuntimeLoop(Program<M, Msg> program, RuntimeOptions options) {
+    public RuntimeLoop(Component<M, Msg, Never> program, RuntimeOptions options) {
         this(program, options, null, RuntimeServices.system());
     }
 
     /** Internal construction seam: an actual JLine terminal, never a Braxton backend abstraction. */
     public RuntimeLoop(
-            Program<M, Msg> program,
+            Component<M, Msg, Never> program,
             RuntimeOptions options,
             Terminal terminal,
             RuntimeServices services) {
@@ -336,15 +344,22 @@ public final class RuntimeLoop<M, Msg> {
             effects = new EffectRunner<>(
                     mailbox, environment, clipboard, options.maxConcurrentEffects());
             effects.bindOwner(Thread.currentThread());
+            effects.bindScopes(scopes, this::enqueueLocal);
             subscriptions = new SubscriptionManager<>(
                     mailbox,
                     environment.timers(),
                     options.maxSubscriptions(),
                     environment.diagnostics());
             subscriptions.bindOwner(Thread.currentThread());
+            subscriptions.bindScopes(scopes);
 
             InitContext context = new InitContext(viewport, capabilities);
-            commit(program.init(context));
+            commit(
+                    ComponentFailure.call(
+                            ComponentPath.ROOT,
+                            ComponentFailure.Phase.INIT,
+                            () -> program.init(context)));
+            drainLocal();
             present();
             terminal.resume();
             inputThread = startInputThread();
@@ -399,11 +414,13 @@ public final class RuntimeLoop<M, Msg> {
                 }
                 return close.result();
             }
+            localDispatches = 0;
             if (envelope instanceof Mailbox.AppMessage message) {
                 applyMessage(message);
             } else if (envelope instanceof Mailbox.Input input) {
                 applyInput(input);
             }
+            drainLocal();
             if (viewDirty
                     && (envelope instanceof Mailbox.Input
                             || effects.quitRequested()
@@ -431,22 +448,33 @@ public final class RuntimeLoop<M, Msg> {
 
     @SuppressWarnings("unchecked")
     private void applyMessage(Mailbox.AppMessage message) {
+        if (message.origin() != null && !scopes.isCurrent(message.origin())) return;
+        if (!message.valid().getAsBoolean()) return;
         Msg value = (Msg) message.payload();
-        Transition<M, Msg> transition = program.update(model, value);
+        Update<M, Msg, Never> transition =
+                ComponentFailure.call(
+                        ComponentPath.ROOT,
+                        ComponentFailure.Phase.UPDATE,
+                        () -> program.update(model, value));
         commit(transition);
     }
 
     private void applyInput(Mailbox.Input input) {
         if (viewDirty) {
             // Bindings belong to the latest model even when its paint is deferred.
-            currentView = program.view(model, viewport);
+            currentView = componentView();
         }
         InputEvent event = stamp(input.event());
         Optional<Msg> routed = InputRouter.route(currentView, event);
-        routed.ifPresent(message -> {
-            Transition<M, Msg> transition = program.update(model, message);
-            commit(transition);
-        });
+        routed.ifPresent(
+                message -> {
+                    Update<M, Msg, Never> transition =
+                            ComponentFailure.call(
+                                    ComponentPath.ROOT,
+                                    ComponentFailure.Phase.UPDATE,
+                                    () -> program.update(model, message));
+                    commit(transition);
+                });
     }
 
     private InputEvent stamp(InputEvent event) {
@@ -463,14 +491,74 @@ public final class RuntimeLoop<M, Msg> {
         viewDirty = true;
     }
 
-    private void commit(Transition<M, Msg> transition) {
+    private void enqueueLocal(Mailbox.AppMessage message) {
+        if (++localDispatches > options.maxLocalDispatchesPerTurn()) {
+            var origin = message.origin();
+            throw new IllegalStateException(
+                    "local dispatch limit exceeded for component "
+                            + (origin == null ? "root" : origin.path().toString()));
+        }
+        localMessages.addLast(message);
+    }
+
+    private void drainLocal() {
+        while (!effects.quitRequested() && !localMessages.isEmpty())
+            applyMessage(localMessages.removeFirst());
+        if (effects.quitRequested()) localMessages.clear();
+    }
+
+    private View<Msg> componentView() {
+        return ComponentFailure.call(
+                ComponentPath.ROOT,
+                ComponentFailure.Phase.VIEW,
+                () -> program.view(model, new ViewContext(viewport)));
+    }
+
+    private void commit(Update<M, Msg, Never> transition) {
         if (stopping) return;
-        boolean changed = transition.model() != model;
-        model = transition.model();
-        subscriptions.reconcile(program.subscriptions(model));
+        if (!transition.outputs().isEmpty())
+            throw new IllegalArgumentException("root component emitted output");
+        M candidate = transition.model();
+        var tree =
+                ComponentFailure.call(
+                        ComponentPath.ROOT,
+                        ComponentFailure.Phase.CHILDREN,
+                        () -> program.children(candidate));
+        var nextScopes = scopes.prepare(tree, options.maxComponents(), options.maxComponentDepth());
+        var sources =
+                ComponentFailure.call(
+                        ComponentPath.ROOT,
+                        ComponentFailure.Phase.SUBSCRIPTIONS,
+                        () -> program.subscriptions(candidate));
+        validateSubscriptions(sources, nextScopes);
+        boolean changed = candidate != model;
+        model = candidate;
+        var removed = scopes.commit(nextScopes);
+        for (var path : removed) effects.cancelScope(path);
+        for (var path : removed) subscriptions.closeScope(path);
+        subscriptions.reconcile(sources);
         effects.interpret(transition.command());
-        if (changed || viewDirty) {
-            viewDirty = true;
+        if (changed || viewDirty) viewDirty = true;
+    }
+
+    private void validateSubscriptions(
+            io.github.dhoard.braxton.effect.Subscription<Msg> sources,
+            java.util.Map<ComponentPath, Long> nextScopes) {
+        ComponentPath path = ComponentPath.ROOT;
+        try {
+            var leaves = io.github.dhoard.braxton.effect.Subscription.leaves(sources);
+            if (leaves.size() > options.maxSubscriptions())
+                throw new IllegalArgumentException("too many subscriptions");
+            for (var leaf : leaves) {
+                path = leaf.id().path();
+                if (!nextScopes.containsKey(path))
+                    throw new IllegalArgumentException(
+                            "subscription belongs to undeclared component " + path);
+            }
+        } catch (IllegalArgumentException invalid) {
+            // These are framework declaration errors, not thrown component/payload diagnostics.
+            throw new ComponentFailure(
+                    path, ComponentFailure.Phase.SUBSCRIPTIONS, invalid.getMessage(), invalid);
         }
     }
 
@@ -484,7 +572,7 @@ public final class RuntimeLoop<M, Msg> {
         if (size.rows() != viewport.rows() || size.cols() != viewport.cols()) {
             applyResize();
         }
-        View<Msg> view = program.view(model, viewport);
+        View<Msg> view = componentView();
         LayoutEngine.Layout layout = engine.layout(view, viewport.bounds());
         Screen screen = layout.screen();
         String output = AnsiEncoder.diff(currentScreen, screen, capabilities.color());
@@ -661,7 +749,7 @@ public final class RuntimeLoop<M, Msg> {
         }
     }
 
-    /** Exposed for tests: the command type currently held, never {@code null} after init. */
+    /** Exposed for tests: the committed model, never {@code null} after successful init. */
     public M model() {
         return model;
     }

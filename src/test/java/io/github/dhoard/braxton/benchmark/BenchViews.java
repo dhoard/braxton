@@ -22,19 +22,16 @@
 
 package io.github.dhoard.braxton.benchmark;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 import io.github.dhoard.braxton.widget.Box;
 import io.github.dhoard.braxton.widget.Editor;
-import io.github.dhoard.braxton.widget.EditorOptions;
-import io.github.dhoard.braxton.widget.EditorState;
 import io.github.dhoard.braxton.widget.Table;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Shared view-tree fixtures. The shape mirrors what an application actually rebuilds per frame: a
@@ -61,8 +58,13 @@ final class BenchViews {
         items.add(Views.text("Braxton benchmark"));
         items.add(Box.of("status: idle").title("status").view(40));
         items.add(table.view());
-        items.add(Editor.<Object>view(ElementId.of("composer"), EditorState.of(draft),
-                EditorOptions.defaults(), true, action -> action));
+        items.add(
+                new Editor(Editor.Config.defaults())
+                        .view(
+                                (Editor.Model.of(draft)).withFocus(true),
+                                new io.github.dhoard.braxton.mvu.ViewContext(
+                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                        .map(action -> action));
         items.add(Views.grow(Views.blank()));
         return Views.column(items);
     }

@@ -24,12 +24,12 @@ package examples.harness.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
+import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.widget.Editor;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.dhoard.braxton.layout.Size;
-import io.github.dhoard.braxton.widget.EditorState;
+import java.util.List;
 
 /** The production view paints exactly the viewport height and is deterministic. */
 class HarnessViewDeterminismTest {
@@ -38,10 +38,28 @@ class HarnessViewDeterminismTest {
     void everyViewportRendersExactlyItsHeightTwiceTheSame() {
         for (int rows : new int[] {4, 8, 20, 40}) {
             for (int cols : new int[] {10, 40, 120}) {
-                HarnessState state = new HarnessState(HarnessState.Status.READY, List.of(),
-                        HarnessTranscript.Profile.DEFAULT, HarnessTranscript.Usage.EMPTY, 1_000,
-                        List.of(), 0, EditorState.of("draft"), 0, List.of(), null, 0L, 0L, -1L, 0L,
-                        0L, new Size(rows, cols), "", "~/project");
+                Harness.Model state =
+                        new Harness.Model(
+                                new Session.Model(
+                                        Session.Status.READY,
+                                        List.of(),
+                                        HarnessTranscript.Profile.DEFAULT,
+                                        HarnessTranscript.Usage.EMPTY,
+                                        1_000,
+                                        List.of(),
+                                        0,
+                                        0,
+                                        ""),
+                                Editor.Model.of("draft"),
+                                List.of(),
+                                null,
+                                0L,
+                                0L,
+                                -1L,
+                                0L,
+                                0L,
+                                new Size(rows, cols),
+                                "~/project");
                 List<String> first = HarnessView.renderLines(state);
                 List<String> second = HarnessView.renderLines(state);
                 assertThat(first).as("%dx%d", rows, cols).hasSize(rows).isEqualTo(second);

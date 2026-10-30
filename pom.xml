@@ -36,7 +36,7 @@
     </scm>
 
     <properties>
-        <revision>0.1.0-SNAPSHOT</revision>
+        <revision>0.1.0</revision>
         <!-- Build settings -->
         <maven.compiler.release>25</maven.compiler.release>
         <maven.deploy.skip>true</maven.deploy.skip>

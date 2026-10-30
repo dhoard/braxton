@@ -20,24 +20,19 @@
  * SOFTWARE.
  */
 
-package io.github.dhoard.braxton.widget;
+package io.github.dhoard.braxton.mvu;
 
-/** A semantic side effect requested by the editor reducer; the application owns the policy. */
-public sealed interface EditorIntent {
+import io.github.dhoard.braxton.layout.Viewport;
 
-    /** No side effect. */
-    record None() implements EditorIntent {
-    }
+import java.util.Objects;
 
-    /** The user asked to submit this text. */
-    record Submit(String text) implements EditorIntent {
-    }
-
-    /** The user asked to copy this text (empty when copying is not permitted). */
-    record Copy(String text) implements EditorIntent {
-    }
-
-    /** The user asked to paste the internal clipboard buffer. */
-    record PasteRequest() implements EditorIntent {
+/**
+ * Immutable viewport facts for a pure view. No terminal handle is exposed.
+ *
+ * @param viewport the geometry to lay the view out for, never null
+ */
+public record ViewContext(Viewport viewport) {
+    public ViewContext {
+        Objects.requireNonNull(viewport, "viewport");
     }
 }

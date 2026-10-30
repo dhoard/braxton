@@ -20,6 +20,10 @@ not an authoritative source of requirements; verify details against `PROJECT.md`
   synchronized BSU/ESU frame transaction, overwrite-first/suffix-erase rows and spill repair, the
   pyte refresh/wide-edge checks, the JaCoCo coverage gate and its practical ceiling, and why
   installed consumer artifacts must be compared by behavior rather than bytes.
+- [Build, formatting, and documentation gates](memory/build-and-formatting-gates.md) - what
+  `./build.sh` and Spotless actually enforce, why the repository is not Google-Java-Format
+  formatted, the javadoc 100-warning cap and its silent incremental rerun, and why
+  `ComponentPath`/`ComponentId` are serializable (`-Xlint:serial` on `ComponentFailure`).
 
 ## Maintenance
 

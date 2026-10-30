@@ -25,6 +25,26 @@ package io.github.dhoard.braxton.internal.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.dhoard.braxton.app.*;
+import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.effect.SubscriptionId;
+import io.github.dhoard.braxton.internal.render.AnsiEncoder;
+import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.mvu.Component;
+import io.github.dhoard.braxton.mvu.InitContext;
+import io.github.dhoard.braxton.mvu.Never;
+import io.github.dhoard.braxton.mvu.Update;
+import io.github.dhoard.braxton.mvu.ViewContext;
+import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.view.Views;
+
+import org.jline.terminal.Terminal;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -33,41 +53,38 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.jline.terminal.Terminal;
-import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
-import io.github.dhoard.braxton.app.*;
-import io.github.dhoard.braxton.effect.*;
-import io.github.dhoard.braxton.internal.render.AnsiEncoder;
-import io.github.dhoard.braxton.layout.Size;
-import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.view.*;
-
 /** Frame boundaries and failure state, using real JLine output over owned streams. */
 @Timeout(10)
 class FramePresentationTest {
     private static final String BEGIN = "\u001b[?2026h";
     private static final String END = "\u001b[?2026l";
 
-    private static Program<Integer, String> program(Runnable prepare, boolean update) {
-        return new Program<>() {
-            public Transition<Integer, String> init(InitContext context) {
-                return Transition.next(0, update ? Command.none() : Command.quit());
+    private static Component<Integer, String, Never> program(Runnable prepare, boolean update) {
+        return new Component<>() {
+            public Update<Integer, String, Never> init(InitContext context) {
+                return Update.next(0, update ? Command.none() : Command.quit());
             }
-            public Transition<Integer, String> update(Integer model, String message) {
-                return Transition.next(1, Command.quit());
+
+            public Update<Integer, String, Never> update(Integer model, String message) {
+                return Update.next(1, Command.quit());
             }
-            public View<String> view(Integer model, Viewport viewport) {
+
+            public View<String> view(Integer model, ViewContext context) {
                 prepare.run();
                 return Views.text("ready");
             }
+
             public Subscription<String> subscriptions(Integer model) {
-                return update ? Subscription.source(SubscriptionId.of("update"), "update", emitter -> {
-                    emitter.accept("update");
-                    return () -> {};
-                }, value -> (String) value) : Subscription.none();
+                return update
+                        ? Subscription.source(
+                                SubscriptionId.of("update"),
+                                "update",
+                                emitter -> {
+                                    emitter.accept("update");
+                                    return () -> {};
+                                },
+                                value -> (String) value)
+                        : Subscription.none();
             }
         };
     }
@@ -115,16 +132,19 @@ class FramePresentationTest {
         }
     }
 
-    private static Program<Integer, String> liveProgram(
+    private static Component<Integer, String, Never> liveProgram(
             java.util.function.Function<Viewport, View<String>> view) {
-        return new Program<>() {
-            public Transition<Integer, String> init(InitContext context) {
-                return Transition.next(0, Command.none());
+        return new Component<>() {
+            public Update<Integer, String, Never> init(InitContext context) {
+                return Update.next(0, Command.none());
             }
-            public Transition<Integer, String> update(Integer model, String message) {
-                return Transition.next(model);
+
+            public Update<Integer, String, Never> update(Integer model, String message) {
+                return Update.next(model);
             }
-            public View<String> view(Integer model, Viewport viewport) {
+
+            public View<String> view(Integer model, ViewContext context) {
+                Viewport viewport = context.viewport();
                 return view.apply(viewport);
             }
         };
@@ -134,19 +154,24 @@ class FramePresentationTest {
     void presentationResamplesSizeChangedDuringInitialization() {
         try (var fixture = new JLineTestTerminal()) {
             var seen = new AtomicReference<Viewport>();
-            Program<Integer, String> p = new Program<>() {
-                public Transition<Integer, String> init(InitContext context) {
-                    fixture.resize(new io.github.dhoard.braxton.layout.Size(4, 10));
-                    return Transition.next(0, Command.quit());
-                }
-                public Transition<Integer, String> update(Integer model, String message) {
-                    return Transition.next(model);
-                }
-                public View<String> view(Integer model, Viewport viewport) {
-                    seen.set(viewport);
-                    return Views.text("x".repeat(viewport.cols()));
-                }
-            };
+            Component<Integer, String, Never> p =
+                    new Component<>() {
+                        public Update<Integer, String, Never> init(InitContext context) {
+                            fixture.resize(new io.github.dhoard.braxton.layout.Size(4, 10));
+                            return Update.next(0, Command.quit());
+                        }
+
+                        public Update<Integer, String, Never> update(
+                                Integer model, String message) {
+                            return Update.next(model);
+                        }
+
+                        public View<String> view(Integer model, ViewContext context) {
+                            Viewport viewport = context.viewport();
+                            seen.set(viewport);
+                            return Views.text("x".repeat(viewport.cols()));
+                        }
+                    };
             var loop = new RuntimeLoop<>(p, RuntimeOptions.defaults(), fixture.terminal(),
                     RuntimeServices.system());
             assertThat(loop.run().kind()).isEqualTo(ExitResult.Kind.QUIT);
@@ -245,7 +270,7 @@ class FramePresentationTest {
 
     @Test
     void constructorAcceptsNullOptionsAndTheTwoArgumentForm() {
-        Program<Integer, String> p = program(() -> {}, false);
+        Component<Integer, String, Never> p = program(() -> {}, false);
         assertThat(new RuntimeLoop<>(p, null)).isNotNull();
         assertThat(new RuntimeLoop<>(p, RuntimeOptions.defaults())).isNotNull();
     }

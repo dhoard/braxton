@@ -22,14 +22,15 @@
 
 package io.github.dhoard.braxton.effect;
 
+import io.github.dhoard.braxton.clipboard.ClipboardResult;
+import io.github.dhoard.braxton.mvu.ComponentPath;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.function.Function;
-
-import io.github.dhoard.braxton.clipboard.ClipboardResult;
 
 /**
  * An inert description of work to perform once, interpreted by the runtime after a transition
@@ -50,6 +51,7 @@ public sealed interface Command<Msg> {
 
         @Override
         public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new None<>();
         }
     }
@@ -63,6 +65,7 @@ public sealed interface Command<Msg> {
 
         @Override
         public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             List<Command<Msg2>> mapped = new ArrayList<>(commands.size());
             for (Command<Msg> command : commands) {
                 mapped.add(command.map(mapper));
@@ -90,6 +93,7 @@ public sealed interface Command<Msg> {
 
         @Override
         public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Task<>(id, work, onSuccess.andThen(mapper), onFailure.andThen(mapper));
         }
     }
@@ -118,6 +122,7 @@ public sealed interface Command<Msg> {
 
         @Override
         public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Delay<>(id, delay, mapper.apply(message), mapper.apply(rejected));
         }
     }
@@ -131,24 +136,50 @@ public sealed interface Command<Msg> {
 
         @Override
         public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Cancel<>(id);
         }
     }
 
-    /** Invalidates every effect whose id starts with {@code namespace}. */
-    record CancelNamespace<Msg>(String namespace) implements Command<Msg> {
+    /** Invalidates all effects in the current component scope and descendants. */
+    record CancelAll<Msg>() implements Command<Msg> {
+        @Override
+        public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
+            return new CancelAll<>();
+        }
+    }
 
-        public CancelNamespace {
-            if (namespace == null || namespace.isBlank()) {
-                throw new IllegalArgumentException("namespace must not be blank");
-            }
-            namespace = namespace.endsWith("/") ? namespace.substring(0, namespace.length() - 1) : namespace;
+    /** Enqueues an owner-local message after commit; never invokes update recursively. */
+    record Dispatch<Msg>(Msg message) implements Command<Msg> {
+        public Dispatch {
+            Objects.requireNonNull(message, "message");
         }
 
         @Override
         public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
-            return new CancelNamespace<>(namespace);
+            Objects.requireNonNull(mapper, "mapper");
+            return new Dispatch<>(mapper.apply(message));
         }
+    }
+
+    /** Structural origin for a mounted command, including unkeyed built-ins and dispatch. */
+    record Scoped<Msg>(ComponentPath path, Command<Msg> command) implements Command<Msg> {
+        public Scoped {
+            Objects.requireNonNull(path, "path");
+            Objects.requireNonNull(command, "command");
+        }
+
+        @Override
+        public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
+            return new Scoped<>(path, command.map(mapper));
+        }
+    }
+
+    default Command<Msg> scoped(ComponentPath path) {
+        Objects.requireNonNull(path, "path");
+        return this instanceof None<Msg> ? this : new Scoped<>(path, this);
     }
 
     /** Reads the session's in-process clipboard buffer and reports it as one message. */
@@ -160,6 +191,7 @@ public sealed interface Command<Msg> {
 
         @Override
         public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new ReadClipboard<>(this.mapper.andThen(mapper));
         }
     }
@@ -174,6 +206,7 @@ public sealed interface Command<Msg> {
 
         @Override
         public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Copy<>(text, this.mapper.andThen(mapper));
         }
     }
@@ -183,6 +216,7 @@ public sealed interface Command<Msg> {
 
         @Override
         public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Quit<>(status);
         }
     }
@@ -241,8 +275,12 @@ public sealed interface Command<Msg> {
         return new Cancel<>(id);
     }
 
-    static <Msg> Command<Msg> cancelNamespace(String namespace) {
-        return new CancelNamespace<>(namespace);
+    static <Msg> Command<Msg> cancelAll() {
+        return new CancelAll<>();
+    }
+
+    static <Msg> Command<Msg> dispatch(Msg message) {
+        return new Dispatch<>(message);
     }
 
     static <Msg> Command<Msg> copy(String text, Function<ClipboardResult, Msg> mapper) {

@@ -24,20 +24,37 @@ package examples.harness.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
+import io.github.dhoard.braxton.layout.Size;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.dhoard.braxton.layout.Size;
+import java.util.List;
 
 /** Deterministic replay selection and the offline fallback. */
 class HarnessMockTest {
 
-    private static HarnessState state(int replayIndex, List<HarnessTranscript.HarnessTurn> turns) {
-        return new HarnessState(HarnessState.Status.READY, List.of(),
-                HarnessTranscript.Profile.DEFAULT, HarnessTranscript.Usage.EMPTY, 1_000, turns,
-                replayIndex, io.github.dhoard.braxton.widget.EditorState.empty(), 0, List.of(), null,
-                0L, 0L, 0L, 0L, 0L, new Size(24, 80), "", "~/project");
+    private static Harness.Model state(int replayIndex, List<HarnessTranscript.HarnessTurn> turns) {
+        return new Harness.Model(
+                new Session.Model(
+                        Session.Status.READY,
+                        List.of(),
+                        HarnessTranscript.Profile.DEFAULT,
+                        HarnessTranscript.Usage.EMPTY,
+                        1_000,
+                        turns,
+                        replayIndex,
+                        0,
+                        ""),
+                io.github.dhoard.braxton.widget.Editor.Model.empty(),
+                List.of(),
+                null,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                new Size(24, 80),
+                "~/project");
     }
 
     @Test

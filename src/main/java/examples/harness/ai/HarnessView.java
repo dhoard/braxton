@@ -22,23 +22,22 @@
 
 package examples.harness.ai;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.input.Modifiers;
 import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.ScreenRenderer;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.widget.Editor;
-import io.github.dhoard.braxton.widget.EditorAction;
-import io.github.dhoard.braxton.widget.EditorOptions;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * The harness view: one native Braxton view tree built from a model snapshot and explicit geometry.
@@ -48,25 +47,20 @@ import io.github.dhoard.braxton.widget.EditorOptions;
  */
 final class HarnessView {
 
-    private static final ElementId COMPOSER = ElementId.of("composer");
+    private HarnessView() {}
 
-    private HarnessView() {
-    }
-
-    static View<HarnessMsg> view(HarnessState state) {
+    static View<Harness.Msg> view(Harness.Model state) {
         int width = state.viewport().cols();
         int height = state.viewport().rows();
         HarnessProjection.Allocation allocation =
                 HarnessProjection.allocate(height, state.editorRows());
 
-        List<View<HarnessMsg>> parts = new ArrayList<>();
+        List<View<Harness.Msg>> parts = new ArrayList<>();
         if (allocation.transcript() > 0) {
-            List<View<HarnessMsg>> rows = new ArrayList<>();
-            for (StyledText row : HarnessProjection.window(state, width, height,
-                    state.editorRows())) {
-                rows.add(Views.text(row));
-            }
-            parts.add(Views.fixed(allocation.transcript(), Views.column(rows)));
+            var context = new ViewContext(new Viewport(allocation.transcript(), width));
+            parts.add(
+                    Views.fixed(
+                            allocation.transcript(), Harness.SESSION.view(state, context)));
         }
         if (allocation.gap() > 0) {
             parts.add(Views.fixed(allocation.gap(), Views.text(
@@ -79,9 +73,12 @@ final class HarnessView {
         if (allocation.composer() > 0) {
             // The editor keeps the caret inside the lines it draws, so it must draw no more rows
             // than this allocation gives it; otherwise the caret's line is clipped away.
-            EditorOptions composerOptions = HarnessProgram.editorOptions()
-                    .withVisibleLines(Math.max(1, allocation.composer()));
-            parts.add(Views.fixed(allocation.composer(), composer(state, composerOptions)));
+            var context = new ViewContext(new Viewport(allocation.composer(), width));
+            parts.add(
+                    Views.fixed(
+                            allocation.composer(),
+                            Harness.composer(Math.max(1, allocation.composer()))
+                                    .view(state, context)));
         }
         if (allocation.bottomRule() > 0) {
             parts.add(Views.fixed(allocation.bottomRule(),
@@ -89,7 +86,7 @@ final class HarnessView {
         }
         if (allocation.footer() > 0) {
             List<StyledText> footer = HarnessProjection.footer(state);
-            List<View<HarnessMsg>> rows = new ArrayList<>();
+            List<View<Harness.Msg>> rows = new ArrayList<>();
             for (int i = 0; i < allocation.footer() && i < footer.size(); i++) {
                 rows.add(Views.text(footer.get(i)));
             }
@@ -99,64 +96,49 @@ final class HarnessView {
             parts.add(Views.fixed(allocation.footer(), Views.column(rows)));
         }
 
-        View<HarnessMsg> body = Views.column(parts);
-        View<HarnessMsg> root = Views.overlay(List.of(
-                Views.fill(HarnessTheme.BACKGROUND), body), false);
+        View<Harness.Msg> body = Views.column(parts);
+        View<Harness.Msg> root =
+                Views.overlay(List.of(Views.fill(HarnessTheme.BACKGROUND), body), false);
         return Views.keyed(bindings(), HarnessView::intercept, root, List.of());
     }
 
-    /**
-     * The composer wires the same public render and action API as {@link Editor#view}, plus a
-     * message for a key the editor does not consume. Routing can change state only through a
-     * message, and the README promises that any other key cancels a pending Ctrl+C confirmation:
-     * without this fallback a key the editor ignores never reached the harness at all.
-     */
-    private static View<HarnessMsg> composer(HarnessState state, EditorOptions options) {
-        View.InputHandler<HarnessMsg> handler = event -> {
-            Optional<EditorAction> action = Editor.actionFor(event, options);
-            if (action.isPresent()) {
-                return Optional.of(new HarnessMsg.Editor(action.get()));
-            }
-            return event instanceof InputEvent.KeyInput
-                    ? Optional.of(new HarnessMsg.UnhandledKey()) : Optional.empty();
-        };
-        return Views.focus(COMPOSER, true, List.of(), handler,
-                Views.text(Editor.render(state.draft(), options, true)));
-    }
-
     /** Root capture bindings. These intentionally override the focused editor. */
-    static List<Binding<HarnessMsg>> bindings() {
+    static List<Binding<Harness.Msg>> bindings() {
         return List.of(
-                Binding.of("up", new HarnessMsg.ScrollUp()),
-                Binding.of("down", new HarnessMsg.ScrollDown()),
-                Binding.of("wheelup", new HarnessMsg.ScrollUp()),
-                Binding.of("wheeldown", new HarnessMsg.ScrollDown()),
-                Binding.of("pageup", new HarnessMsg.PageUp()),
-                Binding.of("pagedown", new HarnessMsg.PageDown()),
-                Binding.of("end", new HarnessMsg.ScrollBottom()),
-                Binding.of("alt+t", new HarnessMsg.CopyVisible()),
-                Binding.of("alt+l", new HarnessMsg.CopyLastReply()),
-                Binding.of("tab", new HarnessMsg.FocusComposer()));
+                Binding.of("up", new Harness.Msg.ScrollUp()),
+                Binding.of("down", new Harness.Msg.ScrollDown()),
+                Binding.of("wheelup", new Harness.Msg.ScrollUp()),
+                Binding.of("wheeldown", new Harness.Msg.ScrollDown()),
+                Binding.of("pageup", new Harness.Msg.PageUp()),
+                Binding.of("pagedown", new Harness.Msg.PageDown()),
+                Binding.of("end", new Harness.Msg.ScrollBottom()),
+                Binding.of("alt+t", new Harness.Msg.CopyVisible()),
+                Binding.of("alt+l", new Harness.Msg.CopyLastReply()),
+                Binding.of("tab", new Harness.Msg.FocusComposer()));
     }
 
     /**
      * Time-based gestures are intercepted so they see the event's capture time: Escape for the
      * turn-cancel window and Ctrl+C for the two-press exit confirmation.
      */
-    private static Optional<HarnessMsg> intercept(InputEvent event) {
+    private static Optional<Harness.Msg> intercept(InputEvent event) {
         if (event instanceof InputEvent.KeyInput key) {
             if (key.key().equals(Key.ESCAPE)) {
-                return Optional.of(new HarnessMsg.Escape(key.capturedAtNanos()));
+                return Optional.of(new Harness.Msg.Escape(key.capturedAtNanos()));
             }
-            if (key.key().equals(Key.of("c", io.github.dhoard.braxton.input.Modifiers.CTRL))) {
-                return Optional.of(new HarnessMsg.QuitRequest(key.capturedAtNanos()));
+            if (key.key().equals(Key.of("c", Modifiers.CTRL))) {
+                return Optional.of(new Harness.Msg.QuitRequest(key.capturedAtNanos()));
             }
+        }
+        if (event instanceof InputEvent.KeyInput
+                && Editor.actionFor(event, Harness.editorOptions()).isEmpty()) {
+            return Optional.of(new Harness.Msg.UnhandledKey());
         }
         return Optional.empty();
     }
 
     /** Headless rows for tests and diagnostics; uses the production view and renderer. */
-    static List<String> renderLines(HarnessState state) {
+    static List<String> renderLines(Harness.Model state) {
         Size size = state.viewport();
         return new ScreenRenderer().plainLines(view(state), new Viewport(size.rows(), size.cols()));
     }

@@ -22,27 +22,35 @@
 
 package io.github.dhoard.braxton.app;
 
-import java.time.Duration;
-
 import io.github.dhoard.braxton.clipboard.ClipboardConfig;
 import io.github.dhoard.braxton.input.InputOptions;
+
+import java.time.Duration;
 
 /**
  * Immutable limits and input/presentation choices for one application run.
  *
- * <p>Defaults are the documented numbers: a 4,096-entry mailbox, 64 concurrent one-shot effects
- * (tasks and delays together), 64 ongoing sources, and a two-second shutdown grace period. They are
- * configuration, not hidden constants.</p>
+ * <p>Defaults are the documented numbers, not hidden constants: a 4,096-entry mailbox, 64
+ * concurrent one-shot effects (tasks and delays together), 64 ongoing sources, 4,096 active
+ * components including the root, a child depth of 64, 1,024 local dispatches per turn, and a
+ * two-second shutdown grace period. The component and dispatch limits bound a hostile or
+ * accidentally cyclic hierarchy instead of allowing it to allocate or spin without end.</p>
  */
 public record RuntimeOptions(
         Duration shutdownGrace,
         int mailboxCapacity,
         int maxConcurrentEffects,
         int maxSubscriptions,
+        int maxComponents,
+        int maxComponentDepth,
+        int maxLocalDispatchesPerTurn,
         ClipboardConfig clipboard,
         TerminalOptions terminal,
         InputOptions input) {
 
+    public static final int DEFAULT_MAX_COMPONENTS = 4_096;
+    public static final int DEFAULT_MAX_COMPONENT_DEPTH = 64;
+    public static final int DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN = 1_024;
     public static final int DEFAULT_MAILBOX_CAPACITY = 4_096;
     public static final int DEFAULT_MAX_EFFECTS = 64;
     public static final int DEFAULT_MAX_SUBSCRIPTIONS = 64;
@@ -68,6 +76,9 @@ public record RuntimeOptions(
         if (maxConcurrentEffects < 0 || maxSubscriptions < 0) {
             throw new IllegalArgumentException("limits must not be negative");
         }
+        if (maxComponents < 1 || maxComponentDepth < 1 || maxLocalDispatchesPerTurn < 1) {
+            throw new IllegalArgumentException("component and dispatch limits must be positive");
+        }
         clipboard = clipboard == null ? ClipboardConfig.defaults() : clipboard;
         terminal = terminal == null ? TerminalOptions.DEFAULT : terminal;
         input = input == null ? InputOptions.DEFAULT : input;
@@ -79,9 +90,26 @@ public record RuntimeOptions(
                 DEFAULT_MAILBOX_CAPACITY,
                 DEFAULT_MAX_EFFECTS,
                 DEFAULT_MAX_SUBSCRIPTIONS,
+                DEFAULT_MAX_COMPONENTS,
+                DEFAULT_MAX_COMPONENT_DEPTH,
+                DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
                 ClipboardConfig.defaults(),
                 TerminalOptions.DEFAULT,
                 InputOptions.DEFAULT);
+    }
+
+    public RuntimeOptions withComponentLimits(int count, int depth, int dispatches) {
+        return new RuntimeOptions(
+                shutdownGrace,
+                mailboxCapacity,
+                maxConcurrentEffects,
+                maxSubscriptions,
+                count,
+                depth,
+                dispatches,
+                clipboard,
+                terminal,
+                input);
     }
 
     public RuntimeOptions withInput(InputOptions value) {
@@ -90,6 +118,9 @@ public record RuntimeOptions(
                 mailboxCapacity,
                 maxConcurrentEffects,
                 maxSubscriptions,
+                maxComponents,
+                maxComponentDepth,
+                maxLocalDispatchesPerTurn,
                 clipboard,
                 terminal,
                 value);
@@ -101,6 +132,9 @@ public record RuntimeOptions(
                 mailboxCapacity,
                 maxConcurrentEffects,
                 maxSubscriptions,
+                maxComponents,
+                maxComponentDepth,
+                maxLocalDispatchesPerTurn,
                 clipboard,
                 value,
                 input);
@@ -112,6 +146,9 @@ public record RuntimeOptions(
                 mailboxCapacity,
                 maxConcurrentEffects,
                 maxSubscriptions,
+                maxComponents,
+                maxComponentDepth,
+                maxLocalDispatchesPerTurn,
                 value,
                 terminal,
                 input);
@@ -119,6 +156,15 @@ public record RuntimeOptions(
 
     public RuntimeOptions withLimits(int mailbox, int effects, int subscriptions) {
         return new RuntimeOptions(
-                shutdownGrace, mailbox, effects, subscriptions, clipboard, terminal, input);
+                shutdownGrace,
+                mailbox,
+                effects,
+                subscriptions,
+                maxComponents,
+                maxComponentDepth,
+                maxLocalDispatchesPerTurn,
+                clipboard,
+                terminal,
+                input);
     }
 }

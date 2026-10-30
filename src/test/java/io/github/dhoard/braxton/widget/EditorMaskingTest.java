@@ -24,15 +24,14 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.ScreenRenderer;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 /**
  * Masked drafts paint one mask per cluster, keep line structure, move by the columns they paint,
@@ -40,17 +39,22 @@ import io.github.dhoard.braxton.view.ScreenRenderer;
  */
 class EditorMaskingTest {
 
-    private static final EditorOptions PASSWORD = EditorOptions.defaults()
-            .withMasking(EditorOptions.Masking.PASSWORD);
-    private static final EditorOptions HIDDEN = EditorOptions.defaults()
-            .withMasking(EditorOptions.Masking.HIDDEN);
+    private static final Editor.Config PASSWORD =
+            Editor.Config.defaults().withMasking(Editor.Config.Masking.PASSWORD);
+    private static final Editor.Config HIDDEN =
+            Editor.Config.defaults().withMasking(Editor.Config.Masking.HIDDEN);
 
     /** Every row a viewport paints for {@code state}, through the real layout path. */
-    private static List<String> paintedLines(EditorState state, EditorOptions options) {
-        return new ScreenRenderer().plainLines(
-                Editor.view(ElementId.of("passphrase"), state, options, true,
-                        (EditorAction action) -> action),
-                new Viewport(2, 24));
+    private static List<String> paintedLines(Editor.Model state, Editor.Config options) {
+        return new ScreenRenderer()
+                .plainLines(
+                        new Editor(options)
+                                .view(
+                                        (state).withFocus(true),
+                                        new io.github.dhoard.braxton.mvu.ViewContext(
+                                                io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                                .map((Editor.Msg action) -> action),
+                        new Viewport(2, 24));
     }
 
     /** Painted column of the block cursor in {@code row}, or -1 when the row does not draw one. */
@@ -60,7 +64,7 @@ class EditorMaskingTest {
 
     @Test
     void aPasswordDraftMasksEachClusterAndKeepsItsLines() {
-        EditorState state = EditorState.of("ab\uD83D\uDE00\ncd").withCaret(0);
+        Editor.Model state = Editor.Model.of("ab\uD83D\uDE00\ncd").withCaret(0);
         var rendered = Editor.render(state, PASSWORD, false);
         assertThat(rendered.plainText().split("\n", -1)).hasSize(2);
         assertThat(rendered.plainText()).doesNotContain("a").doesNotContain("b")
@@ -72,12 +76,13 @@ class EditorMaskingTest {
 
     @Test
     void aCrLfPairSeededIntoTheDraftMasksAsTheEditorsLineBreak() {
-        // EditorState prepares the draft it is given, so a seeded CR/LF pair is the editor's own LF:
+        // Editor.Model prepares the draft it is given, so a seeded CR/LF pair is the editor's own
+        // LF:
         // one line break, not a mask glyph for a character no row paints. The painted and masked
         // views of such a draft therefore agree, and the break keeps the line count it paints.
         // (Drafts the reducer reaches are already normalized by Editor.insert and PasteSanitizer.)
         for (String draft : new String[] {"a\r\nb", "\r\n", "a\n\r\nb", "a\r", "\r\n\r\n"}) {
-            EditorState state = EditorState.of(draft).withCaret(0);
+            Editor.Model state = Editor.Model.of(draft).withCaret(0);
             String display = state.displayText(PASSWORD);
             assertThat(state.text()).as("draft of [%s]", visible(draft)).doesNotContain("\r");
             assertThat(display).as("masked display of [%s]", visible(draft))
@@ -85,7 +90,7 @@ class EditorMaskingTest {
             assertThat(display.split("\n", -1)).as("masked lines of [%s]", visible(draft))
                     .hasSize(state.lineCount());
         }
-        assertThat(EditorState.of("a\r\nb").displayText(PASSWORD)).isEqualTo("\u2022\n\u2022");
+        assertThat(Editor.Model.of("a\r\nb").displayText(PASSWORD)).isEqualTo("\u2022\n\u2022");
     }
 
     private static String visible(String text) {
@@ -94,13 +99,13 @@ class EditorMaskingTest {
 
     @Test
     void aHiddenDraftRendersNoContentAndNeverCopies() {
-        EditorState state = EditorState.of("secret");
+        Editor.Model state = Editor.Model.of("secret");
         assertThat(Editor.render(state, HIDDEN, false).plainText()).isEmpty();
         assertThat(state.displayText(HIDDEN)).isEmpty();
         assertThat(Editor.copyableText(state, PASSWORD)).isEmpty();
         assertThat(Editor.copyableText(state, HIDDEN)).isEmpty();
-        assertThat(Editor.update(state, HIDDEN, new EditorAction.Copy()).intent())
-                .isEqualTo(new EditorIntent.Copy(""));
+        assertThat(new Editor(HIDDEN).update(state, new Editor.Msg.Copy()).outputs().getFirst())
+                .isEqualTo(new Editor.Output.Copy(""));
     }
 
     @Test
@@ -110,23 +115,25 @@ class EditorMaskingTest {
         // cleartext the row never draws - two columns per astral cluster - aims two columns right of
         // where the block was drawn, so the block jumps sideways on the move.
         String draft = "\uD83D\uDE00\uD83D\uDE00\nabcdefgh";
-        EditorState state = new EditorState(draft, 4, 4, 0);
+        Editor.Model state = new Editor.Model(draft, 4, 4, 0);
         List<String> before = paintedLines(state, PASSWORD);
         assertThat(before).containsExactly("\u2022\u2022" + Editor.CURSOR, "\u2022".repeat(8));
 
-        EditorState down = Editor.update(state, PASSWORD, new EditorAction.MoveDown()).state();
+        Editor.Model down = new Editor(PASSWORD).update(state, new Editor.Msg.MoveDown()).model();
         assertThat(down.preferredColumn()).isEqualTo(2);
         assertThat(down.caret()).isEqualTo(draft.indexOf('c'));
         List<String> after = paintedLines(down, PASSWORD);
         assertThat(after).containsExactly("\u2022\u2022",
                 "\u2022\u2022" + Editor.CURSOR + "\u2022".repeat(5));
         assertThat(blockColumn(after.get(1))).isEqualTo(blockColumn(before.get(0)));
-        assertThat(Editor.update(down, PASSWORD, new EditorAction.MoveUp()).state().caret())
+        assertThat(new Editor(PASSWORD).update(down, new Editor.Msg.MoveUp()).model().caret())
                 .isEqualTo(4);
 
         // The same draft unmasked keeps the cleartext columns: the mask is the only difference.
-        EditorState clear = Editor.update(state, EditorOptions.defaults(),
-                new EditorAction.MoveDown()).state();
+        Editor.Model clear =
+                new Editor(Editor.Config.defaults())
+                        .update(state, new Editor.Msg.MoveDown())
+                        .model();
         assertThat(clear.preferredColumn()).isEqualTo(4);
         assertThat(clear.caret()).isEqualTo(draft.indexOf('e'));
     }
@@ -137,40 +144,43 @@ class EditorMaskingTest {
         // a tab: three cells before the block, not the four-column stop an unmasked row expands it
         // to. The tab is where the disagreement between the two rules is largest.
         String draft = "a\tb\nabcdefgh";
-        EditorState state = new EditorState(draft, 3, 3, 0);
+        Editor.Model state = new Editor.Model(draft, 3, 3, 0);
         assertThat(paintedLines(state, PASSWORD))
                 .containsExactly("\u2022\u2022\u2022" + Editor.CURSOR, "\u2022".repeat(8));
 
-        EditorState down = Editor.update(state, PASSWORD, new EditorAction.MoveDown()).state();
+        Editor.Model down = new Editor(PASSWORD).update(state, new Editor.Msg.MoveDown()).model();
         assertThat(down.preferredColumn()).isEqualTo(3);
         assertThat(down.caret()).isEqualTo(draft.indexOf('d'));
         assertThat(paintedLines(down, PASSWORD)).containsExactly("\u2022\u2022\u2022",
                 "\u2022\u2022\u2022" + Editor.CURSOR + "\u2022".repeat(4));
-        assertThat(Editor.update(down, PASSWORD, new EditorAction.MoveUp()).state().caret())
+        assertThat(new Editor(PASSWORD).update(down, new Editor.Msg.MoveUp()).model().caret())
                 .isEqualTo(3);
 
-        EditorState clear = Editor.update(state, EditorOptions.defaults(),
-                new EditorAction.MoveDown()).state();
+        Editor.Model clear =
+                new Editor(Editor.Config.defaults())
+                        .update(state, new Editor.Msg.MoveDown())
+                        .model();
         assertThat(clear.preferredColumn()).isEqualTo(5);
         assertThat(clear.caret()).isEqualTo(draft.indexOf('f'));
     }
 
     @Test
     void aVerticalMoveInAPasswordDraftWithAPromptCountsThePromptAndEveryMaskGlyph() {
-        // The prompt prefixes every masked line, so the caret's column is the prompt's painted width
-        // plus one cell per masked cluster, and the target line is sought from that same base.
-        EditorOptions password = PASSWORD.withPrompt("> ", Style.NONE);
+        // The prompt prefixes every masked line, so the caret's column is the prompt's painted
+        // width plus one cell per masked cluster, and the target line is sought from that same
+        // base.
+        Editor.Config password = PASSWORD.withPrompt("> ", Style.NONE);
         String draft = "\u65E5\u65E5\nabcd";
-        EditorState state = new EditorState(draft, 2, 2, 0);
+        Editor.Model state = new Editor.Model(draft, 2, 2, 0);
         assertThat(paintedLines(state, password))
                 .containsExactly("> \u2022\u2022" + Editor.CURSOR, "  " + "\u2022".repeat(4));
 
-        EditorState down = Editor.update(state, password, new EditorAction.MoveDown()).state();
+        Editor.Model down = new Editor(password).update(state, new Editor.Msg.MoveDown()).model();
         assertThat(down.preferredColumn()).isEqualTo(4);
         assertThat(down.caret()).isEqualTo(draft.indexOf('c'));
         assertThat(paintedLines(down, password)).containsExactly("> \u2022\u2022",
                 "  \u2022\u2022" + Editor.CURSOR + "\u2022");
-        assertThat(Editor.update(down, password, new EditorAction.MoveUp()).state().caret())
+        assertThat(new Editor(password).update(down, new Editor.Msg.MoveUp()).model().caret())
                 .isEqualTo(2);
     }
 
@@ -182,14 +192,14 @@ class EditorMaskingTest {
         // a move returns the caret to the cluster that layout names, never to the cleartext columns
         // a hidden row does not draw.
         String draft = "\uD83D\uDE00\uD83D\uDE00\nabcdefgh";
-        EditorState state = new EditorState(draft, 4, 4, 0);
+        Editor.Model state = new Editor.Model(draft, 4, 4, 0);
         assertThat(blockColumn(paintedLines(state, HIDDEN).get(0))).isZero();
 
-        EditorState down = Editor.update(state, HIDDEN, new EditorAction.MoveDown()).state();
+        Editor.Model down = new Editor(HIDDEN).update(state, new Editor.Msg.MoveDown()).model();
         assertThat(down.preferredColumn()).isEqualTo(2);
         assertThat(down.caret()).isEqualTo(draft.indexOf('c'));
         assertThat(blockColumn(paintedLines(down, HIDDEN).get(1))).isZero();
-        assertThat(Editor.update(down, HIDDEN, new EditorAction.MoveUp()).state().caret())
+        assertThat(new Editor(HIDDEN).update(down, new Editor.Msg.MoveUp()).model().caret())
                 .isEqualTo(4);
     }
 
@@ -197,12 +207,12 @@ class EditorMaskingTest {
     void copyTextIsRawWhileCopyableTextHonoursMasking() {
         // Documented distinction: copyText returns the selection or the draft and deliberately
         // ignores masking; copyableText (which the Copy action uses) refuses a masked draft.
-        EditorState state = EditorState.of("secret").withCaret(3);
+        Editor.Model state = Editor.Model.of("secret").withCaret(3);
         assertThat(Editor.copyText(state)).isEqualTo("secret");
         assertThat(Editor.copyText(state.withSelection(0, 2))).isEqualTo("se");
         assertThat(Editor.copyableText(state, PASSWORD)).isEmpty();
-        assertThat(Editor.copyableText(state, EditorOptions.defaults())).contains("secret");
-        assertThat(Editor.update(state, PASSWORD, new EditorAction.Copy()).intent())
-                .isEqualTo(new EditorIntent.Copy(""));
+        assertThat(Editor.copyableText(state, Editor.Config.defaults())).contains("secret");
+        assertThat(new Editor(PASSWORD).update(state, new Editor.Msg.Copy()).outputs().getFirst())
+                .isEqualTo(new Editor.Output.Copy(""));
     }
 }

@@ -24,29 +24,27 @@ package io.github.dhoard.braxton.internal.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.effect.EffectId;
+
+import org.junit.jupiter.api.Test;
+
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
-import io.github.dhoard.braxton.effect.Command;
-import io.github.dhoard.braxton.effect.EffectId;
-import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 
 /** An executor may retain a task until after its effect has been invalidated. */
 class EffectTaskStartupTest {
 
     @Test
     void cancellingBeforeExecutorStartupDoesNotRunTheBody() throws Exception {
-        verifyInvalidation(Command.cancel(EffectId.of("group/work")), false);
+        verifyInvalidation(Command.cancel(EffectId.of("group-work")), false);
     }
 
     @Test
     void cancellingANamespaceBeforeExecutorStartupDoesNotRunTheBody() throws Exception {
-        verifyInvalidation(Command.cancelNamespace("group"), false);
+        verifyInvalidation(Command.cancelAll(), false);
     }
 
     @Test
@@ -67,7 +65,7 @@ class EffectTaskStartupTest {
         RuntimeServices environment = new RuntimeServices(() -> 0L, queued::add,
                 new ManualTimers(), message -> { });
         EffectRunner<String> runner = new EffectRunner<>(mailbox, environment, null, 1);
-        EffectId id = EffectId.of("group/work");
+        EffectId id = EffectId.of("group-work");
         runner.interpret(task(id, "obsolete", bodies, mappings));
         assertThat(queued).hasSize(1);
         if (replace) {

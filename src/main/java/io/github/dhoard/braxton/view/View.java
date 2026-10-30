@@ -22,19 +22,20 @@
 
 package io.github.dhoard.braxton.view;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.function.Function;
-
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Insets;
+import io.github.dhoard.braxton.mvu.ComponentPath;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * An immutable description of what to draw.
@@ -55,6 +56,47 @@ public sealed interface View<Msg> {
 
     /** Maps every message value this view can produce. */
     <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper);
+
+    /** Scopes every focus identity without changing bindings, handlers, or layout. */
+    default View<Msg> scoped(ComponentPath path) {
+        return switch (this) {
+            case Text<Msg> text -> text;
+            case Blank<Msg> blank -> blank;
+            case Fill<Msg> fill -> fill;
+            case Column<Msg> column ->
+                    new Column<>(
+                            column.items().stream().map(item -> item.scoped(path)).toList(),
+                            column.align());
+            case Row<Msg> row ->
+                    new Row<>(
+                            row.items().stream().map(item -> item.scoped(path)).toList(),
+                            row.align());
+            case Padding<Msg> padding ->
+                    new Padding<>(padding.insets(), padding.child().scoped(path));
+            case BorderBox<Msg> box ->
+                    new BorderBox<>(
+                            box.border(), box.title(), box.style(), box.child().scoped(path));
+            case Fixed<Msg> fixed -> new Fixed<>(fixed.size(), fixed.child().scoped(path));
+            case Grow<Msg> grow -> new Grow<>(grow.weight(), grow.child().scoped(path));
+            case Overlay<Msg> overlay ->
+                    new Overlay<>(
+                            overlay.layers().stream().map(item -> item.scoped(path)).toList(),
+                            overlay.modal());
+            case Keyed<Msg> keyed ->
+                    new Keyed<>(
+                            keyed.capture(),
+                            keyed.intercept(),
+                            keyed.child().scoped(path),
+                            keyed.bubble());
+            case Focused<Msg> focused ->
+                    new Focused<>(
+                            focused.id().scoped(path),
+                            focused.focused(),
+                            focused.bindings(),
+                            focused.input(),
+                            focused.child().scoped(path));
+        };
+    }
 
     /** Handles one input event, returning a message when the event is consumed. */
     @FunctionalInterface
@@ -87,6 +129,7 @@ public sealed interface View<Msg> {
         @Override
         @SuppressWarnings("unchecked")
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return (View<Msg2>) this;
         }
     }
@@ -102,6 +145,7 @@ public sealed interface View<Msg> {
         @Override
         @SuppressWarnings("unchecked")
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return (View<Msg2>) this;
         }
     }
@@ -128,6 +172,7 @@ public sealed interface View<Msg> {
         @Override
         @SuppressWarnings("unchecked")
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return (View<Msg2>) this;
         }
     }
@@ -154,6 +199,7 @@ public sealed interface View<Msg> {
 
         @Override
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Column<>(mapAll(items, mapper), align);
         }
     }
@@ -177,6 +223,7 @@ public sealed interface View<Msg> {
 
         @Override
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Row<>(mapAll(items, mapper), align);
         }
     }
@@ -196,6 +243,7 @@ public sealed interface View<Msg> {
 
         @Override
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Padding<>(insets, child.map(mapper));
         }
     }
@@ -218,6 +266,7 @@ public sealed interface View<Msg> {
 
         @Override
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new BorderBox<>(border, title, style, child.map(mapper));
         }
     }
@@ -239,6 +288,7 @@ public sealed interface View<Msg> {
 
         @Override
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Fixed<>(size, child.map(mapper));
         }
     }
@@ -260,6 +310,7 @@ public sealed interface View<Msg> {
 
         @Override
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Grow<>(weight, child.map(mapper));
         }
     }
@@ -283,6 +334,7 @@ public sealed interface View<Msg> {
 
         @Override
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Overlay<>(mapAll(layers, mapper), modal);
         }
     }
@@ -313,6 +365,7 @@ public sealed interface View<Msg> {
 
         @Override
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Keyed<>(mapBindings(capture, mapper), intercept.map(mapper),
                     child.map(mapper), mapBindings(bubble, mapper));
         }
@@ -344,6 +397,7 @@ public sealed interface View<Msg> {
 
         @Override
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new Focused<>(id, focused, mapBindings(bindings, mapper), input.map(mapper),
                     child.map(mapper));
         }

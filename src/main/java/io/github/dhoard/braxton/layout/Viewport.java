@@ -22,8 +22,9 @@
 
 package io.github.dhoard.braxton.layout;
 
+
 /**
- * The terminal geometry handed to {@code Program.view}.
+ * The terminal geometry handed to {@code Component.view}.
  *
  * <p>A viewport is a plain value: the runtime owns when it changes and the application owns any
  * geometry-dependent state it derives from it.</p>

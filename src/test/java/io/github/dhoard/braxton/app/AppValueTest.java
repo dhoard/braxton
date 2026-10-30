@@ -25,31 +25,33 @@ package io.github.dhoard.braxton.app;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.app.TerminalCapabilities;
+import io.github.dhoard.braxton.mvu.Component;
+import io.github.dhoard.braxton.mvu.InitContext;
+import io.github.dhoard.braxton.mvu.Never;
+import io.github.dhoard.braxton.mvu.Update;
+import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.Views;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.util.List;
 
 /** Application entry values: transitions, exit results, init context, runtime options. */
 class AppValueTest {
 
     @Test
     void aTransitionRequiresACommandAndOffersStayAndNext() {
-        assertThatThrownBy(() -> new Transition<>("m", null))
+        assertThatThrownBy(() -> new Update<>("m", null, java.util.List.of()))
                 .isInstanceOf(NullPointerException.class);
-        Transition<String, String> stay = Transition.next("m");
+        Update<String, String, Never> stay = Update.next("m");
         assertThat(stay.command()).isInstanceOf(Command.None.class);
-        assertThat(Transition.next("m", Command.quit(2)).command())
-                .isInstanceOf(Command.Quit.class);
-        assertThat(Transition.<String, String>next("m").command())
+        assertThat(Update.next("m", Command.quit(2)).command()).isInstanceOf(Command.Quit.class);
+        assertThat(Update.<String, String, Never>next("m").command())
                 .isInstanceOf(Command.None.class);
     }
 
@@ -82,14 +84,63 @@ class AppValueTest {
         RuntimeOptions defaults = RuntimeOptions.defaults();
         assertThat(defaults.mailboxCapacity()).isEqualTo(RuntimeOptions.DEFAULT_MAILBOX_CAPACITY);
         assertThat(defaults.maxConcurrentEffects()).isEqualTo(RuntimeOptions.DEFAULT_MAX_EFFECTS);
-        assertThatThrownBy(() -> new RuntimeOptions(null, 0, 1, 1, null, null, null))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("capacity");
-        assertThatThrownBy(() -> new RuntimeOptions(null, 1, -1, 1, null, null, null))
+        assertThatThrownBy(
+                        () ->
+                                new RuntimeOptions(
+                                        null,
+                                        0,
+                                        1,
+                                        1,
+                                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
+                                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
+                                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
+                                        null,
+                                        null,
+                                        null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("capacity");
+        assertThatThrownBy(
+                        () ->
+                                new RuntimeOptions(
+                                        null,
+                                        1,
+                                        -1,
+                                        1,
+                                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
+                                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
+                                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
+                                        null,
+                                        null,
+                                        null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new RuntimeOptions(Duration.ofSeconds(-1), 1, 0, 0, null, null,
-                null)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new RuntimeOptions(Duration.ofSeconds(Long.MAX_VALUE), 1, 0, 0,
-                null, null, null)).isInstanceOf(IllegalArgumentException.class)
+        assertThatThrownBy(
+                        () ->
+                                new RuntimeOptions(
+                                        Duration.ofSeconds(-1),
+                                        1,
+                                        0,
+                                        0,
+                                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
+                                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
+                                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
+                                        null,
+                                        null,
+                                        null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(
+                        () ->
+                                new RuntimeOptions(
+                                        Duration.ofSeconds(Long.MAX_VALUE),
+                                        1,
+                                        0,
+                                        0,
+                                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
+                                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
+                                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
+                                        null,
+                                        null,
+                                        null))
+                .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("nanoseconds");
         RuntimeOptions limited = defaults.withLimits(8, 2, 3);
         assertThat(limited.mailboxCapacity()).isEqualTo(8);
@@ -97,20 +148,19 @@ class AppValueTest {
         assertThat(limited.input()).isSameAs(defaults.input());
     }
 
-    private static final class DefaultSubscriptions implements Program<String, String> {
+    private static final class DefaultSubscriptions implements Component<String, String, Never> {
         @Override
-        public Transition<String, String> init(InitContext context) {
-            return Transition.next("");
+        public Update<String, String, Never> init(InitContext context) {
+            return Update.next("");
         }
 
         @Override
-        public Transition<String, String> update(String model, String message) {
-            return Transition.next(model);
+        public Update<String, String, Never> update(String model, String message) {
+            return Update.next(model);
         }
 
         @Override
-        public io.github.dhoard.braxton.view.View<String> view(String model,
-                Viewport viewport) {
+        public io.github.dhoard.braxton.view.View<String> view(String model, ViewContext context) {
             return Views.text("x");
         }
     }

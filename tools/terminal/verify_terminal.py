@@ -397,12 +397,45 @@ def check_cleanup(java_command, command, expected_code):
 
 def check_harness():
     with PtyChild([str(ROOT / "run-ai-harness.sh"), "--no-build"], control=False) as child:
+        def screen_until(predicate, description):
+            deadline = time.monotonic() + 30
+            while not predicate("\n".join(child.screen.display)):
+                require(time.monotonic() < deadline, f"harness screen never showed {description}")
+                require(child.process.poll() is None, f"harness exited before {description}")
+                child.pump(0.1)
+
         child.terminal_contains("\x1b[?2004h")
+        screen_until(lambda text: "Yes" in text and "deepseek" in text, "loaded session")
+        os.write(child.master, b"hierarchy probe")
+        screen_until(lambda text: "> hierarchy probe" in text, "mounted editor input")
+        os.write(child.master, b"\x1bc")  # Alt+C: copy the editor output through the parent.
+        screen_until(lambda text: "Copied" in text, "clipboard output")
+        os.write(child.master, b"\x16")  # Ctrl+V: session-local clipboard, no external clipboard read.
+        screen_until(lambda text: "> hierarchy probehierarchy probe" in text, "paste dispatch")
+        os.write(child.master, b"\r")
+        screen_until(lambda text: "Working" in text, "submitted workflow")
+        screen_until(lambda text: "I'll start by reading" in text, "timer-driven response")
+        screen_until(lambda text: "\u2503" in text, "overflow scrollbar")
+        # Stop response pacing before comparing scroll positions; no task races the assertion.
+        os.write(child.master, b"\x1b")
+        screen_until(lambda text: "esc again to stop" in text, "cancel confirmation")
+        os.write(child.master, b"\x1b")
+        screen_until(lambda text: "Stopped." in text and "Working" not in text, "cancelled workflow")
+        before = tuple(child.screen.display[:17])
+        os.write(child.master, b"\x1b[5~")  # PageUp, then End returns to the latest transcript.
+        screen_until(lambda text: tuple(child.screen.display[:17]) != before, "scroll movement")
+        os.write(child.master, b"\x1b[F")
+        screen_until(lambda text: "Stopped." in text, "scroll to bottom")
+        child.screen.resize(20, 64)
+        child.resize(20, 64)
+        screen_until(lambda text: "deepseek" in child.screen.display[-2], "resized footer")
+        require(len(child.screen.display) == 20 and all(len(row) == 64 for row in child.screen.display),
+                "harness resize did not match the emulated viewport")
         os.write(child.master, b"\x03")
-        child.terminal_contains("Press Ctrl+C again")
+        screen_until(lambda text: "Press Ctrl+C again" in text, "exit confirmation")
         os.write(child.master, b"\x03")
         child.finish()
-    print("PASS packaged AI Harness startup/quit/restoration")
+    print("PASS packaged hierarchical AI Harness editor/output/paste/submit/timer/scroll/resize/cancel/quit/restoration")
 
 
 def main():
@@ -413,7 +446,7 @@ def main():
     args = parser.parse_args()
     require(1 <= args.repeat <= 100, "repeat must be between 1 and 100")
     require(platform.system() in ("Darwin", "Linux"), "PTY verification supports Darwin/Linux")
-    require((ROOT / "target/braxton-0.1.0-SNAPSHOT.jar").is_file(), "run ./mvnw clean install first")
+    require(any((ROOT / "target").glob("braxton-*.jar")), "run ./build.sh first")
     java = shutil.which("java")
     javac = shutil.which("javac")
     require(java and javac, "Java 25 JDK required")

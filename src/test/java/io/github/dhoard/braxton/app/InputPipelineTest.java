@@ -23,26 +23,25 @@
 package io.github.dhoard.braxton.app;
 
 import static io.github.dhoard.braxton.internal.runtime.JLineTestTerminal.run;
-import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
-import io.github.dhoard.braxton.internal.runtime.ManualTimers;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
 import io.github.dhoard.braxton.input.Binding;
-import io.github.dhoard.braxton.layout.Size;
-import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
-import io.github.dhoard.braxton.view.ElementId;
+import io.github.dhoard.braxton.internal.runtime.ManualTimers;
+import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
+import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.mvu.Component;
+import io.github.dhoard.braxton.mvu.InitContext;
+import io.github.dhoard.braxton.mvu.Never;
+import io.github.dhoard.braxton.mvu.Update;
+import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 import io.github.dhoard.braxton.widget.Editor;
-import io.github.dhoard.braxton.widget.EditorAction;
-import io.github.dhoard.braxton.widget.EditorIntent;
-import io.github.dhoard.braxton.widget.EditorOptions;
-import io.github.dhoard.braxton.widget.EditorResult;
-import io.github.dhoard.braxton.widget.EditorState;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 /**
  * One keystroke path end to end: raw bytes through the decoder and router into an editor reducer,
@@ -50,34 +49,45 @@ import io.github.dhoard.braxton.widget.EditorState;
  */
 class InputPipelineTest {
 
-    private static final EditorOptions OPTIONS = EditorOptions.defaults();
+    private static final Editor.Config OPTIONS = Editor.Config.defaults();
 
-    private record Model(EditorState draft, int submitted) {
-    }
+    private record Model(Editor.Model draft, int submitted) {}
 
-    private static final class DraftProgram implements Program<Model, EditorAction> {
+    private static final class DraftProgram implements Component<Model, Editor.Msg, Never> {
 
         @Override
-        public Transition<Model, EditorAction> init(InitContext context) {
-            return Transition.next(new Model(EditorState.empty(), 0));
+        public Update<Model, Editor.Msg, Never> init(InitContext context) {
+            return Update.next(new Model(Editor.Model.empty(), 0));
         }
 
         @Override
-        public Transition<Model, EditorAction> update(Model model, EditorAction action) {
-            EditorResult result = Editor.update(model.draft(), OPTIONS, action);
-            boolean submit = result.intent() instanceof EditorIntent.Submit;
-            return Transition.next(new Model(submit ? EditorState.empty() : result.state(),
-                    model.submitted() + (submit ? 1 : 0)));
+        public Update<Model, Editor.Msg, Never> update(Model model, Editor.Msg action) {
+            io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> result =
+                    new Editor(OPTIONS).update(model.draft(), action);
+            boolean submit =
+                    result.outputs().stream().anyMatch(Editor.Output.Submit.class::isInstance);
+            return Update.next(
+                    new Model(
+                            submit ? Editor.Model.empty() : result.model(),
+                            model.submitted() + (submit ? 1 : 0)));
         }
 
         @Override
-        public View<EditorAction> view(Model model, Viewport viewport) {
-            return Views.keyed(java.util.List.of(Binding.of("q", new EditorAction.Submit())),
+        public View<Editor.Msg> view(Model model, ViewContext context) {
+            return Views.keyed(
+                    java.util.List.of(Binding.of("q", new Editor.Msg.Submit())),
                     Views.column(
-                            Views.text("draft=[" + model.draft().text() + "] submitted="
-                                    + model.submitted()),
-                            Editor.view(ElementId.of("editor"), model.draft(), OPTIONS, true,
-                                    action -> action)),
+                            Views.text(
+                                    "draft=["
+                                            + model.draft().text()
+                                            + "] submitted="
+                                            + model.submitted()),
+                            new Editor(OPTIONS)
+                                    .view(
+                                            (model.draft()).withFocus(true),
+                                            new io.github.dhoard.braxton.mvu.ViewContext(
+                                                    io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                                    .map(action -> action)),
                     java.util.List.of());
         }
     }

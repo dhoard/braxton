@@ -22,6 +22,12 @@
 
 package io.github.dhoard.braxton.internal.runtime;
 
+import io.github.dhoard.braxton.clipboard.ClipboardResult;
+import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.effect.EffectId;
+import io.github.dhoard.braxton.internal.clipboard.ClipboardService;
+import io.github.dhoard.braxton.mvu.ComponentPath;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,13 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
-
-import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
-import io.github.dhoard.braxton.internal.runtime.Timers;
-import io.github.dhoard.braxton.clipboard.ClipboardResult;
-import io.github.dhoard.braxton.effect.Command;
-import io.github.dhoard.braxton.effect.EffectId;
-import io.github.dhoard.braxton.internal.clipboard.ClipboardService;
+import java.util.function.Consumer;
 
 /**
  * Interprets inert {@link Command} values: exactly once, on the owner thread for structured
@@ -49,13 +49,15 @@ public final class EffectRunner<Msg> {
 
     private static final class Entry {
         final EffectId id;
+        final ScopeManager.Origin origin;
         final long epoch;
         final boolean task;
         final Duration delay;
         Timers.Handle timer;
         volatile Thread thread;
 
-        Entry(EffectId id, long epoch, boolean task, Duration delay) {
+        Entry(EffectId id, long epoch, boolean task, Duration delay, ScopeManager.Origin origin) {
+            this.origin = origin;
             this.id = id;
             this.epoch = epoch;
             this.task = task;
@@ -68,8 +70,42 @@ public final class EffectRunner<Msg> {
     private final ClipboardService clipboard;
     private final int maxEffects;
     private final Map<EffectId, Entry> entries = new HashMap<>();
+    // Completed registrations live only until their envelope is consumed, keeping queued-result
+    // cancellation safe without retaining a generation for every ID ever seen.
+    private final Map<EffectId, Entry> deliveries = new HashMap<>();
     private final Object lock = new Object();
     private final List<Thread> running = new ArrayList<>();
+
+    private ScopeManager scopes;
+    private Consumer<Mailbox.AppMessage> dispatch =
+            mailboxMessage -> {
+                throw new IllegalStateException("local dispatch requires an owner queue");
+            };
+
+    public void bindScopes(ScopeManager scopes, Consumer<Mailbox.AppMessage> dispatch) {
+        this.scopes = scopes;
+        this.dispatch = dispatch;
+    }
+
+    private ScopeManager.Origin origin(ComponentPath path) {
+        return scopes == null ? null : scopes.capture(path);
+    }
+
+    /**
+     * Whether a scoped command still owns a component, discarding it once the commit removed it.
+     *
+     * <p>Every command variant must validate its origin before doing work, even commands such as
+     * quit or cancellation that produce no message and never capture a delivery origin.</p>
+     */
+    private boolean live(ComponentPath path) {
+        if (scopes == null || scopes.isActive(path)) return true;
+        if (scopes.wasJustRemoved(path)) {
+            environment.diagnostics().accept("discarded command for removed component " + path);
+            return false;
+        }
+        scopes.capture(path); // Reject an undeclared origin before interpreting any command variant.
+        return true;
+    }
 
     private Thread owner = Thread.currentThread();
     private long nextEpoch = 1L;
@@ -99,27 +135,52 @@ public final class EffectRunner<Msg> {
 
     /** Interprets one command; batches run in order and stop after a quit. */
     public void interpret(Command<Msg> command) {
-        if (command == null) {
-            return;
-        }
+        interpret(command, ComponentPath.ROOT);
+    }
+
+    private void interpret(Command<Msg> command, ComponentPath path) {
+        if (quitRequested || command == null) return;
         switch (command) {
             case Command.None<Msg> none -> { }
             case Command.Batch<Msg> batch -> {
                 for (Command<Msg> item : batch.commands()) {
-                    interpret(item);
+                    interpret(item, path);
                     if (quitRequested) {
                         return;
                     }
                 }
             }
-            case Command.Delay<Msg> delay -> startDelay(delay);
-            case Command.Task<Msg> task -> startTask(task);
-            case Command.Cancel<Msg> cancel -> cancel(cancel.id());
-            case Command.CancelNamespace<Msg> cancel -> cancelNamespace(cancel.namespace());
-            case Command.ReadClipboard<Msg> read -> deliver(read.mapper().apply(clipboard.internalText()));
+            case Command.Scoped<Msg> scoped -> {
+                ComponentPath target = scoped.path().prepend(path);
+                // A command returned by the update whose commit tore its own scope down is void:
+                // the component no longer exists, so nothing it asked for may run. This is the
+                // normal "child emits, parent unmounts it" shape, not a contract violation.
+                if (!live(target)) return;
+                interpret(scoped.command(), target);
+            }
+            case Command.Dispatch<Msg> local ->
+                    dispatch.accept(new Mailbox.AppMessage(local.message(), origin(path)));
+            case Command.Delay<Msg> delay ->
+                    startDelay(
+                            new Command.Delay<>(
+                                    delay.id().scoped(path),
+                                    delay.delay(),
+                                    delay.message(),
+                                    delay.rejected()));
+            case Command.Task<Msg> task ->
+                    startTask(
+                            new Command.Task<>(
+                                    task.id().scoped(path),
+                                    task.work(),
+                                    task.onSuccess(),
+                                    task.onFailure()));
+            case Command.Cancel<Msg> cancel -> cancel(cancel.id().scoped(path));
+            case Command.CancelAll<Msg> cancel -> cancelScope(path);
+            case Command.ReadClipboard<Msg> read ->
+                    deliver(read.mapper().apply(clipboard.internalText()), origin(path));
             case Command.Copy<Msg> copy -> {
                 ClipboardResult result = clipboard.copy(copy.text());
-                deliver(copy.mapper().apply(result));
+                deliver(copy.mapper().apply(result), origin(path));
             }
             case Command.Quit<Msg> quit -> {
                 quitRequested = true;
@@ -132,10 +193,16 @@ public final class EffectRunner<Msg> {
         Entry entry;
         synchronized (lock) {
             if (entries.size() >= maxEffects && !entries.containsKey(command.id())) {
-                deliver(command.rejected());
+                deliver(command.rejected(), origin(command.id().path()));
                 return;
             }
-            entry = new Entry(command.id(), nextEpoch++, false, command.delay());
+            entry =
+                    new Entry(
+                            command.id(),
+                            nextEpoch++,
+                            false,
+                            command.delay(),
+                            origin(command.id().path()));
             replaceLocked(entry);
         }
         Timers.Handle handle = environment.timers().schedule(
@@ -155,7 +222,7 @@ public final class EffectRunner<Msg> {
             }
             entries.remove(entry.id, entry);
         }
-        deliver(command.message());
+        deliver(command.message(), entry.origin, entry);
     }
 
     private void startTask(Command.Task<Msg> command) {
@@ -166,18 +233,22 @@ public final class EffectRunner<Msg> {
                         new IllegalStateException("effect quota exhausted: " + command.id()));
                 return;
             }
-            entry = new Entry(command.id(), nextEpoch++, true, Duration.ZERO);
+            entry =
+                    new Entry(
+                            command.id(),
+                            nextEpoch++,
+                            true,
+                            Duration.ZERO,
+                            origin(command.id().path()));
             replaceLocked(entry);
         }
         Executor executor = environment.effectExecutor();
         try {
             executor.execute(() -> runTask(command, entry));
         } catch (RejectedExecutionException rejected) {
-            finish(entry);
-            deliverFailure(command, rejected);
+            deliverFailure(command, rejected, entry);
         } catch (RuntimeException rejected) {
-            finish(entry);
-            deliverFailure(command, rejected);
+            deliverFailure(command, rejected, entry);
         }
     }
 
@@ -226,7 +297,7 @@ public final class EffectRunner<Msg> {
         // Mapping is application code and can outlive cancellation or replacement. Keep the
         // registration until mapping finishes, then claim completion only if it is still current.
         if (finish(entry)) {
-            deliver(message);
+            deliver(message, entry.origin, entry);
         }
     }
 
@@ -238,12 +309,15 @@ public final class EffectRunner<Msg> {
     private void deliverFailure(Command.Task<Msg> command, Throwable failure, Entry entry) {
         try {
             Msg message = command.onFailure().apply(failure);
-            if (entry == null || finish(entry)) {
-                deliver(message);
+            if (entry == null) {
+                deliver(message, origin(command.id().path()));
+            } else if (finish(entry)) {
+                deliver(message, entry.origin, entry);
             }
         } catch (Throwable mapperFailure) {
             if (entry != null) {
                 finish(entry);
+                accept(entry);
             }
             environment.diagnostics().accept("effect " + command.id()
                     + ": failure mapper threw " + mapperFailure.getClass().getSimpleName());
@@ -262,6 +336,7 @@ public final class EffectRunner<Msg> {
     }
 
     private void replaceLocked(Entry entry) {
+        deliveries.put(entry.id, entry);
         Entry previous = entries.put(entry.id, entry);
         if (previous != null) {
             cancelEntry(previous);
@@ -275,6 +350,7 @@ public final class EffectRunner<Msg> {
     private void cancel(EffectId id) {
         Entry entry;
         synchronized (lock) {
+            deliveries.remove(id);
             entry = entries.remove(id);
         }
         if (entry != null) {
@@ -282,12 +358,12 @@ public final class EffectRunner<Msg> {
         }
     }
 
-    private void cancelNamespace(String namespace) {
+    public void cancelScope(ComponentPath path) {
         List<Entry> cancelled = new ArrayList<>();
         synchronized (lock) {
-            String prefix = namespace + "/";
+            deliveries.keySet().removeIf(id -> id.path().startsWith(path));
             for (EffectId id : new ArrayList<>(entries.keySet())) {
-                if (id.value().equals(namespace) || id.value().startsWith(prefix)) {
+                if (id.path().startsWith(path)) {
                     cancelled.add(entries.remove(id));
                 }
             }
@@ -313,6 +389,7 @@ public final class EffectRunner<Msg> {
         synchronized (lock) {
             cancelled = new ArrayList<>(entries.values());
             entries.clear();
+            deliveries.clear();
         }
         for (Entry entry : cancelled) {
             cancelEntry(entry);
@@ -339,6 +416,17 @@ public final class EffectRunner<Msg> {
         }
     }
 
+    /** Claims one completed delivery unless cancellation or replacement already invalidated it. */
+    private boolean accept(Entry entry) {
+        synchronized (lock) {
+            return deliveries.remove(entry.id, entry);
+        }
+    }
+
+    private void deliver(Msg message, ScopeManager.Origin origin) {
+        deliver(message, origin, null);
+    }
+
     /**
      * Delivers one result to the owner.
      *
@@ -347,11 +435,15 @@ public final class EffectRunner<Msg> {
      * the wait is retried until the mailbox accepts it or is closed: a fixed timeout would silently
      * lose a task result or a delayed message.</p>
      */
-    private void deliver(Msg message) {
+    private void deliver(Msg message, ScopeManager.Origin origin, Entry entry) {
         if (message == null) {
+            if (entry != null) accept(entry);
             return;
         }
-        Mailbox.Envelope envelope = new Mailbox.AppMessage(message);
+        Mailbox.Envelope envelope =
+                entry == null
+                        ? new Mailbox.AppMessage(message, origin)
+                        : new Mailbox.AppMessage(message, origin, () -> accept(entry));
         if (Thread.currentThread() == owner) {
             mailbox.enqueueFromOwner(envelope);
             return;

@@ -22,17 +22,19 @@
 
 package io.github.dhoard.braxton.internal.runtime;
 
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
+import io.github.dhoard.braxton.app.*;
+import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.mvu.Component;
+import io.github.dhoard.braxton.mvu.Never;
 
 import org.jline.terminal.Terminal;
 import org.jline.terminal.impl.ExternalTerminal;
 import org.jline.utils.NonBlockingReader;
 
-import io.github.dhoard.braxton.app.*;
-import io.github.dhoard.braxton.layout.Size;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Owned streams feeding an actual JLine terminal; no Braxton backend abstraction. */
 public final class JLineTestTerminal implements AutoCloseable {
@@ -326,7 +328,7 @@ public final class JLineTestTerminal implements AutoCloseable {
     }
 
     public static <M, Msg> ExitResult run(
-            Program<M, Msg> program, RuntimeOptions options, JLineTestTerminal terminal) {
+            Component<M, Msg, Never> program, RuntimeOptions options, JLineTestTerminal terminal) {
         return run(
                 program,
                 options,
@@ -338,7 +340,7 @@ public final class JLineTestTerminal implements AutoCloseable {
     }
 
     public static <M, Msg> ExitResult run(
-            Program<M, Msg> program,
+            Component<M, Msg, Never> program,
             RuntimeOptions options,
             JLineTestTerminal terminal,
             RuntimeServices services) {

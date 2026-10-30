@@ -24,6 +24,14 @@ package io.github.dhoard.braxton.internal.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.effect.SubscriptionId;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -33,17 +41,15 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-
-import io.github.dhoard.braxton.effect.Subscription;
-import io.github.dhoard.braxton.effect.SubscriptionId;
-
 /** Timer registration can finish after removal or after its own callback schedules a successor. */
 @Timeout(10)
 class SubscriptionTimerLifecycleTest {
+    private static Object validPayload(Mailbox.Envelope envelope) {
+        assertThat(envelope).isInstanceOf(Mailbox.AppMessage.class);
+        var message = (Mailbox.AppMessage) envelope;
+        assertThat(message.valid().getAsBoolean()).as("the emitted message is still live").isTrue();
+        return message.payload();
+    }
 
     @ParameterizedTest
     @ValueSource(strings = {"remove", "replace", "close"})
@@ -84,7 +90,7 @@ class SubscriptionTimerLifecycleTest {
             if (action.equals("replace")) {
                 assertThat(timers.calls.get(2).cancellations).hasValue(0);
                 timers.calls.get(2).task.run();
-                assertThat(mailbox.poll(0)).isEqualTo(new Mailbox.AppMessage("replacement"));
+                assertThat(validPayload(mailbox.poll(0))).isEqualTo("replacement");
             }
             manager.closeAll();
             manager.closeAll();
@@ -120,7 +126,7 @@ class SubscriptionTimerLifecycleTest {
             assertThat(timers.calls).hasSize(2);
             assertThat(timers.calls.get(1).cancellations).hasValue(0);
             timers.calls.get(1).task.run();
-            assertThat(mailbox.poll(0)).isEqualTo(new Mailbox.AppMessage("fresh"));
+            assertThat(validPayload(mailbox.poll(0))).isEqualTo("fresh");
             manager.closeAll();
             assertThat(timers.calls.get(2).cancellations).hasValue(1);
         } finally {

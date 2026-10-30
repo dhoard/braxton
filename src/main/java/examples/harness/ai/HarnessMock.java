@@ -22,12 +22,13 @@
 
 package examples.harness.ai;
 
+
 import java.util.List;
 
 /**
  * Deterministic mock responder.
  *
- * <p>Pure selection: the replay position lives in {@link HarnessState}, not in this class. Once the
+ * <p>Pure selection: the replay position lives in {@link Harness.Model}, not in this class. Once the
  * bundled turns are exhausted, the fallback builds a fixed response from the submitted text. No
  * model, filesystem, network, or command execution happens here.</p>
  */
@@ -37,13 +38,13 @@ final class HarnessMock {
     }
 
     /** Whether the replay position still names a recorded turn. */
-    static boolean hasRecordedTurn(HarnessState state) {
+    static boolean hasRecordedTurn(Harness.Model state) {
         int index = state.replayIndex();
         return index >= 0 && index < state.turns().size();
     }
 
     /** The next turn for {@code prompt}: the recorded turn at the replay index, or a fallback. */
-    static HarnessTranscript.HarnessTurn turnFor(HarnessState state, String prompt) {
+    static HarnessTranscript.HarnessTurn turnFor(Harness.Model state, String prompt) {
         List<HarnessTranscript.HarnessTurn> turns = state.turns();
         if (hasRecordedTurn(state)) {
             return turns.get(state.replayIndex());
@@ -57,15 +58,19 @@ final class HarnessMock {
         String quoted = "\"" + HarnessRender.truncate(safePrompt, 80) + "\"";
         String reasoning = "No model is attached. I am rendering a deterministic mock response for "
                 + quoted + ".";
-        String result = """
-                Program          holds immutable state and pure update/view
+        String result =
+                """
+                Component          holds immutable state and pure update/view
                 Editor           owns the draft and emits submit/copy/paste intents
                 View             describes layout; layout paints cells
                 JLine Terminal   owns raw mode and timed input
                 """;
-        HarnessEntry.Tool tool = new HarnessEntry.Tool(
-                "read src/main/java/examples/harness/ai/HarnessProgram.java",
-                result, false, HarnessEntry.ToolStatus.SUCCESS);
+        HarnessEntry.Tool tool =
+                new HarnessEntry.Tool(
+                        "read src/main/java/examples/harness/ai/Harness.java",
+                        result,
+                        false,
+                        HarnessEntry.ToolStatus.SUCCESS);
         String assistant = switch (Math.floorMod(safePrompt.hashCode(), 3)) {
             case 0 -> "You said: " + quoted + "\n\n"
                     + "This is mock data, not a model response. The showcase is one MVU program: "

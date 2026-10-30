@@ -25,23 +25,22 @@ package io.github.dhoard.braxton.widget;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.ScreenRenderer;
 import io.github.dhoard.braxton.view.View;
+
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Catalog widgets remain pure values with deterministic layout. */
 class CatalogTest {
@@ -851,40 +850,78 @@ class CatalogTest {
 
     @Test
     void selectorActionsClampAndEmitTypedIntents() {
-        Selector.State state = Selector.State.of(List.of("a", "b"));
-        assertThat(Selector.update(state, new Selector.Action.Up()).state().selected()).isZero();
-        assertThat(Selector.update(state, new Selector.Action.Down()).state().selected()).isEqualTo(1);
-        assertThat(Selector.update(state, new Selector.Action.Down()).state().selected()).isEqualTo(1);
-        Selector.Intent chosen = Selector.update(state, new Selector.Action.Confirm()).intent();
-        assertThat(chosen).isInstanceOf(Selector.Intent.Chosen.class);
-        assertThat(((Selector.Intent.Chosen) chosen).value()).isEqualTo("a");
+        Selector.Model state = Selector.Model.of(List.of("a", "b"));
+        assertThat(
+                        new Selector(Selector.Config.defaults())
+                                .update(state, new Selector.Msg.Up())
+                                .model()
+                                .selected())
+                .isZero();
+        assertThat(
+                        new Selector(Selector.Config.defaults())
+                                .update(state, new Selector.Msg.Down())
+                                .model()
+                                .selected())
+                .isEqualTo(1);
+        assertThat(
+                        new Selector(Selector.Config.defaults())
+                                .update(state, new Selector.Msg.Down())
+                                .model()
+                                .selected())
+                .isEqualTo(1);
+        Selector.Output chosen =
+                new Selector(Selector.Config.defaults())
+                        .update(state, new Selector.Msg.Confirm())
+                        .outputs()
+                        .getFirst();
+        assertThat(chosen).isInstanceOf(Selector.Output.Chosen.class);
+        assertThat(((Selector.Output.Chosen) chosen).value()).isEqualTo("a");
     }
 
     @Test
     void confirmingAnEmptySelectorHasNothingToChoose() {
-        Selector.State empty = Selector.State.of(List.of());
-        Selector.Result result = Selector.update(empty, new Selector.Action.Confirm());
-        assertThat(result.intent()).isInstanceOf(Selector.Intent.None.class);
-        assertThat(result.state()).isEqualTo(empty);
+        Selector.Model empty = Selector.Model.of(List.of());
+        io.github.dhoard.braxton.mvu.Update<Selector.Model, Selector.Msg, Selector.Output> result =
+                new Selector(Selector.Config.defaults()).update(empty, new Selector.Msg.Confirm());
+        assertThat(result.outputs()).isEmpty();
+        assertThat(result.model()).isEqualTo(empty);
     }
 
     @Test
     void confirmingAnEmptyTableHasNothingToChoose() {
-        TableSelector.State empty = TableSelector.State.of(List.of("h1"), List.of());
-        TableSelector.Result result = TableSelector.update(empty, new TableSelector.Action.Confirm());
-        assertThat(result.intent()).isInstanceOf(TableSelector.Intent.None.class);
-        assertThat(result.state()).isEqualTo(empty);
-        TableSelector.State headerless = TableSelector.State.of(List.of(), List.of(List.of("a")));
-        assertThat(TableSelector.update(headerless, new TableSelector.Action.Confirm()).intent())
-                .isInstanceOf(TableSelector.Intent.None.class);
+        TableSelector.Model empty = TableSelector.Model.of(List.of("h1"), List.of());
+        io.github.dhoard.braxton.mvu.Update<
+                        TableSelector.Model, TableSelector.Msg, TableSelector.Output>
+                result =
+                        new TableSelector(TableSelector.Config.defaults())
+                                .update(empty, new TableSelector.Msg.Confirm());
+        assertThat(result.outputs()).isEmpty();
+        assertThat(result.model()).isEqualTo(empty);
+        TableSelector.Model headerless = TableSelector.Model.of(List.of(), List.of(List.of("a")));
+        assertThat(
+                        new TableSelector(TableSelector.Config.defaults())
+                                .update(headerless, new TableSelector.Msg.Confirm())
+                                .outputs())
+                .isEmpty();
     }
 
     @Test
     void tableSelectorKeepsAMultiLineCellOnOneRow() {
-        TableSelector.State state = TableSelector.State.of(List.of("h"),
-                List.of(List.of("a\nb"), List.of("c")));
-        View<Object> view = TableSelector.view(ElementId.of("table"), state, false, Style.NONE,
-                Style.NONE, Style.NONE, action -> "");
+        TableSelector.Model state =
+                TableSelector.Model.of(List.of("h"), List.of(List.of("a\nb"), List.of("c")));
+        View<Object> view =
+                new TableSelector(
+                                new TableSelector.Config(
+                                        TableSelector.Model.of(
+                                                java.util.List.of(), java.util.List.of()),
+                                        Style.NONE,
+                                        Style.NONE,
+                                        Style.NONE))
+                        .view(
+                                (state).withFocus(false),
+                                new io.github.dhoard.braxton.mvu.ViewContext(
+                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                        .map(action -> "");
         List<String> lines = new ScreenRenderer().plainLines(view, new Viewport(3, 20));
         assertThat(lines.get(1)).startsWith("a b");
         assertThat(lines.get(2)).startsWith("c");
@@ -892,25 +929,46 @@ class CatalogTest {
 
     @Test
     void tableSelectorColumnsLineUpWhenACellContainsATabStop() {
-        TableSelector.State state = TableSelector.State.of(List.of("a\tb", "c"),
-                List.of(List.of("x", "y")));
-        View<Object> view = TableSelector.view(ElementId.of("table"), state, false, Style.NONE,
-                Style.NONE, Style.NONE, action -> "");
+        TableSelector.Model state =
+                TableSelector.Model.of(List.of("a\tb", "c"), List.of(List.of("x", "y")));
+        View<Object> view =
+                new TableSelector(
+                                new TableSelector.Config(
+                                        TableSelector.Model.of(
+                                                java.util.List.of(), java.util.List.of()),
+                                        Style.NONE,
+                                        Style.NONE,
+                                        Style.NONE))
+                        .view(
+                                (state).withFocus(false),
+                                new io.github.dhoard.braxton.mvu.ViewContext(
+                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                        .map(action -> "");
         List<String> lines = new ScreenRenderer().plainLines(view, new Viewport(2, 20));
         assertThat(lines.get(0).indexOf('c')).isEqualTo(lines.get(1).indexOf('y'));
     }
 
     @Test
     void tableSelectorClampsAndReportsTheSelectedCell() {
-        TableSelector.State state = TableSelector.State.of(List.of("h1", "h2"),
-                List.of(List.of("a", "b"), List.of("c", "d")));
-        state = TableSelector.update(state, new TableSelector.Action.Right()).state();
+        TableSelector.Model state =
+                TableSelector.Model.of(
+                        List.of("h1", "h2"), List.of(List.of("a", "b"), List.of("c", "d")));
+        state =
+                new TableSelector(TableSelector.Config.defaults())
+                        .update(state, new TableSelector.Msg.Right())
+                        .model();
         assertThat(state.selectedValue()).isEqualTo("b");
-        state = TableSelector.update(state, new TableSelector.Action.Down()).state();
+        state =
+                new TableSelector(TableSelector.Config.defaults())
+                        .update(state, new TableSelector.Msg.Down())
+                        .model();
         assertThat(state.selectedValue()).isEqualTo("d");
-        TableSelector.Intent chosen = TableSelector.update(state,
-                new TableSelector.Action.Confirm()).intent();
-        assertThat(((TableSelector.Intent.Chosen) chosen).value()).isEqualTo("d");
+        TableSelector.Output chosen =
+                new TableSelector(TableSelector.Config.defaults())
+                        .update(state, new TableSelector.Msg.Confirm())
+                        .outputs()
+                        .getFirst();
+        assertThat(((TableSelector.Output.Chosen) chosen).value()).isEqualTo("d");
     }
 
     @Test

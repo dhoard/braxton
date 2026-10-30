@@ -25,17 +25,22 @@ package io.github.dhoard.braxton.internal.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.effect.SubscriptionId;
+
+import org.junit.jupiter.api.Test;
+
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.effect.Subscription;
-import io.github.dhoard.braxton.effect.SubscriptionId;
-import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
-
 class SubscriptionStartFailureTest {
+    private static Object validPayload(Mailbox.Envelope envelope) {
+        assertThat(envelope).isInstanceOf(Mailbox.AppMessage.class);
+        var message = (Mailbox.AppMessage) envelope;
+        assertThat(message.valid().getAsBoolean()).as("the emitted message is still live").isTrue();
+        return message.payload();
+    }
 
     @Test
     void aFailedStartInvalidatesTheEmitterItAlreadyHandedToTheSource() {
@@ -98,7 +103,7 @@ class SubscriptionStartFailureTest {
         failed.get().accept("ignored");
         old.get().accept("kept");
         assertThat(oldCloses).hasValue(0);
-        assertThat(mailbox.poll(0)).isEqualTo(new Mailbox.AppMessage("old:kept"));
+        assertThat(validPayload(mailbox.poll(0))).isEqualTo("old:kept");
         assertThat(mailbox.size()).isZero();
 
         manager.reconcile(Subscription.source(id, "new", emitter -> {
@@ -108,7 +113,7 @@ class SubscriptionStartFailureTest {
         old.get().accept("removed");
         failed.get().accept("still ignored");
         replacement.get().accept("current");
-        assertThat(mailbox.poll(0)).isEqualTo(new Mailbox.AppMessage("new:current"));
+        assertThat(validPayload(mailbox.poll(0))).isEqualTo("new:current");
         assertThat(mailbox.size()).isZero();
         manager.closeAll();
         manager.closeAll();

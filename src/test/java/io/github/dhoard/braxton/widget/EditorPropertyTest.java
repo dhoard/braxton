@@ -24,11 +24,11 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.Random;
+import io.github.dhoard.braxton.style.TextMeasure;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.dhoard.braxton.style.TextMeasure;
+import java.util.Random;
 
 /** Inserting then backspacing the same cluster restores the draft, at every position. */
 class EditorPropertyTest {
@@ -37,23 +37,23 @@ class EditorPropertyTest {
     void anInsertedClusterIsRemovedExactlyByBackspace() {
         String[] clusters = {"a", "\u65E5", "\uD83D\uDE00", "e\u0301", "\uD83D\uDC68\u200D\uD83D\uDC69"};
         Random random = new Random(7L);
-        EditorOptions options = EditorOptions.defaults();
+        Editor.Config options = Editor.Config.defaults();
         for (int iteration = 0; iteration < 400; iteration++) {
             StringBuilder text = new StringBuilder();
             for (int i = 0; i < random.nextInt(6); i++) {
                 text.append(clusters[random.nextInt(clusters.length)]);
             }
-            EditorState start = EditorState.of(text.toString());
+            Editor.Model start = Editor.Model.of(text.toString());
             int caret = random.nextInt(start.text().length() + 1);
-            EditorState placed = start.withCaret(caret);
+            Editor.Model placed = start.withCaret(caret);
             int boundary = caret == 0 ? 0 : io.github.dhoard.braxton.style.TextMeasure
                     .previousBoundary(start.text(), caret);
-            EditorState atBoundary = start.withCaret(boundary);
+            Editor.Model atBoundary = start.withCaret(boundary);
             String cluster = clusters[random.nextInt(clusters.length)];
-            EditorState inserted = Editor.update(atBoundary, options, new EditorAction.Insert(cluster))
-                    .state();
-            EditorState removed = Editor.update(inserted, options, new EditorAction.Backspace())
-                    .state();
+            Editor.Model inserted =
+                    new Editor(options).update(atBoundary, new Editor.Msg.Insert(cluster)).model();
+            Editor.Model removed =
+                    new Editor(options).update(inserted, new Editor.Msg.Backspace()).model();
             assertThat(removed.text()).as("insert then backspace at %d", boundary)
                     .isEqualTo(start.text());
             assertThat(removed.caret()).isEqualTo(boundary);
@@ -73,20 +73,23 @@ class EditorPropertyTest {
         String[] atoms = {"a", "b", " ", "\n", "\r\n", "\r", "\u65E5", "\uD83D\uDE00", "e\u0301",
                 "1"};
         for (int iteration = 0; iteration < 400; iteration++) {
-            EditorState state = EditorState.of(randomText(random, atoms));
+            Editor.Model state = Editor.Model.of(randomText(random, atoms));
             assertThat(state.text()).as("seeded draft").doesNotContain("\r");
             int limit = 1 + random.nextInt(12);
-            EditorOptions options = EditorOptions.defaults().withMaxLength(limit);
+            Editor.Config options = Editor.Config.defaults().withMaxLength(limit);
             if (random.nextBoolean()) {
                 options = options.withVisibleLines(1 + random.nextInt(3));
             }
             if (random.nextBoolean()) {
-                options = options.withMasking(random.nextBoolean()
-                        ? EditorOptions.Masking.PASSWORD : EditorOptions.Masking.HIDDEN);
+                options =
+                        options.withMasking(
+                                random.nextBoolean()
+                                        ? Editor.Config.Masking.PASSWORD
+                                        : Editor.Config.Masking.HIDDEN);
             }
             for (int step = 0; step < 25; step++) {
-                EditorState before = state;
-                state = Editor.update(state, options, randomAction(random)).state();
+                Editor.Model before = state;
+                state = new Editor(options).update(state, randomAction(random)).model();
                 assertThat(state.text()).as("no carriage return survives step %d", step)
                         .doesNotContain("\r");
                 assertThat(TextMeasure.isBoundary(state.text(), state.caret()))
@@ -100,7 +103,7 @@ class EditorPropertyTest {
                 assertThat(rendered.split("\n", -1))
                         .as("visible rows for [%s]", state.text())
                         .hasSize(Editor.visibleLineCount(state, options));
-                if (options.masking() == EditorOptions.Masking.NONE) {
+                if (options.masking() == Editor.Config.Masking.NONE) {
                     for (String row : Editor.render(state, options, false).plainText()
                             .split("\n", -1)) {
                         assertThat(Editor.lines(state))
@@ -123,21 +126,21 @@ class EditorPropertyTest {
         return text.toString();
     }
 
-    private static EditorAction randomAction(Random random) {
+    private static Editor.Msg randomAction(Random random) {
         return switch (random.nextInt(13)) {
-            case 0 -> new EditorAction.Insert(random.nextBoolean() ? "x" : "\r\n");
-            case 1 -> new EditorAction.Paste(random.nextBoolean() ? "p" : "p\n\nq");
-            case 2 -> new EditorAction.Backspace();
-            case 3 -> new EditorAction.Delete();
-            case 4 -> new EditorAction.MoveLeft();
-            case 5 -> new EditorAction.MoveRight();
-            case 6 -> new EditorAction.MoveUp();
-            case 7 -> new EditorAction.MoveDown();
-            case 8 -> new EditorAction.MoveHome();
-            case 9 -> new EditorAction.MoveEnd();
-            case 10 -> new EditorAction.SelectAll();
-            case 11 -> new EditorAction.Newline();
-            default -> new EditorAction.Copy();
+            case 0 -> new Editor.Msg.Insert(random.nextBoolean() ? "x" : "\r\n");
+            case 1 -> new Editor.Msg.Paste(random.nextBoolean() ? "p" : "p\n\nq");
+            case 2 -> new Editor.Msg.Backspace();
+            case 3 -> new Editor.Msg.Delete();
+            case 4 -> new Editor.Msg.MoveLeft();
+            case 5 -> new Editor.Msg.MoveRight();
+            case 6 -> new Editor.Msg.MoveUp();
+            case 7 -> new Editor.Msg.MoveDown();
+            case 8 -> new Editor.Msg.MoveHome();
+            case 9 -> new Editor.Msg.MoveEnd();
+            case 10 -> new Editor.Msg.SelectAll();
+            case 11 -> new Editor.Msg.Newline();
+            default -> new Editor.Msg.Copy();
         };
     }
 }

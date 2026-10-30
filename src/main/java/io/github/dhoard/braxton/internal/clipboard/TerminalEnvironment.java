@@ -75,7 +75,7 @@ public final class TerminalEnvironment {
      *
      * <p>Nested tmux sessions overwrite {@code TMUX} with the innermost server, so depth cannot be
      * derived reliably from the environment. The clipboard layer therefore never double-wraps a
-     * passthrough sequence and {@link TmuxStrategy#AUTO} never uses passthrough.</p>
+     * passthrough sequence and {@link io.github.dhoard.braxton.clipboard.TmuxStrategy#AUTO} never uses passthrough.</p>
      */
     public boolean inTmux() {
         return !value("TMUX").isBlank();

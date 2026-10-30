@@ -22,43 +22,50 @@
 
 package io.github.dhoard.braxton.effect;
 
+import io.github.dhoard.braxton.mvu.ComponentId;
+import io.github.dhoard.braxton.mvu.ComponentPath;
+
 import java.util.Objects;
 
-/** Identity of one ongoing source. Same id and configuration keeps the live resource. */
-public record SubscriptionId(String value) {
+/** A validated local identity. Mounting adds a structural path, never a string namespace. */
+public final class SubscriptionId {
+    private final String value;
+    private final ComponentPath path;
 
-    public SubscriptionId {
-        Objects.requireNonNull(value, "value");
-        if (value.isBlank()) {
-            throw new IllegalArgumentException("subscription id must not be blank");
-        }
+    private SubscriptionId(String value, ComponentPath path) {
+        this.value = ComponentId.of(value).value();
+        this.path = Objects.requireNonNull(path, "path");
     }
 
     public static SubscriptionId of(String value) {
-        return new SubscriptionId(value);
+        return new SubscriptionId(value, ComponentPath.ROOT);
     }
 
-    /**
-     * An id inside this namespace.
-     *
-     * @throws IllegalArgumentException when {@code name} is null, blank, or contains the {@code /}
-     *     namespace separator; joining any of them would forge an id ("parent/null", "parent/",
-     *     "parent/child/grandchild") that collides with a real child name or with another parent's
-     *     child, so one feature's source would displace another's
-     */
-    public SubscriptionId child(String name) {
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("child name must not be blank");
-        }
-        if (name.indexOf('/') >= 0) {
-            throw new IllegalArgumentException(
-                    "child name must not contain the '/' namespace separator");
-        }
-        return new SubscriptionId(value + "/" + name);
+    public String value() {
+        return value;
+    }
+
+    public ComponentPath path() {
+        return path;
+    }
+
+    /** Composition operation used by mounts; prepends a structural scope. */
+    public SubscriptionId scoped(ComponentPath prefix) {
+        return new SubscriptionId(value, path.prepend(prefix));
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof SubscriptionId id && value.equals(id.value) && path.equals(id.path);
+    }
+
+    @Override
+    public int hashCode() {
+        return 31 * path.hashCode() + value.hashCode();
     }
 
     @Override
     public String toString() {
-        return value;
+        return path.equals(ComponentPath.ROOT) ? value : path + ":" + value;
     }
 }

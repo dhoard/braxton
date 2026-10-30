@@ -22,74 +22,56 @@
 
 package io.github.dhoard.braxton.effect;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
+
+import io.github.dhoard.braxton.mvu.ComponentId;
+import io.github.dhoard.braxton.mvu.ComponentPath;
 
 import org.junit.jupiter.api.Test;
 
-/** Effect and source identities: namespaced values whose child name must name something. */
 class EffectIdTest {
-
     @Test
-    void aChildIdIsNamespacedUnderItsParent() {
-        assertThat(EffectId.of("harness").child("tick").value()).isEqualTo("harness/tick");
-        assertThat(EffectId.of("harness").child("tick").namespace()).isEqualTo("harness");
-        assertThat(SubscriptionId.of("harness").child("tick").value()).isEqualTo("harness/tick");
+    void effectIdIsLocalAndStructurallyScoped() {
+        var local = EffectId.of("tick");
+        var a = ComponentPath.ROOT.append(ComponentId.of("a"));
+        var b = ComponentPath.ROOT.append(ComponentId.of("b"));
+        assertThat(local.value()).isEqualTo("tick");
+        assertThat(local.path()).isEqualTo(ComponentPath.ROOT);
+        assertThat(local.scoped(a)).isEqualTo(EffectId.of("tick").scoped(a));
+        assertThat(local.scoped(a)).isNotEqualTo(local.scoped(b));
+        assertThat(local.scoped(b).scoped(a).path()).isEqualTo(a.append(ComponentId.of("b")));
+        assertThat(local.scoped(a).hashCode()).isEqualTo(EffectId.of("tick").scoped(a).hashCode());
+        assertThat(local.toString()).isEqualTo("tick");
+        assertThat(local.scoped(a).toString()).isEqualTo("/a:tick");
+        for (String invalid :
+                new String[] {"", " ", ".", "..", "a/b", "/b", "b/", "a\u001bb", "x".repeat(129)}) {
+            assertThatThrownBy(() -> EffectId.of(invalid))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThatThrownBy(() -> EffectId.of(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> local.scoped(null)).isInstanceOf(NullPointerException.class);
     }
 
     @Test
-    void aChildNameMustNotBeNullOrBlank() {
-        // "harness/null" and "harness/   " are identities a real child could carry, so a forged
-        // one would cancel or replace the wrong effect or source.
-        assertThatThrownBy(() -> EffectId.of("harness").child(null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        assertThatThrownBy(() -> EffectId.of("harness").child("   "))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        assertThatThrownBy(() -> SubscriptionId.of("harness").child(null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        assertThatThrownBy(() -> SubscriptionId.of("harness").child("   "))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-    }
-
-    @Test
-    void aChildIdMustNotForgeAnotherNamespace() {
-        // The join is a namespace separator, not part of the name: "a" + "b/c" and "a/b" + "c"
-        // would both be "a/b/c", which the runner registers as one effect, so one feature's work
-        // replaces and cancels the other's. The rule that rejects null and blank rejects a name
-        // that forges a path through another namespace too.
-        assertThatThrownBy(() -> EffectId.of("a").child("b/c"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        assertThatThrownBy(() -> EffectId.of("a").child("b/"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        assertThatThrownBy(() -> EffectId.of("a").child("/b"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        // A parent may itself be namespaced: only the child name is a single path segment.
-        assertThat(EffectId.of("a/b").child("c").value()).isEqualTo("a/b/c");
-        assertThat(EffectId.of("a/b").child("c").namespace()).isEqualTo("a");
-    }
-
-    @Test
-    void aSubscriptionChildIdMustNotForgeAnotherNamespace() {
-        // The source identity carries the same join as the effect id: "a" + "b/c" and
-        // "a/b" + "c" would both be "a/b/c", so the runtime sees one subscription where the
-        // application declared two paths and rejects the set as a duplicate.
-        assertThatThrownBy(() -> SubscriptionId.of("a").child("b/c"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        assertThatThrownBy(() -> SubscriptionId.of("a").child("b/"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        assertThatThrownBy(() -> SubscriptionId.of("a").child("/b"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("child name");
-        // A parent may itself be namespaced: only the child name is a single path segment.
-        assertThat(SubscriptionId.of("a/b").child("c").value()).isEqualTo("a/b/c");
+    void subscriptionIdIsLocalAndStructurallyScoped() {
+        var local = SubscriptionId.of("tick");
+        var a = ComponentPath.ROOT.append(ComponentId.of("a"));
+        var b = ComponentPath.ROOT.append(ComponentId.of("b"));
+        assertThat(local.value()).isEqualTo("tick");
+        assertThat(local.path()).isEqualTo(ComponentPath.ROOT);
+        assertThat(local.scoped(a)).isEqualTo(SubscriptionId.of("tick").scoped(a));
+        assertThat(local.scoped(a)).isNotEqualTo(local.scoped(b));
+        assertThat(local.scoped(b).scoped(a).path()).isEqualTo(a.append(ComponentId.of("b")));
+        assertThat(local.scoped(a).hashCode())
+                .isEqualTo(SubscriptionId.of("tick").scoped(a).hashCode());
+        assertThat(local.toString()).isEqualTo("tick");
+        assertThat(local.scoped(a).toString()).isEqualTo("/a:tick");
+        for (String invalid :
+                new String[] {"", " ", ".", "..", "a/b", "/b", "b/", "a\u001bb", "x".repeat(129)}) {
+            assertThatThrownBy(() -> SubscriptionId.of(invalid))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThatThrownBy(() -> SubscriptionId.of(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> local.scoped(null)).isInstanceOf(NullPointerException.class);
     }
 }

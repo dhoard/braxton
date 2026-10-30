@@ -20,30 +20,27 @@
  * SOFTWARE.
  */
 
-package io.github.dhoard.braxton.app;
+package io.github.dhoard.braxton.mvu;
 
-import java.util.Objects;
-
-import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.app.TerminalCapabilities;
+import io.github.dhoard.braxton.layout.Viewport;
 
 /**
- * The result of {@code init} or {@code update}: the next model plus an inert command.
+ * Immutable terminal facts captured before pure initialization. Application data belongs in the
+ * component definition, not here.
  *
- * <p>A returned identical model reference lets the runtime skip rebuilding the view; returning a
- * value equal to the previous one is also fine, because the screen diff suppresses redundant
- * output. Neither shortcut skips command interpretation or subscription reconciliation.</p>
+ * <p>A null value is the documented headless default: a null viewport becomes
+ * {@link Viewport#EMPTY} and null capabilities become {@link TerminalCapabilities#PLAIN}, so a
+ * component can be initialized in a test without a terminal. {@link ViewContext} deliberately has
+ * no such default because a view always has a viewport to lay out for.</p>
+ *
+ * @param viewport the startup terminal geometry, or null for {@link Viewport#EMPTY}
+ * @param capabilities the detected terminal capabilities, or null for
+ *     {@link TerminalCapabilities#PLAIN}
  */
-public record Transition<M, Msg>(M model, Command<Msg> command) {
-
-    public Transition {
-        Objects.requireNonNull(command, "command");
-    }
-
-    public static <M, Msg> Transition<M, Msg> next(M model) {
-        return new Transition<>(model, Command.none());
-    }
-
-    public static <M, Msg> Transition<M, Msg> next(M model, Command<Msg> command) {
-        return new Transition<>(model, command);
+public record InitContext(Viewport viewport, TerminalCapabilities capabilities) {
+    public InitContext {
+        viewport = viewport == null ? Viewport.EMPTY : viewport;
+        capabilities = capabilities == null ? TerminalCapabilities.PLAIN : capabilities;
     }
 }

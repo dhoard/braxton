@@ -24,16 +24,16 @@ package examples.harness.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.widget.EditorState;
+import io.github.dhoard.braxton.widget.Editor;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
 /** The visible transcript window and its scrollbar thumb hold for any content and viewport. */
 class HarnessProjectionPropertyTest {
@@ -41,7 +41,7 @@ class HarnessProjectionPropertyTest {
     private static final String TRACK = "\u2502";
     private static final String THUMB = "\u2503";
 
-    private static HarnessState randomState(Random random) {
+    private static Harness.Model randomState(Random random) {
         List<HarnessEntry> entries = new ArrayList<>();
         int count = random.nextInt(30);
         for (int i = 0; i < count; i++) {
@@ -58,16 +58,20 @@ class HarnessProjectionPropertyTest {
         }
         int rows = 1 + random.nextInt(24);
         int cols = 1 + random.nextInt(60);
-        return HarnessState.initial(new Size(rows, cols), "~/braxton", List.of())
+        return Harness.Model.initial(new Size(rows, cols), "~/braxton", List.of())
                 .withEntries(entries)
-                .withStatus(HarnessState.Status.READY)
+                .withStatus(Session.Status.READY)
                 .withViewport(new Size(rows, cols))
-                .withDraft(EditorState.of("d".repeat(random.nextInt(6))));
+                .withDraft(Editor.Model.of("d".repeat(random.nextInt(6))));
     }
 
-    private static List<String> thumbRows(HarnessState state, int width, int height) {
+    private static List<String> thumbRows(Harness.Model state, int width, int height) {
         List<String> rows = new ArrayList<>();
-        for (StyledText row : HarnessProjection.window(state, width, height, state.editorRows())) {
+        for (StyledText row :
+                HarnessProjection.window(
+                        (state).session(),
+                        width,
+                        HarnessProjection.allocate(height, state.editorRows()).transcript())) {
             String plain = row.plainText();
             rows.add(plain.endsWith(THUMB) ? THUMB : plain.endsWith(TRACK) ? TRACK : "");
         }
@@ -78,12 +82,15 @@ class HarnessProjectionPropertyTest {
     void everyWindowRowIsExactlyTheViewportWidth() {
         Random random = new Random(41L);
         for (int iteration = 0; iteration < 400; iteration++) {
-            HarnessState state = randomState(random);
+            Harness.Model state = randomState(random);
             int width = state.viewport().cols();
             int height = state.viewport().rows();
             int rows = HarnessProjection.allocate(height, state.editorRows()).transcript();
-            List<StyledText> window = HarnessProjection.window(state, width, height,
-                    state.editorRows());
+            List<StyledText> window =
+                    HarnessProjection.window(
+                            (state).session(),
+                            width,
+                            HarnessProjection.allocate(height, state.editorRows()).transcript());
             assertThat(window).as("iteration %d size", iteration).hasSize(Math.max(0, rows));
             for (int row = 0; row < window.size(); row++) {
                 assertThat(TextMeasure.columns(window.get(row).plainText()))
@@ -98,7 +105,7 @@ class HarnessProjectionPropertyTest {
         Random random = new Random(67L);
         int overflowing = 0;
         for (int iteration = 0; iteration < 400; iteration++) {
-            HarnessState state = randomState(random);
+            Harness.Model state = randomState(random);
             int width = state.viewport().cols();
             int height = state.viewport().rows();
             int max = HarnessProjection.maxScroll(state);
@@ -136,17 +143,25 @@ class HarnessProjectionPropertyTest {
     void scrollingPastTheEndIsTheSameAsTheLastPage() {
         Random random = new Random(89L);
         for (int iteration = 0; iteration < 400; iteration++) {
-            HarnessState state = randomState(random);
+            Harness.Model state = randomState(random);
             int width = state.viewport().cols();
             int height = state.viewport().rows();
             int max = HarnessProjection.maxScroll(state);
             assertThat(HarnessProjection.maxScroll(state.withScroll(max + 100 + random.nextInt(50))))
                     .as("iteration %d max is scroll independent", iteration).isEqualTo(max);
-            List<StyledText> clamped = HarnessProjection.window(state.withScroll(max + 1_000),
-                    width, height, state.editorRows());
-            assertThat(clamped).as("iteration %d clamped window", iteration)
-                    .isEqualTo(HarnessProjection.window(state.withScroll(max), width, height,
-                            state.editorRows()));
+            List<StyledText> clamped =
+                    HarnessProjection.window(
+                            (state.withScroll(max + 1_000)).session(),
+                            width,
+                            HarnessProjection.allocate(height, state.editorRows()).transcript());
+            assertThat(clamped)
+                    .as("iteration %d clamped window", iteration)
+                    .isEqualTo(
+                            HarnessProjection.window(
+                                    (state.withScroll(max)).session(),
+                                    width,
+                                    HarnessProjection.allocate(height, state.editorRows())
+                                            .transcript()));
             assertThat(HarnessProjection.visiblePlainText(state.withScroll(max + 1_000)))
                     .as("iteration %d clamped copy", iteration)
                     .doesNotContain(TRACK).doesNotContain(THUMB);

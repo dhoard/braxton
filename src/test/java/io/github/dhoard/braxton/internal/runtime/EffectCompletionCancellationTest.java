@@ -24,23 +24,21 @@ package io.github.dhoard.braxton.internal.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.effect.EffectId;
+
+import org.junit.jupiter.api.Test;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
-import io.github.dhoard.braxton.effect.Command;
-import io.github.dhoard.braxton.effect.EffectId;
-import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
-
 /** Mapping a completion does not end the effect's cancellable lifetime. */
 class EffectCompletionCancellationTest {
 
-    private static final EffectId ID = EffectId.of("group/work");
+    private static final EffectId ID = EffectId.of("group-work");
 
     @Test
     void cancellationWhileSuccessIsMappedDiscardsTheResult() throws Exception {
@@ -49,7 +47,7 @@ class EffectCompletionCancellationTest {
 
     @Test
     void namespaceCancellationWhileSuccessIsMappedDiscardsTheResult() throws Exception {
-        verify(Command.cancelNamespace("group"), 0);
+        verify(Command.cancelAll(), 0);
     }
 
     @Test

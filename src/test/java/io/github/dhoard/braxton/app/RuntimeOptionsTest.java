@@ -25,17 +25,25 @@ package io.github.dhoard.braxton.app;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.Duration;
-
 import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
 
 /** Runtime limits are validated where they are accepted, not when shutdown uses them. */
 class RuntimeOptionsTest {
 
     private static RuntimeOptions options(Duration grace) {
-        return new RuntimeOptions(grace, RuntimeOptions.DEFAULT_MAILBOX_CAPACITY,
-                RuntimeOptions.DEFAULT_MAX_EFFECTS, RuntimeOptions.DEFAULT_MAX_SUBSCRIPTIONS,
-                null, null, null);
+        return new RuntimeOptions(
+                grace,
+                RuntimeOptions.DEFAULT_MAILBOX_CAPACITY,
+                RuntimeOptions.DEFAULT_MAX_EFFECTS,
+                RuntimeOptions.DEFAULT_MAX_SUBSCRIPTIONS,
+                RuntimeOptions.DEFAULT_MAX_COMPONENTS,
+                RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
+                RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
+                null,
+                null,
+                null);
     }
 
     @Test

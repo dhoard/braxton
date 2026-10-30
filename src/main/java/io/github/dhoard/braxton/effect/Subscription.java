@@ -22,14 +22,15 @@
 
 package io.github.dhoard.braxton.effect;
 
+import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.mvu.ComponentPath;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
-import io.github.dhoard.braxton.layout.Size;
 
 /**
  * An inert description of an ongoing source of messages.
@@ -48,7 +49,27 @@ public sealed interface Subscription<Msg> {
     /** Configuration compared to decide whether the live resource can be reused. */
     Object configuration();
 
+    /** Re-types emitted messages, preserving null (declined) emissions without calling the mapper. */
     <Msg2> Subscription<Msg2> map(Function<? super Msg, ? extends Msg2> mapper);
+
+    /** Prepends scope recursively without starting sources or evaluating message mappers. */
+    default Subscription<Msg> scoped(ComponentPath path) {
+        return switch (this) {
+            case None<Msg> none -> none;
+            case Batch<Msg> batch ->
+                    new Batch<>(batch.items().stream().map(item -> item.scoped(path)).toList());
+            case Interval<Msg> interval ->
+                    new Interval<>(
+                            interval.id().scoped(path), interval.period(), interval.onTick());
+            case Resize<Msg> resize -> new Resize<>(resize.id().scoped(path), resize.onResize());
+            case Source<Msg> source ->
+                    new Source<>(
+                            source.id().scoped(path),
+                            source.configuration(),
+                            source.start(),
+                            source.mapper());
+        };
+    }
 
     /** No source. */
     record None<Msg>() implements Subscription<Msg> {
@@ -67,6 +88,7 @@ public sealed interface Subscription<Msg> {
 
         @Override
         public <Msg2> Subscription<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             return new None<>();
         }
     }
@@ -92,6 +114,7 @@ public sealed interface Subscription<Msg> {
 
         @Override
         public <Msg2> Subscription<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
             List<Subscription<Msg2>> mapped = new ArrayList<>(items.size());
             for (Subscription<Msg> item : items) {
                 mapped.add(item.map(mapper));
@@ -126,7 +149,8 @@ public sealed interface Subscription<Msg> {
 
         @Override
         public <Msg2> Subscription<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
-            return new Interval<>(id, period, onTick.andThen(mapper));
+            Objects.requireNonNull(mapper, "mapper");
+            return new Interval<>(id, period, time -> mapMessage(onTick.apply(time), mapper));
         }
     }
 
@@ -145,7 +169,8 @@ public sealed interface Subscription<Msg> {
 
         @Override
         public <Msg2> Subscription<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
-            return new Resize<>(id, onResize.andThen(mapper));
+            Objects.requireNonNull(mapper, "mapper");
+            return new Resize<>(id, size -> mapMessage(onResize.apply(size), mapper));
         }
     }
 
@@ -176,8 +201,15 @@ public sealed interface Subscription<Msg> {
 
         @Override
         public <Msg2> Subscription<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
-            return new Source<>(id, configuration, start, this.mapper.andThen(mapper));
+            Objects.requireNonNull(mapper, "mapper");
+            return new Source<>(id, configuration, start,
+                    value -> mapMessage(this.mapper.apply(value), mapper));
         }
+    }
+
+    private static <Msg, Msg2> Msg2 mapMessage(
+            Msg message, Function<? super Msg, ? extends Msg2> mapper) {
+        return message == null ? null : mapper.apply(message);
     }
 
     static <Msg> Subscription<Msg> none() {
@@ -224,12 +256,11 @@ public sealed interface Subscription<Msg> {
     static <Msg> List<Subscription<Msg>> leaves(Subscription<Msg> subscription) {
         List<Subscription<Msg>> leaves = new ArrayList<>();
         collect(subscription, leaves);
-        List<SubscriptionId> seen = new ArrayList<>();
+        java.util.Set<SubscriptionId> seen = new java.util.HashSet<>();
         for (Subscription<Msg> leaf : leaves) {
-            if (seen.contains(leaf.id())) {
+            if (!seen.add(leaf.id())) {
                 throw new IllegalArgumentException("duplicate subscription id: " + leaf.id());
             }
-            seen.add(leaf.id());
         }
         return List.copyOf(leaves);
     }

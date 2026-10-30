@@ -22,22 +22,23 @@
 
 package examples.harness.ai;
 
+import io.github.dhoard.braxton.app.TerminalCapabilities;
+import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.mvu.InitContext;
+import io.github.dhoard.braxton.mvu.Never;
+import io.github.dhoard.braxton.mvu.Update;
+import io.github.dhoard.braxton.mvu.ViewContext;
+import io.github.dhoard.braxton.widget.Editor;
+
+import org.junit.jupiter.api.Test;
+
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
-
-import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.app.InitContext;
-import io.github.dhoard.braxton.app.Transition;
-import io.github.dhoard.braxton.layout.Size;
-import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.app.TerminalCapabilities;
-import io.github.dhoard.braxton.widget.EditorAction;
 
 /**
  * Randomized message sequences keep the harness model, its bounds, and its view consistent.
@@ -46,7 +47,7 @@ import io.github.dhoard.braxton.widget.EditorAction;
  * queue, non-negative windows, a view that always builds) are the ones a real application relies on
  * when timers, responses, input, and resizes interleave arbitrarily.</p>
  */
-class HarnessProgramPropertyTest {
+class HarnessPropertyTest {
 
     private static final String[] TEXTS = {"", "hi", "hello world", "a\nb", "\u65e5\u672c", "  x  ",
             "\u0000bad", "line one\ntwo\nthree"};
@@ -71,25 +72,27 @@ class HarnessProgramPropertyTest {
         }
     }
 
-    private static HarnessMsg randomMessage(Random random) {
+    private static Harness.Msg randomMessage(Random random) {
         return switch (random.nextInt(15)) {
-            case 0 -> new HarnessMsg.Submit(TEXTS[random.nextInt(TEXTS.length)]);
-            case 1 -> new HarnessMsg.Editor(new EditorAction.Insert(
-                    TEXTS[random.nextInt(TEXTS.length)]));
-            case 2 -> new HarnessMsg.Editor(new EditorAction.Backspace());
-            case 3 -> new HarnessMsg.Tick(random.nextInt(1_000_000_000));
-            case 4 -> new HarnessMsg.Escape(random.nextInt(1_000_000_000));
-            case 5 -> new HarnessMsg.QuitRequest(random.nextInt(1_000_000_000));
-            case 6 -> new HarnessMsg.ResponseBlock(random.nextInt(4), random.nextInt(4));
-            case 7 -> new HarnessMsg.ScrollUp();
-            case 8 -> new HarnessMsg.ScrollDown();
-            case 9 -> new HarnessMsg.PageUp();
-            case 10 -> new HarnessMsg.PageDown();
-            case 11 -> new HarnessMsg.Resized(new Size(1 + random.nextInt(30),
-                    1 + random.nextInt(60)));
-            case 12 -> new HarnessMsg.TranscriptLoaded(transcript());
-            case 13 -> new HarnessMsg.Editor(new EditorAction.Submit());
-            default -> new HarnessMsg.CopyVisible();
+            case 0 -> new Harness.Msg.Submit(TEXTS[random.nextInt(TEXTS.length)]);
+            case 1 ->
+                    new Harness.Msg.ComposerMsg(
+                            new Editor.Msg.Insert(TEXTS[random.nextInt(TEXTS.length)]));
+            case 2 -> new Harness.Msg.ComposerMsg(new Editor.Msg.Backspace());
+            case 3 -> new Harness.Msg.Tick(random.nextInt(1_000_000_000));
+            case 4 -> new Harness.Msg.Escape(random.nextInt(1_000_000_000));
+            case 5 -> new Harness.Msg.QuitRequest(random.nextInt(1_000_000_000));
+            case 6 -> new Harness.Msg.ResponseBlock(random.nextInt(4), random.nextInt(4));
+            case 7 -> new Harness.Msg.ScrollUp();
+            case 8 -> new Harness.Msg.ScrollDown();
+            case 9 -> new Harness.Msg.PageUp();
+            case 10 -> new Harness.Msg.PageDown();
+            case 11 ->
+                    new Harness.Msg.Resized(
+                            new Size(1 + random.nextInt(30), 1 + random.nextInt(60)));
+            case 12 -> new Harness.Msg.SessionMsg(new Session.Msg.Loaded(transcript()));
+            case 13 -> new Harness.Msg.ComposerMsg(new Editor.Msg.Submit());
+            default -> new Harness.Msg.CopyVisible();
         };
     }
 
@@ -98,12 +101,17 @@ class HarnessProgramPropertyTest {
         Random random = new Random(303L);
         List<String> failures = new ArrayList<>();
         for (int iteration = 0; iteration < 300; iteration++) {
-            HarnessProgram program = new HarnessProgram(HarnessProgramPropertyTest::transcript,
-                    "/tmp/project", List.of("warning"));
-            HarnessState state = program.init(new InitContext(new Viewport(12, 40), TerminalCapabilities.PLAIN)).model();
+            Harness program =
+                    new Harness(
+                            HarnessPropertyTest::transcript,
+                            "/tmp/project",
+                            List.of("warning"));
+            Harness.Model state =
+                    program.init(new InitContext(new Viewport(12, 40), TerminalCapabilities.PLAIN))
+                            .model();
             for (int step = 0; step < 40; step++) {
-                HarnessMsg message = randomMessage(random);
-                Transition<HarnessState, HarnessMsg> transition;
+                Harness.Msg message = randomMessage(random);
+                Update<Harness.Model, Harness.Msg, Never> transition;
                 try {
                     transition = program.update(state, message);
                 } catch (RuntimeException failure) {
@@ -111,10 +119,10 @@ class HarnessProgramPropertyTest {
                     break;
                 }
                 state = transition.model();
-                if (state.entries().size() > HarnessState.MAX_ENTRIES) {
+                if (state.entries().size() > Harness.Model.MAX_ENTRIES) {
                     failures.add("entries " + state.entries().size() + " exceed the bound");
                 }
-                if (state.pending().size() > HarnessProgram.MAX_OUTSTANDING) {
+                if (state.pending().size() > Harness.MAX_OUTSTANDING) {
                     failures.add("pending " + state.pending().size() + " exceeds the bound");
                 }
                 if (state.escArmedUntilNanos() < 0 || state.quitArmedUntilNanos() < 0) {
@@ -130,8 +138,11 @@ class HarnessProgramPropertyTest {
                     failures.add("an idle harness still waits for a work start");
                 }
                 try {
-                    program.view(state, new Viewport(state.viewport().rows(),
-                            state.viewport().cols()));
+                    program.view(
+                            state,
+                            new ViewContext(
+                                    new Viewport(
+                                            state.viewport().rows(), state.viewport().cols())));
                 } catch (RuntimeException failure) {
                     failures.add("view threw " + failure);
                 }

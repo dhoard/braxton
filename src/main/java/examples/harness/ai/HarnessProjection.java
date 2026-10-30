@@ -22,15 +22,15 @@
 
 package examples.harness.ai;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.IntFunction;
-
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.IntFunction;
 
 /**
  * Pure screen projection for the harness: geometry, content rows, and scroll clamping.
@@ -76,13 +76,15 @@ final class HarnessProjection {
 
     // ── geometry ─────────────────────────────────────────────────────────────
 
-    static int maxScroll(HarnessState state) {
+    static int maxScroll(Harness.Model state) {
         Allocation allocation = allocate(state.viewport().rows(), state.editorRows());
         if (allocation.transcript() <= 0) {
             return 0;
         }
-        int rows = projectedRows(state, state.viewport().cols()).stream()
-                .mapToInt(ProjectedRows::size).sum();
+        int rows =
+                projectedRows(state.session(), state.viewport().cols()).stream()
+                        .mapToInt(ProjectedRows::size)
+                        .sum();
         return Math.max(0, rows - allocation.transcript());
     }
 
@@ -90,9 +92,7 @@ final class HarnessProjection {
     private record Slice(List<StyledText> rows, int start, int total) {
     }
 
-    private static Slice slice(HarnessState state, int width, int height, int editorRows) {
-        Allocation allocation = allocate(height, editorRows);
-        int rows = allocation.transcript();
+    private static Slice slice(Session.Model state, int width, int rows) {
         if (rows <= 0 || width <= 0) {
             return new Slice(List.of(), 0, 0);
         }
@@ -120,8 +120,8 @@ final class HarnessProjection {
     }
 
     /** The visible transcript window, padded and with a scrollbar when content overflows. */
-    static List<StyledText> window(HarnessState state, int width, int height, int editorRows) {
-        Slice slice = slice(state, width, height, editorRows);
+    static List<StyledText> window(Session.Model state, int width, int allocatedRows) {
+        Slice slice = slice(state, width, allocatedRows);
         List<StyledText> window = new ArrayList<>(slice.rows());
         int rows = window.size();
         if (rows > 0 && slice.total() > rows) {
@@ -145,9 +145,13 @@ final class HarnessProjection {
      * Plain text of the currently visible transcript, used by Alt+T: no scrollbar column and no
      * right padding, so pasted text carries the transcript only.
      */
-    static String visiblePlainText(HarnessState state) {
-        List<StyledText> rows = slice(state, state.viewport().cols(), state.viewport().rows(),
-                state.editorRows()).rows();
+    static String visiblePlainText(Harness.Model state) {
+        List<StyledText> rows =
+                slice(
+                                state.session(),
+                                state.viewport().cols(),
+                                allocate(state.viewport().rows(), state.editorRows()).transcript())
+                        .rows();
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < rows.size(); i++) {
             if (i > 0) {
@@ -164,9 +168,9 @@ final class HarnessProjection {
     private record ProjectedRows(int size, IntFunction<StyledText> row) {
     }
 
-    static List<StyledText> allRows(HarnessState state, int width) {
+    static List<StyledText> allRows(Harness.Model state, int width) {
         List<StyledText> result = new ArrayList<>();
-        for (ProjectedRows group : projectedRows(state, width)) {
+        for (ProjectedRows group : projectedRows(state.session(), width)) {
             for (int i = 0; i < group.size(); i++) {
                 result.add(group.row().apply(i));
             }
@@ -174,7 +178,7 @@ final class HarnessProjection {
         return result;
     }
 
-    private static List<ProjectedRows> projectedRows(HarnessState state, int width) {
+    private static List<ProjectedRows> projectedRows(Session.Model state, int width) {
         List<ProjectedRows> rows = new ArrayList<>();
         rows.add(new ProjectedRows(2, i -> i == 0
                 ? row(width, HarnessTheme.BACKGROUND_COLOR,
@@ -258,7 +262,7 @@ final class HarnessProjection {
 
     // ── chrome ───────────────────────────────────────────────────────────────
 
-    static StyledText topRule(HarnessState state) {
+    static StyledText topRule(Harness.Model state) {
         int width = Math.max(1, state.viewport().cols());
         boolean quitArmed = state.quitArmedUntilNanos() > state.nowNanos();
         if (!state.working()) {
@@ -279,16 +283,16 @@ final class HarnessProjection {
     }
 
     /**
-     * The status line. {@link HarnessState#statusMessage()} carries the program's transient
+     * The status line. {@link Harness.Model#statusMessage()} carries the program's transient
      * feedback ("Queue full (64); prompt not submitted.", clipboard outcomes, the Ctrl+C hint), so
      * it is painted here; an absent or blank message leaves the plain rule unchanged.
      */
-    static StyledText bottomRule(HarnessState state) {
+    static StyledText bottomRule(Harness.Model state) {
         String message = state.statusMessage();
         return rule(Math.max(1, state.viewport().cols()), message == null ? "" : message);
     }
 
-    static List<StyledText> footer(HarnessState state) {
+    static List<StyledText> footer(Harness.Model state) {
         int limit = Math.max(0, state.viewport().cols());
         String path = state.projectPath();
         if (path == null || path.isBlank()) {
@@ -304,7 +308,7 @@ final class HarnessProjection {
         return rows;
     }
 
-    private static StyledText statsRow(int width, HarnessState state) {
+    private static StyledText statsRow(int width, Harness.Model state) {
         if (width <= 0) {
             return StyledText.empty();
         }

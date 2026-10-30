@@ -23,6 +23,8 @@
 package io.github.dhoard.braxton.app;
 
 import io.github.dhoard.braxton.internal.runtime.RuntimeLoop;
+import io.github.dhoard.braxton.mvu.Component;
+import io.github.dhoard.braxton.mvu.Never;
 
 /**
  * Entry point for running one MVU application.
@@ -40,7 +42,7 @@ public final class Application {
      *
      * @return how the run ended; never null
      */
-    public static <M, Msg> ExitResult run(Program<M, Msg> program) {
+    public static <M, Msg> ExitResult run(Component<M, Msg, Never> program) {
         return run(program, RuntimeOptions.defaults());
     }
 
@@ -49,7 +51,8 @@ public final class Application {
      *
      * @return how the run ended; never null
      */
-    public static <M, Msg> ExitResult run(Program<M, Msg> program, RuntimeOptions options) {
+    public static <M, Msg> ExitResult run(
+            Component<M, Msg, Never> program, RuntimeOptions options) {
         if (program == null) throw new IllegalArgumentException("program is required");
         return new RuntimeLoop<>(program, options).run();
     }

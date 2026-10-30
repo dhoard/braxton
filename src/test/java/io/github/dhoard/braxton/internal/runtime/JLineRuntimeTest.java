@@ -24,30 +24,35 @@ package io.github.dhoard.braxton.internal.runtime;
 
 import static org.assertj.core.api.Assertions.*;
 
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
+import io.github.dhoard.braxton.app.*;
+import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.mvu.Component;
+import io.github.dhoard.braxton.mvu.InitContext;
+import io.github.dhoard.braxton.mvu.Never;
+import io.github.dhoard.braxton.mvu.Update;
+import io.github.dhoard.braxton.mvu.ViewContext;
+import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.view.Views;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-import io.github.dhoard.braxton.app.*;
-import io.github.dhoard.braxton.effect.Command;
-import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.view.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
 
 @Timeout(10)
 class JLineRuntimeTest {
-    private static Program<Integer, String> program(Command<String> command) {
-        return new Program<>() {
-            public Transition<Integer, String> init(InitContext context) {
-                return Transition.next(0, command);
+    private static Component<Integer, String, Never> program(Command<String> command) {
+        return new Component<>() {
+            public Update<Integer, String, Never> init(InitContext context) {
+                return Update.next(0, command);
             }
 
-            public Transition<Integer, String> update(Integer model, String message) {
-                return Transition.next(model);
+            public Update<Integer, String, Never> update(Integer model, String message) {
+                return Update.next(model);
             }
 
-            public View<String> view(Integer model, Viewport viewport) {
+            public View<String> view(Integer model, ViewContext context) {
                 return Views.text("ready");
             }
         };

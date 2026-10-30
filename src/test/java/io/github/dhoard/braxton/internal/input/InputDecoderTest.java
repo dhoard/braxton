@@ -24,6 +24,14 @@ package io.github.dhoard.braxton.internal.input;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.input.InputEvent;
+import io.github.dhoard.braxton.input.InputOptions;
+import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.input.Modifiers;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -31,14 +39,6 @@ import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
-import io.github.dhoard.braxton.input.InputEvent;
-import io.github.dhoard.braxton.input.InputOptions;
-import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.input.Modifiers;
 
 /** Terminal bytes become normalized events exactly once. */
 @org.junit.jupiter.api.extension.ExtendWith(io.github.dhoard.braxton.internal.input.TestReaders.class)
@@ -164,13 +164,15 @@ class InputDecoderTest {
         InputEvent.KeyInput lineFeed = (InputEvent.KeyInput) read("\n").orElseThrow();
         assertThat(lineFeed.key()).isEqualTo(Key.of("j", Modifiers.CTRL));
         assertThat(lineFeed.text()).isEmpty();
-        assertThat(io.github.dhoard.braxton.widget.Editor.actionFor(lineFeed,
-                io.github.dhoard.braxton.widget.EditorOptions.defaults()))
-                .contains(new io.github.dhoard.braxton.widget.EditorAction.Newline());
-        assertThat(io.github.dhoard.braxton.widget.Editor.actionFor(enter,
-                io.github.dhoard.braxton.widget.EditorOptions.defaults()))
+        assertThat(
+                        io.github.dhoard.braxton.widget.Editor.actionFor(
+                                lineFeed, io.github.dhoard.braxton.widget.Editor.Config.defaults()))
+                .contains(new io.github.dhoard.braxton.widget.Editor.Msg.Newline());
+        assertThat(
+                        io.github.dhoard.braxton.widget.Editor.actionFor(
+                                enter, io.github.dhoard.braxton.widget.Editor.Config.defaults()))
                 .as("only CR submits")
-                .contains(new io.github.dhoard.braxton.widget.EditorAction.Submit());
+                .contains(new io.github.dhoard.braxton.widget.Editor.Msg.Submit());
     }
 
     @Test

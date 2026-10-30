@@ -15,7 +15,7 @@
   environment during an authorized implementation stage. Do not claim terminal
   verification based solely on headless assertions or Maven success.
 - Keep benchmarks opt-in. Terminal integration uses locally built JLine
-  `0.1.0-jline-braxton` with the FFM provider only; the patched sources live in
+  `0.2.0-jline-braxton` with the FFM provider only; the patched sources live in
   `vendor/jline3`, and `./build.sh` keeps their version matched to the Braxton version;
   no compatibility facade, alternate provider, or custom native backend is retained. Keep JLine
   and internal engine/service types out of the public MVU API. Verify historical memory against

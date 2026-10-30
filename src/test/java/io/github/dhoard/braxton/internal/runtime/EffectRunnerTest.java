@@ -24,6 +24,16 @@ package io.github.dhoard.braxton.internal.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.clipboard.ClipboardConfig;
+import io.github.dhoard.braxton.clipboard.ClipboardPath;
+import io.github.dhoard.braxton.clipboard.ClipboardResult;
+import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.effect.EffectId;
+import io.github.dhoard.braxton.internal.clipboard.ClipboardService;
+import io.github.dhoard.braxton.internal.clipboard.TerminalEnvironment;
+
+import org.junit.jupiter.api.Test;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,19 +42,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-
-import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
-import io.github.dhoard.braxton.internal.runtime.Timers;
-import io.github.dhoard.braxton.clipboard.ClipboardConfig;
-import io.github.dhoard.braxton.clipboard.ClipboardPath;
-import io.github.dhoard.braxton.clipboard.ClipboardResult;
-import io.github.dhoard.braxton.effect.Command;
-import io.github.dhoard.braxton.effect.EffectId;
-import io.github.dhoard.braxton.internal.clipboard.ClipboardService;
-import io.github.dhoard.braxton.internal.clipboard.TerminalEnvironment;
-import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 
 /** Commands are inert descriptions with exactly-once, epoch-guarded interpretation. */
 class EffectRunnerTest {
@@ -313,14 +310,27 @@ class EffectRunnerTest {
     }
 
     @Test
-    void cancelNamespaceInvalidatesEveryChildEffect() throws Exception {
+    void cancelScopeInvalidatesEveryChildEffect() throws Exception {
         EffectRunner<String> runner = new EffectRunner<>(mailbox, environment, clipboard, 8);
         runner.bindOwner(Thread.currentThread());
-        runner.interpret(Command.batch(
-                Command.delay(EffectId.of("harness/a"), Duration.ofSeconds(1), "a", "r"),
-                Command.delay(EffectId.of("harness/b"), Duration.ofSeconds(1), "b", "r"),
-                Command.delay(EffectId.of("other/c"), Duration.ofSeconds(1), "c", "r")));
-        runner.interpret(Command.cancelNamespace("harness"));
+        runner.interpret(
+                Command.batch(
+                        Command.delay(EffectId.of("a"), Duration.ofSeconds(1), "a", "r")
+                                .scoped(
+                                        io.github.dhoard.braxton.mvu.ComponentPath.ROOT.append(
+                                                io.github.dhoard.braxton.mvu.ComponentId.of(
+                                                        "harness"))),
+                        Command.delay(EffectId.of("b"), Duration.ofSeconds(1), "b", "r")
+                                .scoped(
+                                        io.github.dhoard.braxton.mvu.ComponentPath.ROOT.append(
+                                                io.github.dhoard.braxton.mvu.ComponentId.of(
+                                                        "harness"))),
+                        Command.delay(EffectId.of("other-c"), Duration.ofSeconds(1), "c", "r")));
+        runner.interpret(
+                Command.<String>cancelAll()
+                        .scoped(
+                                io.github.dhoard.braxton.mvu.ComponentPath.ROOT.append(
+                                        io.github.dhoard.braxton.mvu.ComponentId.of("harness"))));
         timers.advance(2_000_000_000L);
         assertThat(nextMessage()).isEqualTo("c");
         assertThat(mailbox.size()).isZero();

@@ -22,14 +22,14 @@
 
 package io.github.dhoard.braxton.internal.runtime;
 
+import io.github.dhoard.braxton.app.ExitResult;
+import io.github.dhoard.braxton.input.InputEvent;
+
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
-
-import io.github.dhoard.braxton.app.ExitResult;
-import io.github.dhoard.braxton.input.InputEvent;
 
 /**
  * Bounded hand-off between producers (input, effects, timers, sources) and the runtime owner.
@@ -45,7 +45,19 @@ public final class Mailbox {
     public sealed interface Envelope permits AppMessage, Input, Close {}
 
     /** An application message produced by routing, a command, or a source. */
-    public record AppMessage(Object payload) implements Envelope {}
+    public record AppMessage(
+            Object payload, ScopeManager.Origin origin, java.util.function.BooleanSupplier valid)
+            implements Envelope {
+        private static final java.util.function.BooleanSupplier ALWAYS = () -> true;
+
+        public AppMessage(Object payload) {
+            this(payload, null, ALWAYS);
+        }
+
+        public AppMessage(Object payload, ScopeManager.Origin origin) {
+            this(payload, origin, ALWAYS);
+        }
+    }
 
     /** Raw normalized input, routed later against the latest committed view. */
     public record Input(InputEvent event) implements Envelope {}
@@ -130,11 +142,7 @@ public final class Mailbox {
         }
     }
 
-    /**
-     * Waits up to {@code timeoutMillis} for the next envelope.
-     *
-     * @return the envelope, or null on timeout or when the mailbox is closed
-     */
+    /** Notifies the owner without blocking a signal thread on the mailbox lock. */
     public void wake() {
         if (lock.tryLock()) {
             try {
@@ -146,6 +154,11 @@ public final class Mailbox {
         }
     }
 
+    /**
+     * Waits up to {@code timeoutMillis} for the next envelope.
+     *
+     * @return the envelope, or null on timeout or when the mailbox is closed
+     */
     public Envelope poll(long timeoutMillis) throws InterruptedException {
         long remaining = waitNanos(timeoutMillis);
         lock.lockInterruptibly();

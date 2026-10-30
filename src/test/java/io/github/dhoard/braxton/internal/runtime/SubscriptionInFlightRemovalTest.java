@@ -24,6 +24,12 @@ package io.github.dhoard.braxton.internal.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.effect.SubscriptionId;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -34,15 +40,14 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
-import io.github.dhoard.braxton.internal.runtime.Timers;
-import io.github.dhoard.braxton.effect.Subscription;
-import io.github.dhoard.braxton.effect.SubscriptionId;
-
 @Timeout(10)
 class SubscriptionInFlightRemovalTest {
+    private static Object validPayload(Mailbox.Envelope envelope) {
+        assertThat(envelope).isInstanceOf(Mailbox.AppMessage.class);
+        var message = (Mailbox.AppMessage) envelope;
+        assertThat(message.valid().getAsBoolean()).as("the emitted message is still live").isTrue();
+        return message.payload();
+    }
 
     @Test
     void removingAnExternalSourceDiscardsItsInFlightMapping() throws Exception {
@@ -136,13 +141,14 @@ class SubscriptionInFlightRemovalTest {
             }
             inFlight.get(3, TimeUnit.SECONDS);
             if (action.equals("replace")) {
-                assertThat(mailbox.poll(0)).isEqualTo(new Mailbox.AppMessage("fresh"));
+                assertThat(validPayload(mailbox.poll(0))).isEqualTo("fresh");
             }
             if (action.equals("refresh")) {
-                assertThat(mailbox.poll(0)).as("a mapper refresh does not remove the source")
-                        .isEqualTo(new Mailbox.AppMessage("obsolete"));
+                assertThat(validPayload(mailbox.poll(0)))
+                        .as("a mapper refresh does not remove the source")
+                        .isEqualTo("obsolete");
                 (interval ? tick.get() : emit).run();
-                assertThat(mailbox.poll(0)).isEqualTo(new Mailbox.AppMessage("fresh"));
+                assertThat(validPayload(mailbox.poll(0))).isEqualTo("fresh");
                 assertThat(interval ? cancellations : closes).hasValue(0);
                 return;
             }
