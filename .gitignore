@@ -9,6 +9,7 @@ plans/
 .settings/
 .DS_Store
 .flattened-pom.xml
+.sdlc/
 
 # Vendored JLine (vendor/jline3) build output and scratch files. The vendored
 # tree has its own .gitignore; these rules are repeated here so a regenerated or
