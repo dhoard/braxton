@@ -26,10 +26,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.dhoard.braxton.internal.text.Graphemes;
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.style.WidthPolicy;
 import io.github.dhoard.braxton.testing.AllocationProbe;
 import io.github.dhoard.braxton.view.Views;
 
@@ -62,6 +64,38 @@ class TextPaintCostTest {
             text.setCharAt(columns - 1, 'z');
         }
         return text.toString();
+    }
+
+    /**
+     * A whole row of one non-ASCII cluster, wide enough to fill {@code columns} columns exactly.
+     * Box drawing is the frame a bordered widget paints; CJK is what a row of translated text
+     * holds.
+     */
+    private static String rowOf(char glyph, int columns) {
+        String cluster = String.valueOf(glyph);
+        int width = TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED);
+        StringBuilder text = new StringBuilder();
+        for (int used = 0; used < columns; used += width) {
+            text.append(cluster);
+        }
+        return text.toString();
+    }
+
+    /**
+     * What one segmentation pass over {@code line} costs: the cursor, its break iterator, and the
+     * String of every cluster it hands out. Wrapping and painting each segment a value, so this is
+     * the part of a row's cost that does not depend on how a "does this cluster continue the cell"
+     * question is answered - the allowance the bounds below add to the printable-ASCII row of the
+     * same width.
+     */
+    private static long segmentationCost(String line) {
+        return AllocationProbe.bytes(() -> {
+            int clusters = 0;
+            for (String ignored : Graphemes.iterate(line)) {
+                clusters++;
+            }
+            return clusters;
+        });
     }
 
     /** Every painted cell of a screen, so two layouts can be compared column by column. */
@@ -116,6 +150,65 @@ class TextPaintCostTest {
     }
 
     @Test
+    void aRowOfNonAsciiClustersIsNotReSegmentedPerColumn() {
+        // The bounds above cover the alphabet the fast answer already decides: a printable-ASCII
+        // row never reaches the break iterator. A frame is not that alphabet - a bordered widget
+        // paints its edges as one run of box-drawing glyphs, and a translated row is CJK - and a
+        // row of those used to copy and re-segment the growing cell at every column. The reference
+        // is the printable-ASCII row of the same width; the allowance is the segmentation every
+        // pass over the row pays whatever the answer to the continuation question is.
+        long ascii = AllocationProbe.bytes(
+                () -> engine.layout(Views.text(StyledText.plain(prose(COLUMNS))),
+                        new Rect(0, 0, 1, COLUMNS)));
+        for (char glyph : new char[] {'\u2500', '\u4e2d', '\u00e9'}) {
+            String line = rowOf(glyph, COLUMNS);
+            StyledText text = StyledText.plain(line);
+            int clusters = TextMeasure.graphemeCount(line);
+            long segmentation = segmentationCost(line);
+
+            long bytes = AllocationProbe.bytes(
+                    () -> engine.layout(Views.text(text), new Rect(0, 0, 1, COLUMNS)));
+            assertThat(bytes)
+                    .as("a row of \"%s\" costs the printable-ASCII row plus the wrap and paint "
+                            + "segmentations of its clusters, not a copy of the cell and a "
+                            + "segmentation per column", glyph)
+                    .isLessThan(ascii + 4 * segmentation);
+
+            Screen screen = engine.layout(Views.text(text), new Rect(0, 0, 1, COLUMNS)).screen();
+            assertThat(screen.plainLine(0)).isEqualTo(line);
+            assertThat(TextMeasure.columns(screen.plainLine(0))).isEqualTo(COLUMNS);
+            int painted = 0;
+            for (int col = 0; col < COLUMNS; col++) {
+                if (!screen.isContinuation(0, col)) {
+                    painted++;
+                }
+            }
+            assertThat(painted).as("cells painted for \"%s\"", glyph).isEqualTo(clusters);
+        }
+    }
+
+    @Test
+    void wrappingARowOfNonAsciiClustersDoesNotReSegmentItsCellPerColumn() {
+        long ascii = AllocationProbe.bytes(
+                () -> engine.wrapLines(StyledText.plain(prose(COLUMNS)), COLUMNS));
+        for (char glyph : new char[] {'\u2500', '\u4e2d', '\u00e9'}) {
+            String line = rowOf(glyph, COLUMNS);
+            StyledText text = StyledText.plain(line);
+            long segmentation = segmentationCost(line);
+
+            long bytes = AllocationProbe.bytes(() -> engine.wrapLines(text, COLUMNS));
+            assertThat(bytes)
+                    .as("wrapping a row of \"%s\" charges the row's own segmentation, not a "
+                            + "segmentation of the cell it is building at every column", glyph)
+                    .isLessThan(ascii + 2 * segmentation);
+
+            assertThat(engine.wrapLines(text, COLUMNS))
+                    .as("a row of \"%s\" that fits the row is still one line", glyph)
+                    .containsExactly(text);
+        }
+    }
+
+    @Test
     void aStyleBoundaryBetweenTwoPrintableAsciiCharactersKeepsThemInSeparateCells() {
         // The cheap answer for the continuation question applies when the character before the gap
         // and the cluster after it are both printable ASCII. The oracle is the break iterator
@@ -149,6 +242,33 @@ class TextPaintCostTest {
             }
         }
         assertThat(pairs).isEqualTo(95 * 14);
+    }
+
+    @Test
+    void aRunInsideOneSpanKeepsItsCellsAndAClusterSplitIntoTheNextSpanStillJoins() {
+        // The cheap answer is a fact about a span's own clusters, not a licence to stop asking. A
+        // run of box-drawing glyphs in one span is a run of clusters the value's segmentation
+        // already separated; a base and the mark that arrives in the span after it are one cluster
+        // of the plain text, and only the break iterator can say so. Both answers have to hold in
+        // the same row, and they have to agree with the same text as one plain span.
+        Style bold = Style.NONE.withBold();
+        StyledText split = StyledText.concat(
+                StyledText.of("\u2500\u2500\u2500", Style.NONE),
+                StyledText.of("e", bold),
+                StyledText.of("\u0301", Style.NONE),
+                StyledText.of("\u2500", bold));
+        StyledText plain = StyledText.plain(split.plainText());
+        Screen screen = engine.layout(Views.text(split), new Rect(0, 0, 1, 8)).screen();
+        Screen reference = engine.layout(Views.text(plain), new Rect(0, 0, 1, 8)).screen();
+
+        assertThat(paintedCells(screen)).isEqualTo(paintedCells(reference));
+        assertThat(screen.cell(0, 0).text()).isEqualTo("\u2500");
+        assertThat(screen.cell(0, 1).text()).isEqualTo("\u2500");
+        assertThat(screen.cell(0, 2).text()).isEqualTo("\u2500");
+        assertThat(screen.cell(0, 3).text()).isEqualTo("e\u0301");
+        assertThat(screen.cell(0, 3).style()).isEqualTo(bold);
+        assertThat(screen.cell(0, 4).text()).isEqualTo("\u2500");
+        assertThat(TextMeasure.columns(screen.plainLine(0))).isEqualTo(5);
     }
 
     @Test

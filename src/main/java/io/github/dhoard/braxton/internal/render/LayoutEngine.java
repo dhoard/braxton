@@ -613,14 +613,28 @@ public final class LayoutEngine {
         int cellWidth = 0;
         Style cellStyle = Style.NONE;
         String cellLink = null;
+        // The span every cluster of the open cell came from, or -1 when the cell is not made only of
+        // consecutive clusters of one span - the only kind of cell whose gap to the cluster after it
+        // that span's own segmentation has already settled.
+        int cellSpan = -1;
+        int spanIndex = -1;
         for (StyledText.Span span : line.spans()) {
+            spanIndex++;
+            int clusterIndex = 0;
             Iterable<String> graphemes = Graphemes.iterate(span.text());
             for (String grapheme : graphemes) {
+                clusterIndex++;
                 int width = TextMeasure.clusterColumns(grapheme, policy);
                 // A cluster that claims a column or holds a mark or selector is the only kind a cell
                 // can be continued by; a format character that claims no column cannot be, and a run
                 // of them must not re-segment the growing cell.
-                if ((width > 0 || hasNoBase(grapheme)) && cellBase != null
+                // A cell built from clusters that sit consecutively inside one span, and did not open
+                // at that span's first cluster, ends at a gap that span was segmented at: the cluster
+                // after it is a cluster of its own there, so asking the break iterator again would
+                // re-segment a cell it has already split. A cell that opened at the span's first
+                // cluster is the exception - that cluster can be the tail of a cluster the plain text
+                // reads as one, and the next cluster can continue it.
+                if ((width > 0 || hasNoBase(grapheme)) && cellBase != null && cellSpan != spanIndex
                         && continuesCluster(cellText(cellBase, cellRun), grapheme)) {
                     // A span boundary can split one cluster the measurement read as one: the mark
                     // or selector in its own span continues the cell painted before it instead of
@@ -629,6 +643,9 @@ public final class LayoutEngine {
                     // included - past the width the value was measured at.
                     cellRun = joinCell(cellBase, cellRun, grapheme);
                     cellWidth = TextMeasure.clusterColumns(cellRun.toString(), policy);
+                    // A cell that took a cluster from a span it did not open in is no longer a run
+                    // this row has a segmentation of.
+                    cellSpan = -1;
                     continue;
                 }
                 if (width == 0) {
@@ -638,6 +655,11 @@ public final class LayoutEngine {
                     // and a style boundary must not paint different content from the same value.
                     if (cellBase != null) {
                         cellRun = joinCell(cellBase, cellRun, grapheme);
+                        if (cellSpan != spanIndex) {
+                            // The cell now holds clusters from more than one span, and no span's
+                            // segmentation covers the gap at its end.
+                            cellSpan = -1;
+                        }
                     } else {
                         if (leading == null) {
                             leading = new StringBuilder();
@@ -665,6 +687,7 @@ public final class LayoutEngine {
                 cellLink = span.link();
                 cellBase = grapheme;
                 cellRun = null;
+                cellSpan = clusterIndex > 1 ? spanIndex : -1;
             }
         }
         if (cellBase != null && nextCol + cellWidth <= limit) {
@@ -916,8 +939,20 @@ public final class LayoutEngine {
                 }
                 pieces.add(new Piece(raw, style, link));
             }
-            for (String following = cursor.peek(); following != null
-                    && continuesCluster(cellPlain, following); following = cursor.peek()) {
+            for (String following = cursor.peek(); following != null;
+                    following = cursor.peek()) {
+                // The cursor took both clusters from one segmentation of the same span, so the cell
+                // that ends at the first of them is whole there and the second opens a cluster of its
+                // own: asking again would copy the cell out and segment it once per column. A cell
+                // carrying the dotted circle, or an invisible run held in front of it, holds text
+                // that segmentation never saw, so it is still asked - as is a cell that opens the
+                // span, whose first cluster can be the tail of a cluster the plain text reads as one.
+                if (attached == null && circle.isEmpty() && cursor.gapIsSegmented()) {
+                    break;
+                }
+                if (!continuesCluster(cellPlain, following)) {
+                    break;
+                }
                 cursor.next();
                 if (pieces == null) {
                     pieces = new ArrayList<>(2);
@@ -1024,6 +1059,15 @@ public final class LayoutEngine {
         private Iterator<String> clusters = Collections.emptyIterator();
         private Style spanStyle = Style.NONE;
         private String spanLink;
+        // Where the cluster the cursor is holding sits in the span it was segmented from, counting
+        // from one, with -1 for a cluster whose place is unknown - one a scan read ahead and put
+        // back. Neighbours inside one span were already split by the break iterator that segmented
+        // it, which is the question continuesCluster answers; a span's first cluster is the
+        // exception, because that span can start in the middle of a cluster the whole value reads
+        // as one.
+        private int spanClusterCount;
+        private int aheadIndex = -1;
+        private int textIndex = -1;
         private String ahead;
         private Style aheadStyle = Style.NONE;
         private String aheadLink;
@@ -1044,9 +1088,11 @@ public final class LayoutEngine {
         boolean next() {
             if (!hasAhead && !fetch()) {
                 text = null;
+                textIndex = -1;
                 return false;
             }
             text = ahead;
+            textIndex = aheadIndex;
             style = aheadStyle;
             link = aheadLink;
             hasAhead = false;
@@ -1102,6 +1148,15 @@ public final class LayoutEngine {
             return chain == null ? List.of() : chain;
         }
 
+        /**
+         * True when the gap between the current cluster and the one {@link #peek()} returns is one
+         * the break iterator already segmented: neighbours in the same span, and the current cluster
+         * is not that span's first cluster.
+         */
+        boolean gapIsSegmented() {
+            return textIndex > 1 && aheadIndex == textIndex + 1;
+        }
+
         String text() {
             return text;
         }
@@ -1118,6 +1173,7 @@ public final class LayoutEngine {
             if (buffered != null && bufferedIndex < buffered.size()) {
                 Piece piece = buffered.get(bufferedIndex++);
                 ahead = piece.text();
+                aheadIndex = -1;
                 aheadStyle = piece.style();
                 aheadLink = piece.link();
                 hasAhead = true;
@@ -1134,10 +1190,12 @@ public final class LayoutEngine {
                 }
                 StyledText.Span span = spans.get(spanIndex++);
                 clusters = Graphemes.iterate(span.text()).iterator();
+                spanClusterCount = 0;
                 spanStyle = span.style();
                 spanLink = span.link();
             }
             ahead = clusters.next();
+            aheadIndex = ++spanClusterCount;
             aheadStyle = spanStyle;
             aheadLink = spanLink;
             hasAhead = true;
