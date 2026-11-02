@@ -20,9 +20,9 @@
 # ./mvnw clean leaves Braxton's installed artifact alone.
 #
 # Vendored JLine version contract: the Braxton version in pom.xml (`${revision}`,
-# for example 0.2.0-SNAPSHOT) builds JLine at its numeric core plus
-# "-jline-braxton" (0.2.0-jline-braxton), and Braxton resolves exactly that
-# version. The script refuses to build when pom.xml `<jline.version>` or
+# for example 0.1.0) builds JLine at its numeric core plus "-jline-braxton"
+# (0.1.0-jline-braxton), and Braxton resolves exactly that version. The script
+# refuses to build when pom.xml `<jline.version>` or
 # vendor/jline3/.mvn/maven.config disagree with that derivation, so the vendored
 # JLine version cannot drift from the Braxton version.
 #

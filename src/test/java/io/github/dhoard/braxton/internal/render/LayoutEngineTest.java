@@ -669,6 +669,54 @@ class LayoutEngineTest {
         }
     }
 
+    /**
+     * A soft break may drop only the space it broke at. When a span boundary falls inside the
+     * cluster that space is the base of - the accent in a span of its own, the space at the end of
+     * the span before it - the wrap saw the space as a cluster of its own, dropped it as "the space
+     * at the break", and painted the accent with no base. The same plain text lost a painted cell
+     * and gained a dotted circle purely because of a style boundary.
+     */
+    @Test
+    void aStyleBoundaryInsideAClusterAtASoftBreakKeepsTheBaseThePlainTextMeasures() {
+        Style bold = Style.NONE.withBold();
+        List<StyledText> values = List.of(
+                // "a  \u0301" is the clusters "a", " ", " \u0301": the break drops the first space,
+                // and the second one is the base of the cluster the accent continues.
+                StyledText.concat(StyledText.of("a  ", Style.NONE), StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("a\u65E5 ", Style.NONE),
+                        StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("\u65E5  ", Style.NONE),
+                        StyledText.of("\uFE0F", bold)),
+                StyledText.concat(StyledText.of("a  ", Style.NONE), StyledText.of("\u200D", bold)),
+                // A tab stop's last space is the one cell not placed by the loop that reads the
+                // clusters continuing it, so a zero-width head split from the tail that gives the
+                // cluster its columns was absorbed into the stop instead of travelling with it.
+                StyledText.concat(StyledText.of("\t\uFE0F", Style.NONE),
+                        StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("ab\t\u200D", Style.NONE),
+                        StyledText.of("\u0301", bold)));
+        for (StyledText value : values) {
+            StyledText plain = StyledText.plain(value.plainText());
+            for (int cols = 1; cols <= 8; cols++) {
+                List<String> wrapped = engine.wrapLines(value, cols).stream()
+                        .map(StyledText::plainText)
+                        .toList();
+                assertThat(wrapped)
+                        .as("rows of \"%s\" at %d columns", value.plainText(), cols)
+                        .isEqualTo(engine.wrapLines(plain, cols).stream()
+                                .map(StyledText::plainText)
+                                .toList());
+                int rows = Math.max(1, wrapped.size());
+                assertThat(paintedCells(paint(Views.text(value), rows, cols)))
+                        .as("painted cells of \"%s\" at %d columns", value.plainText(), cols)
+                        .isEqualTo(paintedCells(paint(Views.text(plain), rows, cols)));
+                assertThat(engine.intrinsicHeight(Views.text(value), cols))
+                        .as("intrinsic height of \"%s\" at %d columns", value.plainText(), cols)
+                        .isEqualTo(engine.intrinsicHeight(Views.text(plain), cols));
+            }
+        }
+    }
+
     @Test
     void aBaselessClusterAtTheStartOfARowStillGetsItsDottedCircle() {
         // With no cell before it there is nothing for a bare mark to join, so the dotted circle

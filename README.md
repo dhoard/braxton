@@ -72,13 +72,13 @@ gate:
 ./build.sh clean                  # remove target/ for Braxton and vendor/jline3
 ```
 
-The vendored JLine version is derived from the Braxton version: `0.2.0-SNAPSHOT` builds
-`0.2.0-jline-braxton`. `./build.sh` refuses to build when `pom.xml` `<jline.version>` or
+The vendored JLine version is derived from the Braxton version: revision `0.1.0` builds
+`0.1.0-jline-braxton`. `./build.sh` refuses to build when `pom.xml` `<jline.version>` or
 `vendor/jline3/.mvn/maven.config` disagree with that derivation, and it skips the JLine build when
 the installed artifacts are newer than the vendored sources. A `clean` goal removes the vendored
 JLine build output as well, so the next build compiles JLine from scratch; installed artifacts stay
 in the local repository, as `./mvnw clean` leaves Braxton's installed artifact alone. `./mvnw` on
-its own does not build JLine; the `0.2.0-jline-braxton` artifacts must already be installed.
+its own does not build JLine; the `0.1.0-jline-braxton` artifacts must already be installed.
 
 This local JLine build serializes a closed-stream check and byte consumption after native poll completion, preventing a
 closed input pump from consuming the next application's first key. Published Maven 4.4.8 does not
@@ -643,7 +643,7 @@ the full project gate, and a terminal-emulation check when TUI code is touched.
 Interactive runs require `--enable-native-access=ALL-UNNAMED` on the classpath. A module-path
 launch must instead grant access to `org.jline.terminal.ffm`. Braxton checks permission before
 initializing the FFM provider, even on JDKs that otherwise only warn. Maven resolves the locally
-installed `0.2.0-jline-braxton` version of the pinned
+installed `0.1.0-jline-braxton` version of the pinned
 `jline-terminal` and `jline-terminal-ffm` dependencies and their transitive support artifacts;
 JLine is not shaded or optional. A launch with only the Braxton jar on its classpath is insufficient.
 JLine still performs native integration and can use internal signal APIs as an upstream fallback.
@@ -681,9 +681,9 @@ it is not part of the published library. Run the corresponding checks on each na
 claiming its terminal behavior is verified. Test outcomes and remaining gaps are recorded in
 [the implementation record](plans/hierarchical-mvu-refactor.impl.md#9-execution-record-and-handoff).
 
-### Source migration to 0.2
+### Source migration to 0.1.0
 
-This is an intentional source/binary break, with no adapters, aliases or deprecated forwarders.
+`0.1.0` is an intentional source/binary break, with no adapters, aliases or deprecated forwarders.
 Replace the flat two-generic application contract/result with `Component<M, Msg, Out>` and
 `Update<M, Msg, Out>`; root output is `Never`. Import contexts from `mvu`, and use `ViewContext`
 instead of passing a viewport directly. Split feature state/messages into child components, embed
@@ -738,7 +738,7 @@ Before opening a pull request:
 
 ## Project status and versioning
 
-Braxton is **pre-1.0** (`0.2.0-SNAPSHOT`). The public API is stabilizing but may change between minor
+Braxton is **pre-1.0** (`0.1.0`). The public API is stabilizing but may change between minor
 releases; `internal` packages are never part of the supported surface. Releases follow semantic
 versioning once 1.0 is reached.
 

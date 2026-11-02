@@ -808,7 +808,13 @@ public final class LayoutEngine {
                 softWrapped = false;
                 continue;
             }
-            if (" ".equals(raw) && softWrapped) {
+            if (" ".equals(raw) && softWrapped && !cursor.gapSplitsCluster()) {
+                // The blank a soft break leaves belongs at the end of the previous line, so the
+                // space that opens the new one is dropped - but only when it is a cluster of the
+                // value's plain text. A span boundary can cut one cluster of that plain text in
+                // two, and then this space is its base: dropping it left the tail - a combining
+                // mark, a variation selector, a joiner - with no base at all, so the row lost the
+                // cell the plain text measures and gained a dotted circle in its place.
                 commitRun(current, pending);
                 pending = null;
                 continue;
@@ -1123,6 +1129,32 @@ public final class LayoutEngine {
                         || !continuesCluster(grown, ahead)) {
                     break;
                 }
+                String head = ahead;
+                Style headStyle = aheadStyle;
+                String headLink = aheadLink;
+                hasAhead = false;
+                // A candidate that claims no column and continues the cell is only a cluster of the
+                // value's plain text when the cluster after it does not continue it. A span boundary
+                // can cut one cluster of the plain text in two, and the tail of that cluster is the
+                // character that carries its columns: taking the head alone made the stop's last
+                // space two columns wide and left the tail to open a row of its own, so the same
+                // plain text painted different cells depending on how it was styled. Such a head
+                // travels with its cluster instead, exactly as the same text in one span does.
+                if (splitsAColumnCarryingCluster(head)) {
+                    if (chain == null) {
+                        buffered = new ArrayList<>(2);
+                        bufferedIndex = 0;
+                    }
+                    // Everything the scan took, the head, and the tail that continues it go back in
+                    // the value's own order for the loop that places cells; the stop keeps only its
+                    // own columns.
+                    buffered.add(new Piece(head, headStyle, headLink));
+                    if (hasAhead) {
+                        buffered.add(new Piece(ahead, aheadStyle, aheadLink));
+                        hasAhead = false;
+                    }
+                    return List.of();
+                }
                 if (chain == null) {
                     chain = new ArrayList<>(2);
                     if (buffered == null) {
@@ -1131,13 +1163,12 @@ public final class LayoutEngine {
                         // The buffer is empty here: everything it held was delivered before the
                         // current cluster, which is the tab this scan follows.
                         buffered.clear();
+                        bufferedIndex = 0;
                     }
-                    bufferedIndex = 0;
                 }
-                chain.add(ahead);
-                buffered.add(new Piece(ahead, aheadStyle, aheadLink));
-                hasAhead = false;
-                grown += ahead;
+                chain.add(head);
+                buffered.add(new Piece(head, headStyle, headLink));
+                grown += head;
             }
             if (chain != null && hasAhead) {
                 // The scan stopped at a cluster that does not continue the cell. It was read past
@@ -1146,6 +1177,34 @@ public final class LayoutEngine {
                 hasAhead = false;
             }
             return chain == null ? List.of() : chain;
+        }
+
+        /**
+         * True when {@code head} is only the head of a cluster the value's plain text reads as one:
+         * the cluster after it continues it, and the pair claims columns of its own. Reading that
+         * cluster is what makes it available to the caller either way, so the head and the tail are
+         * delivered in the value's own order whether or not the scan takes them.
+         */
+        private boolean splitsAColumnCarryingCluster(String head) {
+            return (hasAhead || fetchFromSource())
+                    && continuesCluster(head, ahead)
+                    && TextMeasure.clusterColumns(head + ahead, policy) > 0;
+        }
+
+        /**
+         * True when the cluster {@link #peek()} returns continues the one the cursor holds, so the
+         * two are a single cluster of the value's plain text and no rule may act on the first of
+         * them alone. Neighbours inside one span were already split by the segmentation that
+         * produced them, which is the question {@link #gapIsSegmented()} answers; a span's first
+         * cluster is the exception, because that span can start inside a cluster the whole value
+         * reads as one.
+         */
+        boolean gapSplitsCluster() {
+            String following = peek();
+            if (following == null || gapIsSegmented()) {
+                return false;
+            }
+            return continuesCluster(text, following);
         }
 
         /**
