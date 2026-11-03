@@ -25,9 +25,11 @@ package io.github.dhoard.braxton.internal.clipboard;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.charset.StandardCharsets;
+import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 
 import org.junit.jupiter.api.Test;
@@ -46,6 +48,29 @@ class Osc52Test {
         int start = sequence.indexOf(';', selection + 1) + 1;
         return new String(Base64.getDecoder().decode(
                 sequence.substring(start, sequence.length() - 1)), StandardCharsets.UTF_8);
+    }
+
+    /**
+     * The documented rule, as a boundary search over the pinned break iterator: the longest prefix
+     * that ends after a complete cluster and encodes to at most {@code maxBytes} UTF-8 bytes.
+     */
+    private static String wholeClusterPrefix(String text, int maxBytes) {
+        BreakIterator boundaries = BreakIterator.getCharacterInstance(Locale.ROOT);
+        boundaries.setText(text);
+        int start = boundaries.first();
+        int used = 0;
+        while (true) {
+            int next = boundaries.next();
+            if (next == BreakIterator.DONE) {
+                return text;
+            }
+            int size = text.substring(start, next).getBytes(StandardCharsets.UTF_8).length;
+            if (used + size > maxBytes) {
+                return text.substring(0, start);
+            }
+            used += size;
+            start = next;
+        }
     }
 
     @Test
@@ -132,6 +157,47 @@ class Osc52Test {
         assertThat(Osc52.encode(null)).isEmpty();
         assertThat(Osc52.encode("")).isEmpty();
         assertThat(Osc52.encode("hi")).isEqualTo(Osc52.encode("hi", "c", Integer.MAX_VALUE).sequence());
+    }
+
+    @Test
+    void aTextLongerThanTheSegmentedWindowKeepsTheWholeClusterPrefix() {
+        // The limit is applied to a window of the source, so a copy past that window exercises the
+        // path that never sees the whole text; the reference below sees all of it.
+        String[] pieces = {"a", "bc", " ", "\u65E5\u672C", FAMILY, FLAG, COMBINING, "\u200D",
+            "\uFE0F", "\n", "\uD800", "\uDC00"};
+        Random random = new Random(97L);
+        for (int iteration = 0; iteration < 400; iteration++) {
+            StringBuilder text = new StringBuilder();
+            int target = 200 + random.nextInt(3_000);
+            while (text.length() < target) {
+                text.append(pieces[random.nextInt(pieces.length)]);
+            }
+            String source = text.toString();
+            int max = random.nextInt(random.nextBoolean() ? 128 : 2_000);
+            String limited = Osc52.limitUtf8(source, max);
+            assertThat(limited).as("iteration %d at %d bytes", iteration, max)
+                    .isEqualTo(wholeClusterPrefix(source, max));
+            assertThat(limited.getBytes(StandardCharsets.UTF_8).length)
+                    .as("iteration %d at %d bytes", iteration, max).isLessThanOrEqualTo(max);
+        }
+    }
+
+    @Test
+    void aClusterStraddlingTheSegmentedWindowIsNeverCutInsideIt() {
+        // A cluster has no length limit, so the window the encoder segments can end inside the one
+        // cluster that straddles the limit. The cut still lands between clusters: a fragment that
+        // already exceeds the limit ends the payload there, and a fragment that fits is settled
+        // against the whole source instead of being accepted.
+        String cluster = "e" + "\u0301".repeat(200);
+        String source = "a".repeat(10) + cluster + "z".repeat(400);
+        for (int max : new int[] {10, 11, 50, 210, 211, 212, 400, 411}) {
+            assertThat(Osc52.limitUtf8(source, max)).as("limit %d", max)
+                    .isEqualTo(wholeClusterPrefix(source, max));
+        }
+        assertThat(Osc52.limitUtf8(source, 100)).isEqualTo("a".repeat(10));
+        // The cluster is 201 units and 401 bytes, so only a budget that reaches its end keeps it.
+        assertThat(Osc52.limitUtf8(source, 410)).isEqualTo("a".repeat(10));
+        assertThat(Osc52.limitUtf8(source, 411)).isEqualTo("a".repeat(10) + cluster);
     }
 
     @Test

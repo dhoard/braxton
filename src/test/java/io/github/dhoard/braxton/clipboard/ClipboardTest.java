@@ -127,6 +127,30 @@ class ClipboardTest {
     }
 
     @Test
+    void anOverLimitInternalCopyKeepsOnlyWholeClustersOfTheText() {
+        // The internal buffer is the dependable destination and the source of an application
+        // paste, so it must not keep a partial cluster of the copy; the emitted OSC 52 payload
+        // already truncates on a cluster boundary.
+        String family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
+        List<String> writes = new ArrayList<>();
+        ClipboardConfig config = ClipboardConfig.builder().maxInternalChars(4).build();
+        ClipboardService clipboard = new ClipboardService(config,
+                new TerminalEnvironment(Map.of("TERM", "xterm-256color")), writes::add);
+        ClipboardResult result = clipboard.copy("a" + family);
+        assertThat(result.text()).isEqualTo("a");
+        assertThat(clipboard.internalText()).isEqualTo("a");
+        assertThat(result.truncated()).isTrue();
+        assertThat(result.storedInternally()).isTrue();
+        assertThat(result.systemWriteRequested()).isTrue();
+        assertThat(writes).hasSize(1);
+        // The internal character bound does not limit the payload written to the terminal.
+        String sequence = writes.get(0);
+        String payload = sequence.substring("\u001B]52;c;".length(), sequence.length() - 1);
+        assertThat(new String(java.util.Base64.getDecoder().decode(payload),
+                java.nio.charset.StandardCharsets.UTF_8)).isEqualTo("a" + family);
+    }
+
+    @Test
     void aDumbTerminalKeepsTheCopyInternalAndWritesNothing() {
         List<String> writes = new ArrayList<>();
         ClipboardResult result = service("dumb", Map.of(), writes).copy("hello");

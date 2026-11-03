@@ -160,13 +160,11 @@ public final class Table {
                 // a cell joins the cell before it - the previous cell's pad, or the frame's left
                 // edge once the row is framed - and takes no column of its own, while a variation
                 // selector there widens that cell by a column it never paid for.
-                String painted = "";
+                GridRows.Row paintedRow = GridRows.Row.empty();
                 for (int column = 0; column < widths.length; column++) {
                     List<StyledText> lines = cellLines.get(column);
                     StyledText value = line < lines.size() ? lines.get(line) : StyledText.empty();
-                    String plain = value.plainText();
-                    int pad = GridRows.pad(painted, plain, widths[column]);
-                    painted = painted + plain + " ".repeat(pad);
+                    int pad = paintedRow.pad(value.plainText(), widths[column]);
                     rendered = rendered.append(value)
                             .append(StyledText.of(" ".repeat(pad), Style.NONE));
                 }

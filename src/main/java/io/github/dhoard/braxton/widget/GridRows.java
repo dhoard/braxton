@@ -40,6 +40,13 @@ import io.github.dhoard.braxton.style.TextMeasure;
  * occupies a different number of columns from the sum of its cells: padding each cell from its own
  * measurement leaves the row short of the column boundary and lands every cell after it - a frame's
  * right edge included - left of the row above.</p>
+ *
+ * <p>Only a row's trailing cluster can take part in that join, so {@link Row} carries that cluster
+ * and not the text painted before it. Charging a cell against the whole row text - measuring
+ * {@code row + cell} and re-measuring {@code row} - copied and segmented the growing prefix once per
+ * cell, which made assembling one row quadratic in its column count: a 200-row table of
+ * ten-character cells cost 1.2 MB of garbage at 8 columns and 186 MB at 256, and an application that
+ * renders a table from its state pays that once per frame.</p>
  */
 final class GridRows {
 
@@ -47,15 +54,89 @@ final class GridRows {
     }
 
     /**
-     * Spaces that pad {@code cell} to a column {@code width} columns wide, where {@code row} is the
-     * plain text already painted before it. The cell costs the difference between the row with the
-     * cell appended and the row without it, so a cluster that joins the cell before it is not charged
-     * a column the paint path never gives it, and one that widens that cell is charged the column it
-     * really takes.
+     * The cells a row has painted so far, kept as the one cluster a following cell can join: the
+     * trailing cluster of the row as it is painted, and the columns that cluster occupies.
      */
-    static int pad(String row, String cell, int width) {
-        int before = TextMeasure.columns(row);
-        return Math.max(0, width - (TextMeasure.columns(row + cell) - before));
+    static final class Row {
+        private String tail;
+        private int tailColumns;
+
+        private Row(String tail, int tailColumns) {
+            this.tail = tail;
+            this.tailColumns = tailColumns;
+        }
+
+        /** A row with nothing painted yet. */
+        static Row empty() {
+            return new Row(null, 0);
+        }
+
+        /**
+         * A row that already carries {@code painted}, such as a quote's bar and the space after it.
+         * Its trailing cluster is what the first cell is charged against.
+         */
+        static Row after(String painted) {
+            if (painted == null || painted.isEmpty()) {
+                return empty();
+            }
+            String last = lastCluster(painted);
+            return new Row(last, TextMeasure.columns(last));
+        }
+
+        /**
+         * Spaces that pad {@code cell} to a column {@code width} columns wide, charging the cell -
+         * and the pad, which the caller paints after it - to this row. The cell costs the difference
+         * between the row with the cell appended and the row without it, so a cluster that joins the
+         * cell before it is not charged a column the paint path never gives it, and one that widens
+         * that cell is charged the column it really takes.
+         */
+        int pad(String cell, int width) {
+            return pad(cell, width, 0);
+        }
+
+        /**
+         * {@link #pad(String, int)} plus a {@code gap} of columns the grid paints after every cell,
+         * which is the separator {@code Markup} puts between its columns. The gap is part of what
+         * the row really paints, so it is charged to the row with the cell.
+         */
+        int pad(String cell, int width, int gap) {
+            String value = cell == null ? "" : cell;
+            int added = 0;
+            String last = tail;
+            int lastColumns = tailColumns;
+            if (!value.isEmpty()) {
+                if (tail != null && isPrintableAscii(tail.charAt(tail.length() - 1))
+                        && isPrintableAscii(value)) {
+                    // No grapheme break rule joins two printable ASCII characters, so the cell is a
+                    // run of clusters of its own and the seam needs neither a copy nor a
+                    // segmentation - which is what an ordinary table row is made of.
+                    added = value.length();
+                    last = value.substring(value.length() - 1);
+                    lastColumns = 1;
+                } else if (tail == null) {
+                    added = TextMeasure.columns(value);
+                    last = lastCluster(value);
+                    lastColumns = TextMeasure.columns(last);
+                } else {
+                    // Every cluster of the row before its trailing one stays where it was, so the
+                    // seam is decided by that cluster and the cell alone.
+                    String joined = tail + value;
+                    added = TextMeasure.columns(joined) - tailColumns;
+                    last = lastCluster(joined);
+                    lastColumns = TextMeasure.columns(last);
+                }
+            }
+            int pad = Math.max(0, width - added) + Math.max(0, gap);
+            if (pad > 0) {
+                // The pad's last space is the cluster the cell after this one is charged against.
+                tail = " ";
+                tailColumns = 1;
+            } else {
+                tail = last;
+                tailColumns = lastColumns;
+            }
+            return pad;
+        }
     }
 
     /**
@@ -77,5 +158,26 @@ final class GridRows {
             padded.add(pad <= 0 ? line : line.append(StyledText.of(" ".repeat(pad), Style.NONE)));
         }
         return padded;
+    }
+
+    /**
+     * The last grapheme cluster of {@code text}, which is never empty here. The cluster boundary at
+     * or before the last unit starts it, so no other cluster of the text is materialized.
+     */
+    private static String lastCluster(String text) {
+        return text.substring(TextMeasure.boundaryBefore(text, text.length() - 1));
+    }
+
+    private static boolean isPrintableAscii(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            if (!isPrintableAscii(value.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isPrintableAscii(char value) {
+        return value >= 0x20 && value <= 0x7E;
     }
 }

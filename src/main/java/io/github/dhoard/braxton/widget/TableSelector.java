@@ -231,26 +231,24 @@ public final class TableSelector
         // charged columns the row never spent, so the rows of one grid came out different widths,
         // every cell after the shifted one moved, and the selected cell's inversion missed a
         // column.
-        String headerPainted = "";
+        GridRows.Row headerRow = GridRows.Row.empty();
         for (int i = 0; i < columns; i++) {
             String value = header.get(i);
-            int pad = GridRows.pad(headerPainted, value, widths[i] + 2);
-            headerPainted = headerPainted + value + " ".repeat(pad);
+            int pad = headerRow.pad(value, widths[i] + 2);
             headerLine = headerLine.append(StyledText.of(value + " ".repeat(pad), headerStyle));
         }
         lines.add(Views.text(headerLine));
         for (int r = 0; r < rows.size(); r++) {
             List<String> values = rows.get(r);
             StyledText line = StyledText.empty();
-            String rowPainted = "";
+            GridRows.Row row = GridRows.Row.empty();
             for (int c = 0; c < columns; c++) {
                 String value = c < values.size() ? values.get(c) : "";
                 Style style =
                         focused && r == state.row() && c == state.column()
                                 ? activeStyle
                                 : inactiveStyle;
-                int pad = GridRows.pad(rowPainted, value, widths[c] + 2);
-                rowPainted = rowPainted + value + " ".repeat(pad);
+                int pad = row.pad(value, widths[c] + 2);
                 line = line.append(StyledText.of(value + " ".repeat(pad), style));
             }
             lines.add(Views.text(line));

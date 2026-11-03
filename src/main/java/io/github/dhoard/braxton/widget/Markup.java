@@ -386,13 +386,14 @@ public final class Markup {
                 // before it and takes no column of its own, while a variation selector there widens
                 // that gap by a column. Padding from the cell measured alone makes the rows of one
                 // table different widths.
-                String painted = "";
+                GridRows.Row paintedRow = GridRows.Row.empty();
                 for (int column = 0; column < columns; column++) {
                     List<StyledText> lines = cellLines.get(column);
                     StyledText value = line < lines.size() ? lines.get(line) : StyledText.empty();
-                    String plain = value.plainText();
-                    int pad = Math.max(gap, GridRows.pad(painted, plain, widths[column]) + gap);
-                    painted = painted + plain + " ".repeat(pad);
+                    // The column gap is painted after the cell, so it is charged to the row as
+                    // part of the pad: the pad plus the gap is the number the previous
+                    // Math.max(gap, pad + gap) produced, and the next cell meets that last space.
+                    int pad = paintedRow.pad(value.plainText(), widths[column], gap);
                     rendered = rendered.append(value)
                             .append(StyledText.of(" ".repeat(pad), style));
                 }

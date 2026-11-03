@@ -28,11 +28,13 @@ import java.util.Random;
 
 import org.junit.jupiter.api.Test;
 
-/** The bounded in-process buffer truncates only at a code-point boundary. */
+/** The bounded in-process buffer truncates only at a grapheme-cluster boundary. */
 class ClipboardBufferTest {
 
     private static final String EMOJI = "\uD83D\uDE00";
     private static final String WIDE = "\u65E5\u672C";
+    private static final String FAMILY =
+            "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
 
     @Test
     void aBoundThatFitsKeepsTheTextExactly() {
@@ -72,8 +74,33 @@ class ClipboardBufferTest {
     }
 
     @Test
-    void storedTextIsAlwaysAPrefixThatEndsOnAWholeCodePoint() {
-        String[] pieces = {"a", "bc", " ", EMOJI, WIDE, "\u0301", "\n"};
+    void truncationKeepsOnlyWholeGraphemeClusters() {
+        // The stored value can be pasted back, so a cut inside a cluster would end it in a joiner,
+        // selector, or mark whose meaning depends on the text after the insertion point. OSC 52
+        // already truncates the same copy on a cluster boundary.
+        assertThat(new ClipboardBuffer(4).set("a" + FAMILY)).isEqualTo("a");
+        assertThat(new ClipboardBuffer(2).set("ab\u0301c")).isEqualTo("a");
+        assertThat(new ClipboardBuffer(2).set("e\u0301x")).isEqualTo("e\u0301");
+        assertThat(new ClipboardBuffer(3).set(FAMILY + "x")).isEmpty();
+        // A bound that reaches the end of a cluster keeps it; the next cluster is the cut.
+        assertThat(new ClipboardBuffer(3).set("a" + EMOJI + "x")).isEqualTo("a" + EMOJI);
+    }
+
+    @Test
+    void truncationNeverStoresATrailingLoneHighSurrogate() {
+        // A high surrogate with nothing after it is not a character, so a truncated value must not
+        // end with one, however many the source carries. A whole pair is a character and is kept.
+        assertThat(new ClipboardBuffer(3).set("\uD800\uD800\uD800\uD800")).isEmpty();
+        assertThat(new ClipboardBuffer(2).set("a\uD800\uD800")).isEqualTo("a");
+        assertThat(new ClipboardBuffer(2).set("a\uD800b")).isEqualTo("a");
+        assertThat(new ClipboardBuffer(3).set("\uDE00\uD800\uD800\uD800")).isEqualTo("\uDE00");
+        assertThat(new ClipboardBuffer(3).set("a" + EMOJI)).isEqualTo("a" + EMOJI);
+    }
+
+    @Test
+    void storedTextIsAlwaysAPrefixThatEndsAfterAWholeGraphemeCluster() {
+        String[] pieces = {"a", "bc", " ", EMOJI, FAMILY, WIDE, "\u0301", "e\u0301", "\u200D",
+                "\uFE0F", "\n", "\uD800", "\uDC00"};
         Random random = new Random(29L);
         for (int iteration = 0; iteration < 5_000; iteration++) {
             StringBuilder source = new StringBuilder();
@@ -83,15 +110,61 @@ class ClipboardBufferTest {
             }
             String text = source.toString();
             int bound = 1 + random.nextInt(8);
+            boolean truncated = text.length() > bound;
             String stored = new ClipboardBuffer(bound).set(text);
             assertThat(stored).as("iteration %d bound %d", iteration, bound)
                     .hasSizeLessThanOrEqualTo(bound)
-                    .isEqualTo(text.length() <= bound ? text : truncateAt(text, bound));
+                    .isEqualTo(truncated ? truncateToClusters(text, bound) : text);
             assertThat(stored).as("iteration %d is a prefix", iteration)
                     .isEqualTo(text.substring(0, stored.length()));
-            assertThat(stored.isEmpty()
-                    || !Character.isHighSurrogate(stored.charAt(stored.length() - 1)))
-                    .as("iteration %d keeps no half surrogate", iteration).isTrue();
+            if (truncated) {
+                assertThat(stored.isEmpty()
+                        || !Character.isHighSurrogate(stored.charAt(stored.length() - 1)))
+                        .as("iteration %d keeps no trailing lone high surrogate", iteration)
+                        .isTrue();
+            }
+        }
+    }
+
+    @Test
+    void aClusterLongerThanTheLookaheadPastTheBoundIsStillCutOnAClusterBoundary() {
+        // A cluster has no length limit, so the window the buffer segments can end inside the one
+        // cluster that straddles the bound. The whole source is segmented then rather than cutting
+        // inside that cluster: every bound below lands at the start of it or after it.
+        String cluster = "e" + "\u0301".repeat(200);
+        String source = "a".repeat(10) + cluster + "z".repeat(300);
+        for (int bound : new int[] {10, 11, 100, 210, 211, 300, 511}) {
+            assertThat(new ClipboardBuffer(bound).set(source)).as("bound %d", bound)
+                    .isEqualTo(truncateToClusters(source, bound));
+        }
+        assertThat(new ClipboardBuffer(100).set(source)).isEqualTo("a".repeat(10));
+        assertThat(new ClipboardBuffer(211).set(source)).isEqualTo("a".repeat(10) + cluster);
+        assertThat(new ClipboardBuffer(511).set(source)).isEqualTo(source);
+    }
+
+    @Test
+    void aSourceLongerThanTheSegmentedWindowKeepsTheWholeClusterPrefix() {
+        // The window is the bound plus a fixed lookahead, so a copy that long exercises the path
+        // that segments only part of the source; the reference segments all of it.
+        String[] pieces = {"a", "bc", " ", EMOJI, FAMILY, WIDE, "\u0301", "e\u0301", "\u200D",
+                "\uFE0F", "\n", "\uD800", "\uDC00", "\uD83C\uDDFA\uD83C\uDDF8",
+                "\uD83D\uDC4D\uD83C\uDFFD", "\uAC00", "\u1100\u1161\u11A8", "\u0E01\u0E33"};
+        Random random = new Random(41L);
+        for (int iteration = 0; iteration < 1_000; iteration++) {
+            StringBuilder source = new StringBuilder();
+            int target = 200 + random.nextInt(2_800);
+            while (source.length() < target) {
+                source.append(pieces[random.nextInt(pieces.length)]);
+            }
+            String text = source.toString();
+            int bound = 1 + random.nextInt(random.nextBoolean() ? 64 : 600);
+            boolean truncated = text.length() > bound;
+            String stored = new ClipboardBuffer(bound).set(text);
+            assertThat(stored).as("iteration %d bound %d", iteration, bound)
+                    .hasSizeLessThanOrEqualTo(bound)
+                    .isEqualTo(truncated ? truncateToClusters(text, bound) : text);
+            assertThat(stored).as("iteration %d is a prefix", iteration)
+                    .isEqualTo(text.substring(0, stored.length()));
         }
     }
 
@@ -104,9 +177,26 @@ class ClipboardBufferTest {
         assertThat(new ClipboardBuffer(2).set("a\uD83Db")).isEqualTo("a");
     }
 
-    /** The rule the buffer documents: cut at the bound, then back off a dangling high surrogate. */
-    private static String truncateAt(String text, int bound) {
-        return Character.isHighSurrogate(text.charAt(bound - 1))
-                ? text.substring(0, bound - 1) : text.substring(0, bound);
+    /**
+     * The documented rule: the longest whole-cluster prefix that fits the bound and keeps no
+     * trailing lone high surrogate. Expressed as a boundary search so it does not mirror the
+     * implementation's steps.
+     */
+    private static String truncateToClusters(String text, int bound) {
+        java.text.BreakIterator iterator =
+                java.text.BreakIterator.getCharacterInstance(java.util.Locale.ROOT);
+        iterator.setText(text);
+        int end = 0;
+        while (true) {
+            int next = iterator.next();
+            if (next == java.text.BreakIterator.DONE || next > bound) {
+                break;
+            }
+            // A prefix that ends with a high surrogate holds one half of a pair, not a character.
+            if (!Character.isHighSurrogate(text.charAt(next - 1))) {
+                end = next;
+            }
+        }
+        return text.substring(0, end);
     }
 }

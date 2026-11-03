@@ -25,7 +25,7 @@ package io.github.dhoard.braxton.internal.clipboard;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
-import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.internal.text.Graphemes;
 
 /**
  * OSC 52 clipboard encoding.
@@ -45,6 +45,12 @@ public final class Osc52 {
     private static final char ESC = '\u001b';
     private static final char BEL = '\u0007';
     private static final String PREFIX = ESC + "]52;";
+
+    /**
+     * How far past the byte limit the truncating path segments the source: enough to reach the end
+     * of the cluster that straddles the limit in text a terminal holds.
+     */
+    private static final int CLUSTER_LOOKAHEAD = 64;
 
     private Osc52() {
     }
@@ -123,19 +129,95 @@ public final class Osc52 {
         if (text.isEmpty() || maxBytes <= 0) {
             return "";
         }
-        if (text.getBytes(StandardCharsets.UTF_8).length <= maxBytes) {
+        if (utf8Length(text, maxBytes) <= maxBytes) {
             return text;
         }
-        StringBuilder limited = new StringBuilder();
-        int used = 0;
-        for (String cluster : TextMeasure.graphemes(text)) {
-            int size = cluster.getBytes(StandardCharsets.UTF_8).length;
-            if (used + size > maxBytes) {
-                break;
+        return prefixOfCompleteClusters(text, maxBytes);
+    }
+
+    /**
+     * The longest whole-cluster prefix of {@code text} that fits {@code maxBytes} UTF-8 bytes.
+     *
+     * <p>Only a window of the source is segmented, and only the byte count is measured. Segmenting
+     * is the costly half of truncation - the pinned break iterator copies and indexes everything it
+     * is given, and a cluster list holds every cluster at once - while the answer depends only on
+     * the text up to the cluster that straddles the limit, so a copy far larger than the limit costs
+     * no more than the limit does.</p>
+     *
+     * <p>UTF-8 is never shorter than the UTF-16 length that produces it, so a window of the limit
+     * plus {@link #CLUSTER_LOOKAHEAD} units either overflows the limit inside the window or holds
+     * the whole source. A window that stops short of the source with every one of its clusters
+     * fitting is the one case that settles nothing, and it segments the whole source then: the
+     * answer is never guessed at.</p>
+     */
+    private static String prefixOfCompleteClusters(String text, int maxBytes) {
+        int length = text.length();
+        int window = (int) Math.min(length, (long) maxBytes + CLUSTER_LOOKAHEAD);
+        while (true) {
+            int end = settledPrefixEnd(text, window, maxBytes);
+            if (end >= 0) {
+                return text.substring(0, end);
             }
-            limited.append(cluster);
-            used += size;
+            // The end of the source always settles it, so this runs at most twice.
+            window = length;
         }
-        return limited.toString();
+    }
+
+    /**
+     * The length of the longest whole-cluster prefix among the first {@code window} units of
+     * {@code text} that fits {@code maxBytes} UTF-8 bytes, or {@code -1} when the window stops short
+     * of the source with every one of its clusters fitting.
+     *
+     * <p>A window settles every boundary before its last cluster: a break, once decided, does not
+     * change because more text follows. The last cluster of a window that stops short can be a
+     * fragment the source continues, and that doubt never reaches the answer - a fragment that
+     * already exceeds the limit means the cluster it belongs to does too, and a fragment that fits
+     * is reported as unsettled instead of being accepted.</p>
+     */
+    private static int settledPrefixEnd(String text, int window, int maxBytes) {
+        int used = 0;
+        int end = 0;
+        for (String cluster : Graphemes.iterate(window == text.length() ? text
+                : text.substring(0, window))) {
+            int size = utf8Length(cluster, Integer.MAX_VALUE);
+            if (used + size > maxBytes) {
+                return end;
+            }
+            used += size;
+            end += cluster.length();
+        }
+        return window == text.length() ? end : -1;
+    }
+
+    /**
+     * UTF-8 bytes in {@code text}, or the running count once it passes {@code stopAfter}.
+     *
+     * <p>The count is the encoder's own, without the array it would encode into: an ASCII unit is
+     * one byte, the two- and three-byte forms follow, a surrogate pair is four bytes, and an
+     * unpaired half - which cannot be encoded at all - is the single replacement byte the encoder
+     * writes for it.</p>
+     */
+    private static int utf8Length(CharSequence text, int stopAfter) {
+        int bytes = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (Character.isHighSurrogate(c) && i + 1 < text.length()
+                    && Character.isLowSurrogate(text.charAt(i + 1))) {
+                bytes += 4;
+                i++;
+            } else if (c < 0x80) {
+                bytes += 1;
+            } else if (c < 0x800) {
+                bytes += 2;
+            } else if (Character.isSurrogate(c)) {
+                bytes += 1;
+            } else {
+                bytes += 3;
+            }
+            if (bytes > stopAfter) {
+                return bytes;
+            }
+        }
+        return bytes;
     }
 }

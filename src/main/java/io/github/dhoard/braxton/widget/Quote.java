@@ -110,7 +110,7 @@ public final class Quote {
         }
         for (int i = 0; i < body.size(); i++) {
             StyledText line = body.get(i);
-            int pad = GridRows.pad(prefix, line.plainText(), width);
+            int pad = GridRows.Row.after(prefix).pad(line.plainText(), width);
             if (i > 0) {
                 out = out.append("\n");
             }

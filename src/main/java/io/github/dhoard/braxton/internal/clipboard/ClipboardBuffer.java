@@ -22,6 +22,8 @@
 
 package io.github.dhoard.braxton.internal.clipboard;
 
+import io.github.dhoard.braxton.internal.text.Graphemes;
+
 /**
  * Bounded, thread-safe in-process clipboard storage.
  *
@@ -32,6 +34,12 @@ package io.github.dhoard.braxton.internal.clipboard;
  */
 public final class ClipboardBuffer {
 
+    /**
+     * How far past the bound the truncating path segments the source: enough to reach the end of
+     * the cluster that straddles the bound in text a terminal holds.
+     */
+    private static final int CLUSTER_LOOKAHEAD = 64;
+
     private final int maxChars;
     private String text = "";
 
@@ -41,21 +49,93 @@ public final class ClipboardBuffer {
     }
 
     /**
-     * Replaces the stored text, truncating at a code-point boundary when it exceeds the bound.
+     * Replaces the stored text, truncating on a grapheme-cluster boundary when it exceeds the
+     * bound.
+     *
+     * <p>The stored value is text an application pastes back, so it has to be a sequence of
+     * complete clusters of the copy: the OSC 52 payload is truncated on the same boundary. A cut
+     * inside a cluster - a joiner split from the pictographs it joins, a mark split from its base -
+     * would leave the value ending in a character whose meaning depends on the text after the
+     * insertion point, changing it when the value is pasted.</p>
+     *
+     * <p>A bound that cannot hold the first cluster stores nothing. Malformed input is otherwise
+     * kept verbatim, including a value that fits the bound; a truncated value never ends with a
+     * lone high surrogate, because a high surrogate with nothing after it is not a character.</p>
      *
      * @return the text actually stored
      */
     public synchronized String set(String value) {
         String safe = value == null ? "" : value;
         if (safe.length() > maxChars) {
-            int end = maxChars;
-            if (Character.isHighSurrogate(safe.charAt(end - 1))) {
-                end--;
-            }
-            safe = safe.substring(0, end);
+            safe = prefixOfCompleteClusters(safe, maxChars);
         }
         text = safe;
         return text;
+    }
+
+    /**
+     * The longest prefix of {@code text} that fits {@code maxChars} and ends after a cluster.
+     *
+     * <p>Only a window of the source is segmented. Segmenting is the costly half of truncation - the
+     * pinned break iterator copies and indexes everything it is given - while the answer depends
+     * only on the text up to the cluster that straddles the bound, so a copy far larger than the
+     * bound costs no more than the bound does.</p>
+     *
+     * <p>A window that ends inside that straddling cluster cannot show where the cluster ends, and a
+     * cluster has no length limit (a base character plus any number of joiners, marks, or modifiers
+     * is one cluster). The whole source is segmented then, which is what this method did before the
+     * window existed: an unsettled window is never guessed at, so both paths store the same value.
+     * </p>
+     */
+    private static String prefixOfCompleteClusters(String text, int maxChars) {
+        int length = text.length();
+        int window = (int) Math.min(length, (long) maxChars + CLUSTER_LOOKAHEAD);
+        while (true) {
+            int end = settledClusterBoundary(text, window, maxChars);
+            if (end >= 0) {
+                return text.substring(0, endWithoutTrailingLoneHighSurrogates(text, end));
+            }
+            // The end of the source always settles it, so this runs at most twice.
+            window = length;
+        }
+    }
+
+    /**
+     * The largest cluster boundary at or below {@code maxChars} among the first {@code window} units
+     * of {@code text}, or {@code -1} when the window stops short of the source with every one of its
+     * clusters starting at or below the bound.
+     *
+     * <p>A window settles every boundary before its last cluster: a break, once decided, does not
+     * change because more text follows. Only the start of that last cluster is in doubt, because the
+     * characters after the window could extend it. A window whose last cluster starts after the
+     * bound leaves that doubt below the answer, and a window that reaches the end of the source has
+     * no doubt at all.</p>
+     */
+    private static int settledClusterBoundary(String text, int window, int maxChars) {
+        int end = 0;
+        int position = 0;
+        for (String cluster : Graphemes.iterate(window == text.length() ? text
+                : text.substring(0, window))) {
+            if (position > maxChars) {
+                return end;
+            }
+            end = position;
+            position += cluster.length();
+        }
+        return window == text.length() ? end : -1;
+    }
+
+    /**
+     * {@code end}, backed off the lone high surrogates a cut there can leave at the end of the
+     * value. A complete cluster ends with a low surrogate or a BMP character, so a high surrogate at
+     * the cut is unpaired and is not a character: the stored value must not end with something no
+     * cell and no UTF-8 encoder can render.
+     */
+    private static int endWithoutTrailingLoneHighSurrogates(String text, int end) {
+        while (end > 0 && Character.isHighSurrogate(text.charAt(end - 1))) {
+            end--;
+        }
+        return end;
     }
 
     /** Returns the stored text, or an empty string. */
