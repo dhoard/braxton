@@ -47,7 +47,17 @@ class TextMeasureBoundaryCostTest {
             "漢字", "🙂", "\uFE0E", "🙂\uFE0F", "é", "é",
             "\u0301abc", "a\u200Db", "\uD83D\uDE00", "\uD83D\uDE00x", "x\uD83D\uDE00",
             "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67", "\uD800", "a\uD800b",
-            "a漢🙂b\u0301\tz 0123456789");
+            "a漢🙂b\u0301\tz 0123456789",
+            // Box-drawing joins nothing, so every gap in it is a boundary.
+            "─│┌┐",
+            // An astral pictograph with an emoji selector inside a ZWJ sequence.
+            "\uD83C\uDFF3\uFE0F\u200D\uD83C\uDF08",
+            // A devanagari conjunct: a virama keeps KA and SSA in one cluster.
+            "\u0915\u094D\u0937",
+            // A hangul syllable followed by a jamo, and a bare L V T jamo run.
+            "\uAC00\u1100", "\u1100\u1161\u11A8",
+            // A run of three combining marks on one base.
+            "a\u0301\u0302\u0303");
 
     private static long allocated(Runnable action) {
         Assumptions.assumeTrue(ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean);
@@ -95,15 +105,35 @@ class TextMeasureBoundaryCostTest {
                 .isLessThan(LOOKUPS * 1_024L);
     }
 
+    @Test
+    void endOfTextBoundaryLookupsDoNotBuildABreakIterator() {
+        String text = draft("the quick brown fox jumps over the lazy dog 0123456789 ", 82);
+        long bytes = allocated(() -> {
+            for (int i = 0; i < LOOKUPS; i++) {
+                // Where the caret sits while a draft is typed into, so the keystroke path asks
+                // these three questions on every insert.
+                TextMeasure.isBoundary(text, text.length());
+                TextMeasure.boundaryBefore(text, text.length());
+                TextMeasure.boundaryAfter(text, text.length() - 1);
+            }
+        });
+        assertThat(bytes)
+                .as("the text end is a boundary by the break iterator contract, so an end-of-text "
+                        + "lookup must answer without building an iterator and copying the draft")
+                .isLessThan(1_024);
+    }
+
     private static boolean isPrintableAscii(char value) {
         return value >= 0x20 && value <= 0x7E;
     }
 
     private static int[] everyOffset(String text) {
         int[] offsets = new int[LOOKUPS];
-        for (int i = 0; i < LOOKUPS; i++) {
+        for (int i = 0; i < LOOKUPS - 1; i++) {
             offsets[i] = (i * 7) % text.length();
         }
+        // The last position is the one a caret at the end of the draft asks about.
+        offsets[LOOKUPS - 1] = text.length();
         return offsets;
     }
 

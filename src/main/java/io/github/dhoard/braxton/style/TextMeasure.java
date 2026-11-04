@@ -182,6 +182,11 @@ public final class TextMeasure {
             return 0;
         }
         int limit = Math.min(index, text.length());
+        if (limit == text.length()) {
+            // The text end is a boundary by contract: BreakIterator reports it as one and never
+            // answers an interior position there, so no segmentation can change this answer.
+            return limit;
+        }
         if (asciiGap(text, limit)) {
             return limit;
         }
@@ -200,6 +205,11 @@ public final class TextMeasure {
             // The first boundary after an index before the text is the start, not the end of the
             // first cluster.
             return 0;
+        }
+        if (index >= text.length() - 1) {
+            // following(length - 1) is DONE, which the general path below clamps to the text
+            // length, so every index at or past the last character answers the end of the text.
+            return text.length();
         }
         int limit = Math.min(index, text.length() - 1);
         if (asciiGap(text, limit + 1)) {
@@ -234,6 +244,11 @@ public final class TextMeasure {
         if (index < 0 || index > text.length()) {
             return false;
         }
+        if (index == text.length()) {
+            // The text end is a boundary by contract: isBoundary(length) is true for every text,
+            // including the empty one.
+            return true;
+        }
         if (asciiGap(text, index)) {
             return true;
         }
@@ -248,6 +263,10 @@ public final class TextMeasure {
      * extend, format, spacing mark, regional indicator, hangul element or pictograph, so the gap is
      * a cluster boundary whatever the rest of the text holds. Answering it locally keeps a caret or
      * word operation off the break iterator, which copies the whole draft on every lookup.
+     *
+     * <p>The gap at the end of the text is not decided here: it has no character on its right, and
+     * the callers answer the last positions from the iterator contract instead, which makes the
+     * text end a boundary whatever precedes it.</p>
      */
     private static boolean asciiGap(String text, int index) {
         return index > 0 && index < text.length()

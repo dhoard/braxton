@@ -69,6 +69,23 @@ java -cp "$(cat target/bench-cp.txt):target/classes:target/test-classes" \
   4096-char scan, and a 256-lookup probe fell from 148.9 MB / 69.5 ms to 48 B / 0.1 ms.
   `EditorRenderBenchmark` and `FramePipelineBenchmark` did not move beyond their error margins - the
   editor render path segments each line once already, so this cost was never in the frame path.
+- **Fixed (2026-11-03, `plans/01-end-of-text-boundary-fast-path.impl.md`)**: the printable-ASCII
+  fast path above cannot answer the *end* of the text, so the caret position used while typing was
+  the one position that always built an iterator and copied the draft: 768 end-of-text lookups on a
+  4.5 k-char draft allocated 111.7 MB, one `Editor.Msg.Insert` at the end of a 4096-char draft
+  345.8 KB, and `Editor.Model.of(4096)` 227.7 KB. `boundaryBefore`/`boundaryAfter`/`isBoundary` now
+  short-circuit at `length`, `>= length-1` and `length` respectively (19 lines, no cache, no new
+  fields): the same probes allocate 0 B, 4,256 B and 32 B. Gates: `TextMeasureBoundaryCostTest`
+  (`endOfTextBoundaryLookupsDoNotBuildABreakIterator`, and `everyOffset` now samples `length`) and
+  the new `EditorKeystrokeCostTest` (64 KB insert bound plus text/caret/anchor assertions).
+  **Durable fact**: `BreakIterator`'s contract already fixes both ends of the text - `isBoundary`
+  is true at `length` and `following(length-1)` is `DONE` - so those answers need no segmentation.
+  `boundaryBefore` clamps to `min(index, length)` and `boundaryAfter` to `min(index, length-1)`,
+  which is why `asciiGap` (which requires a character on *each* side) could never cover the last
+  gap; the guard has to sit in the helper, not in the gap test.
+  **Durable fact**: `TextMeasureBoundaryCostTest.everyOffset` used `(i * 7) % text.length()`, so an
+  allocation case built on it never sampled `length` and silently could not detect an end-of-text
+  regression; keep the last slot pinned to `text.length()`.
 - **Durable fact**: `BreakIterator.setText(text)` copies the whole text into the iterator's own
   buffers on every call (constructing the iterator is cheap; `setText` is not). Reusing or cloning
   one iterator turned 148 MB into 25 MB, not 0, so iterator reuse is not the fix - answer the
