@@ -55,19 +55,9 @@ public final class TerminalEnvironment {
         return new TerminalEnvironment(System.getenv());
     }
 
-    /** Returns an immutable view of the inspected variables. */
-    public Map<String, String> variables() {
-        return variables;
-    }
-
     /** The {@code TERM} value, or an empty string. */
     public String term() {
         return value("TERM");
-    }
-
-    /** The {@code TERM_PROGRAM} value, or an empty string. */
-    public String termProgram() {
-        return value("TERM_PROGRAM");
     }
 
     /**

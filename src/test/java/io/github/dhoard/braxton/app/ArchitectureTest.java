@@ -48,7 +48,9 @@ class ArchitectureTest {
     /**
      * The nine implementation owners of the one-row policy in the cross-platform line-ending
      * design. Each must delegate conversion to {@code LineBreaks}; this list is explicit because a
-     * test cannot discover an arbitrary future surface that reintroduces its own chain.
+     * test cannot discover an arbitrary future surface that reintroduces its own chain. {@code
+     * SingleRow} is the widget layer's one-row entry point, so a widget that flattens only through
+     * it ({@code Badge}) is covered by that owner rather than listed here.
      */
     private static final List<String> LINE_BREAK_OWNERS =
             List.of(
@@ -59,7 +61,7 @@ class ArchitectureTest {
                     "io/github/dhoard/braxton/widget/TableSelector.java",
                     "io/github/dhoard/braxton/widget/Editor.java",
                     "io/github/dhoard/braxton/widget/Selector.java",
-                    "io/github/dhoard/braxton/widget/Badge.java",
+                    "io/github/dhoard/braxton/widget/SingleRow.java",
                     "io/github/dhoard/braxton/widget/Box.java");
 
     private static List<Path> sources() throws IOException {

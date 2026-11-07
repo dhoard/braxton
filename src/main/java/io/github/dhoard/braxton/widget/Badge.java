@@ -26,7 +26,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.github.dhoard.braxton.style.Color;
-import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
@@ -56,25 +55,9 @@ public final class Badge {
     }
 
     public Badge append(StyledText text, Style style) {
-        segments.add(new Segment(singleRow(text), style == null ? Style.NONE : style));
+        segments.add(new Segment(SingleRow.of(text),
+                style == null ? Style.NONE : style));
         return this;
-    }
-
-    /**
-     * A pill occupies one row, so line breaks and tabs become spaces. A span cannot hold a bare CR,
-     * so a caller that wants a separator from raw text prepares it before constructing the
-     * {@link StyledText}, for example with {@link LineBreaks#normalize(String)}.
-     */
-    private static StyledText singleRow(StyledText text) {
-        if (text == null) {
-            return StyledText.empty();
-        }
-        StyledText result = StyledText.empty();
-        for (StyledText.Span span : text.spans()) {
-            result = result.append(StyledText.of(
-                    LineBreaks.singleRowAndTabs(span.text()), span.style(), span.link()));
-        }
-        return result;
     }
 
     /**

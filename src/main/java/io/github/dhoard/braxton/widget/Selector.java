@@ -99,7 +99,7 @@ public final class Selector implements Component<Selector.Model, Selector.Msg, S
         record Cancelled() implements Output {}
     }
 
-    private record Result(Model state, Output intent) {}
+    private record Result(Model state, Output intent) implements WidgetResult<Model, Output> {}
 
     public record Config(List<String> options, Style activeStyle, Style inactiveStyle) {
         public Config {
@@ -126,14 +126,8 @@ public final class Selector implements Component<Selector.Model, Selector.Msg, S
 
     @Override
     public Update<Model, Msg, Output> update(Model model, Msg message) {
-        Objects.requireNonNull(model, "model");
-        Objects.requireNonNull(message, "message");
-        Result result = reduce(model, message);
-        Model next = result.state().withFocus(model.focused());
-        // An action that changed nothing keeps the incoming instance: the view is a pure function of
-        // the model, so the runtime's unchanged-reference repaint rule stays meaningful.
-        if (next.equals(model)) next = model;
-        return result.intent() == null ? Update.next(next) : Update.emit(next, result.intent());
+        return WidgetUpdate.settled(model, message, action -> reduce(model, action),
+                state -> state.withFocus(model.focused()));
     }
 
     @Override

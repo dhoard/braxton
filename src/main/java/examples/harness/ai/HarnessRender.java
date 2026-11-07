@@ -187,7 +187,7 @@ final class HarnessRender {
      */
     private static int joinedCellEnd(StringBuilder current, String line, int start) {
         char first = line.charAt(start);
-        if (current.length() == 0 || first >= 0x20 && first <= 0x7E) {
+        if (current.length() == 0 || TextMeasure.isPrintableAscii(first)) {
             // A printable ASCII character is never an extend, format, or spacing mark, so it always
             // opens a cell of its own and continues nothing.
             return start;
@@ -212,7 +212,7 @@ final class HarnessRender {
     private static int appendedColumns(StringBuilder current, int currentWidth, String text,
             int start, int end) {
         char first = text.charAt(start);
-        if (first >= 0x20 && first <= 0x7E) {
+        if (TextMeasure.isPrintableAscii(first)) {
             // A printable ASCII character is never an extend, format, or spacing mark, so it always
             // starts a cell of its own: nothing across the gap joins and the two widths add up.
             return currentWidth + runColumns(text, start, end);
@@ -228,8 +228,7 @@ final class HarnessRender {
     /** Measure ordinary word/space runs without allocating one substring for every word. */
     private static int runColumns(String line, int start, int end) {
         for (int i = start; i < end; i++) {
-            char c = line.charAt(i);
-            if (c < 0x20 || c > 0x7e) {
+            if (!TextMeasure.isPrintableAscii(line.charAt(i))) {
                 return visibleLength(line.substring(start, end));
             }
         }

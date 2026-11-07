@@ -534,7 +534,7 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
         }
     }
 
-    private record Result(Model state, Output intent) {
+    private record Result(Model state, Output intent) implements WidgetResult<Model, Output> {
 
         public Result {
             if (state == null) {
@@ -563,14 +563,8 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
 
     @Override
     public Update<Model, Msg, Output> update(Model model, Msg message) {
-        Objects.requireNonNull(model, "model");
-        Objects.requireNonNull(message, "message");
-        Result result = reduce(model, config, message);
-        Model next = result.state().withFocus(model.focused());
-        // An action that changed nothing keeps the incoming instance: the view is a pure function
-        // of the model, so the runtime's unchanged-reference repaint rule stays meaningful.
-        if (next.equals(model)) next = model;
-        return result.intent() == null ? Update.next(next) : Update.emit(next, result.intent());
+        return WidgetUpdate.settled(model, message, action -> reduce(model, config, action),
+                state -> state.withFocus(model.focused()));
     }
 
     @Override

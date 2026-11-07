@@ -22,23 +22,22 @@
 
 package io.github.dhoard.braxton.widget;
 
-/** A small set of box-drawing icon constants used by the bundled examples. */
-public final class Icons {
+/**
+ * What a bundled widget's reducer answers: the next state, and the intent it wants the owning
+ * application to carry out, if any.
+ *
+ * <p>This is the shape {@link WidgetUpdate#settled} needs to turn a reduction into an {@code
+ * Update}. A widget's own {@code Result} record already has these accessors, so implementing this
+ * interface costs it nothing and keeps each reducer's type specific to its model.</p>
+ *
+ * @param <M> the widget model
+ * @param <O> the widget's intent type
+ */
+interface WidgetResult<M, O> {
 
-    public static final String DIAMOND = "\u25C7";
-    public static final String DIAMOND_SOLID = "\u25C6";
-    public static final String SQUARE = "\u25A1";
-    public static final String SQUARE_SOLID = "\u25A0";
-    public static final String CIRCLE = "\u25CB";
-    public static final String CIRCLE_SOLID = "\u25CF";
-    public static final String TRIANGLE_RIGHT = "\u25B7";
-    public static final String TRIANGLE_DOWN = "\u25BD";
-    public static final String CHECK = "\u2714";
-    public static final String CROSS = "\u2718";
-    public static final String STAR = "\u2606";
-    public static final String STAR_SOLID = "\u2605";
-    public static final String OPTION = "\u25C7";
+    /** The state the reduction produced. */
+    M state();
 
-    private Icons() {
-    }
+    /** The intent to hand the application, or {@code null} when the reduction only changed state. */
+    O intent();
 }

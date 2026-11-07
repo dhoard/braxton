@@ -31,7 +31,6 @@ import java.util.Objects;
 import io.github.dhoard.braxton.internal.text.Graphemes;
 import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Border;
-import io.github.dhoard.braxton.layout.Insets;
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
@@ -196,7 +195,37 @@ public final class LayoutEngine {
 
     /** Main-axis width {@link #paintRow} gives each item at {@code cols} columns. */
     private int[] rowWidths(List<? extends View<?>> items, int cols) {
-        int[] widths = new int[items.size()];
+        return mainAxisSizes(items, cols, this::intrinsicWidth);
+    }
+
+    /**
+     * Main-axis height {@link #paintColumn} gives each item in {@code rows} rows, measured at the
+     * column's own {@code cols} columns.
+     */
+    private int[] columnHeights(List<? extends View<?>> items, int cols, int rows) {
+        return mainAxisSizes(items, rows, (child, remaining) ->
+                intrinsicHeight(child, cols, remaining));
+    }
+
+    /** Measures one child against the main-axis space still unclaimed. */
+    @FunctionalInterface
+    private interface MainAxisMeasure {
+        int measure(View<?> child, int remaining);
+    }
+
+    /**
+     * Main-axis sizes shared by {@link #rowWidths} and {@link #columnHeights}: a {@link View.Fixed}
+     * takes its size, any other non-flex child takes its intrinsic measurement, and the cells left
+     * over are divided between {@link View.Grow} children by weight in declaration order, with the
+     * remainder going to the earliest children.
+     *
+     * <p>One implementation for both axes so a row and a column cannot disagree about the division:
+     * the rounding and the order the remainder is handed out are the part that would otherwise drift
+     * between them.</p>
+     */
+    private static int[] mainAxisSizes(
+            List<? extends View<?>> items, int total, MainAxisMeasure intrinsic) {
+        int[] sizes = new int[items.size()];
         int used = 0;
         // Weights are any non-negative int, so the sum and the per-child product are widened:
         // int overflow would leave flex children with no cells at all.
@@ -206,32 +235,32 @@ public final class LayoutEngine {
             if (child instanceof View.Grow<?> grow) {
                 flexWeight += grow.weight();
             } else if (child instanceof View.Fixed<?> fixed) {
-                widths[i] = Math.min(fixed.size(), Math.max(0, cols - used));
-                used += widths[i];
+                sizes[i] = Math.min(fixed.size(), Math.max(0, total - used));
+                used += sizes[i];
             } else {
-                widths[i] = Math.min(intrinsicWidth(child, Math.max(0, cols - used)),
-                        Math.max(0, cols - used));
-                used += widths[i];
+                sizes[i] = Math.min(intrinsic.measure(child, Math.max(0, total - used)),
+                        Math.max(0, total - used));
+                used += sizes[i];
             }
         }
-        int remaining = Math.max(0, cols - used);
+        int remaining = Math.max(0, total - used);
         if (flexWeight > 0) {
             int distributed = 0;
             for (int i = 0; i < items.size(); i++) {
                 if (items.get(i) instanceof View.Grow<?> grow) {
-                    widths[i] = (int) (remaining * (long) grow.weight() / flexWeight);
-                    distributed += widths[i];
+                    sizes[i] = (int) (remaining * (long) grow.weight() / flexWeight);
+                    distributed += sizes[i];
                 }
             }
             int remainder = remaining - distributed;
             for (int i = 0; i < items.size() && remainder > 0; i++) {
                 if (items.get(i) instanceof View.Grow<?>) {
-                    widths[i]++;
+                    sizes[i]++;
                     remainder--;
                 }
             }
         }
-        return widths;
+        return sizes;
     }
 
     private int rowWidth(View.Row<?> row, int maxCols) {
@@ -361,40 +390,7 @@ public final class LayoutEngine {
         if (items.isEmpty()) {
             return;
         }
-        int[] heights = new int[items.size()];
-        int used = 0;
-        // Same widened weight sum and product as rowWidths: a weight can be any non-negative int.
-        long flexWeight = 0;
-        for (int i = 0; i < items.size(); i++) {
-            View<?> child = items.get(i);
-            if (child instanceof View.Grow<?> grow) {
-                flexWeight += grow.weight();
-            } else if (child instanceof View.Fixed<?> fixed) {
-                heights[i] = Math.min(fixed.size(), Math.max(0, bounds.rows() - used));
-                used += heights[i];
-            } else {
-                heights[i] = Math.min(intrinsicHeight(child, bounds.cols(), Math.max(0, bounds.rows() - used)),
-                        Math.max(0, bounds.rows() - used));
-                used += heights[i];
-            }
-        }
-        int remaining = Math.max(0, bounds.rows() - used);
-        if (flexWeight > 0) {
-            int distributed = 0;
-            for (int i = 0; i < items.size(); i++) {
-                if (items.get(i) instanceof View.Grow<?> grow) {
-                    heights[i] = (int) (remaining * (long) grow.weight() / flexWeight);
-                    distributed += heights[i];
-                }
-            }
-            int remainder = remaining - distributed;
-            for (int i = 0; i < items.size() && remainder > 0; i++) {
-                if (items.get(i) instanceof View.Grow<?>) {
-                    heights[i]++;
-                    remainder--;
-                }
-            }
-        }
+        int[] heights = columnHeights(items, bounds.cols(), bounds.rows());
         int row = bounds.row();
         for (int i = 0; i < items.size(); i++) {
             int height = heights[i];
@@ -408,7 +404,7 @@ public final class LayoutEngine {
                     ? bounds.cols() : childWidth(child, bounds.cols());
             int col = bounds.col();
             int childCols = bounds.cols();
-            if (width < bounds.cols() && !(child instanceof View.Fill<?>)) {
+            if (width < bounds.cols()) {
                 // A child that does not fill the width keeps its own size at the aligned offset;
                 // only a start-aligned child takes the rest of the column, so a frame placed at
                 // the centre stays centred instead of stretching to the right edge.
@@ -463,9 +459,6 @@ public final class LayoutEngine {
     }
 
     private int childWidth(View<?> child, int cols) {
-        if (child instanceof View.Fill<?>) {
-            return cols;
-        }
         return Math.min(cols, contentWidth(crossAxis(child), cols));
     }
 
@@ -562,9 +555,8 @@ public final class LayoutEngine {
             StyledText title = box.title();
             List<StyledText> lines = wrapLines(title, Math.max(0, bounds.cols() - 4), 1);
             if (!lines.isEmpty()) {
-                paintText(lines.get(0),
-                        new Rect(bounds.row(), bounds.col() + 2, 1, Math.max(0, bounds.cols() - 4)),
-                        screen);
+                paintText(lines.get(0), screen,
+                        new Rect(bounds.row(), bounds.col() + 2, 1, Math.max(0, bounds.cols() - 4)));
             }
         }
         Rect inner = new Rect(bounds.row() + 1, bounds.col() + 1,
@@ -579,10 +571,6 @@ public final class LayoutEngine {
     }
 
     private void paintText(StyledText text, Screen screen, Rect bounds) {
-        paintText(text, bounds, screen);
-    }
-
-    private void paintText(StyledText text, Rect bounds, Screen screen) {
         List<StyledText> lines = wrapLines(text, bounds.cols(), bounds.rows());
         int limit = Math.min(bounds.rows(), lines.size());
         for (int i = 0; i < limit; i++) {
@@ -731,15 +719,11 @@ public final class LayoutEngine {
         if (cluster.length() == 1 && cell.length() > 0) {
             char before = cell.charAt(cell.length() - 1);
             char after = cluster.charAt(0);
-            if (isPrintableAscii(before) && isPrintableAscii(after)) {
+            if (TextMeasure.isPrintableAscii(before) && TextMeasure.isPrintableAscii(after)) {
                 return false;
             }
         }
         return TextMeasure.graphemeCount(cell.toString() + cluster) == 1;
-    }
-
-    private static boolean isPrintableAscii(char value) {
-        return value >= 0x20 && value <= 0x7E;
     }
 
     /**

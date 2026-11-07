@@ -96,7 +96,7 @@ public final class TextMeasure {
             return 0;
         }
         if (policy != null && cluster.length() == 1
-                && cluster.charAt(0) >= 0x20 && cluster.charAt(0) <= 0x7E) {
+                && isPrintableAscii(cluster.charAt(0))) {
             return 1;
         }
         boolean base = false;
@@ -136,7 +136,7 @@ public final class TextMeasure {
 
     private static boolean ascii(String text) {
         for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) < 0x20 || text.charAt(i) > 0x7E) {
+            if (!isPrintableAscii(text.charAt(i))) {
                 return false;
             }
         }
@@ -274,7 +274,19 @@ public final class TextMeasure {
                 && isPrintableAscii(text.charAt(index));
     }
 
-    private static boolean isPrintableAscii(char value) {
+    /**
+     * True when {@code value} is printable ASCII, {@code 0x20..0x7E}.
+     *
+     * <p>No grapheme break rule joins two characters in that range: none of them is a carriage
+     * return, line feed, extend, format, spacing mark, regional indicator, hangul element or
+     * pictograph. A pair of them is therefore always a cluster boundary, and any question that can
+     * be answered from that fact needs neither a copy of the surrounding text nor a call to the
+     * break iterator — which copies the whole value on every lookup. Measurement, layout and table
+     * cell accounting all take this shortcut, so the rule has one owner here: if it were restated per
+     * call site, one copy could drift and a caret column or a painted cell would disagree with the
+     * measurement that placed it.</p>
+     */
+    public static boolean isPrintableAscii(char value) {
         return value >= 0x20 && value <= 0x7E;
     }
 

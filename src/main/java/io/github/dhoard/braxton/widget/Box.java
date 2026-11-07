@@ -90,21 +90,8 @@ public final class Box {
     }
 
     public Box title(StyledText value) {
-        title = value == null ? StyledText.empty() : singleLine(value);
+        title = SingleRow.of(value);
         return this;
-    }
-
-    /**
-     * The title sits in a one-line top edge, so surviving line breaks and tabs become spaces. A
-     * span cannot hold a bare CR, so only the raw String overload can preserve that separator.
-     */
-    private static StyledText singleLine(StyledText value) {
-        StyledText result = StyledText.empty();
-        for (StyledText.Span span : value.spans()) {
-            result = result.append(StyledText.of(
-                    LineBreaks.singleRowAndTabs(span.text()), span.style(), span.link()));
-        }
-        return result;
     }
 
     /** Uses the width passed to {@link #render}, discarding any fixed width set earlier. */

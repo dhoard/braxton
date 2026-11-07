@@ -106,10 +106,6 @@ public final class ClipboardService {
         return buffer.get();
     }
 
-    public ClipboardConfig config() {
-        return config;
-    }
-
     private ClipboardPath resolvePath() {
         if (!config.osc52Enabled() || !environment.supportsOsc52()) {
             return ClipboardPath.INTERNAL_ONLY;
@@ -123,12 +119,6 @@ public final class ClipboardService {
                     tmux ? ClipboardPath.TMUX_PASSTHROUGH : ClipboardPath.OSC52_DIRECT;
             case AUTO -> tmux ? ClipboardPath.TMUX_NATIVE : ClipboardPath.OSC52_DIRECT;
         };
-    }
-
-    /** The default strategy/limits from {@link ClipboardConfig#fromSystemProperties()}. */
-    public static ClipboardService fromSystem(Consumer<String> writer) {
-        return new ClipboardService(ClipboardConfig.fromSystemProperties(),
-                TerminalEnvironment.system(), writer);
     }
 
     /** Strategy helper retained for callers that need to name the selected tmux mode. */

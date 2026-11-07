@@ -82,7 +82,8 @@ public final class ProgressBar {
     }
 
     public ProgressBar icons(String active, String inactive) {
-        return new ProgressBar(width, buffer, singleRow(active), singleRow(inactive), activeStyle,
+        return new ProgressBar(width, buffer, LineBreaks.singleRowAndTabs(active),
+                LineBreaks.singleRowAndTabs(inactive), activeStyle,
                 inactiveStyle, showPercentage, prepend, append);
     }
 
@@ -100,38 +101,12 @@ public final class ProgressBar {
 
     public ProgressBar prepend(StyledText value) {
         return new ProgressBar(width, buffer, activeIcon, inactiveIcon, activeStyle, inactiveStyle,
-                showPercentage, singleRow(value), append);
+                showPercentage, SingleRow.of(value), append);
     }
 
     public ProgressBar append(StyledText value) {
         return new ProgressBar(width, buffer, activeIcon, inactiveIcon, activeStyle, inactiveStyle,
-                showPercentage, prepend, singleRow(value));
-    }
-
-    /**
-     * A bar occupies one row, so surviving line breaks and tabs become spaces, keeping each span's
-     * style and link. A span cannot hold a bare CR: that boundary has already dropped it, so only
-     * the raw icon path can preserve a separator from the caller's original string.
-     */
-    private static StyledText singleRow(StyledText text) {
-        if (text == null) {
-            return StyledText.empty();
-        }
-        StyledText result = StyledText.empty();
-        for (StyledText.Span span : text.spans()) {
-            result = result.append(StyledText.of(
-                    LineBreaks.singleRowAndTabs(span.text()), span.style(), span.link()));
-        }
-        return result;
-    }
-
-    /**
-     * An icon is painted in one cell, so LF, CRLF, lone CR, and tab each become one space before
-     * the span boundary. A bare CR left to that boundary was deleted, joining the words on either
-     * side.
-     */
-    private static String singleRow(String text) {
-        return LineBreaks.singleRowAndTabs(text);
+                showPercentage, prepend, SingleRow.of(value));
     }
 
     /** Renders a fraction of {@code value / max}; invalid bounds render an empty bar. */

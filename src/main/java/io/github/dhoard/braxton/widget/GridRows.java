@@ -105,8 +105,8 @@ final class GridRows {
             String last = tail;
             int lastColumns = tailColumns;
             if (!value.isEmpty()) {
-                if (tail != null && isPrintableAscii(tail.charAt(tail.length() - 1))
-                        && isPrintableAscii(value)) {
+                if (tail != null && TextMeasure.isPrintableAscii(tail.charAt(tail.length() - 1))
+                        && isAscii(value)) {
                     // No grapheme break rule joins two printable ASCII characters, so the cell is a
                     // run of clusters of its own and the seam needs neither a copy nor a
                     // segmentation - which is what an ordinary table row is made of.
@@ -168,16 +168,13 @@ final class GridRows {
         return text.substring(TextMeasure.boundaryBefore(text, text.length() - 1));
     }
 
-    private static boolean isPrintableAscii(String value) {
+    /** True when every character of {@code value} is printable ASCII; see the per-character rule. */
+    private static boolean isAscii(String value) {
         for (int i = 0; i < value.length(); i++) {
-            if (!isPrintableAscii(value.charAt(i))) {
+            if (!TextMeasure.isPrintableAscii(value.charAt(i))) {
                 return false;
             }
         }
         return true;
-    }
-
-    private static boolean isPrintableAscii(char value) {
-        return value >= 0x20 && value <= 0x7E;
     }
 }
