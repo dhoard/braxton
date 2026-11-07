@@ -404,7 +404,8 @@ final class HarnessRender {
 
     static String spinner(long elapsedMillis) {
         long frame = Math.max(0, elapsedMillis) / SPINNER_FRAME_MILLIS;
-        return SPINNER[(int) Math.floorMod(frame, SPINNER.length)];
+        // floorMod(long, int) already returns the int index the rotation needs.
+        return SPINNER[Math.floorMod(frame, SPINNER.length)];
     }
 
     /** A bounded preview of tool output: the first {@code maxLines} lines plus a total count. */
