@@ -29,7 +29,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-
 import org.junit.jupiter.api.Test;
 
 /** The bounded hand-off between producers and the runtime owner. */
@@ -78,7 +77,9 @@ class MailboxTest {
         Mailbox mailbox = new Mailbox(2);
         mailbox.enqueueFromOwner(new Mailbox.AppMessage("pending"));
         mailbox.close();
-        assertThat(mailbox.size()).as("closed mailboxes release undeliverable payloads").isZero();
+        assertThat(mailbox.size())
+                .as("closed mailboxes release undeliverable payloads")
+                .isZero();
         mailbox.close();
         assertThat(mailbox.size()).isZero();
         assertThat(mailbox.enqueue(new Mailbox.AppMessage("late"), 0L)).isFalse();
@@ -105,7 +106,9 @@ class MailboxTest {
         Thread.sleep(100L);
         mailbox.close();
         producer.join(2_000L);
-        assertThat(producer.isAlive()).as("a blocked producer must be woken by close").isFalse();
+        assertThat(producer.isAlive())
+                .as("a blocked producer must be woken by close")
+                .isFalse();
         assertThat(accepted).as("a closed mailbox accepts nothing").isFalse();
         mailbox.poll(1_000L);
     }
@@ -124,7 +127,9 @@ class MailboxTest {
         Thread.sleep(100L);
         mailbox.close();
         consumer.join(2_000L);
-        assertThat(consumer.isAlive()).as("a blocked consumer must be woken by close").isFalse();
+        assertThat(consumer.isAlive())
+                .as("a blocked consumer must be woken by close")
+                .isFalse();
         assertThat(polled.get()).isNull();
     }
 }

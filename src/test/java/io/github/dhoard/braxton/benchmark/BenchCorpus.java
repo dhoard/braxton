@@ -32,8 +32,7 @@ final class BenchCorpus {
     private static final String MIXED_UNIT = "a漢🙂b" + "́" + "\tz ";
     private static final String CJK_UNIT = "漢字テストの文章";
 
-    private BenchCorpus() {
-    }
+    private BenchCorpus() {}
 
     /**
      * A corpus of at least {@code size} characters.

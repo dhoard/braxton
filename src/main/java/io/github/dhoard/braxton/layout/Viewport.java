@@ -22,7 +22,6 @@
 
 package io.github.dhoard.braxton.layout;
 
-
 /**
  * The terminal geometry handed to {@code Component.view}.
  *

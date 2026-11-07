@@ -26,15 +26,13 @@ import io.github.dhoard.braxton.app.*;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.Never;
-
-import org.jline.terminal.Terminal;
-import org.jline.terminal.impl.ExternalTerminal;
-import org.jline.utils.NonBlockingReader;
-
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.impl.ExternalTerminal;
+import org.jline.utils.NonBlockingReader;
 
 /** Owned streams feeding an actual JLine terminal; no Braxton backend abstraction. */
 public final class JLineTestTerminal implements AutoCloseable {
@@ -121,13 +119,10 @@ public final class JLineTestTerminal implements AutoCloseable {
                                         false, Thread.currentThread().isVirtual());
                                 if (readFailure != null) throw readFailure;
                                 if (readIoFailure != null) throw readIoFailure;
-                                return peek
-                                        ? actualReader.peek(timeout)
-                                        : actualReader.read(timeout);
+                                return peek ? actualReader.peek(timeout) : actualReader.read(timeout);
                             }
 
-                            public int readBuffered(char[] b, int off, int len, long timeout)
-                                    throws IOException {
+                            public int readBuffered(char[] b, int off, int len, long timeout) throws IOException {
                                 return actualReader.readBuffered(b, off, len, timeout);
                             }
 

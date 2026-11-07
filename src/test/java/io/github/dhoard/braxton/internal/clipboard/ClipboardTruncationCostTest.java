@@ -24,9 +24,8 @@ package io.github.dhoard.braxton.internal.clipboard;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.testing.AllocationProbe;
+import org.junit.jupiter.api.Test;
 
 /**
  * What storing the bounded prefix of a large copy costs.
@@ -55,7 +54,8 @@ class ClipboardTruncationCostTest {
         long bytes = AllocationProbe.bytes(() -> buffer.set(copy));
         // The window the buffer segments is the bound plus one cluster of lookahead, so the cost is
         // tens of thousands of bytes; segmenting the copy itself costs tens of millions.
-        assertThat(bytes).as("allocated bytes for a 32-unit bound on a 1 Mi copy")
+        assertThat(bytes)
+                .as("allocated bytes for a 32-unit bound on a 1 Mi copy")
                 .isLessThan(64 * 1024L);
         assertThat(buffer.get()).isEqualTo(wide(32));
     }
@@ -67,7 +67,8 @@ class ClipboardTruncationCostTest {
         long small = AllocationProbe.bytes(() -> new ClipboardBuffer(1_024).set(smallCopy));
         long large = AllocationProbe.bytes(() -> new ClipboardBuffer(1_024).set(largeCopy));
         // The same bound, so the same window: a copy five hundred times larger must not cost more.
-        assertThat(large).as("allocated bytes for a 1 Ki bound on a 2 Ki and a 1 Mi copy")
+        assertThat(large)
+                .as("allocated bytes for a 1 Ki bound on a 2 Ki and a 1 Mi copy")
                 .isLessThan(small + 16 * 1024L);
         assertThat(new ClipboardBuffer(1_024).set(largeCopy)).isEqualTo(wide(1_024));
     }

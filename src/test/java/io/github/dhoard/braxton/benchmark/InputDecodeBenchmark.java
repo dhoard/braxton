@@ -22,12 +22,16 @@
 
 package io.github.dhoard.braxton.benchmark;
 
+import io.github.dhoard.braxton.clipboard.PasteMode;
+import io.github.dhoard.braxton.clipboard.PasteSanitizer;
+import io.github.dhoard.braxton.input.InputEvent;
+import io.github.dhoard.braxton.internal.input.InputDecoder;
+import io.github.dhoard.braxton.internal.input.PasteDecoder;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
-
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -40,12 +44,6 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
-
-import io.github.dhoard.braxton.clipboard.PasteMode;
-import io.github.dhoard.braxton.clipboard.PasteSanitizer;
-import io.github.dhoard.braxton.input.InputEvent;
-import io.github.dhoard.braxton.internal.input.InputDecoder;
-import io.github.dhoard.braxton.internal.input.PasteDecoder;
 
 /**
  * Input path: decoding keystrokes off a stream, reading a bracketed paste body, and sanitizing the
@@ -80,16 +78,19 @@ public class InputDecodeBenchmark {
 
     @Benchmark
     public void decodeKeys(Blackhole sink) throws IOException {
-        try (var reader = org.jline.utils.NonBlocking.nonBlocking("benchmark", stream(keyBytes), StandardCharsets.UTF_8)) {
+        try (var reader =
+                org.jline.utils.NonBlocking.nonBlocking("benchmark", stream(keyBytes), StandardCharsets.UTF_8)) {
             InputDecoder decoder = new InputDecoder(reader);
-            for (InputEvent event; (event = decoder.read().orElse(null)) != null;) sink.consume(event);
+            for (InputEvent event; (event = decoder.read().orElse(null)) != null; ) sink.consume(event);
         }
     }
 
     @Benchmark
     public void readBracketedPaste(Blackhole sink) throws IOException {
-        try (var reader = org.jline.utils.NonBlocking.nonBlocking("benchmark", stream(pasteBytes), StandardCharsets.UTF_8)) {
-            sink.consume(PasteDecoder.read(reader, PasteDecoder.DEFAULT_MAX_BYTES, PasteDecoder.DEFAULT_IDLE_TIMEOUT_MILLIS));
+        try (var reader =
+                org.jline.utils.NonBlocking.nonBlocking("benchmark", stream(pasteBytes), StandardCharsets.UTF_8)) {
+            sink.consume(PasteDecoder.read(
+                    reader, PasteDecoder.DEFAULT_MAX_BYTES, PasteDecoder.DEFAULT_IDLE_TIMEOUT_MILLIS));
         }
     }
 

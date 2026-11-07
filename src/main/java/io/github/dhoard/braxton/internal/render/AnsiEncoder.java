@@ -22,10 +22,9 @@
 
 package io.github.dhoard.braxton.internal.render;
 
+import io.github.dhoard.braxton.style.Style;
 import java.util.ArrayList;
 import java.util.List;
-
-import io.github.dhoard.braxton.style.Style;
 
 /**
  * Turns painted cells into terminal escape sequences.
@@ -145,8 +144,7 @@ public final class AnsiEncoder {
                 }
                 active = cell.style();
                 if (!active.isPlain()) {
-                    out.append(
-                            sgr(color ? active : active.withForeground(null).withBackground(null)));
+                    out.append(sgr(color ? active : active.withForeground(null).withBackground(null)));
                     styled = true;
                 }
             }
@@ -166,8 +164,13 @@ public final class AnsiEncoder {
             out.append(RESET);
         }
         if (end < screen.cols()) {
-            out.append("\u001B[").append(row + 1).append(';').append(end + 1).append("H")
-                    .append(RESET).append("\u001B[0K");
+            out.append("\u001B[")
+                    .append(row + 1)
+                    .append(';')
+                    .append(end + 1)
+                    .append("H")
+                    .append(RESET)
+                    .append("\u001B[0K");
         }
         return out.toString();
     }

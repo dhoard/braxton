@@ -22,15 +22,14 @@
 
 package io.github.dhoard.braxton.widget;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import java.util.ArrayList;
+import java.util.List;
 
 /** A row of pill-shaped labels rendered on their segment background. */
 public final class Badge {
@@ -39,8 +38,7 @@ public final class Badge {
     private boolean pathway;
 
     /** One badge label and its styling. */
-    public record Segment(StyledText text, Style style) {
-    }
+    public record Segment(StyledText text, Style style) {}
 
     public static Badge of() {
         return new Badge();
@@ -55,8 +53,7 @@ public final class Badge {
     }
 
     public Badge append(StyledText text, Style style) {
-        segments.add(new Segment(SingleRow.of(text),
-                style == null ? Style.NONE : style));
+        segments.add(new Segment(SingleRow.of(text), style == null ? Style.NONE : style));
         return this;
     }
 

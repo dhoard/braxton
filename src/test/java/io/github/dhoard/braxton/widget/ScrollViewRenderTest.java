@@ -38,10 +38,8 @@ import io.github.dhoard.braxton.view.ScreenRenderer;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 import io.github.dhoard.braxton.widget.ScrollView.Msg;
-
 import java.util.Arrays;
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /**
@@ -63,8 +61,10 @@ class ScrollViewRenderTest {
 
     private static ScrollView.Model state(int visibleRows, boolean follow, String... lines) {
         ScrollView view = pane(visibleRows, follow);
-        return state(view, ScrollView.Content.of(
-                Arrays.stream(lines).map(StyledText::plain).toList()));
+        return state(
+                view,
+                ScrollView.Content.of(
+                        Arrays.stream(lines).map(StyledText::plain).toList()));
     }
 
     /**
@@ -87,8 +87,7 @@ class ScrollViewRenderTest {
 
         assertThat(rows(paneView(view, top), 3, 10)).containsExactly("L0", "L1", "L2");
 
-        ScrollView.Model scrolled =
-                view.update(top, new Msg.Down(2)).model();
+        ScrollView.Model scrolled = view.update(top, new Msg.Down(2)).model();
         assertThat(rows(paneView(view, scrolled), 3, 10)).containsExactly("L2", "L3", "L4");
         assertThat(ScrollView.visibleLines(scrolled))
                 .extracting(StyledText::plainText)
@@ -104,16 +103,13 @@ class ScrollViewRenderTest {
 
     @Test
     void stylesAndLinksSurviveTheWindow() {
-        StyledText styled =
-                StyledText.empty()
-                        .append(StyledText.of("ab", Style.fg(RED)))
-                        .append(StyledText.of("cd", Style.NONE.withBold()));
+        StyledText styled = StyledText.empty()
+                .append(StyledText.of("ab", Style.fg(RED)))
+                .append(StyledText.of("cd", Style.NONE.withBold()));
         ScrollView view = pane(1, false);
         ScrollView.Model state = state(view, ScrollView.Content.of(List.of(styled)));
 
-        RenderedScreen screen =
-                new ScreenRenderer()
-                        .screen(paneView(view, state), new Viewport(1, 4));
+        RenderedScreen screen = new ScreenRenderer().screen(paneView(view, state), new Viewport(1, 4));
 
         assertThat(screen.plainLine(0)).isEqualTo("abcd");
         assertThat(screen.cell(0, 0).style()).isEqualTo(Style.fg(RED));
@@ -135,18 +131,25 @@ class ScrollViewRenderTest {
     @Test
     void wideClustersAreClippedWholeAndNeverSplit() {
         ScrollView view = pane(4, false);
-        ScrollView.Model state = state(4, false,
-                "\u65E5\u672C\u8A9E", "e\u0301x",
-                "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67", "\uD83D\uDE42z");
+        ScrollView.Model state = state(
+                4,
+                false,
+                "\u65E5\u672C\u8A9E",
+                "e\u0301x",
+                "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67",
+                "\uD83D\uDE42z");
 
         assertThat(rows(paneView(view, state), 4, 4))
                 .as("two columns of the wide row fit; a half glyph is never painted")
-                .containsExactly("\u65E5\u672C", "e\u0301x",
-                        "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67", "\uD83D\uDE42z");
+                .containsExactly(
+                        "\u65E5\u672C",
+                        "e\u0301x",
+                        "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67",
+                        "\uD83D\uDE42z");
         assertThat(rows(paneView(view, state), 4, 3))
                 .as("a wide cluster that does not fit is dropped whole")
-                .containsExactly("\u65E5", "e\u0301x",
-                        "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67", "\uD83D\uDE42z");
+                .containsExactly(
+                        "\u65E5", "e\u0301x", "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67", "\uD83D\uDE42z");
         assertThat(rows(paneView(view, state), 4, 1))
                 .as("one column keeps the combining cluster and drops the two-column ones")
                 .containsExactly("", "e\u0301", "", "z");
@@ -160,16 +163,17 @@ class ScrollViewRenderTest {
         assertThat(prepared).containsExactly("a", "");
 
         ScrollView view = pane(2, false);
-        ScrollView.Model state = state(view, ScrollView.Content.of(
-                prepared.stream().map(StyledText::plain).toList()));
+        ScrollView.Model state = state(
+                view,
+                ScrollView.Content.of(prepared.stream().map(StyledText::plain).toList()));
         assertThat(rows(paneView(view, state), 2, 3)).containsExactly("a", "");
     }
 
     @Test
     void aBreakInsideARowIsNotASecondRow() {
         ScrollView view = pane(2, false);
-        ScrollView.Model state = state(view,
-                ScrollView.Content.of(List.of(StyledText.plain("a\nb"), StyledText.plain("c"))));
+        ScrollView.Model state =
+                state(view, ScrollView.Content.of(List.of(StyledText.plain("a\nb"), StyledText.plain("c"))));
 
         assertThat(rows(paneView(view, state), 2, 3))
                 .as("a row is one display row; the pane declares it, it does not re-flow it")
@@ -209,8 +213,7 @@ class ScrollViewRenderTest {
     void aNestedPaneUsesItsAllocatedHeightAndNotTheRootViewport() {
         ScrollView view = pane(3, true);
         ScrollView.Model state = state(3, true, "L0", "L1", "L2", "L3", "L4", "L5", "L6");
-        View<String> nested =
-                Views.column(Views.fixed(3, paneView(view, state)), Views.text("footer"));
+        View<String> nested = Views.column(Views.fixed(3, paneView(view, state)), Views.text("footer"));
 
         // The pane's own view context says 24 rows and the root viewport says 8; neither is the
         // pane's height, and neither may decide the window.
@@ -229,11 +232,11 @@ class ScrollViewRenderTest {
         ScrollView view = pane(3, false);
         ScrollView.Model state = state(3, false, "aaaa", "bbbb", "cccc");
         View<String> framed =
-                Views.fixed(7, Views.border(Border.SINGLE,
-                        Views.padding(Insets.uniform(1), paneView(view, state))));
+                Views.fixed(7, Views.border(Border.SINGLE, Views.padding(Insets.uniform(1), paneView(view, state))));
 
         assertThat(rows(framed, 7, 8))
-                .containsExactly("\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
+                .containsExactly(
+                        "\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
                         "\u2502      \u2502",
                         "\u2502 aaaa \u2502",
                         "\u2502 bbbb \u2502",
@@ -257,18 +260,14 @@ class ScrollViewRenderTest {
 
     @Test
     void identicalStatePaintsAnIdenticalScreenIncludingStyles() {
-        StyledText styled =
-                StyledText.empty()
-                        .append(StyledText.of("label ", Style.NONE.withBold()))
-                        .append(StyledText.of("\u65E5\u672C\u8A9E", Style.fg(RED)));
+        StyledText styled = StyledText.empty()
+                .append(StyledText.of("label ", Style.NONE.withBold()))
+                .append(StyledText.of("\u65E5\u672C\u8A9E", Style.fg(RED)));
         ScrollView view = pane(3, true);
-        ScrollView.Model state = state(view,
-                ScrollView.Content.of(List.of(styled, StyledText.plain(""), styled)));
+        ScrollView.Model state = state(view, ScrollView.Content.of(List.of(styled, StyledText.plain(""), styled)));
 
-        RenderedScreen first =
-                new ScreenRenderer().screen(paneView(view, state), new Viewport(3, 8));
-        RenderedScreen second =
-                new ScreenRenderer().screen(paneView(view, state), new Viewport(3, 8));
+        RenderedScreen first = new ScreenRenderer().screen(paneView(view, state), new Viewport(3, 8));
+        RenderedScreen second = new ScreenRenderer().screen(paneView(view, state), new Viewport(3, 8));
 
         assertThat(second.plainLines()).isEqualTo(first.plainLines());
         for (int row = 0; row < 3; row++) {
@@ -283,12 +282,16 @@ class ScrollViewRenderTest {
         ScrollView view = pane(2, false);
         ScrollView.Model state = state(2, false, "a", "b");
 
-        List<String> focused =
-                rows(view.view(state.withFocus(true), new ViewContext(new Viewport(2, 4)))
-                        .map(message -> "pane"), 2, 4);
-        List<String> unfocused =
-                rows(view.view(state.withFocus(false), new ViewContext(new Viewport(2, 4)))
-                        .map(message -> "pane"), 2, 4);
+        List<String> focused = rows(
+                view.view(state.withFocus(true), new ViewContext(new Viewport(2, 4)))
+                        .map(message -> "pane"),
+                2,
+                4);
+        List<String> unfocused = rows(
+                view.view(state.withFocus(false), new ViewContext(new Viewport(2, 4)))
+                        .map(message -> "pane"),
+                2,
+                4);
 
         assertThat(focused).containsExactly("a", "b");
         assertThat(unfocused).isEqualTo(focused);

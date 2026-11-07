@@ -55,8 +55,7 @@ public final class ClipboardConfig {
         this.osc52Enabled = builder.osc52Enabled;
         this.maxPayloadBytes = Math.max(1, builder.maxPayloadBytes);
         this.maxInternalChars = Math.max(1, builder.maxInternalChars);
-        this.tmuxStrategy = builder.tmuxStrategy == null
-                ? DEFAULT_TMUX_STRATEGY : builder.tmuxStrategy;
+        this.tmuxStrategy = builder.tmuxStrategy == null ? DEFAULT_TMUX_STRATEGY : builder.tmuxStrategy;
     }
 
     /** Returns the default configuration. */
@@ -85,12 +84,9 @@ public final class ClipboardConfig {
     public static ClipboardConfig fromSystemProperties() {
         Builder builder = builder();
         builder.osc52Enabled(booleanProperty("braxton.clipboard.enabled", true));
-        builder.maxPayloadBytes(integerProperty(
-                "braxton.clipboard.maxPayloadBytes", DEFAULT_MAX_PAYLOAD_BYTES));
-        builder.maxInternalChars(integerProperty(
-                "braxton.clipboard.maxInternalChars", DEFAULT_MAX_INTERNAL_CHARS));
-        builder.tmuxStrategy(TmuxStrategy.parse(
-                property("braxton.clipboard.tmux"), DEFAULT_TMUX_STRATEGY));
+        builder.maxPayloadBytes(integerProperty("braxton.clipboard.maxPayloadBytes", DEFAULT_MAX_PAYLOAD_BYTES));
+        builder.maxInternalChars(integerProperty("braxton.clipboard.maxInternalChars", DEFAULT_MAX_INTERNAL_CHARS));
+        builder.tmuxStrategy(TmuxStrategy.parse(property("braxton.clipboard.tmux"), DEFAULT_TMUX_STRATEGY));
         return builder.build();
     }
 
@@ -156,8 +152,7 @@ public final class ClipboardConfig {
         private int maxInternalChars = DEFAULT_MAX_INTERNAL_CHARS;
         private TmuxStrategy tmuxStrategy = DEFAULT_TMUX_STRATEGY;
 
-        private Builder() {
-        }
+        private Builder() {}
 
         public Builder osc52Enabled(boolean enabled) {
             this.osc52Enabled = enabled;

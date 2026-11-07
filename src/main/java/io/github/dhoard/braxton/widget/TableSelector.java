@@ -35,7 +35,6 @@ import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -56,12 +55,10 @@ import java.util.function.Function;
  * share, so a cell that opens with a cluster that has no base of its own cannot make one row of the
  * grid a different width from another.</p>
  */
-public final class TableSelector
-        implements Component<TableSelector.Model, TableSelector.Msg, TableSelector.Output> {
+public final class TableSelector implements Component<TableSelector.Model, TableSelector.Msg, TableSelector.Output> {
 
     /** Immutable selection state. */
-    public record Model(
-            List<String> header, List<List<String>> rows, int row, int column, boolean focused) {
+    public record Model(List<String> header, List<List<String>> rows, int row, int column, boolean focused) {
 
         public Model(List<String> header, List<List<String>> rows, int row, int column) {
             this(header, rows, row, column, true);
@@ -130,11 +127,7 @@ public final class TableSelector
         }
 
         public static Config defaults() {
-            return new Config(
-                    Model.of(List.of(), List.of()),
-                    Style.NONE.withInvert(),
-                    Style.NONE,
-                    Style.NONE);
+            return new Config(Model.of(List.of(), List.of()), Style.NONE.withInvert(), Style.NONE, Style.NONE);
         }
     }
 
@@ -151,8 +144,8 @@ public final class TableSelector
 
     @Override
     public Update<Model, Msg, Output> update(Model model, Msg message) {
-        return WidgetUpdate.settled(model, message, action -> reduce(model, action),
-                state -> state.withFocus(model.focused()));
+        return WidgetUpdate.settled(
+                model, message, action -> reduce(model, action), state -> state.withFocus(model.focused()));
     }
 
     @Override
@@ -172,20 +165,15 @@ public final class TableSelector
         int columns = Math.max(1, state.header().size());
         return switch (action) {
             case Msg.Up up -> moved(state, Math.max(0, state.row() - 1), state.column());
-            case Msg.Down down ->
-                    moved(state, Math.min(Math.max(0, rows - 1), state.row() + 1), state.column());
+            case Msg.Down down -> moved(state, Math.min(Math.max(0, rows - 1), state.row() + 1), state.column());
             case Msg.Left left -> moved(state, state.row(), Math.max(0, state.column() - 1));
-            case Msg.Right right ->
-                    moved(state, state.row(), Math.min(columns - 1, state.column() + 1));
+            case Msg.Right right -> moved(state, state.row(), Math.min(columns - 1, state.column() + 1));
             // Without a selected cell (no rows, or no header to define columns) there is nothing
             // to confirm; Chosen(-1, -1, "") would not name a cell.
             case Msg.Confirm confirm ->
-                    state.row() < 0 || state.column() < 0
-                            ? new Result(state, null)
-                            : new Result(
-                                    state,
-                                    new Output.Chosen(
-                                            state.row(), state.column(), state.selectedValue()));
+                state.row() < 0 || state.column() < 0
+                        ? new Result(state, null)
+                        : new Result(state, new Output.Chosen(state.row(), state.column(), state.selectedValue()));
             case Msg.Cancel cancel -> new Result(state, new Output.Cancelled());
         };
     }
@@ -238,33 +226,28 @@ public final class TableSelector
             GridRows.Row row = GridRows.Row.empty();
             for (int c = 0; c < columns; c++) {
                 String value = c < values.size() ? values.get(c) : "";
-                Style style =
-                        focused && r == state.row() && c == state.column()
-                                ? activeStyle
-                                : inactiveStyle;
+                Style style = focused && r == state.row() && c == state.column() ? activeStyle : inactiveStyle;
                 int pad = row.pad(value, widths[c] + 2);
                 line = line.append(StyledText.of(value + " ".repeat(pad), style));
             }
             lines.add(Views.text(line));
         }
-        View.InputHandler<Message> handler =
-                event -> {
-                    if (!(event instanceof InputEvent.KeyInput key)) {
-                        return Optional.empty();
-                    }
-                    Key gesture = key.key();
-                    Optional<Msg> action =
-                            switch (gesture.name()) {
-                                case "up" -> Optional.of(new Msg.Up());
-                                case "down" -> Optional.of(new Msg.Down());
-                                case "left" -> Optional.of(new Msg.Left());
-                                case "right" -> Optional.of(new Msg.Right());
-                                case "enter" -> Optional.of(new Msg.Confirm());
-                                case "escape" -> Optional.of(new Msg.Cancel());
-                                default -> Optional.empty();
-                            };
-                    return action.map(map);
-                };
+        View.InputHandler<Message> handler = event -> {
+            if (!(event instanceof InputEvent.KeyInput key)) {
+                return Optional.empty();
+            }
+            Key gesture = key.key();
+            Optional<Msg> action = switch (gesture.name()) {
+                case "up" -> Optional.of(new Msg.Up());
+                case "down" -> Optional.of(new Msg.Down());
+                case "left" -> Optional.of(new Msg.Left());
+                case "right" -> Optional.of(new Msg.Right());
+                case "enter" -> Optional.of(new Msg.Confirm());
+                case "escape" -> Optional.of(new Msg.Cancel());
+                default -> Optional.empty();
+            };
+            return action.map(map);
+        };
         return Views.focus(id, focused, List.of(), handler, Views.column(lines));
     }
 

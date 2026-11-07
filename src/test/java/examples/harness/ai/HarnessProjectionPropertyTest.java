@@ -28,12 +28,10 @@ import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.widget.Editor;
-
-import org.junit.jupiter.api.Test;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import org.junit.jupiter.api.Test;
 
 /** The frame, its transcript window, and its scroll bound hold for any content and viewport. */
 class HarnessProjectionPropertyTest {
@@ -42,16 +40,21 @@ class HarnessProjectionPropertyTest {
         List<HarnessEntry> entries = new ArrayList<>();
         int count = random.nextInt(30);
         for (int i = 0; i < count; i++) {
-            entries.add(switch (random.nextInt(5)) {
-                case 0 -> new HarnessEntry.User("user " + i);
-                case 1 -> new HarnessEntry.Assistant("assistant " + i);
-                case 2 -> new HarnessEntry.Reasoning("thinking " + i);
-                case 3 -> new HarnessEntry.Notice("notice " + i);
-                default -> new HarnessEntry.Tool("$ tool " + i, "out\nput " + i,
-                        random.nextBoolean(),
-                        random.nextBoolean() ? HarnessEntry.ToolStatus.SUCCESS
-                                : HarnessEntry.ToolStatus.PENDING);
-            });
+            entries.add(
+                    switch (random.nextInt(5)) {
+                        case 0 -> new HarnessEntry.User("user " + i);
+                        case 1 -> new HarnessEntry.Assistant("assistant " + i);
+                        case 2 -> new HarnessEntry.Reasoning("thinking " + i);
+                        case 3 -> new HarnessEntry.Notice("notice " + i);
+                        default ->
+                            new HarnessEntry.Tool(
+                                    "$ tool " + i,
+                                    "out\nput " + i,
+                                    random.nextBoolean(),
+                                    random.nextBoolean()
+                                            ? HarnessEntry.ToolStatus.SUCCESS
+                                            : HarnessEntry.ToolStatus.PENDING);
+                    });
         }
         List<String> pending = new ArrayList<>();
         int queued = random.nextInt(4) == 0 ? 1 + random.nextInt(8) : 0;
@@ -112,16 +115,16 @@ class HarnessProjectionPropertyTest {
             Harness.Model state = randomState(random);
             int width = state.viewport().cols();
             HarnessProjection.Layout layout = HarnessProjection.layout(state);
-            List<StyledText> band =
-                    HarnessProjection.queuedBand(state, width, layout.queued());
-            assertThat(band.size())
-                    .as("iteration %d band", iteration)
-                    .isLessThanOrEqualTo(layout.queued());
+            List<StyledText> band = HarnessProjection.queuedBand(state, width, layout.queued());
+            assertThat(band.size()).as("iteration %d band", iteration).isLessThanOrEqualTo(layout.queued());
             if (!state.pending().isEmpty() && layout.queued() > 0) {
                 bounded++;
-                assertThat(band).as("iteration %d names the queued prompts", iteration).isNotEmpty();
+                assertThat(band)
+                        .as("iteration %d names the queued prompts", iteration)
+                        .isNotEmpty();
             }
-            assertThat(layout.rows()).as("iteration %d layout", iteration)
+            assertThat(layout.rows())
+                    .as("iteration %d layout", iteration)
                     .isEqualTo(state.viewport().rows());
         }
         assertThat(bounded).as("the band must be exercised").isPositive();
@@ -135,7 +138,8 @@ class HarnessProjectionPropertyTest {
             int width = state.viewport().cols();
             int max = HarnessProjection.maxScroll(state);
             assertThat(HarnessProjection.maxScroll(state.withScroll(max + 100 + random.nextInt(50))))
-                    .as("iteration %d max is scroll independent", iteration).isEqualTo(max);
+                    .as("iteration %d max is scroll independent", iteration)
+                    .isEqualTo(max);
             Harness.Model clamped = state.withScroll(max + 1_000);
             assertThat(HarnessProjection.visiblePlainText(clamped))
                     .as("iteration %d clamped copy", iteration)

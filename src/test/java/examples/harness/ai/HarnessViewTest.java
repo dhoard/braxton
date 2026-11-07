@@ -36,12 +36,10 @@ import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.view.ScreenRenderer;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.widget.Editor;
-
-import org.junit.jupiter.api.Test;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.Test;
 
 /** Harness frame, transcript rows, and palette, measured through the real production view. */
 class HarnessViewTest {
@@ -54,25 +52,15 @@ class HarnessViewTest {
                 new HarnessEntry.Notice("Bundled example transcript. Type a prompt."),
                 new HarnessEntry.User("u there?"),
                 new HarnessEntry.Reasoning("The user is checking whether the harness is present."),
-                new HarnessEntry.Tool("$ read README.md", "line one\nline two", false,
-                        HarnessEntry.ToolStatus.SUCCESS),
+                new HarnessEntry.Tool("$ read README.md", "line one\nline two", false, HarnessEntry.ToolStatus.SUCCESS),
                 new HarnessEntry.Assistant("Yes \u2014 here. I'm ready."));
         return model(entries, draft, new Size(40, 120), List.of());
     }
 
-    private static Harness.Model model(
-            List<HarnessEntry> entries, String draft, Size viewport, List<String> pending) {
+    private static Harness.Model model(List<HarnessEntry> entries, String draft, Size viewport, List<String> pending) {
         HarnessTranscript.Usage usage = new HarnessTranscript.Usage(7091, 146, 0, 7091, 7237, 42.0);
         return new Harness.Model(
-                new Session.Model(
-                        Session.Status.READY,
-                        entries,
-                        PROFILE,
-                        usage,
-                        1_048_576,
-                        List.of(),
-                        0,
-                        0),
+                new Session.Model(Session.Status.READY, entries, PROFILE, usage, 1_048_576, List.of(), 0, 0),
                 Editor.Model.of(draft),
                 pending,
                 null,
@@ -92,9 +80,7 @@ class HarnessViewTest {
                 base.draft(),
                 pending,
                 new Harness.Model.Active(
-                        new HarnessTranscript.HarnessTurn(
-                                "", List.of(), HarnessTranscript.Usage.EMPTY, PROFILE),
-                        0),
+                        new HarnessTranscript.HarnessTurn("", List.of(), HarnessTranscript.Usage.EMPTY, PROFILE), 0),
                 1L,
                 0L,
                 0L,
@@ -124,9 +110,8 @@ class HarnessViewTest {
         for (int line = 0; line < 8; line++) {
             draft.append(line > 0 ? "\n" : "").append("line ").append(line);
         }
-        Harness.Model shortViewport =
-                Harness.Model.initial(new Size(4, 40), "~/Development/braxton", List.of())
-                        .withDraft(Editor.Model.of(draft.toString()));
+        Harness.Model shortViewport = Harness.Model.initial(new Size(4, 40), "~/Development/braxton", List.of())
+                .withDraft(Editor.Model.of(draft.toString()));
         List<String> rendered = lines(shortViewport);
         assertThat(rendered).hasSize(4);
         assertThat(rendered).anySatisfy(line -> assertThat(line).contains(Editor.CURSOR));
@@ -147,8 +132,11 @@ class HarnessViewTest {
 
         // The transcript yields to the composer and the footer, never the other way round.
         assertThat(HarnessProjection.layout(state("a\nb\nc")).body()).isEqualTo(28);
-        assertThat(HarnessProjection.HEADER_HEIGHT + HarnessProjection.INPUT_GAP_ROWS
-                + 2 + HarnessProjection.FOOTER_HEIGHT + 1)
+        assertThat(HarnessProjection.HEADER_HEIGHT
+                        + HarnessProjection.INPUT_GAP_ROWS
+                        + 2
+                        + HarnessProjection.FOOTER_HEIGHT
+                        + 1)
                 .isEqualTo(HarnessProjection.MIN_FULLSCREEN_ROWS);
     }
 
@@ -160,7 +148,9 @@ class HarnessViewTest {
         assertThat(compact.body()).isZero();
         assertThat(compact.statusRule()).isZero();
         assertThat(compact.editor()).isEqualTo(1);
-        assertThat(compact.editorPad()).as("the draft sits against the metrics row").isEqualTo(4);
+        assertThat(compact.editorPad())
+                .as("the draft sits against the metrics row")
+                .isEqualTo(4);
         assertThat(compact.stats()).isEqualTo(1);
         assertThat(compact.rows()).isEqualTo(8);
 
@@ -179,14 +169,18 @@ class HarnessViewTest {
     void screenRendersTheIdentityTranscriptComposerAndFooter() {
         List<String> lines = lines(state("hello"));
         assertThat(lines).hasSize(40);
-        assertThat(lines).allSatisfy(line ->
-                assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(120));
+        assertThat(lines)
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(120));
         String plain = String.join("\n", lines);
         assertThat(lines.get(0)).startsWith("AI Harness v" + HarnessTranscript.EXAMPLE_VERSION);
         assertThat(lines.get(0)).endsWith(HarnessTranscript.EXAMPLE_SESSION_ID);
         assertThat(lines.get(1)).isEqualTo("\u2500".repeat(120));
-        assertThat(plain).contains("SYSTEM").contains("USER").contains("THINKING")
-                .contains("TOOL").contains("ASSISTANT");
+        assertThat(plain)
+                .contains("SYSTEM")
+                .contains("USER")
+                .contains("THINKING")
+                .contains("TOOL")
+                .contains("ASSISTANT");
         assertThat(plain).contains("u there?");
         assertThat(plain).contains("The user is checking");
         assertThat(plain).contains("$ read README.md");
@@ -220,12 +214,9 @@ class HarnessViewTest {
         assertThat(user).isPositive();
         assertThat(lines.get(user)).startsWith("USER " + expected);
 
-        RenderedScreen screen =
-                new ScreenRenderer().screen(HarnessView.view(state), new Viewport(24, 80));
-        assertThat(screen.cell(user, 0).style().foreground())
-                .isEqualTo(HarnessTheme.USER_GUTTER_COLOR);
-        assertThat(screen.cell(user, "USER ".length()).style().foreground())
-                .isEqualTo(HarnessTheme.DIM_COLOR);
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state), new Viewport(24, 80));
+        assertThat(screen.cell(user, 0).style().foreground()).isEqualTo(HarnessTheme.USER_GUTTER_COLOR);
+        assertThat(screen.cell(user, "USER ".length()).style().foreground()).isEqualTo(HarnessTheme.DIM_COLOR);
 
         int assistant = rowStartingWith(lines, "ASSISTANT");
         assertThat(lines.get(assistant).stripTrailing())
@@ -233,8 +224,8 @@ class HarnessViewTest {
                 .isEqualTo("ASSISTANT");
 
         // A header wider than the frame is cut at its right edge, never wrapped.
-        List<String> narrow = lines(model(
-                List.of(new HarnessEntry.User("hello", time)), "", new Size(24, 8), List.of()));
+        List<String> narrow =
+                lines(model(List.of(new HarnessEntry.User("hello", time)), "", new Size(24, 8), List.of()));
         int narrowHeader = rowStartingWith(narrow, "USER");
         assertThat(narrowHeader).isPositive();
         assertThat(narrow.get(narrowHeader)).startsWith("USER");
@@ -256,8 +247,7 @@ class HarnessViewTest {
 
         int system = rowStartingWith(lines, "SYSTEM");
         assertThat(system).isPositive();
-        assertThat(lines.get(system + 2).stripTrailing())
-                .isEqualTo("Bundled example transcript. Type a prompt.");
+        assertThat(lines.get(system + 2).stripTrailing()).isEqualTo("Bundled example transcript. Type a prompt.");
     }
 
     @Test
@@ -268,29 +258,30 @@ class HarnessViewTest {
                 new Size(14, 8),
                 List.of());
         List<String> lines = lines(narrow);
-        assertThat(lines).hasSize(14).allSatisfy(line ->
-                assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(8));
+        assertThat(lines)
+                .hasSize(14)
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(8));
         String plain = String.join("\n", lines);
         assertThat(plain).contains("enough").contains("wrap").contains("times?");
 
-        Harness.Model selector = model(
-                List.of(new HarnessEntry.User("a \uFE0FCD tail")), "", new Size(14, 6), List.of());
+        Harness.Model selector =
+                model(List.of(new HarnessEntry.User("a \uFE0FCD tail")), "", new Size(14, 6), List.of());
         List<String> marked = lines(selector);
         assertThat(String.join("\n", marked)).contains("CD");
         assertThat(marked.stream().filter(line -> line.contains("\u2026")).count())
                 .as("a lost selector must not cost the body an ellipsis")
-                .isEqualTo(lines(model(
-                                List.of(new HarnessEntry.User("a CD tail")), "", new Size(14, 6), List.of()))
-                        .stream().filter(line -> line.contains("\u2026")).count());
+                .isEqualTo(
+                        lines(model(List.of(new HarnessEntry.User("a CD tail")), "", new Size(14, 6), List.of()))
+                                .stream()
+                                .filter(line -> line.contains("\u2026"))
+                                .count());
     }
 
     @Test
     void theToolMessageNamesWhatThePreviewHides() {
         Harness.Model tools = model(
-                List.of(
-                        new HarnessEntry.Tool(
-                                "$ seq 1 10", "1\n2\n3\n4\n5\n6\n7\n8\n9\n10", true,
-                                HarnessEntry.ToolStatus.SUCCESS)),
+                List.of(new HarnessEntry.Tool(
+                        "$ seq 1 10", "1\n2\n3\n4\n5\n6\n7\n8\n9\n10", true, HarnessEntry.ToolStatus.SUCCESS)),
                 "",
                 new Size(40, 120),
                 List.of());
@@ -303,22 +294,18 @@ class HarnessViewTest {
     @Test
     void aFailedToolKeepsTheToolLabelAndShowsItsOutputInTheErrorColour() {
         Harness.Model failed = model(
-                List.of(new HarnessEntry.Tool(
-                        "$ false", "boom", false, HarnessEntry.ToolStatus.ERROR)),
+                List.of(new HarnessEntry.Tool("$ false", "boom", false, HarnessEntry.ToolStatus.ERROR)),
                 "",
                 new Size(24, 80),
                 List.of());
-        RenderedScreen screen =
-                new ScreenRenderer().screen(HarnessView.view(failed), new Viewport(24, 80));
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(failed), new Viewport(24, 80));
         List<String> lines = lines(failed);
         int header = rowStartingWith(lines, "TOOL");
         assertThat(header).isPositive();
-        assertThat(screen.cell(header, 0).style().foreground())
-                .isEqualTo(HarnessTheme.ERROR_COLOR);
+        assertThat(screen.cell(header, 0).style().foreground()).isEqualTo(HarnessTheme.ERROR_COLOR);
         int body = rowStartingWith(lines, "boom");
         assertThat(body).isPositive();
-        assertThat(screen.cell(body, 0).style().foreground())
-                .isEqualTo(HarnessTheme.ERROR_COLOR);
+        assertThat(screen.cell(body, 0).style().foreground()).isEqualTo(HarnessTheme.ERROR_COLOR);
     }
 
     @Test
@@ -326,11 +313,14 @@ class HarnessViewTest {
         Harness.Model multiLine = state("line1\nline2");
         List<String> lines = lines(multiLine);
         HarnessProjection.Layout layout = HarnessProjection.layout(multiLine);
-        int composerRow = layout.header() + layout.body() + layout.queued() + layout.gap()
-                + layout.statusRule() + layout.editorPad();
+        int composerRow = layout.header()
+                + layout.body()
+                + layout.queued()
+                + layout.gap()
+                + layout.statusRule()
+                + layout.editorPad();
         assertThat(lines.get(composerRow)).startsWith("line1");
-        assertThat(lines.get(composerRow + 1))
-                .isEqualTo("line2" + Editor.CURSOR);
+        assertThat(lines.get(composerRow + 1)).isEqualTo("line2" + Editor.CURSOR);
         assertThat(String.join("\n", lines)).doesNotContain("> ");
     }
 
@@ -341,9 +331,7 @@ class HarnessViewTest {
                 Editor.Model.empty(),
                 List.of(),
                 new Harness.Model.Active(
-                        new HarnessTranscript.HarnessTurn(
-                                "", List.of(), HarnessTranscript.Usage.EMPTY, PROFILE),
-                        0),
+                        new HarnessTranscript.HarnessTurn("", List.of(), HarnessTranscript.Usage.EMPTY, PROFILE), 0),
                 1L,
                 2_500_000_000L,
                 0L,
@@ -352,10 +340,12 @@ class HarnessViewTest {
                 new Size(24, 80),
                 "~/braxton");
         String rule = HarnessProjection.statusRule(working).plainText();
-        assertThat(rule).contains("Working").contains("2s").contains("- esc esc to stop")
+        assertThat(rule)
+                .contains("Working")
+                .contains("2s")
+                .contains("- esc esc to stop")
                 .startsWith("\u2500 ");
-        assertThat(HarnessProjection.statusRule(state(""))).isEqualTo(
-                HarnessProjection.rule(120));
+        assertThat(HarnessProjection.statusRule(state(""))).isEqualTo(HarnessProjection.rule(120));
     }
 
     @Test
@@ -365,11 +355,9 @@ class HarnessViewTest {
         assertThat(stats).contains("ctrl+c again to exit");
         assertThat(stats).endsWith("ctrl+c again to exit");
         assertThat(TextMeasure.columns(stats)).isEqualTo(120);
-        assertThat(HarnessProjection.footer(armed, 120).getLast().plainText())
-                .endsWith("ctrl+c again to exit");
+        assertThat(HarnessProjection.footer(armed, 120).getLast().plainText()).endsWith("ctrl+c again to exit");
 
-        RenderedScreen screen =
-                new ScreenRenderer().screen(HarnessView.view(armed), new Viewport(40, 120));
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(armed), new Viewport(40, 120));
         String last = screen.plainLine(39);
         assertThat(last).endsWith("ctrl+c again to exit");
     }
@@ -392,24 +380,26 @@ class HarnessViewTest {
         for (int i = 0; i < Harness.MAX_OUTSTANDING; i++) {
             many.add("queued prompt " + i);
         }
-        Harness.Model crowded = working(
-                model(List.of(new HarnessEntry.Notice("notice")), "", new Size(16, 40), List.of()),
-                many);
+        Harness.Model crowded =
+                working(model(List.of(new HarnessEntry.Notice("notice")), "", new Size(16, 40), List.of()), many);
         List<String> crowdedLines = lines(crowded);
         assertThat(crowdedLines).hasSize(16);
         assertThat(String.join("\n", crowdedLines)).contains("more queued]");
     }
 
     private static int composerRowIndex(HarnessProjection.Layout layout) {
-        return layout.header() + layout.body() + layout.queued() + layout.gap()
-                + layout.statusRule() + layout.editorPad();
+        return layout.header()
+                + layout.body()
+                + layout.queued()
+                + layout.gap()
+                + layout.statusRule()
+                + layout.editorPad();
     }
 
     @Test
     void aQueuedPromptMirrorsIntoTheComposer() {
         Harness.Model queued = working(
-                model(List.of(new HarnessEntry.Notice("notice")), "unused draft",
-                        new Size(24, 80), List.of()),
+                model(List.of(new HarnessEntry.Notice("notice")), "unused draft", new Size(24, 80), List.of()),
                 List.of("queued prompt"));
         HarnessProjection.Layout layout = HarnessProjection.layout(queued);
         List<String> lines = lines(queued);
@@ -418,14 +408,12 @@ class HarnessViewTest {
         assertThat(String.join("\n", lines)).doesNotContain("unused draft");
         assertThat(String.join("\n", lines).split("queued prompt", -1)).hasSize(2);
 
-        RenderedScreen screen =
-                new ScreenRenderer().screen(HarnessView.view(queued), new Viewport(24, 80));
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(queued), new Viewport(24, 80));
         assertThat(screen.cell(composerRowIndex(layout), 0).style().foreground())
                 .isEqualTo(HarnessTheme.QUEUED_COLOR);
 
         // A queued prompt belongs to the queue, not to a draft, so edits are refused.
-        Harness.Model edited = new Harness(
-                        () -> HarnessTranscript.empty(List.of()), "~/braxton", List.of())
+        Harness.Model edited = new Harness(() -> HarnessTranscript.empty(List.of()), "~/braxton", List.of())
                 .update(queued, new Harness.Msg.ComposerMsg(new Editor.Msg.Insert("x")))
                 .model();
         assertThat(edited.draft()).isEqualTo(queued.draft());
@@ -434,8 +422,7 @@ class HarnessViewTest {
 
     @Test
     void messageHeadersPaintTheirTextOnTheHeaderBand() {
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")),
-                new Viewport(40, 120));
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")), new Viewport(40, 120));
         List<String> lines = lines(state(""));
         for (String prefix : List.of("SYSTEM", "USER", "THINKING", "TOOL", "ASSISTANT")) {
             int header = rowStartingWith(lines, prefix);
@@ -450,17 +437,14 @@ class HarnessViewTest {
 
     @Test
     void theIdentityLineCarriesTheExampleVersion() {
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")),
-                new Viewport(40, 120));
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")), new Viewport(40, 120));
         String line = screen.plainLine(0);
         assertThat(line).startsWith("AI Harness v" + HarnessTranscript.EXAMPLE_VERSION);
         assertThat(line).endsWith(HarnessTranscript.EXAMPLE_SESSION_ID);
-        assertThat(screen.cell(0, 0).style().foreground())
-                .isEqualTo(HarnessTheme.ACCENT_COLOR);
+        assertThat(screen.cell(0, 0).style().foreground()).isEqualTo(HarnessTheme.ACCENT_COLOR);
         assertThat(screen.cell(0, 0).style().bold()).isTrue();
         int version = "AI Harness v".length();
-        assertThat(screen.cell(0, version).style().foreground())
-                .isEqualTo(HarnessTheme.DIM_COLOR);
+        assertThat(screen.cell(0, version).style().foreground()).isEqualTo(HarnessTheme.DIM_COLOR);
         assertThat(screen.cell(0, version).style().bold()).isFalse();
 
         // Narrow frames keep the identity and drop the session field whole.
@@ -470,21 +454,16 @@ class HarnessViewTest {
 
     @Test
     void paletteIsCarriedByCellStylesRatherThanInlineAnsi() {
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")),
-                new Viewport(40, 120));
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")), new Viewport(40, 120));
         List<String> lines = lines(state(""));
         int user = rowStartingWith(lines, "USER");
-        assertThat(screen.cell(user, 0).style().foreground())
-                .isEqualTo(HarnessTheme.USER_GUTTER_COLOR);
+        assertThat(screen.cell(user, 0).style().foreground()).isEqualTo(HarnessTheme.USER_GUTTER_COLOR);
         assertThat(screen.cell(user, 0).style().bold()).isTrue();
-        assertThat(screen.cell(user, 119).style().background())
-                .isEqualTo(HarnessTheme.TRANSCRIPT_HEADER_BG_COLOR);
+        assertThat(screen.cell(user, 119).style().background()).isEqualTo(HarnessTheme.TRANSCRIPT_HEADER_BG_COLOR);
         int system = rowStartingWith(lines, "SYSTEM");
-        assertThat(screen.cell(system, 0).style().foreground())
-                .isEqualTo(HarnessTheme.SYSTEM_GUTTER_COLOR);
+        assertThat(screen.cell(system, 0).style().foreground()).isEqualTo(HarnessTheme.SYSTEM_GUTTER_COLOR);
         int assistant = rowStartingWith(lines, "ASSISTANT");
-        assertThat(screen.cell(assistant, 0).style().foreground())
-                .isEqualTo(HarnessTheme.ASSISTANT_GUTTER_COLOR);
+        assertThat(screen.cell(assistant, 0).style().foreground()).isEqualTo(HarnessTheme.ASSISTANT_GUTTER_COLOR);
         for (int row = 0; row < screen.rows(); row++) {
             for (int col = 0; col < screen.cols(); col++) {
                 assertThat(screen.cell(row, col).text()).doesNotContain("\u001B");
@@ -494,27 +473,27 @@ class HarnessViewTest {
 
     @Test
     void reasoningBodyIsItalicAndMessagesKeepTheTextColour() {
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")),
-                new Viewport(40, 120));
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")), new Viewport(40, 120));
         List<String> lines = lines(state(""));
         int thinking = rowStartingWith(lines, "THINKING");
-        assertThat(screen.cell(thinking, 0).style().foreground())
-                .isEqualTo(HarnessTheme.THINKING_GUTTER_COLOR);
+        assertThat(screen.cell(thinking, 0).style().foreground()).isEqualTo(HarnessTheme.THINKING_GUTTER_COLOR);
         int body = rowStartingWith(lines, "The user is checking");
         assertThat(body).isPositive();
         assertThat(screen.cell(body, 0).style().italic()).isTrue();
-        assertThat(screen.cell(body, 0).style().foreground())
-                .isEqualTo(HarnessTheme.THINKING_TEXT_COLOR);
+        assertThat(screen.cell(body, 0).style().foreground()).isEqualTo(HarnessTheme.THINKING_TEXT_COLOR);
     }
 
     @Test
     void composerRowAndCaretCarryTheInputAreaBackground() {
         Harness.Model state = state("hi");
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state),
-                new Viewport(40, 120));
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state), new Viewport(40, 120));
         HarnessProjection.Layout layout = HarnessProjection.layout(state);
-        int composerRow = layout.header() + layout.body() + layout.queued() + layout.gap()
-                + layout.statusRule() + layout.editorPad();
+        int composerRow = layout.header()
+                + layout.body()
+                + layout.queued()
+                + layout.gap()
+                + layout.statusRule()
+                + layout.editorPad();
         String row = screen.plainLine(composerRow);
         assertThat(row).startsWith("hi").contains(Editor.CURSOR);
         for (int col = 0; col < screen.cols(); col++) {
@@ -526,8 +505,7 @@ class HarnessViewTest {
 
     @Test
     void noMessageCarriesABackgroundPanel() {
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")),
-                new Viewport(40, 120));
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")), new Viewport(40, 120));
         List<String> lines = lines(state(""));
         for (String prefix : List.of("USER", "TOOL", "ASSISTANT")) {
             int row = rowStartingWith(lines, prefix);
@@ -542,8 +520,7 @@ class HarnessViewTest {
     void copyVisibleOmitsTheFrameChrome() {
         Harness.Model overflowing = state("hello").withViewport(new Size(12, 40));
         String copied = HarnessProjection.visiblePlainText(overflowing);
-        assertThat(copied).doesNotContain("AI Harness").doesNotContain("\u2502")
-                .doesNotContain("\u2503");
+        assertThat(copied).doesNotContain("AI Harness").doesNotContain("\u2502").doesNotContain("\u2503");
         assertThat(copied.lines()).allSatisfy(line -> assertThat(line).doesNotEndWith(" "));
         assertThat(copied).contains("Yes \u2014 here.");
     }
@@ -555,8 +532,8 @@ class HarnessViewTest {
         Harness.Model tiny = state("").withViewport(new Size(3, 20));
         List<String> lines = HarnessView.renderLines(tiny);
         assertThat(lines).hasSize(3);
-        assertThat(lines).allSatisfy(line ->
-                assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(20));
+        assertThat(lines)
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(20));
     }
 
     @Test
@@ -592,8 +569,7 @@ class HarnessViewTest {
         }
         Harness.Model base = model(entries, "", new Size(24, 80), List.of());
         assertThat(HarnessProjection.maxScroll(base)).isPositive();
-        assertThat(HarnessProjection.maxScroll(base.withScroll(0)))
-                .isEqualTo(HarnessProjection.maxScroll(base));
+        assertThat(HarnessProjection.maxScroll(base.withScroll(0))).isEqualTo(HarnessProjection.maxScroll(base));
         assertThat(HarnessProjection.window(
                         base.session(), 80, HarnessProjection.layout(base).body()))
                 .hasSize(HarnessProjection.layout(base).body());
@@ -641,10 +617,8 @@ class HarnessViewTest {
                 0L,
                 new Size(24, 80),
                 "~/braxton");
-        RenderedScreen screen =
-                new ScreenRenderer().screen(HarnessView.view(warning), new Viewport(24, 80));
-        RenderedScreen errorScreen =
-                new ScreenRenderer().screen(HarnessView.view(error), new Viewport(24, 80));
+        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(warning), new Viewport(24, 80));
+        RenderedScreen errorScreen = new ScreenRenderer().screen(HarnessView.view(error), new Viewport(24, 80));
         boolean yellow = false;
         boolean red = false;
         for (int row = 0; row < screen.rows(); row++) {
@@ -661,13 +635,17 @@ class HarnessViewTest {
 
     @Test
     void metricsLaneShowsRealTotalsAndPlaceholders() {
-        Harness.Model state = state("").withMetadata(
-                PROFILE, new HarnessTranscript.Usage(1_000, 20, 0, 900, 1_020, null));
+        Harness.Model state =
+                state("").withMetadata(PROFILE, new HarnessTranscript.Usage(1_000, 20, 0, 900, 1_020, null));
         String stats = HarnessProjection.statsRow(state, 120).plainText();
-        assertThat(stats).contains("\u2191 900").contains("\u2193 20").contains("R -")
-                .contains("CH 0.0%").contains("1.0M (0.1%)").contains("- t/s");
-        assertThat(HarnessProjection.statsRow(state, 120).plainText())
-                .doesNotContain("2.1M");
+        assertThat(stats)
+                .contains("\u2191 900")
+                .contains("\u2193 20")
+                .contains("R -")
+                .contains("CH 0.0%")
+                .contains("1.0M (0.1%)")
+                .contains("- t/s");
+        assertThat(HarnessProjection.statsRow(state, 120).plainText()).doesNotContain("2.1M");
     }
 
     @Test
@@ -694,11 +672,9 @@ class HarnessViewTest {
     void ctrlCIsInterceptedWithItsCaptureTimeAndIsNotABinding() {
         View<Harness.Msg> view = HarnessView.view(state(""));
         Optional<Harness.Msg> routed =
-                InputRouter.route(
-                        view, InputEvent.KeyInput.of(Key.of("c", Modifiers.CTRL), "", 42L));
+                InputRouter.route(view, InputEvent.KeyInput.of(Key.of("c", Modifiers.CTRL), "", 42L));
         assertThat(routed).contains(new Harness.Msg.QuitRequest(42L));
-        assertThat(HarnessView.bindings())
-                .noneMatch(binding -> binding.key().equals(Key.of("c", Modifiers.CTRL)));
+        assertThat(HarnessView.bindings()).noneMatch(binding -> binding.key().equals(Key.of("c", Modifiers.CTRL)));
     }
 
     @Test
@@ -706,57 +682,43 @@ class HarnessViewTest {
         // The README's key table is the harness contract; route each documented gesture through
         // the production view so a changed binding cannot drift from the documentation.
         View<Harness.Msg> view = HarnessView.view(state(""));
-        record Case(Key key, String text, Class<?> messageType) {
-        }
-        List<Case> cases =
-                List.of(
-                        new Case(Key.ENTER, "\r", Harness.Msg.ComposerMsg.class),
-                        new Case(Key.of("j", Modifiers.CTRL), "", Harness.Msg.ComposerMsg.class),
-                        new Case(Key.UP, "", Harness.Msg.ScrollUp.class),
-                        new Case(Key.WHEEL_UP, "", Harness.Msg.ScrollUp.class),
-                        new Case(Key.DOWN, "", Harness.Msg.ScrollDown.class),
-                        new Case(Key.WHEEL_DOWN, "", Harness.Msg.ScrollDown.class),
-                        new Case(Key.PAGE_UP, "", Harness.Msg.PageUp.class),
-                        new Case(Key.PAGE_DOWN, "", Harness.Msg.PageDown.class),
-                        new Case(Key.END, "", Harness.Msg.ScrollBottom.class),
-                        new Case(Key.TAB, "", Harness.Msg.FocusComposer.class),
-                        new Case(Key.ESCAPE, "", Harness.Msg.Escape.class),
-                        new Case(Key.of("c", Modifiers.CTRL), "", Harness.Msg.QuitRequest.class),
-                        new Case(Key.of("c", Modifiers.ALT), "", Harness.Msg.ComposerMsg.class),
-                        new Case(Key.of("v", Modifiers.CTRL), "", Harness.Msg.ComposerMsg.class),
-                        new Case(Key.of("t", Modifiers.ALT), "", Harness.Msg.CopyVisible.class),
-                        new Case(Key.of("l", Modifiers.ALT), "", Harness.Msg.CopyLastReply.class));
-        assertThat(cases)
-                .allSatisfy(
-                        entry -> {
-                            Optional<Harness.Msg> routed =
-                                    InputRouter.route(
-                                            view,
-                                            new InputEvent.KeyInput(entry.key(), entry.text(), 0L));
-                            assertThat(routed)
-                                    .as("%s is documented but produces nothing", entry.key())
-                                    .isPresent();
-                            assertThat(routed.get())
-                                    .as("%s routes to the documented message", entry.key())
-                                    .isInstanceOf(entry.messageType());
-                        });
+        record Case(Key key, String text, Class<?> messageType) {}
+        List<Case> cases = List.of(
+                new Case(Key.ENTER, "\r", Harness.Msg.ComposerMsg.class),
+                new Case(Key.of("j", Modifiers.CTRL), "", Harness.Msg.ComposerMsg.class),
+                new Case(Key.UP, "", Harness.Msg.ScrollUp.class),
+                new Case(Key.WHEEL_UP, "", Harness.Msg.ScrollUp.class),
+                new Case(Key.DOWN, "", Harness.Msg.ScrollDown.class),
+                new Case(Key.WHEEL_DOWN, "", Harness.Msg.ScrollDown.class),
+                new Case(Key.PAGE_UP, "", Harness.Msg.PageUp.class),
+                new Case(Key.PAGE_DOWN, "", Harness.Msg.PageDown.class),
+                new Case(Key.END, "", Harness.Msg.ScrollBottom.class),
+                new Case(Key.TAB, "", Harness.Msg.FocusComposer.class),
+                new Case(Key.ESCAPE, "", Harness.Msg.Escape.class),
+                new Case(Key.of("c", Modifiers.CTRL), "", Harness.Msg.QuitRequest.class),
+                new Case(Key.of("c", Modifiers.ALT), "", Harness.Msg.ComposerMsg.class),
+                new Case(Key.of("v", Modifiers.CTRL), "", Harness.Msg.ComposerMsg.class),
+                new Case(Key.of("t", Modifiers.ALT), "", Harness.Msg.CopyVisible.class),
+                new Case(Key.of("l", Modifiers.ALT), "", Harness.Msg.CopyLastReply.class));
+        assertThat(cases).allSatisfy(entry -> {
+            Optional<Harness.Msg> routed =
+                    InputRouter.route(view, new InputEvent.KeyInput(entry.key(), entry.text(), 0L));
+            assertThat(routed)
+                    .as("%s is documented but produces nothing", entry.key())
+                    .isPresent();
+            assertThat(routed.get())
+                    .as("%s routes to the documented message", entry.key())
+                    .isInstanceOf(entry.messageType());
+        });
         // A printable key edits the composer, and the two editor gestures keep their own actions.
         assertThat(InputRouter.route(view, new InputEvent.KeyInput(Key.of("a"), "a", 0L)))
-                .contains(
-                        new Harness.Msg.ComposerMsg(
-                                new io.github.dhoard.braxton.widget.Editor.Msg.Insert("a")));
+                .contains(new Harness.Msg.ComposerMsg(new io.github.dhoard.braxton.widget.Editor.Msg.Insert("a")));
         assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.of("j", Modifiers.CTRL))))
-                .contains(
-                        new Harness.Msg.ComposerMsg(
-                                new io.github.dhoard.braxton.widget.Editor.Msg.Newline()));
+                .contains(new Harness.Msg.ComposerMsg(new io.github.dhoard.braxton.widget.Editor.Msg.Newline()));
         assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.of("c", Modifiers.ALT))))
-                .contains(
-                        new Harness.Msg.ComposerMsg(
-                                new io.github.dhoard.braxton.widget.Editor.Msg.Copy()));
+                .contains(new Harness.Msg.ComposerMsg(new io.github.dhoard.braxton.widget.Editor.Msg.Copy()));
         assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.of("v", Modifiers.CTRL))))
-                .contains(
-                        new Harness.Msg.ComposerMsg(
-                                new io.github.dhoard.braxton.widget.Editor.Msg.PasteRequest()));
+                .contains(new Harness.Msg.ComposerMsg(new io.github.dhoard.braxton.widget.Editor.Msg.PasteRequest()));
         assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.of("t", Modifiers.ALT))))
                 .as("Alt+T copies the visible transcript, not the draft")
                 .contains(new Harness.Msg.CopyVisible());
@@ -768,7 +730,7 @@ class HarnessViewTest {
         assertThat(lines(state)).isEqualTo(lines(state));
         LayoutEngine engine = new LayoutEngine();
         assertThat(engine.layout(HarnessView.view(state), new io.github.dhoard.braxton.layout.Rect(0, 0, 40, 120)))
-                .isEqualTo(engine.layout(HarnessView.view(state),
-                        new io.github.dhoard.braxton.layout.Rect(0, 0, 40, 120)));
+                .isEqualTo(engine.layout(
+                        HarnessView.view(state), new io.github.dhoard.braxton.layout.Rect(0, 0, 40, 120)));
     }
 }

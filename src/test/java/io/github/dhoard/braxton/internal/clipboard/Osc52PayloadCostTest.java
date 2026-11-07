@@ -24,9 +24,8 @@ package io.github.dhoard.braxton.internal.clipboard;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.testing.AllocationProbe;
+import org.junit.jupiter.api.Test;
 
 /**
  * What limiting a large copy to the OSC 52 payload budget costs.
@@ -55,7 +54,8 @@ class Osc52PayloadCostTest {
         long bytes = AllocationProbe.bytes(() -> Osc52.encode(copy, budget));
         // The encoder segments the budget plus one cluster of lookahead, so the cost is a few
         // megabytes; segmenting the copy itself costs more than a hundred.
-        assertThat(bytes).as("allocated bytes for the default payload budget on a 1 Mi copy")
+        assertThat(bytes)
+                .as("allocated bytes for the default payload budget on a 1 Mi copy")
                 .isLessThan(8 * 1024 * 1024L);
         Osc52.Encoded encoded = Osc52.encode(copy, budget);
         assertThat(encoded.text()).isEqualTo(wide(21_845));
@@ -71,7 +71,8 @@ class Osc52PayloadCostTest {
         long small = AllocationProbe.bytes(() -> Osc52.encode(smallCopy, budget));
         long large = AllocationProbe.bytes(() -> Osc52.encode(largeCopy, budget));
         // The same budget, so the same window: a copy ten times larger must not cost more.
-        assertThat(large).as("allocated bytes for a 1 Ki budget on a 100 Ki and a 1 Mi copy")
+        assertThat(large)
+                .as("allocated bytes for a 1 Ki budget on a 100 Ki and a 1 Mi copy")
                 .isLessThan(small + 1024 * 1024L);
         assertThat(Osc52.encode(largeCopy, budget).text()).isEqualTo(wide(341));
     }

@@ -24,15 +24,13 @@ package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.lang.management.ManagementFactory;
-
-import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
+import java.lang.management.ManagementFactory;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
 
 class RenderCostTest {
     private static volatile Object sink;
@@ -88,7 +86,8 @@ class RenderCostTest {
         LayoutEngine engine = new LayoutEngine();
         StyledText text = StyledText.plain("x".repeat(2048));
         long bytes = allocated(() -> sink = engine.wrapLines(text, 2048));
-        assertThat(bytes).as("one wrapped row should not allocate quadratic prefix copies")
+        assertThat(bytes)
+                .as("one wrapped row should not allocate quadratic prefix copies")
                 .isLessThan(1_000_000);
         assertThat(engine.wrapLines(text, 2048)).containsExactly(text);
     }
@@ -108,16 +107,22 @@ class RenderCostTest {
         Style blue = Style.fg(Colors.BLUE_400);
         String url = "https://example.com";
         StyledText text = StyledText.of("ab🙂", red, url).append(StyledText.of("c\td\nz", blue, url));
-        assertThat(new LayoutEngine().wrapLines(text, 4)).containsExactly(
-                StyledText.of("ab🙂", red, url), StyledText.of("c   ", blue, url),
-                StyledText.of("d", blue, url), StyledText.of("z", blue, url));
+        assertThat(new LayoutEngine().wrapLines(text, 4))
+                .containsExactly(
+                        StyledText.of("ab🙂", red, url), StyledText.of("c   ", blue, url),
+                        StyledText.of("d", blue, url), StyledText.of("z", blue, url));
     }
 
     @Test
     void concatKeepsTheExistingAppendSemanticsIncludingEmptyStyledSpans() {
-        StyledText[] parts = {StyledText.empty(), StyledText.of("\u001b", Style.NONE.withBold()),
-                StyledText.plain("a"), StyledText.plain("b"),
-                StyledText.of("c", Style.NONE, "https://example.com"), StyledText.empty()};
+        StyledText[] parts = {
+            StyledText.empty(),
+            StyledText.of("\u001b", Style.NONE.withBold()),
+            StyledText.plain("a"),
+            StyledText.plain("b"),
+            StyledText.of("c", Style.NONE, "https://example.com"),
+            StyledText.empty()
+        };
         StyledText expected = StyledText.empty();
         for (StyledText part : parts) {
             expected = expected.append(part);

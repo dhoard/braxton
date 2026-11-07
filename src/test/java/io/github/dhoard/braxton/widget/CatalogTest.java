@@ -33,14 +33,12 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.ScreenRenderer;
 import io.github.dhoard.braxton.view.View;
-
-import org.junit.jupiter.api.Test;
-
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /** Catalog widgets remain pure values with deterministic layout. */
 class CatalogTest {
@@ -91,8 +89,7 @@ class CatalogTest {
         Table table = Table.of();
         table.row(StyledText.plain("a\tb"), StyledText.plain("c"));
         table.row(StyledText.plain("x"), StyledText.plain("y"));
-        List<String> lines = new ScreenRenderer().plainLines(table.view(),
-                new Viewport(2, 24));
+        List<String> lines = new ScreenRenderer().plainLines(table.view(), new Viewport(2, 24));
         assertThat(lines.get(0).indexOf('c')).isEqualTo(lines.get(1).indexOf('y'));
     }
 
@@ -101,8 +98,7 @@ class CatalogTest {
         Table plain = Table.of().buffer(0);
         plain.row(StyledText.plain("ab\tx"));
         Table styled = Table.of().buffer(0);
-        styled.row(StyledText.concat(StyledText.of("ab", Style.NONE.withBold()),
-                StyledText.of("\tx", Style.NONE)));
+        styled.row(StyledText.concat(StyledText.of("ab", Style.NONE.withBold()), StyledText.of("\tx", Style.NONE)));
         assertThat(styled.renderLines().get(0).plainText())
                 .isEqualTo(plain.renderLines().get(0).plainText())
                 .isEqualTo("ab  x");
@@ -118,24 +114,24 @@ class CatalogTest {
     @Test
     void tableCellsExpandATabThatFollowsAClusterASpanBoundarySplit() {
         Style bold = Style.NONE.withBold();
-        assertSplitCellIsThePlainCell(StyledText.plain("a\u0301\tb"),
-                StyledText.concat(StyledText.of("a", Style.NONE),
-                        StyledText.of("\u0301\tb", bold)),
+        assertSplitCellIsThePlainCell(
+                StyledText.plain("a\u0301\tb"),
+                StyledText.concat(StyledText.of("a", Style.NONE), StyledText.of("\u0301\tb", bold)),
                 "a\u0301   b");
-        assertSplitCellIsThePlainCell(StyledText.plain("a\uFE0F\tb"),
-                StyledText.concat(StyledText.of("a", Style.NONE),
-                        StyledText.of("\uFE0F\tb", bold)),
+        assertSplitCellIsThePlainCell(
+                StyledText.plain("a\uFE0F\tb"),
+                StyledText.concat(StyledText.of("a", Style.NONE), StyledText.of("\uFE0F\tb", bold)),
                 "a\uFE0F  b");
     }
 
-    private static void assertSplitCellIsThePlainCell(StyledText plain, StyledText split,
-            String expected) {
+    private static void assertSplitCellIsThePlainCell(StyledText plain, StyledText split, String expected) {
         assertThat(split.plainText()).as("the same plain text").isEqualTo(plain.plainText());
         Table plainTable = Table.of().buffer(0);
         plainTable.row(plain);
         Table splitTable = Table.of().buffer(0);
         splitTable.row(split);
-        assertThat(splitTable.columnWidths()).as("widths of \"%s\"", plain.plainText())
+        assertThat(splitTable.columnWidths())
+                .as("widths of \"%s\"", plain.plainText())
                 .isEqualTo(plainTable.columnWidths())
                 .containsExactly(TextMeasure.columns(expected));
         assertThat(splitTable.renderLines().get(0).plainText())
@@ -149,8 +145,8 @@ class CatalogTest {
         StyledText rendered = Markup.parse("<root><table gap=\"1\">"
                 + "<tr><td>a\tb</td><td>c</td></tr>"
                 + "<tr><td>x</td><td>y</td></tr></table></root>");
-        List<String> lines = new ScreenRenderer().plainLines(
-                io.github.dhoard.braxton.view.Views.text(rendered), new Viewport(2, 24));
+        List<String> lines = new ScreenRenderer()
+                .plainLines(io.github.dhoard.braxton.view.Views.text(rendered), new Viewport(2, 24));
         assertThat(lines.get(0).indexOf('c')).isEqualTo(lines.get(1).indexOf('y'));
     }
 
@@ -168,10 +164,10 @@ class CatalogTest {
                 + "<tr><td>x</td><td>a\u0301\tb</td></tr>"
                 + "<tr><td>y</td><td>z</td></tr></table></root>");
         assertThat(styled.plainText()).as("the same plain text").isEqualTo(plain.plainText());
-        assertThat(new ScreenRenderer().plainLines(
-                        io.github.dhoard.braxton.view.Views.text(styled), new Viewport(2, 24)))
-                .isEqualTo(new ScreenRenderer().plainLines(
-                        io.github.dhoard.braxton.view.Views.text(plain), new Viewport(2, 24)));
+        assertThat(new ScreenRenderer()
+                        .plainLines(io.github.dhoard.braxton.view.Views.text(styled), new Viewport(2, 24)))
+                .isEqualTo(new ScreenRenderer()
+                        .plainLines(io.github.dhoard.braxton.view.Views.text(plain), new Viewport(2, 24)));
     }
 
     @Test
@@ -182,11 +178,12 @@ class CatalogTest {
 
     @Test
     void boxDrawsABorderWithATitleAndClipsContent() {
-        StyledText rendered = Box.of(StyledText.plain("hello world")).title("label").render(12);
+        StyledText rendered =
+                Box.of(StyledText.plain("hello world")).title("label").render(12);
         List<String> lines = List.of(rendered.plainText().split("\n", -1));
         assertThat(lines.get(0)).startsWith("\u250C").contains("label");
-        assertThat(lines).allSatisfy(line ->
-                assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(12));
+        assertThat(lines)
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(12));
         assertThat(lines.get(lines.size() - 1)).startsWith("\u2514");
     }
 
@@ -194,8 +191,8 @@ class CatalogTest {
     void boxTruncatesALongTitleToItsFixedWidth() {
         StyledText rendered = Box.of("x").width(10).title("a very long title").render(40);
         List<String> lines = List.of(rendered.plainText().split("\n", -1));
-        assertThat(lines).allSatisfy(line ->
-                assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(10));
+        assertThat(lines)
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(10));
         assertThat(lines.get(0)).startsWith("\u250C").contains("a ver").endsWith("\u2510");
     }
 
@@ -220,16 +217,18 @@ class CatalogTest {
             String shown = title.replace("\n", "\\n").replace("\r", "\\r");
             StyledText rendered = Box.of("x").width(16).title(title).render(40);
             List<String> lines = List.of(rendered.plainText().split("\n", -1));
-            assertThat(lines.get(0)).as("top edge for title %s", shown)
-                    .startsWith("\u250C").contains("one two").endsWith("\u2510");
+            assertThat(lines.get(0))
+                    .as("top edge for title %s", shown)
+                    .startsWith("\u250C")
+                    .contains("one two")
+                    .endsWith("\u2510");
             assertThat(TextMeasure.columns(lines.get(0))).isEqualTo(16);
         }
         // Already-sanitized styled input has lost the CR before Box sees it; no separator can be
         // guessed, so this pinned result must not change with the raw-string correction.
-        StyledText rendered = Box.of("x").width(16)
-                .title(StyledText.plain("one\rtwo")).render(40);
-        assertThat(rendered.plainText().split("\n", -1)[0]).contains("onetwo")
-                .doesNotContain("one two");
+        StyledText rendered =
+                Box.of("x").width(16).title(StyledText.plain("one\rtwo")).render(40);
+        assertThat(rendered.plainText().split("\n", -1)[0]).contains("onetwo").doesNotContain("one two");
     }
 
     @Test
@@ -296,12 +295,15 @@ class CatalogTest {
         // both of which the frame's one-cell-per-character geometry cannot hold.
         for (char edge : new char[] {'\u001b', '\ud800', '\n', '\t'}) {
             Border vertical = new Border('+', '+', '+', '+', '-', edge);
-            List<String> box = List.of(
-                    Box.of("ab").border(vertical).render(8).plainText().split("\n", -1));
-            assertThat(box).as("box vertical edge 0x%04x", (int) edge)
+            List<String> box =
+                    List.of(Box.of("ab").border(vertical).render(8).plainText().split("\n", -1));
+            assertThat(box)
+                    .as("box vertical edge 0x%04x", (int) edge)
                     .containsExactly("+------+", " ab     ", "+------+");
-            assertThat(box).allSatisfy(line ->
-                    assertThat(TextMeasure.columns(line)).as("box line [%s]", line).isEqualTo(8));
+            assertThat(box)
+                    .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                            .as("box line [%s]", line)
+                            .isEqualTo(8));
             Table table = Table.of().buffer(0).border(vertical);
             table.row(StyledText.plain("ab"));
             assertThat(List.of(table.render().plainText().split("\n", -1)))
@@ -311,18 +313,26 @@ class CatalogTest {
             List<String> across = List.of(
                     Box.of("ab").border(horizontal).render(8).plainText().split("\n", -1));
             assertThat(across).as("box horizontal edge 0x%04x", (int) edge).hasSize(3);
-            assertThat(across.get(1)).as("box horizontal edge 0x%04x", (int) edge)
+            assertThat(across.get(1))
+                    .as("box horizontal edge 0x%04x", (int) edge)
                     .isEqualTo("|ab    |");
-            assertThat(across).allSatisfy(line ->
-                    assertThat(TextMeasure.columns(line)).as("box line [%s]", line).isEqualTo(8));
+            assertThat(across)
+                    .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                            .as("box line [%s]", line)
+                            .isEqualTo(8));
             Table acrossTable = Table.of().buffer(0).border(horizontal);
             acrossTable.row(StyledText.plain("ab"));
             List<String> acrossRows = List.of(acrossTable.render().plainText().split("\n", -1));
-            assertThat(acrossRows).as("table horizontal edge 0x%04x", (int) edge).hasSize(3);
-            assertThat(acrossRows.get(1)).as("table horizontal edge 0x%04x", (int) edge)
+            assertThat(acrossRows)
+                    .as("table horizontal edge 0x%04x", (int) edge)
+                    .hasSize(3);
+            assertThat(acrossRows.get(1))
+                    .as("table horizontal edge 0x%04x", (int) edge)
                     .isEqualTo("|ab|");
-            assertThat(acrossRows).allSatisfy(line ->
-                    assertThat(TextMeasure.columns(line)).as("table line [%s]", line).isEqualTo(4));
+            assertThat(acrossRows)
+                    .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                            .as("table line [%s]", line)
+                            .isEqualTo(4));
         }
     }
 
@@ -334,12 +344,15 @@ class CatalogTest {
         // the box and the closing edge landed left of the row above it.
         for (char edge : new char[] {'\u200B', '\u200D', '\uFEFF', '\u00AD'}) {
             Border vertical = new Border('+', '+', '+', '+', '-', edge);
-            List<String> box = List.of(
-                    Box.of("ab").border(vertical).render(8).plainText().split("\n", -1));
-            assertThat(box).as("box vertical edge 0x%04x", (int) edge)
+            List<String> box =
+                    List.of(Box.of("ab").border(vertical).render(8).plainText().split("\n", -1));
+            assertThat(box)
+                    .as("box vertical edge 0x%04x", (int) edge)
                     .containsExactly("+------+", " ab     ", "+------+");
-            assertThat(box).allSatisfy(line ->
-                    assertThat(TextMeasure.columns(line)).as("box line [%s]", line).isEqualTo(8));
+            assertThat(box)
+                    .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                            .as("box line [%s]", line)
+                            .isEqualTo(8));
             Table table = Table.of().buffer(0).border(vertical);
             table.row(StyledText.plain("ab"));
             assertThat(List.of(table.render().plainText().split("\n", -1)))
@@ -349,18 +362,26 @@ class CatalogTest {
             List<String> across = List.of(
                     Box.of("ab").border(horizontal).render(8).plainText().split("\n", -1));
             assertThat(across).as("box horizontal edge 0x%04x", (int) edge).hasSize(3);
-            assertThat(across.get(0)).as("box horizontal edge 0x%04x", (int) edge)
+            assertThat(across.get(0))
+                    .as("box horizontal edge 0x%04x", (int) edge)
                     .isEqualTo("+      +");
-            assertThat(across).allSatisfy(line ->
-                    assertThat(TextMeasure.columns(line)).as("box line [%s]", line).isEqualTo(8));
+            assertThat(across)
+                    .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                            .as("box line [%s]", line)
+                            .isEqualTo(8));
             Table acrossTable = Table.of().buffer(0).border(horizontal);
             acrossTable.row(StyledText.plain("ab"));
             List<String> acrossRows = List.of(acrossTable.render().plainText().split("\n", -1));
-            assertThat(acrossRows).as("table horizontal edge 0x%04x", (int) edge).hasSize(3);
-            assertThat(acrossRows.get(0)).as("table horizontal edge 0x%04x", (int) edge)
+            assertThat(acrossRows)
+                    .as("table horizontal edge 0x%04x", (int) edge)
+                    .hasSize(3);
+            assertThat(acrossRows.get(0))
+                    .as("table horizontal edge 0x%04x", (int) edge)
                     .isEqualTo("+  +");
-            assertThat(acrossRows).allSatisfy(line ->
-                    assertThat(TextMeasure.columns(line)).as("table line [%s]", line).isEqualTo(4));
+            assertThat(acrossRows)
+                    .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                            .as("table line [%s]", line)
+                            .isEqualTo(4));
         }
     }
 
@@ -373,16 +394,23 @@ class CatalogTest {
         // repeated across the top and bottom pushed those edges past the box's own width.
         for (char edge : new char[] {'\uFF5C', '\u300C', '\uFF0D', '\u2B50'}) {
             Border vertical = new Border('+', '+', '+', '+', '-', edge);
-            List<String> box = List.of(
-                    Box.of("ab").border(vertical).render(8).plainText().split("\n", -1));
-            assertThat(box).as("box vertical edge 0x%04x", (int) edge)
+            List<String> box =
+                    List.of(Box.of("ab").border(vertical).render(8).plainText().split("\n", -1));
+            assertThat(box)
+                    .as("box vertical edge 0x%04x", (int) edge)
                     .containsExactly("+------+", " ab     ", "+------+");
-            assertThat(box).allSatisfy(line ->
-                    assertThat(TextMeasure.columns(line)).as("box line [%s]", line).isEqualTo(8));
+            assertThat(box)
+                    .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                            .as("box line [%s]", line)
+                            .isEqualTo(8));
             // Content wider than the inner width is clipped by the same one-cell budget, so the
             // row keeps its width instead of trailing a column past the frame.
-            assertThat(List.of(Box.of("abcdefghij").border(vertical).width(8).render(8).plainText()
-                    .split("\n", -1)))
+            assertThat(List.of(Box.of("abcdefghij")
+                            .border(vertical)
+                            .width(8)
+                            .render(8)
+                            .plainText()
+                            .split("\n", -1)))
                     .as("box vertical edge 0x%04x with clipped content", (int) edge)
                     .containsExactly("+------+", " abcdef ", "+------+");
             Table table = Table.of().buffer(0).border(vertical);
@@ -394,20 +422,29 @@ class CatalogTest {
             List<String> across = List.of(
                     Box.of("ab").border(horizontal).render(8).plainText().split("\n", -1));
             assertThat(across).as("box horizontal edge 0x%04x", (int) edge).hasSize(3);
-            assertThat(across.get(0)).as("box horizontal edge 0x%04x", (int) edge)
+            assertThat(across.get(0))
+                    .as("box horizontal edge 0x%04x", (int) edge)
                     .isEqualTo("+      +");
-            assertThat(across.get(2)).as("box horizontal edge 0x%04x", (int) edge)
+            assertThat(across.get(2))
+                    .as("box horizontal edge 0x%04x", (int) edge)
                     .isEqualTo("+      +");
-            assertThat(across).allSatisfy(line ->
-                    assertThat(TextMeasure.columns(line)).as("box line [%s]", line).isEqualTo(8));
+            assertThat(across)
+                    .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                            .as("box line [%s]", line)
+                            .isEqualTo(8));
             Table acrossTable = Table.of().buffer(0).border(horizontal);
             acrossTable.row(StyledText.plain("ab"));
             List<String> acrossRows = List.of(acrossTable.render().plainText().split("\n", -1));
-            assertThat(acrossRows).as("table horizontal edge 0x%04x", (int) edge).hasSize(3);
-            assertThat(acrossRows.get(0)).as("table horizontal edge 0x%04x", (int) edge)
+            assertThat(acrossRows)
+                    .as("table horizontal edge 0x%04x", (int) edge)
+                    .hasSize(3);
+            assertThat(acrossRows.get(0))
+                    .as("table horizontal edge 0x%04x", (int) edge)
                     .isEqualTo("+  +");
-            assertThat(acrossRows).allSatisfy(line ->
-                    assertThat(TextMeasure.columns(line)).as("table line [%s]", line).isEqualTo(4));
+            assertThat(acrossRows)
+                    .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                            .as("table line [%s]", line)
+                            .isEqualTo(4));
         }
     }
 
@@ -429,10 +466,11 @@ class CatalogTest {
 
     @Test
     void aBorderlessFixedWidthBoxStillTruncatesItsContent() {
-        String rendered = Box.of("abcdefgh").border(Border.NONE).width(4).render(20).plainText();
+        String rendered =
+                Box.of("abcdefgh").border(Border.NONE).width(4).render(20).plainText();
         assertThat(rendered).isEqualTo("abcd");
-        String multiline = Box.of("abcdef\nghi").border(Border.NONE).width(4)
-                .render(20).plainText();
+        String multiline =
+                Box.of("abcdef\nghi").border(Border.NONE).width(4).render(20).plainText();
         assertThat(multiline).isEqualTo("abcd\nghi");
     }
 
@@ -441,8 +479,7 @@ class CatalogTest {
         // The text view paints a tab as spaces up to the next four-column stop. A box that
         // measures the tab as one column pads or truncates to the wrong width, so the right frame
         // column lands past the frame's own width.
-        String framed = new ScreenRenderer().plainText(
-                Box.of("a\tb").width(10).view(10), new Viewport(3, 20));
+        String framed = new ScreenRenderer().plainText(Box.of("a\tb").width(10).view(10), new Viewport(3, 20));
         assertThat(framed).isEqualTo("""
                 \u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510
                 \u2502a   b   \u2502
@@ -452,16 +489,19 @@ class CatalogTest {
         }
 
         String clipped = Box.of("a\tbbbbbbbb").width(6).render(6).plainText();
-        assertThat(clipped).isEqualTo("\u250C\u2500\u2500\u2500\u2500\u2510\n"
-                + "\u2502a   \u2502\n\u2514\u2500\u2500\u2500\u2500\u2518");
+        assertThat(clipped)
+                .isEqualTo("\u250C\u2500\u2500\u2500\u2500\u2510\n"
+                        + "\u2502a   \u2502\n\u2514\u2500\u2500\u2500\u2500\u2518");
 
-        String borderless = Box.of("a\tb").border(Border.NONE).width(4).render(20).plainText();
+        String borderless =
+                Box.of("a\tb").border(Border.NONE).width(4).render(20).plainText();
         assertThat(borderless).isEqualTo("a   ");
     }
 
     @Test
     void aBoxNarrowerThanTwoColumnsStillDrawsItsFrame() {
-        String rendered = Box.of("body").border(Border.SINGLE).width(1).render(10).plainText();
+        String rendered =
+                Box.of("body").border(Border.SINGLE).width(1).render(10).plainText();
         assertThat(rendered).isEqualTo("\u250C\u2510\n\u2502\u2502\n\u2514\u2518");
         for (String line : rendered.split("\n", -1)) {
             assertThat(TextMeasure.columns(line)).isEqualTo(2);
@@ -500,21 +540,32 @@ class CatalogTest {
         // label budget is one column, which no wide cluster fits, so the edge must be plain dashes
         // rather than the label's hole.
         Style bold = Style.NONE.withBold();
-        String narrow = Box.of("x").width(6).title(StyledText.of("\u65E5\u672C", bold))
-                .render(6).plainText();
+        String narrow = Box.of("x")
+                .width(6)
+                .title(StyledText.of("\u65E5\u672C", bold))
+                .render(6)
+                .plainText();
         assertThat(narrow.lines().findFirst().orElseThrow()).isEqualTo("\u250C\u2500\u2500\u2500\u2500\u2510");
         // One column wider keeps the first glyph, and the edge still ends at the frame width.
-        String fitted = Box.of("x").width(7).title(StyledText.of("\u65E5\u672C", bold))
-                .render(7).plainText();
+        String fitted = Box.of("x")
+                .width(7)
+                .title(StyledText.of("\u65E5\u672C", bold))
+                .render(7)
+                .plainText();
         assertThat(fitted.lines().findFirst().orElseThrow()).isEqualTo("\u250C\u2500 \u65E5 \u2510");
-        assertThat(TextMeasure.columns(fitted.lines().findFirst().orElseThrow())).isEqualTo(7);
+        assertThat(TextMeasure.columns(fitted.lines().findFirst().orElseThrow()))
+                .isEqualTo(7);
     }
 
     @Test
     void aTitledBoxKeepsItsWidthWhenTheFrameHasNoRoomForTheTitle() {
         for (int width = 2; width <= 10; width++) {
-            String rendered = Box.of("body").border(Border.ROUNDED).title("Title").width(width)
-                    .render(width).plainText();
+            String rendered = Box.of("body")
+                    .border(Border.ROUNDED)
+                    .title("Title")
+                    .width(width)
+                    .render(width)
+                    .plainText();
             for (String line : rendered.split("\n", -1)) {
                 assertThat(TextMeasure.columns(line))
                         .as("width %d line [%s]", width, line)
@@ -553,7 +604,8 @@ class CatalogTest {
 
     @Test
     void progressBarKeepsEverythingOnOneRow() {
-        StyledText labelled = ProgressBar.of(3).icons("#", "-")
+        StyledText labelled = ProgressBar.of(3)
+                .icons("#", "-")
                 .prepend(StyledText.plain("a\nb\tc"))
                 .append(StyledText.plain("d\ne"))
                 .render(1, 3);
@@ -583,9 +635,9 @@ class CatalogTest {
 
     @Test
     void quotePreservesTheStylingOfTheQuotedContent() {
-        StyledText content = StyledText.of("hot",
-                Style.NONE.withBold().withForeground(Colors.ERROR_400));
-        StyledText quote = Quote.of().append(content).background(Colors.GRAY_600).render();
+        StyledText content = StyledText.of("hot", Style.NONE.withBold().withForeground(Colors.ERROR_400));
+        StyledText quote =
+                Quote.of().append(content).background(Colors.GRAY_600).render();
         assertThat(quote.plainText()).isEqualTo("\u2502 hot");
         List<StyledText.Span> spans = quote.spans();
         StyledText.Span body = spans.stream()
@@ -600,8 +652,8 @@ class CatalogTest {
 
     @Test
     void quoteKeepsItsBarAndBackground() {
-        StyledText quote = Quote.of().append("one").append("two")
-                .border(Colors.CYAN_400).render();
+        StyledText quote =
+                Quote.of().append("one").append("two").border(Colors.CYAN_400).render();
         assertThat(quote.plainText()).isEqualTo("\u2502 one\n\u2502 two");
         assertThat(quote.style().foreground()).isEqualTo(Colors.CYAN_400);
     }
@@ -628,11 +680,11 @@ class CatalogTest {
     void gradientKeepsTheTextAttributesAndLinksItColours() {
         StyledText content = StyledText.of("ab", Style.NONE.withBold())
                 .append(StyledText.of("c", Style.NONE, "https://example.test/info"));
-        StyledText gradient = Gradient.apply(content,
-                List.of(Colors.ERROR_400, Colors.GRAY_600), Gradient.Direction.HORIZONTAL);
+        StyledText gradient =
+                Gradient.apply(content, List.of(Colors.ERROR_400, Colors.GRAY_600), Gradient.Direction.HORIZONTAL);
         assertThat(gradient.plainText()).isEqualTo("abc");
-        assertThat(gradient.spans()).allSatisfy(span ->
-                assertThat(span.style().foreground()).isNotNull());
+        assertThat(gradient.spans())
+                .allSatisfy(span -> assertThat(span.style().foreground()).isNotNull());
         assertThat(gradient.spans()).anySatisfy(span -> {
             assertThat(span.text()).isEqualTo("a");
             assertThat(span.style().bold()).isTrue();
@@ -646,9 +698,10 @@ class CatalogTest {
     @Test
     void gradientColoursEachGraphemeAndRejectsAnEmptyPalette() {
         StyledText plain = StyledText.plain("abc");
-        assertThat(Gradient.apply(plain, List.of(), Gradient.Direction.VERTICAL)).isEqualTo(plain);
-        StyledText painted = Gradient.apply(plain,
-                List.of(Colors.ERROR_400, Colors.SUCCESS_400), Gradient.Direction.HORIZONTAL);
+        assertThat(Gradient.apply(plain, List.of(), Gradient.Direction.VERTICAL))
+                .isEqualTo(plain);
+        StyledText painted =
+                Gradient.apply(plain, List.of(Colors.ERROR_400, Colors.SUCCESS_400), Gradient.Direction.HORIZONTAL);
         assertThat(painted.plainText()).isEqualTo("abc");
         assertThat(painted.spans()).hasSize(3);
         assertThat(painted.spans().get(0).style().foreground()).isEqualTo(Colors.ERROR_400);
@@ -679,11 +732,11 @@ class CatalogTest {
         assertThat(plain).contains("- one");
         assertThat(plain).contains("a   b");
         assertThat(plain).contains("cc  d");
-        assertThat(rendered.spans()).anySatisfy(span ->
-                assertThat(span.link()).isEqualTo("https://example.com"));
-        assertThat(rendered.spans()).anySatisfy(span ->
-                assertThat(span.style().foreground()).isEqualTo(
-                        io.github.dhoard.braxton.style.Color.parse("#ff0000").orElseThrow()));
+        assertThat(rendered.spans()).anySatisfy(span -> assertThat(span.link()).isEqualTo("https://example.com"));
+        assertThat(rendered.spans())
+                .anySatisfy(span -> assertThat(span.style().foreground())
+                        .isEqualTo(io.github.dhoard.braxton.style.Color.parse("#ff0000")
+                                .orElseThrow()));
     }
 
     @Test
@@ -693,21 +746,22 @@ class CatalogTest {
         assertThat(Markup.parse("<ul><li>one</li><li>two</li></ul>").plainText())
                 .isEqualTo("  \u2022 one\n  \u2022 two");
         assertThat(Markup.parse("<table gap=\"1\"><tr><td>a</td><td>bb</td></tr>"
-                + "<tr><td>cc</td><td>d</td></tr></table>").plainText())
+                                + "<tr><td>cc</td><td>d</td></tr></table>")
+                        .plainText())
                 .isEqualTo("a  bb \ncc d  ");
         StyledText link = Markup.parse("<a href=\"https://x\">link</a>");
         assertThat(link.plainText()).isEqualTo("link");
-        assertThat(link.spans()).anySatisfy(span ->
-                assertThat(span.link()).isEqualTo("https://x"));
-        assertThat(Markup.parse("<p color=\"#ff0000\">para</p>").spans()).anySatisfy(span ->
-                assertThat(span.style().foreground()).isEqualTo(
-                        io.github.dhoard.braxton.style.Color.parse("#ff0000").orElseThrow()));
+        assertThat(link.spans()).anySatisfy(span -> assertThat(span.link()).isEqualTo("https://x"));
+        assertThat(Markup.parse("<p color=\"#ff0000\">para</p>").spans())
+                .anySatisfy(span -> assertThat(span.style().foreground())
+                        .isEqualTo(io.github.dhoard.braxton.style.Color.parse("#ff0000")
+                                .orElseThrow()));
     }
 
     @Test
     void markupNestsListsOnTheirOwnIndentedLines() {
-        StyledText rendered = Markup.parse(
-                "<root><ul gap=\"1\"><li>parent<ul gap=\"1\"><li>child</li></ul></li></ul></root>");
+        StyledText rendered =
+                Markup.parse("<root><ul gap=\"1\"><li>parent<ul gap=\"1\"><li>child</li></ul></li></ul></root>");
         assertThat(rendered.plainText()).isEqualTo(" \u2022 parent\n    \u2022 child");
     }
 
@@ -716,14 +770,14 @@ class CatalogTest {
         // An icon that is only whitespace is not an icon: the list treats it as absent, so the
         // default bullet is used and each item keeps one line per row. A visible multi-column icon
         // keeps its continuation lines under the item text.
-        String tabbed = Markup.parse(
-                "<root><ul gap=\"0\" icon=\"&#9;\"><li>a<br/>b</li></ul></root>").plainText();
+        String tabbed = Markup.parse("<root><ul gap=\"0\" icon=\"&#9;\"><li>a<br/>b</li></ul></root>")
+                .plainText();
         assertThat(tabbed).isEqualTo("\u2022 a\n  b");
-        String broken = Markup.parse(
-                "<root><ul gap=\"0\" icon=\"&#10;\"><li>a<br/>b</li></ul></root>").plainText();
+        String broken = Markup.parse("<root><ul gap=\"0\" icon=\"&#10;\"><li>a<br/>b</li></ul></root>")
+                .plainText();
         assertThat(broken).isEqualTo("\u2022 a\n  b");
-        String wide = Markup.parse(
-                "<root><ul gap=\"1\" icon=\">>\"><li>a<br/>b</li></ul></root>").plainText();
+        String wide = Markup.parse("<root><ul gap=\"1\" icon=\">>\"><li>a<br/>b</li></ul></root>")
+                .plainText();
         assertThat(wide).isEqualTo(" >> a\n    b");
         String[] lines = wide.split("\n", -1);
         assertThat(lines[0].indexOf('a')).isEqualTo(lines[1].indexOf('b'));
@@ -731,8 +785,7 @@ class CatalogTest {
 
     @Test
     void markupListContinuationLinesAlignUnderTheItemText() {
-        StyledText rendered = Markup.parse(
-                "<root><ul gap=\"1\"><li>item<br/>tail</li></ul></root>");
+        StyledText rendered = Markup.parse("<root><ul gap=\"1\"><li>item<br/>tail</li></ul></root>");
         assertThat(rendered.plainText()).isEqualTo(" \u2022 item\n   tail");
     }
 
@@ -745,21 +798,21 @@ class CatalogTest {
     @Test
     void markupStartsABlockChildOnANewLine() {
         StyledText rendered = Markup.parse(
-                "<root><ul gap=\"1\"><li>item<table gap=\"1\"><tr><td>cell</td>"
-                        + "</tr></table></li></ul></root>");
+                "<root><ul gap=\"1\"><li>item<table gap=\"1\"><tr><td>cell</td>" + "</tr></table></li></ul></root>");
         assertThat(rendered.plainText()).startsWith(" \u2022 item\n   ");
         assertThat(rendered.plainText()).contains("cell");
     }
 
     @Test
     void markupListAppliesTheListStyleToTheBulletAndIndent() {
-        StyledText rendered = Markup.parse(
-                "<root><ul style=\"bold\" color=\"#ff0000\" gap=\"1\"><li>x</li></ul></root>");
+        StyledText rendered =
+                Markup.parse("<root><ul style=\"bold\" color=\"#ff0000\" gap=\"1\"><li>x</li></ul></root>");
         assertThat(rendered.plainText()).isEqualTo(" \u2022 x");
         assertThat(rendered.spans()).allSatisfy(span -> {
             assertThat(span.style().bold()).isTrue();
             assertThat(span.style().foreground())
-                    .isEqualTo(io.github.dhoard.braxton.style.Color.parse("#ff0000").orElseThrow());
+                    .isEqualTo(io.github.dhoard.braxton.style.Color.parse("#ff0000")
+                            .orElseThrow());
         });
     }
 
@@ -768,7 +821,8 @@ class CatalogTest {
         StyledText rendered = Markup.parse("<root><table gap=\"2\">"
                 + "<tr><td>ab<br/>c</td><td>x</td></tr>"
                 + "<tr><td>d</td><td>y</td></tr></table></root>");
-        List<String> lines = rendered.lines().stream().map(StyledText::plainText).toList();
+        List<String> lines =
+                rendered.lines().stream().map(StyledText::plainText).toList();
         int firstRowColumn = lines.get(0).indexOf('x');
         int secondRowColumn = lines.get(2).indexOf('y');
         assertThat(firstRowColumn).isGreaterThan(0);
@@ -778,12 +832,12 @@ class CatalogTest {
     @Test
     void markupPreservesNestedInheritanceAndCdata() {
         StyledText rendered = Markup.parse(
-                "<root><span color=\"#00ff00\"><span style=\"bold\">x</span>y</span>"
-                        + "<![CDATA[<literal>]]></root>");
+                "<root><span color=\"#00ff00\"><span style=\"bold\">x</span>y</span>" + "<![CDATA[<literal>]]></root>");
         assertThat(rendered.plainText()).contains("<literal>");
-        assertThat(rendered.spans().subList(0, 2)).allSatisfy(span ->
-                assertThat(span.style().foreground()).isEqualTo(
-                        io.github.dhoard.braxton.style.Color.parse("#00ff00").orElseThrow()));
+        assertThat(rendered.spans().subList(0, 2))
+                .allSatisfy(span -> assertThat(span.style().foreground())
+                        .isEqualTo(io.github.dhoard.braxton.style.Color.parse("#00ff00")
+                                .orElseThrow()));
     }
 
     @Test
@@ -791,8 +845,7 @@ class CatalogTest {
         assertThatThrownBy(() -> Markup.parse("<root><unclosed></root>"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("invalid markup");
-        assertThatThrownBy(() -> Markup.parse(""))
-                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Markup.parse("")).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -800,8 +853,7 @@ class CatalogTest {
         assertThatThrownBy(() -> Markup.parse("""
                 <!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
                 <root>&xxe;</root>
-                """))
-                .isInstanceOf(IllegalArgumentException.class);
+                """)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -816,8 +868,7 @@ class CatalogTest {
             assertThatThrownBy(() -> Markup.parse("""
                     <!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
                     <root>&xxe;</root>
-                    """))
-                    .isInstanceOf(IllegalArgumentException.class);
+                    """)).isInstanceOf(IllegalArgumentException.class);
         } finally {
             System.setErr(original);
         }
@@ -844,36 +895,33 @@ class CatalogTest {
         StyledText badge = Badge.of()
                 .append(StyledText.plain("one"), Colors.BLUE_400)
                 .append(StyledText.plain("two"), Colors.PURPLE_400)
-                .pathway().render();
+                .pathway()
+                .render();
         assertThat(badge.plainText()).isEqualTo(" one  \u2192  two ");
     }
 
     @Test
     void selectorActionsClampAndEmitTypedIntents() {
         Selector.Model state = Selector.Model.of(List.of("a", "b"));
-        assertThat(
-                        new Selector(Selector.Config.defaults())
-                                .update(state, new Selector.Msg.Up())
-                                .model()
-                                .selected())
+        assertThat(new Selector(Selector.Config.defaults())
+                        .update(state, new Selector.Msg.Up())
+                        .model()
+                        .selected())
                 .isZero();
-        assertThat(
-                        new Selector(Selector.Config.defaults())
-                                .update(state, new Selector.Msg.Down())
-                                .model()
-                                .selected())
+        assertThat(new Selector(Selector.Config.defaults())
+                        .update(state, new Selector.Msg.Down())
+                        .model()
+                        .selected())
                 .isEqualTo(1);
-        assertThat(
-                        new Selector(Selector.Config.defaults())
-                                .update(state, new Selector.Msg.Down())
-                                .model()
-                                .selected())
+        assertThat(new Selector(Selector.Config.defaults())
+                        .update(state, new Selector.Msg.Down())
+                        .model()
+                        .selected())
                 .isEqualTo(1);
-        Selector.Output chosen =
-                new Selector(Selector.Config.defaults())
-                        .update(state, new Selector.Msg.Confirm())
-                        .outputs()
-                        .getFirst();
+        Selector.Output chosen = new Selector(Selector.Config.defaults())
+                .update(state, new Selector.Msg.Confirm())
+                .outputs()
+                .getFirst();
         assertThat(chosen).isInstanceOf(Selector.Output.Chosen.class);
         assertThat(((Selector.Output.Chosen) chosen).value()).isEqualTo("a");
     }
@@ -890,38 +938,29 @@ class CatalogTest {
     @Test
     void confirmingAnEmptyTableHasNothingToChoose() {
         TableSelector.Model empty = TableSelector.Model.of(List.of("h1"), List.of());
-        io.github.dhoard.braxton.mvu.Update<
-                        TableSelector.Model, TableSelector.Msg, TableSelector.Output>
-                result =
-                        new TableSelector(TableSelector.Config.defaults())
-                                .update(empty, new TableSelector.Msg.Confirm());
+        io.github.dhoard.braxton.mvu.Update<TableSelector.Model, TableSelector.Msg, TableSelector.Output> result =
+                new TableSelector(TableSelector.Config.defaults()).update(empty, new TableSelector.Msg.Confirm());
         assertThat(result.outputs()).isEmpty();
         assertThat(result.model()).isEqualTo(empty);
         TableSelector.Model headerless = TableSelector.Model.of(List.of(), List.of(List.of("a")));
-        assertThat(
-                        new TableSelector(TableSelector.Config.defaults())
-                                .update(headerless, new TableSelector.Msg.Confirm())
-                                .outputs())
+        assertThat(new TableSelector(TableSelector.Config.defaults())
+                        .update(headerless, new TableSelector.Msg.Confirm())
+                        .outputs())
                 .isEmpty();
     }
 
     @Test
     void tableSelectorKeepsAMultiLineCellOnOneRow() {
-        TableSelector.Model state =
-                TableSelector.Model.of(List.of("h"), List.of(List.of("a\nb"), List.of("c")));
-        View<Object> view =
-                new TableSelector(
-                                new TableSelector.Config(
-                                        TableSelector.Model.of(
-                                                java.util.List.of(), java.util.List.of()),
-                                        Style.NONE,
-                                        Style.NONE,
-                                        Style.NONE))
-                        .view(
-                                (state).withFocus(false),
-                                new io.github.dhoard.braxton.mvu.ViewContext(
-                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                        .map(action -> "");
+        TableSelector.Model state = TableSelector.Model.of(List.of("h"), List.of(List.of("a\nb"), List.of("c")));
+        View<Object> view = new TableSelector(new TableSelector.Config(
+                        TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
+                        Style.NONE,
+                        Style.NONE,
+                        Style.NONE))
+                .view(
+                        (state).withFocus(false),
+                        new io.github.dhoard.braxton.mvu.ViewContext(io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                .map(action -> "");
         List<String> lines = new ScreenRenderer().plainLines(view, new Viewport(3, 20));
         assertThat(lines.get(1)).startsWith("a b");
         assertThat(lines.get(2)).startsWith("c");
@@ -929,21 +968,16 @@ class CatalogTest {
 
     @Test
     void tableSelectorColumnsLineUpWhenACellContainsATabStop() {
-        TableSelector.Model state =
-                TableSelector.Model.of(List.of("a\tb", "c"), List.of(List.of("x", "y")));
-        View<Object> view =
-                new TableSelector(
-                                new TableSelector.Config(
-                                        TableSelector.Model.of(
-                                                java.util.List.of(), java.util.List.of()),
-                                        Style.NONE,
-                                        Style.NONE,
-                                        Style.NONE))
-                        .view(
-                                (state).withFocus(false),
-                                new io.github.dhoard.braxton.mvu.ViewContext(
-                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                        .map(action -> "");
+        TableSelector.Model state = TableSelector.Model.of(List.of("a\tb", "c"), List.of(List.of("x", "y")));
+        View<Object> view = new TableSelector(new TableSelector.Config(
+                        TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
+                        Style.NONE,
+                        Style.NONE,
+                        Style.NONE))
+                .view(
+                        (state).withFocus(false),
+                        new io.github.dhoard.braxton.mvu.ViewContext(io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                .map(action -> "");
         List<String> lines = new ScreenRenderer().plainLines(view, new Viewport(2, 20));
         assertThat(lines.get(0).indexOf('c')).isEqualTo(lines.get(1).indexOf('y'));
     }
@@ -951,23 +985,19 @@ class CatalogTest {
     @Test
     void tableSelectorClampsAndReportsTheSelectedCell() {
         TableSelector.Model state =
-                TableSelector.Model.of(
-                        List.of("h1", "h2"), List.of(List.of("a", "b"), List.of("c", "d")));
-        state =
-                new TableSelector(TableSelector.Config.defaults())
-                        .update(state, new TableSelector.Msg.Right())
-                        .model();
+                TableSelector.Model.of(List.of("h1", "h2"), List.of(List.of("a", "b"), List.of("c", "d")));
+        state = new TableSelector(TableSelector.Config.defaults())
+                .update(state, new TableSelector.Msg.Right())
+                .model();
         assertThat(state.selectedValue()).isEqualTo("b");
-        state =
-                new TableSelector(TableSelector.Config.defaults())
-                        .update(state, new TableSelector.Msg.Down())
-                        .model();
+        state = new TableSelector(TableSelector.Config.defaults())
+                .update(state, new TableSelector.Msg.Down())
+                .model();
         assertThat(state.selectedValue()).isEqualTo("d");
-        TableSelector.Output chosen =
-                new TableSelector(TableSelector.Config.defaults())
-                        .update(state, new TableSelector.Msg.Confirm())
-                        .outputs()
-                        .getFirst();
+        TableSelector.Output chosen = new TableSelector(TableSelector.Config.defaults())
+                .update(state, new TableSelector.Msg.Confirm())
+                .outputs()
+                .getFirst();
         assertThat(((TableSelector.Output.Chosen) chosen).value()).isEqualTo("d");
     }
 
@@ -976,24 +1006,23 @@ class CatalogTest {
         // The documented split: ProgressBar is an immutable value (setters return a new instance),
         // the other multi-part widgets are mutable builders (setters return the same instance), and
         // rendering any of them reads only the built value, so a frame can be built repeatedly.
-        io.github.dhoard.braxton.widget.ProgressBar bar =
-                io.github.dhoard.braxton.widget.ProgressBar.of(4);
+        io.github.dhoard.braxton.widget.ProgressBar bar = io.github.dhoard.braxton.widget.ProgressBar.of(4);
         io.github.dhoard.braxton.widget.ProgressBar shown = bar.showPercentage(true);
         io.github.dhoard.braxton.widget.ProgressBar buffered = bar.buffer(1);
         assertThat(shown).isNotSameAs(bar);
         assertThat(buffered).isNotSameAs(bar);
-        assertThat(bar.render(1, 4).plainText()).as("the original never gains the label")
+        assertThat(bar.render(1, 4).plainText())
+                .as("the original never gains the label")
                 .doesNotContain("%");
-        assertThat(bar.render(1, 4)).as("the receiver is unchanged")
-                .isEqualTo(bar.render(1, 4));
+        assertThat(bar.render(1, 4)).as("the receiver is unchanged").isEqualTo(bar.render(1, 4));
         assertThat(bar.render(1, 4).plainText()).doesNotContain("%");
         assertThat(shown.render(1, 4).plainText()).contains("%");
 
-        io.github.dhoard.braxton.widget.Badge badge =
-                io.github.dhoard.braxton.widget.Badge.of().append(
-                        io.github.dhoard.braxton.style.StyledText.plain("one"));
+        io.github.dhoard.braxton.widget.Badge badge = io.github.dhoard.braxton.widget.Badge.of()
+                .append(io.github.dhoard.braxton.style.StyledText.plain("one"));
         assertThat(badge.append(io.github.dhoard.braxton.style.StyledText.plain("two")))
-                .as("the builder returns itself").isSameAs(badge);
+                .as("the builder returns itself")
+                .isSameAs(badge);
         assertThat(badge.segments()).hasSize(2);
         assertThat(badge.render()).isEqualTo(badge.render());
         assertThat(badge.columns()).isEqualTo(TextMeasure.columns(badge.render().plainText()));
@@ -1007,8 +1036,7 @@ class CatalogTest {
         assertThat(table.buffer(0)).isSameAs(table);
         assertThat(table.renderLines()).isEqualTo(table.renderLines());
 
-        io.github.dhoard.braxton.widget.Box box =
-                io.github.dhoard.braxton.widget.Box.of("body");
+        io.github.dhoard.braxton.widget.Box box = io.github.dhoard.braxton.widget.Box.of("body");
         assertThat(box.responsive()).isSameAs(box);
         assertThat(box.view(8)).isEqualTo(box.view(8));
     }

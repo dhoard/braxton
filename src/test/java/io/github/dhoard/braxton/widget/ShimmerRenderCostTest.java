@@ -24,13 +24,13 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.lang.management.ManagementFactory;
-import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.Test;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import java.lang.management.ManagementFactory;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
 
 class ShimmerRenderCostTest {
     private static volatile Object sink;
@@ -52,7 +52,8 @@ class ShimmerRenderCostTest {
         String text = "a".repeat(4096);
         assertThat(allocated(() -> sink = Animation.shimmer(text, 0L, Color.BLACK, Color.WHITE)))
                 .isLessThan(1_500_000L);
-        assertThat(Animation.shimmer(text, 0L, Color.BLACK, Color.WHITE).plainText()).isEqualTo(text);
+        assertThat(Animation.shimmer(text, 0L, Color.BLACK, Color.WHITE).plainText())
+                .isEqualTo(text);
     }
 
     @Test
@@ -70,10 +71,11 @@ class ShimmerRenderCostTest {
                             if (color == null) {
                                 color = base;
                             }
-                            reference = reference.append(StyledText.of(clusters.get(i),
-                                    color == null ? Style.NONE : Style.fg(color)));
+                            reference = reference.append(
+                                    StyledText.of(clusters.get(i), color == null ? Style.NONE : Style.fg(color)));
                         }
-                        assertThat(Animation.shimmer(text, now, base, highlight)).isEqualTo(reference);
+                        assertThat(Animation.shimmer(text, now, base, highlight))
+                                .isEqualTo(reference);
                     }
                 }
             }

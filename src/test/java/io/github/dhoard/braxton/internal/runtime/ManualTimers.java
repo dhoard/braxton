@@ -21,72 +21,75 @@
  */
 
 package io.github.dhoard.braxton.internal.runtime;
-import java.util.List;
+
 import java.util.ArrayList;
+import java.util.List;
+
 public final class ManualTimers implements Timers {
 
-        private final List<Task> tasks = new ArrayList<>();
-        private long nowNanos;
+    private final List<Task> tasks = new ArrayList<>();
+    private long nowNanos;
 
-        private static final class Task {
-            final long dueNanos;
-            final Runnable runnable;
-            final long sequence;
-            boolean cancelled;
+    private static final class Task {
+        final long dueNanos;
+        final Runnable runnable;
+        final long sequence;
+        boolean cancelled;
 
-            Task(long dueNanos, Runnable runnable, long sequence) {
-                this.dueNanos = dueNanos;
-                this.runnable = runnable;
-                this.sequence = sequence;
-            }
-        }
-
-        private long sequence;
-
-        @Override
-        public synchronized Handle schedule(long delayNanos, Runnable task) {
-            Task scheduled = new Task(nowNanos + Math.max(0L, delayNanos), task, sequence++);
-            tasks.add(scheduled);
-            return () -> {
-                synchronized (ManualTimers.this) {
-                    scheduled.cancelled = true;
-                }
-            };
-        }
-
-        /** Runs every task due at or before {@code now + nanos}, in due order. */
-        public synchronized void advance(long nanos) {
-            nowNanos += Math.max(0L, nanos);
-            while (true) {
-                Task next = null;
-                for (Task task : tasks) {
-                    if (task.cancelled || task.dueNanos > nowNanos) {
-                        continue;
-                    }
-                    if (next == null || task.dueNanos < next.dueNanos
-                            || (task.dueNanos == next.dueNanos && task.sequence < next.sequence)) {
-                        next = task;
-                    }
-                }
-                if (next == null) {
-                    return;
-                }
-                tasks.remove(next);
-                next.runnable.run();
-            }
-        }
-
-        public synchronized int pending() {
-            int count = 0;
-            for (Task task : tasks) {
-                if (!task.cancelled) {
-                    count++;
-                }
-            }
-            return count;
-        }
-
-        public synchronized long nowNanos() {
-            return nowNanos;
+        Task(long dueNanos, Runnable runnable, long sequence) {
+            this.dueNanos = dueNanos;
+            this.runnable = runnable;
+            this.sequence = sequence;
         }
     }
+
+    private long sequence;
+
+    @Override
+    public synchronized Handle schedule(long delayNanos, Runnable task) {
+        Task scheduled = new Task(nowNanos + Math.max(0L, delayNanos), task, sequence++);
+        tasks.add(scheduled);
+        return () -> {
+            synchronized (ManualTimers.this) {
+                scheduled.cancelled = true;
+            }
+        };
+    }
+
+    /** Runs every task due at or before {@code now + nanos}, in due order. */
+    public synchronized void advance(long nanos) {
+        nowNanos += Math.max(0L, nanos);
+        while (true) {
+            Task next = null;
+            for (Task task : tasks) {
+                if (task.cancelled || task.dueNanos > nowNanos) {
+                    continue;
+                }
+                if (next == null
+                        || task.dueNanos < next.dueNanos
+                        || (task.dueNanos == next.dueNanos && task.sequence < next.sequence)) {
+                    next = task;
+                }
+            }
+            if (next == null) {
+                return;
+            }
+            tasks.remove(next);
+            next.runnable.run();
+        }
+    }
+
+    public synchronized int pending() {
+        int count = 0;
+        for (Task task : tasks) {
+            if (!task.cancelled) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public synchronized long nowNanos() {
+        return nowNanos;
+    }
+}

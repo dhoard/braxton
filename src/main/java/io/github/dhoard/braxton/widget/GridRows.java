@@ -22,12 +22,11 @@
 
 package io.github.dhoard.braxton.widget;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Row arithmetic shared by the widgets that lay a grid of cells out themselves.
@@ -50,8 +49,7 @@ import io.github.dhoard.braxton.style.TextMeasure;
  */
 final class GridRows {
 
-    private GridRows() {
-    }
+    private GridRows() {}
 
     /**
      * The cells a row has painted so far, kept as the one cluster a following cell can join: the
@@ -105,8 +103,7 @@ final class GridRows {
             String last = tail;
             int lastColumns = tailColumns;
             if (!value.isEmpty()) {
-                if (tail != null && TextMeasure.isPrintableAscii(tail.charAt(tail.length() - 1))
-                        && isAscii(value)) {
+                if (tail != null && TextMeasure.isPrintableAscii(tail.charAt(tail.length() - 1)) && isAscii(value)) {
                     // No grapheme break rule joins two printable ASCII characters, so the cell is a
                     // run of clusters of its own and the seam needs neither a copy nor a
                     // segmentation - which is what an ordinary table row is made of.

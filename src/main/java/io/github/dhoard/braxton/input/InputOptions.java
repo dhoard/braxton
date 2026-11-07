@@ -32,8 +32,8 @@ public record InputOptions(
         int maxPasteBytes,
         Duration pasteIdleTimeout,
         Duration cancellationInterval) {
-    public static final InputOptions DEFAULT = new InputOptions(
-            Duration.ofMillis(30), 64, 1_048_576, Duration.ofMillis(250), Duration.ofMillis(100));
+    public static final InputOptions DEFAULT =
+            new InputOptions(Duration.ofMillis(30), 64, 1_048_576, Duration.ofMillis(250), Duration.ofMillis(100));
 
     public InputOptions {
         positive(escapeTimeout, "escape timeout");
@@ -43,15 +43,13 @@ public record InputOptions(
             throw new IllegalArgumentException("cancellation interval must be at most 100 ms");
         }
         if (maxCsiCharacters < 1 || maxPasteBytes < 0) {
-            throw new IllegalArgumentException(
-                    "CSI capacity must be positive and paste capacity nonnegative");
+            throw new IllegalArgumentException("CSI capacity must be positive and paste capacity nonnegative");
         }
     }
 
     private static void positive(Duration value, String name) {
         Objects.requireNonNull(value, name);
-        if (value.isNegative() || value.isZero())
-            throw new IllegalArgumentException(name + " must be positive");
+        if (value.isNegative() || value.isZero()) throw new IllegalArgumentException(name + " must be positive");
         try {
             value.toNanos();
         } catch (ArithmeticException error) {

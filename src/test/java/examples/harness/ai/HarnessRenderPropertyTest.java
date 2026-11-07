@@ -24,12 +24,10 @@ package examples.harness.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.style.TextMeasure;
 import java.util.List;
 import java.util.Random;
-
 import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.style.TextMeasure;
 
 /**
  * Wrapping never overflows its width, never loses a non-space character, and never rewraps text
@@ -38,10 +36,20 @@ import io.github.dhoard.braxton.style.TextMeasure;
 class HarnessRenderPropertyTest {
 
     private static final String[] WORDS = {
-        "a", "bb", "ccc", "dddd", "\u65E5", "\u65E5\u672C", "e\u0301", "tool_read(path)", "==>",
+        "a",
+        "bb",
+        "ccc",
+        "dddd",
+        "\u65E5",
+        "\u65E5\u672C",
+        "e\u0301",
+        "tool_read(path)",
+        "==>",
         // A variation selector with no base of its own, before and after a base: it joins the cell
         // in front of it, which is the class of character the width bound used to miss.
-        "\uFE0F", "\uFE0Fx", "x\uFE0Fy"
+        "\uFE0F",
+        "\uFE0Fx",
+        "x\uFE0Fy"
     };
 
     private static String randomText(Random random) {
@@ -83,9 +91,11 @@ class HarnessRenderPropertyTest {
             int width = random.nextInt(20);
             int limit = Math.max(1, width);
             List<String> lines = HarnessRender.wrap(text, width);
-            assertThat(lines).as("iteration %d width %d lines", iteration, width)
+            assertThat(lines)
+                    .as("iteration %d width %d lines", iteration, width)
                     .isNotEmpty();
-            assertThat(lines.size()).as("iteration %d width %d line count", iteration, width)
+            assertThat(lines.size())
+                    .as("iteration %d width %d line count", iteration, width)
                     .isGreaterThanOrEqualTo(text.split("\n", -1).length);
             for (int row = 0; row < lines.size(); row++) {
                 assertThat(HarnessRender.visibleLength(lines.get(row)))
@@ -102,10 +112,10 @@ class HarnessRenderPropertyTest {
     void textThatAlreadyFitsIsNeverRewrapped() {
         Random random = new Random(131L);
         for (int iteration = 0; iteration < 4_000; iteration++) {
-            String line = WORDS[random.nextInt(WORDS.length)] + " "
-                    + WORDS[random.nextInt(WORDS.length)];
+            String line = WORDS[random.nextInt(WORDS.length)] + " " + WORDS[random.nextInt(WORDS.length)];
             int width = Math.max(HarnessRender.visibleLength(line), 1);
-            assertThat(HarnessRender.wrap(line, width)).as("iteration %d %s", iteration, line)
+            assertThat(HarnessRender.wrap(line, width))
+                    .as("iteration %d %s", iteration, line)
                     .containsExactly(line);
         }
     }
@@ -118,7 +128,8 @@ class HarnessRenderPropertyTest {
             List<String> lines = HarnessRender.wrap(text, random.nextInt(3) - 1);
             assertThat(lines).as("iteration %d", iteration).isNotEmpty();
             assertThat(String.join("", lines).replace(" ", ""))
-                    .as("iteration %d content", iteration).isEqualTo(content(text));
+                    .as("iteration %d content", iteration)
+                    .isEqualTo(content(text));
         }
     }
 }

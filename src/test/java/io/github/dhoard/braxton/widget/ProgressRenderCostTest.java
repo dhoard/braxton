@@ -24,14 +24,12 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.lang.management.ManagementFactory;
-
-import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
+import java.lang.management.ManagementFactory;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
 
 class ProgressRenderCostTest {
     private static volatile Object sink;
@@ -52,8 +50,7 @@ class ProgressRenderCostTest {
     void aLongBarDoesNotCopyItsGrowingRunsForEveryCell() {
         ProgressBar bar = ProgressBar.of(4096);
         assertThat(allocated(() -> sink = bar.render(0.5, 1.0))).isLessThan(2_000_000L);
-        assertThat(bar.render(0.5, 1.0).plainText())
-                .isEqualTo("\u2588".repeat(2048) + "\u2591".repeat(2048));
+        assertThat(bar.render(0.5, 1.0).plainText()).isEqualTo("\u2588".repeat(2048) + "\u2591".repeat(2048));
     }
 
     @Test
@@ -62,17 +59,21 @@ class ProgressRenderCostTest {
         for (int width : new int[] {1, 3, 8}) {
             for (int buffer : new int[] {0, 2}) {
                 for (double value : new double[] {0, 0.5, 1}) {
-                    ProgressBar bar = ProgressBar.of(width).icons("漢", " ").buffer(buffer)
-                            .colors(Color.WHITE, Color.BLACK).prepend(label)
-                            .append(StyledText.of("post", Style.NONE.withItalic())).showPercentage(true);
+                    ProgressBar bar = ProgressBar.of(width)
+                            .icons("漢", " ")
+                            .buffer(buffer)
+                            .colors(Color.WHITE, Color.BLACK)
+                            .prepend(label)
+                            .append(StyledText.of("post", Style.NONE.withItalic()))
+                            .showPercentage(true);
                     StyledText expected = StyledText.of("pre ", label.style(), "https://example.com");
                     int filled = (int) Math.round(value * width);
                     for (int i = 0; i < width; i++) {
                         if (i > 0 && buffer > 0) {
                             expected = expected.append(" ".repeat(buffer));
                         }
-                        expected = expected.append(StyledText.of(i < filled ? "漢" : " ",
-                                Style.fg(i < filled ? Color.WHITE : Color.BLACK)));
+                        expected = expected.append(StyledText.of(
+                                i < filled ? "漢" : " ", Style.fg(i < filled ? Color.WHITE : Color.BLACK)));
                     }
                     expected = expected.append(" " + Math.round(value * 100) + "%")
                             .append(StyledText.of("post", Style.NONE.withItalic()));

@@ -22,10 +22,9 @@
 
 package io.github.dhoard.braxton.clipboard;
 
+import io.github.dhoard.braxton.style.LineBreaks;
 import java.util.ArrayList;
 import java.util.List;
-
-import io.github.dhoard.braxton.style.LineBreaks;
 
 /**
  * Centralized, deterministic normalization for pasted text.
@@ -51,8 +50,7 @@ public final class PasteSanitizer {
     private static final char C1_PM = '\u009e';
     private static final char C1_APC = '\u009f';
 
-    private PasteSanitizer() {
-    }
+    private PasteSanitizer() {}
 
     /** Normalizes pasted text with {@link PasteMode#NORMAL}. */
     public static String sanitize(String text) {
@@ -204,8 +202,7 @@ public final class PasteSanitizer {
                 index++;
                 continue;
             }
-            if (c == '\ufeff' || c == '\u200b' || c == '\u2060' || c == '\u180e'
-                    || c == '\u00ad') {
+            if (c == '\ufeff' || c == '\u200b' || c == '\u2060' || c == '\u180e' || c == '\u00ad') {
                 index++;
                 continue;
             }
@@ -224,9 +221,10 @@ public final class PasteSanitizer {
      * joiner (U+200D) is deliberately never removed because it is required by emoji sequences.
      */
     private static boolean isAggressivelyRemoved(char c) {
-        return c == '\u200c'                 // zero-width non-joiner
-                || c == '\u061c'             // Arabic letter mark
-                || c == '\u200e' || c == '\u200f' // LRM / RLM
+        return c == '\u200c' // zero-width non-joiner
+                || c == '\u061c' // Arabic letter mark
+                || c == '\u200e'
+                || c == '\u200f' // LRM / RLM
                 || (c >= '\u202a' && c <= '\u202e') // bidi embeddings/overrides
                 || (c >= '\u2061' && c <= '\u2064') // invisible mathematical operators
                 || (c >= '\u2066' && c <= '\u206f') // bidi isolates and deprecated format chars
@@ -253,9 +251,7 @@ public final class PasteSanitizer {
                 while (i < text.length() && text.charAt(i) >= 0x20 && text.charAt(i) <= 0x2f) {
                     i++;
                 }
-                yield i < text.length() && text.charAt(i) >= 0x30 && text.charAt(i) <= 0x7e
-                        ? i + 1
-                        : i;
+                yield i < text.length() && text.charAt(i) >= 0x30 && text.charAt(i) <= 0x7e ? i + 1 : i;
             }
         };
     }

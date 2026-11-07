@@ -24,7 +24,6 @@ package io.github.dhoard.braxton.effect;
 
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.mvu.ComponentPath;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,17 +56,13 @@ public sealed interface Subscription<Msg> {
         return switch (this) {
             case None<Msg> none -> none;
             case Batch<Msg> batch ->
-                    new Batch<>(batch.items().stream().map(item -> item.scoped(path)).toList());
+                new Batch<>(
+                        batch.items().stream().map(item -> item.scoped(path)).toList());
             case Interval<Msg> interval ->
-                    new Interval<>(
-                            interval.id().scoped(path), interval.period(), interval.onTick());
+                new Interval<>(interval.id().scoped(path), interval.period(), interval.onTick());
             case Resize<Msg> resize -> new Resize<>(resize.id().scoped(path), resize.onResize());
             case Source<Msg> source ->
-                    new Source<>(
-                            source.id().scoped(path),
-                            source.configuration(),
-                            source.start(),
-                            source.mapper());
+                new Source<>(source.id().scoped(path), source.configuration(), source.start(), source.mapper());
         };
     }
 
@@ -124,8 +119,7 @@ public sealed interface Subscription<Msg> {
     }
 
     /** Emits a message after every {@code period}; the payload is the emission time in nanos. */
-    record Interval<Msg>(SubscriptionId id, Duration period, Function<Long, Msg> onTick)
-            implements Subscription<Msg> {
+    record Interval<Msg>(SubscriptionId id, Duration period, Function<Long, Msg> onTick) implements Subscription<Msg> {
 
         public Interval {
             Objects.requireNonNull(id, "id");
@@ -136,8 +130,7 @@ public sealed interface Subscription<Msg> {
             try {
                 period.toNanos();
             } catch (ArithmeticException overflow) {
-                throw new IllegalArgumentException(
-                        "interval period must fit in nanoseconds: " + period, overflow);
+                throw new IllegalArgumentException("interval period must fit in nanoseconds: " + period, overflow);
             }
             Objects.requireNonNull(onTick, "onTick");
         }
@@ -188,8 +181,11 @@ public sealed interface Subscription<Msg> {
      * for the queue to drain: a burst larger than the mailbox capacity fails the run with a mailbox
      * overflow instead of waiting for the consumer that is already blocked in {@code start}.</p>
      */
-    record Source<Msg>(SubscriptionId id, Object configuration,
-            Function<Consumer<Object>, AutoCloseable> start, Function<Object, Msg> mapper)
+    record Source<Msg>(
+            SubscriptionId id,
+            Object configuration,
+            Function<Consumer<Object>, AutoCloseable> start,
+            Function<Object, Msg> mapper)
             implements Subscription<Msg> {
 
         public Source {
@@ -202,13 +198,11 @@ public sealed interface Subscription<Msg> {
         @Override
         public <Msg2> Subscription<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
             Objects.requireNonNull(mapper, "mapper");
-            return new Source<>(id, configuration, start,
-                    value -> mapMessage(this.mapper.apply(value), mapper));
+            return new Source<>(id, configuration, start, value -> mapMessage(this.mapper.apply(value), mapper));
         }
     }
 
-    private static <Msg, Msg2> Msg2 mapMessage(
-            Msg message, Function<? super Msg, ? extends Msg2> mapper) {
+    private static <Msg, Msg2> Msg2 mapMessage(Msg message, Function<? super Msg, ? extends Msg2> mapper) {
         return message == null ? null : mapper.apply(message);
     }
 
@@ -235,8 +229,7 @@ public sealed interface Subscription<Msg> {
         return flat.size() == 1 ? flat.get(0) : new Batch<>(flat);
     }
 
-    static <Msg> Subscription<Msg> interval(SubscriptionId id, Duration period,
-            Function<Long, Msg> onTick) {
+    static <Msg> Subscription<Msg> interval(SubscriptionId id, Duration period, Function<Long, Msg> onTick) {
         return new Interval<>(id, period, onTick);
     }
 
@@ -244,8 +237,11 @@ public sealed interface Subscription<Msg> {
         return new Resize<>(id, onResize);
     }
 
-    static <Msg> Subscription<Msg> source(SubscriptionId id, Object configuration,
-            Function<Consumer<Object>, AutoCloseable> start, Function<Object, Msg> mapper) {
+    static <Msg> Subscription<Msg> source(
+            SubscriptionId id,
+            Object configuration,
+            Function<Consumer<Object>, AutoCloseable> start,
+            Function<Object, Msg> mapper) {
         return new Source<>(id, configuration, start, mapper);
     }
 

@@ -24,13 +24,11 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /** Time-driven frames: the spinner advances and wraps, the shimmer travels and repeats. */
 class AnimationTest {
@@ -60,9 +58,11 @@ class AnimationTest {
         assertThat(Animation.spinner(250_000_000L, 0L, Style.NONE).plainText()).isEqualTo("\u25C8");
         assertThat(Animation.spinner(500_000_000L, 0L, Style.NONE).plainText()).isEqualTo("\u25C6");
         assertThat(Animation.spinner(1_000_000_000L, 0L, Style.NONE).plainText())
-                .as("a full cycle wraps back to the first frame").isEqualTo("\u25C7");
+                .as("a full cycle wraps back to the first frame")
+                .isEqualTo("\u25C7");
         assertThat(Animation.spinner(0L, 5_000_000_000L, Style.NONE).plainText())
-                .as("a clock before the start clamps to the first frame").isEqualTo("\u25C7");
+                .as("a clock before the start clamps to the first frame")
+                .isEqualTo("\u25C7");
     }
 
     @Test
@@ -94,10 +94,12 @@ class AnimationTest {
         assertThat(Animation.spinner(0L, 10_000_000_000L, Style.NONE).plainText())
                 .as("a clock before the start is frame zero")
                 .isEqualTo(Animation.spinner(0L, 0L, Style.NONE).plainText());
-        assertThat(Animation.spinner(Long.MAX_VALUE, 0L, Style.NONE).plainText()).isNotEmpty();
+        assertThat(Animation.spinner(Long.MAX_VALUE, 0L, Style.NONE).plainText())
+                .isNotEmpty();
         assertThat(Animation.spinner(Long.MAX_VALUE, Long.MIN_VALUE, Style.NONE).plainText())
                 .isNotEmpty();
-        assertThat(Animation.spinner(0L, 0L, null).style()).as("a null style is the default")
+        assertThat(Animation.spinner(0L, 0L, null).style())
+                .as("a null style is the default")
                 .isEqualTo(Style.NONE);
         // Four frames of 250 ms make a one-second cycle; the glyph set repeats the second glyph,
         // so the cycle is proven by wrapping rather than by counting distinct glyphs.
@@ -107,9 +109,13 @@ class AnimationTest {
         }
         assertThat(frames).allSatisfy(frame -> assertThat(frame).isNotEmpty());
         assertThat(frames.get(Animation.spinnerFrames()))
-                .as("the cycle repeats after four frames").isEqualTo(frames.get(0));
-        assertThat(frames.subList(0, Animation.spinnerFrames()).stream().distinct().count())
-                .as("the frames advance").isGreaterThan(1);
+                .as("the cycle repeats after four frames")
+                .isEqualTo(frames.get(0));
+        assertThat(frames.subList(0, Animation.spinnerFrames()).stream()
+                        .distinct()
+                        .count())
+                .as("the frames advance")
+                .isGreaterThan(1);
 
         assertThat(Animation.shimmer("abcdef", Long.MIN_VALUE, BASE, LIGHT).plainText())
                 .isEqualTo("abcdef");

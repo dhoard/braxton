@@ -26,7 +26,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-
 /** Mailbox accessors and a negative timeout (treated as no wait). */
 class MailboxValueTest {
 

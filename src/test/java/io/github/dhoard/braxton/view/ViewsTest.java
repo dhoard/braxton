@@ -24,14 +24,12 @@ package io.github.dhoard.braxton.view;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Style;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /** The terse factories produce the geometry the view records describe. */
 class ViewsTest {
@@ -41,21 +39,21 @@ class ViewsTest {
     @Test
     void gapReservesExactlyItsRowsAndNothingElse() {
         View<String> view = Views.column(Views.text("top"), Views.gap(2), Views.text("bottom"));
-        assertThat(renderer.plainLines(view, new Viewport(5, 8)))
-                .containsExactly("top", "", "", "bottom", "");
+        assertThat(renderer.plainLines(view, new Viewport(5, 8))).containsExactly("top", "", "", "bottom", "");
         assertThat(renderer.plainLines(Views.gap(0), new Viewport(2, 4)))
                 .as("a zero gap is a blank placeholder")
                 .containsExactly("", "");
-        assertThat(renderer.plainLines(Views.column(Views.text("a"), Views.gap(-3),
-                Views.text("b")), new Viewport(3, 4)))
+        assertThat(renderer.plainLines(
+                        Views.column(Views.text("a"), Views.gap(-3), Views.text("b")), new Viewport(3, 4)))
                 .as("a negative gap is clamped instead of rejected")
                 .containsExactly("a", "b", "");
     }
 
     @Test
     void blankAndFillOccupyTheirAllocationWithoutMessages() {
-        assertThat(renderer.plainLines(Views.column(Views.text("a"), Views.blank(),
-                Views.text("b")), new Viewport(3, 4))).containsExactly("a", "b", "");
+        assertThat(renderer.plainLines(
+                        Views.column(Views.text("a"), Views.blank(), Views.text("b")), new Viewport(3, 4)))
+                .containsExactly("a", "b", "");
         assertThat(Views.blank().children()).isEmpty();
         assertThat(Views.fill(Style.NONE).children()).isEmpty();
         assertThat(renderer.plainText(Views.fill(Style.NONE), new Viewport(2, 3)))
@@ -70,10 +68,8 @@ class ViewsTest {
                 .containsExactly("    ab");
         assertThat(renderer.plainLines(Views.column(Alignment.CENTER, items), new Viewport(1, 6)))
                 .containsExactly("  ab");
-        assertThat(renderer.plainLines(Views.column(items), new Viewport(1, 6)))
-                .containsExactly("ab");
-        assertThat(renderer.plainLines(Views.row(Alignment.END, List.of(Views.text("ab"))),
-                new Viewport(2, 4)))
+        assertThat(renderer.plainLines(Views.column(items), new Viewport(1, 6))).containsExactly("ab");
+        assertThat(renderer.plainLines(Views.row(Alignment.END, List.of(Views.text("ab"))), new Viewport(2, 4)))
                 .containsExactly("", "ab");
     }
 
@@ -99,26 +95,27 @@ class ViewsTest {
         assertThat(plain.border()).isEqualTo(Border.SINGLE);
         assertThat(plain.title().isEmpty()).isTrue();
         assertThat(plain.style()).isEqualTo(Style.NONE);
-        View.BorderBox<String> titled = (View.BorderBox<String>) Views.border(Border.DOUBLE,
-                io.github.dhoard.braxton.style.StyledText.plain("t"), child);
+        View.BorderBox<String> titled = (View.BorderBox<String>)
+                Views.border(Border.DOUBLE, io.github.dhoard.braxton.style.StyledText.plain("t"), child);
         assertThat(titled.border()).isEqualTo(Border.DOUBLE);
         assertThat(titled.title().plainText()).isEqualTo("t");
         assertThat(titled.style()).isEqualTo(Style.NONE);
-        View.BorderBox<String> styled = (View.BorderBox<String>) Views.border(Border.SINGLE,
-                io.github.dhoard.braxton.style.StyledText.plain("t"), Style.NONE.withBold(), child);
+        View.BorderBox<String> styled = (View.BorderBox<String>) Views.border(
+                Border.SINGLE, io.github.dhoard.braxton.style.StyledText.plain("t"), Style.NONE.withBold(), child);
         assertThat(styled.style().bold()).isTrue();
         assertThat(renderer.plainLines(plain, new Viewport(3, 6)))
-                .containsExactly("\u250C\u2500\u2500\u2500\u2500\u2510", "\u2502body\u2502",
+                .containsExactly(
+                        "\u250C\u2500\u2500\u2500\u2500\u2510",
+                        "\u2502body\u2502",
                         "\u2514\u2500\u2500\u2500\u2500\u2518");
     }
 
     @Test
     void withFocusChangesOnlyTheFocusedFlag() {
-        io.github.dhoard.braxton.input.Binding<String> binding =
-                io.github.dhoard.braxton.input.Binding.of("a", "msg");
+        io.github.dhoard.braxton.input.Binding<String> binding = io.github.dhoard.braxton.input.Binding.of("a", "msg");
         View<String> child = Views.text("body");
-        View.Focused<String> unfocused = (View.Focused<String>) Views.focus(ElementId.of("e"),
-                false, List.of(binding), event -> java.util.Optional.empty(), child);
+        View.Focused<String> unfocused = (View.Focused<String>)
+                Views.focus(ElementId.of("e"), false, List.of(binding), event -> java.util.Optional.empty(), child);
         View.Focused<String> focused = unfocused.withFocus(true);
         assertThat(focused.focused()).isTrue();
         assertThat(focused.id()).isEqualTo(unfocused.id());

@@ -37,14 +37,17 @@ class EditorStateBoundaryTest {
                 Editor.Model caret = original.withCaret(offset);
                 assertThat(caret.caret()).as("inside %s at %d", cluster, offset).isEqualTo(1);
                 assertThat(caret.anchor()).isEqualTo(1);
-                assertThat(original.withSelection(offset, original.text().length()).selection())
+                assertThat(original.withSelection(offset, original.text().length())
+                                .selection())
                         .isEqualTo(cluster + "z");
-                assertThat(original.withSelection(original.text().length(), offset).selection())
+                assertThat(original.withSelection(original.text().length(), offset)
+                                .selection())
                         .isEqualTo(cluster + "z");
                 assertThat(original.withCaret(1 + cluster.length()).caret()).isEqualTo(1 + cluster.length());
             }
             assertThat(original.withCaret(Integer.MIN_VALUE).caret()).isZero();
-            assertThat(original.withCaret(Integer.MAX_VALUE).caret()).isEqualTo(original.text().length());
+            assertThat(original.withCaret(Integer.MAX_VALUE).caret())
+                    .isEqualTo(original.text().length());
         }
     }
 }

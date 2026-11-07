@@ -39,8 +39,7 @@ public final class TmuxClipboard {
     private static final String SUFFIX = "\u001b\\";
     private static final char ESC = '\u001b';
 
-    private TmuxClipboard() {
-    }
+    private TmuxClipboard() {}
 
     /**
      * Wraps {@code sequence} for tmux passthrough.

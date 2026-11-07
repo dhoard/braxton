@@ -24,10 +24,9 @@ package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
+import org.junit.jupiter.api.Test;
 
 /** A cell is a value, and only an untouched one counts as empty: a blank still occupies a column. */
 class CellTest {
@@ -54,13 +53,10 @@ class CellTest {
     @Test
     void equalityIsByValueIncludingTheLink() {
         Cell cell = new Cell("\u65E5", Style.NONE.withBold(), "https://example.test");
-        assertThat(cell).isEqualTo(new Cell("\u65E5", Style.NONE.withBold(),
-                "https://example.test"));
-        assertThat(cell).hasSameHashCodeAs(new Cell("\u65E5", Style.NONE.withBold(),
-                "https://example.test"));
+        assertThat(cell).isEqualTo(new Cell("\u65E5", Style.NONE.withBold(), "https://example.test"));
+        assertThat(cell).hasSameHashCodeAs(new Cell("\u65E5", Style.NONE.withBold(), "https://example.test"));
         assertThat(cell).isNotEqualTo(new Cell("\u65E5", Style.NONE.withBold(), null));
         assertThat(cell).isNotEqualTo(new Cell("\u65E5", Style.NONE, "https://example.test"));
-        assertThat(cell).isNotEqualTo(new Cell("\u65E5", Style.NONE.withItalic(),
-                "https://example.test"));
+        assertThat(cell).isNotEqualTo(new Cell("\u65E5", Style.NONE.withItalic(), "https://example.test"));
     }
 }

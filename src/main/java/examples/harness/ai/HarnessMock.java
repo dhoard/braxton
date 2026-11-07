@@ -22,7 +22,6 @@
 
 package examples.harness.ai;
 
-
 import java.util.List;
 
 /**
@@ -34,8 +33,7 @@ import java.util.List;
  */
 final class HarnessMock {
 
-    private HarnessMock() {
-    }
+    private HarnessMock() {}
 
     /** Whether the replay position still names a recorded turn. */
     static boolean hasRecordedTurn(Harness.Model state) {
@@ -52,43 +50,42 @@ final class HarnessMock {
         return fallback(prompt, state.profile());
     }
 
-    static HarnessTranscript.HarnessTurn fallback(String prompt,
-            HarnessTranscript.Profile profile) {
+    static HarnessTranscript.HarnessTurn fallback(String prompt, HarnessTranscript.Profile profile) {
         String safePrompt = HarnessRender.sanitize(prompt).strip();
         String quoted = "\"" + HarnessRender.truncate(safePrompt, 80) + "\"";
-        String reasoning = "No model is attached. I am rendering a deterministic mock response for "
-                + quoted + ".";
-        String result =
-                """
+        String reasoning = "No model is attached. I am rendering a deterministic mock response for " + quoted + ".";
+        String result = """
                 Component          holds immutable state and pure update/view
                 Editor           owns the draft and emits submit/copy/paste intents
                 View             describes layout; layout paints cells
                 JLine Terminal   owns raw mode and timed input
                 """;
-        HarnessEntry.Tool tool =
-                new HarnessEntry.Tool(
-                        "$ read src/main/java/examples/harness/ai/Harness.java",
-                        result,
-                        false,
-                        HarnessEntry.ToolStatus.SUCCESS);
+        HarnessEntry.Tool tool = new HarnessEntry.Tool(
+                "$ read src/main/java/examples/harness/ai/Harness.java",
+                result,
+                false,
+                HarnessEntry.ToolStatus.SUCCESS);
         String assistant = switch (Math.floorMod(safePrompt.hashCode(), 3)) {
-            case 0 -> "You said: " + quoted + "\n\n"
-                    + "This is mock data, not a model response. The showcase is one MVU program: "
-                    + "no widget owns application state and no network call was made.";
-            case 1 -> "Mock response for " + quoted + ".\n\n"
-                    + "The harness is deterministic on purpose: the same prompt always produces "
-                    + "this same transcript block, so the layout is easy to inspect.";
-            default -> "Acknowledged: " + quoted + ".\n\n"
-                    + "Try another prompt, scroll the transcript with Up/Down, or press Ctrl+C "
-                    + "to exit. The example transcript is loaded from the classpath.";
+            case 0 ->
+                "You said: " + quoted + "\n\n"
+                        + "This is mock data, not a model response. The showcase is one MVU program: "
+                        + "no widget owns application state and no network call was made.";
+            case 1 ->
+                "Mock response for " + quoted + ".\n\n"
+                        + "The harness is deterministic on purpose: the same prompt always produces "
+                        + "this same transcript block, so the layout is easy to inspect.";
+            default ->
+                "Acknowledged: " + quoted + ".\n\n"
+                        + "Try another prompt, scroll the transcript with Up/Down, or press Ctrl+C "
+                        + "to exit. The example transcript is loaded from the classpath.";
         };
         long input = 800L + safePrompt.length() / 4L;
         long output = 80L + assistant.length() / 4L;
-        HarnessTranscript.Usage usage = new HarnessTranscript.Usage(
-                input, output, 120, input, input + output, 64.0);
-        return new HarnessTranscript.HarnessTurn("",
-                List.of(new HarnessEntry.Reasoning(reasoning), tool,
-                        new HarnessEntry.Assistant(assistant)),
-                usage, profile);
+        HarnessTranscript.Usage usage = new HarnessTranscript.Usage(input, output, 120, input, input + output, 64.0);
+        return new HarnessTranscript.HarnessTurn(
+                "",
+                List.of(new HarnessEntry.Reasoning(reasoning), tool, new HarnessEntry.Assistant(assistant)),
+                usage,
+                profile);
     }
 }

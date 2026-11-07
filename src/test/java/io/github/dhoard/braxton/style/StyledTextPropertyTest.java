@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.style;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Random;
-
 import org.junit.jupiter.api.Test;
 
 /** Concatenation is associative, and line splitting round-trips the plain text. */
@@ -41,7 +40,8 @@ class StyledTextPropertyTest {
             StyledText c = StyledText.plain(randomText(parts, random));
             assertThat(a.append(b).append(c)).isEqualTo(a.append(b.append(c)));
             assertThat(StyledText.concat(a, b, c)).isEqualTo(a.append(b).append(c));
-            String joined = String.join("\n", a.lines().stream().map(StyledText::plainText).toList());
+            String joined = String.join(
+                    "\n", a.lines().stream().map(StyledText::plainText).toList());
             assertThat(joined).isEqualTo(a.plainText());
             assertThat(a.stripTrailingNewlines().plainText())
                     .isEqualTo(a.plainText().replaceAll("\n+$", ""));

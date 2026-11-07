@@ -22,9 +22,6 @@
 
 package io.github.dhoard.braxton.widget;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
@@ -32,6 +29,8 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Row/column table with deterministic column widths.
@@ -55,8 +54,7 @@ public final class Table {
     private Border border = Border.NONE;
     private Style borderStyle = Style.NONE;
 
-    public Table() {
-    }
+    public Table() {}
 
     public static Table of() {
         return new Table();
@@ -165,8 +163,7 @@ public final class Table {
                     List<StyledText> lines = cellLines.get(column);
                     StyledText value = line < lines.size() ? lines.get(line) : StyledText.empty();
                     int pad = paintedRow.pad(value.plainText(), widths[column]);
-                    rendered = rendered.append(value)
-                            .append(StyledText.of(" ".repeat(pad), Style.NONE));
+                    rendered = rendered.append(value).append(StyledText.of(" ".repeat(pad), Style.NONE));
                 }
                 out.add(rendered);
             }
@@ -209,17 +206,15 @@ public final class Table {
         String bottomRight = Border.glyph(border.bottomRight());
         String horizontal = Border.glyph(border.horizontal());
         List<StyledText> framed = new ArrayList<>();
-        framed.add(StyledText.of(
-                topLeft + horizontal.repeat(Math.max(0, width - 2)) + topRight, borderStyle));
+        framed.add(StyledText.of(topLeft + horizontal.repeat(Math.max(0, width - 2)) + topRight, borderStyle));
         for (StyledText line : lines) {
             int pad = Math.max(0, painted - TextMeasure.columns(vertical + line.plainText()));
             framed.add(StyledText.concat(
-                    StyledText.of(vertical, borderStyle), line,
+                    StyledText.of(vertical, borderStyle),
+                    line,
                     StyledText.of(" ".repeat(pad) + vertical, borderStyle)));
         }
-        framed.add(StyledText.of(
-                bottomLeft + horizontal.repeat(Math.max(0, width - 2)) + bottomRight,
-                borderStyle));
+        framed.add(StyledText.of(bottomLeft + horizontal.repeat(Math.max(0, width - 2)) + bottomRight, borderStyle));
         StyledText out = StyledText.empty();
         for (int i = 0; i < framed.size(); i++) {
             if (i > 0) {

@@ -24,15 +24,13 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.Arrays;
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import java.util.Arrays;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /** A gradient recolours every cluster in place and leaves the text itself untouched. */
 class GradientTest {
@@ -45,31 +43,32 @@ class GradientTest {
         StyledText source = StyledText.of("ab\nc日", Style.NONE.withBold(), "https://example.test");
         for (Gradient.Direction direction : Gradient.Direction.values()) {
             StyledText painted = Gradient.apply(source, List.of(RED, BLUE), direction);
-            assertThat(painted.plainText()).as("text for %s", direction)
-                    .isEqualTo(source.plainText());
+            assertThat(painted.plainText()).as("text for %s", direction).isEqualTo(source.plainText());
             for (StyledText.Span span : painted.spans()) {
                 if ("\n".equals(span.text())) {
                     continue;
                 }
-                assertThat(span.style().bold()).as("bold kept for %s", direction).isTrue();
-                assertThat(span.style().foreground()).as("colour set for %s", direction).isNotNull();
-                assertThat(span.link()).as("link kept for %s", direction)
-                        .isEqualTo("https://example.test");
+                assertThat(span.style().bold())
+                        .as("bold kept for %s", direction)
+                        .isTrue();
+                assertThat(span.style().foreground())
+                        .as("colour set for %s", direction)
+                        .isNotNull();
+                assertThat(span.link()).as("link kept for %s", direction).isEqualTo("https://example.test");
             }
         }
     }
 
     @Test
     void thePaletteEndsLandOnTheFirstAndLastCluster() {
-        StyledText vertical = Gradient.apply(StyledText.plain("a\nb"), List.of(RED, BLUE),
-                Gradient.Direction.VERTICAL);
+        StyledText vertical = Gradient.apply(StyledText.plain("a\nb"), List.of(RED, BLUE), Gradient.Direction.VERTICAL);
         List<StyledText.Span> verticalSpans = vertical.spans();
         assertThat(verticalSpans).hasSize(3);
         assertThat(verticalSpans.get(0).style().foreground()).isEqualTo(RED);
         assertThat(verticalSpans.get(2).style().foreground()).isEqualTo(BLUE);
 
-        StyledText horizontal = Gradient.apply(StyledText.plain("ab"), List.of(RED, BLUE),
-                Gradient.Direction.HORIZONTAL);
+        StyledText horizontal =
+                Gradient.apply(StyledText.plain("ab"), List.of(RED, BLUE), Gradient.Direction.HORIZONTAL);
         assertThat(horizontal.spans()).hasSize(2);
         assertThat(horizontal.spans().get(0).style().foreground()).isEqualTo(RED);
         assertThat(horizontal.spans().get(1).style().foreground()).isEqualTo(BLUE);
@@ -78,8 +77,8 @@ class GradientTest {
     /** A wide cluster advances the horizontal column by its painted width, not by one. */
     @Test
     void aWideClusterAdvancesTheHorizontalPositionByItsWidth() {
-        StyledText horizontal = Gradient.apply(StyledText.plain("日ab"), List.of(RED, BLUE),
-                Gradient.Direction.HORIZONTAL);
+        StyledText horizontal =
+                Gradient.apply(StyledText.plain("日ab"), List.of(RED, BLUE), Gradient.Direction.HORIZONTAL);
         List<StyledText.Span> spans = horizontal.spans();
         assertThat(TextMeasure.columns(spans.get(0).text())).isEqualTo(2);
         Color twoThirds = Gradient.interpolate(List.of(RED, BLUE), 2.0 / 3.0);
@@ -91,22 +90,23 @@ class GradientTest {
     void anUnusablePaletteReturnsTheOriginalText() {
         StyledText source = StyledText.of("ab", Style.NONE.withBold());
         assertThat(Gradient.apply(source, null, Gradient.Direction.VERTICAL)).isSameAs(source);
-        assertThat(Gradient.apply(source, List.of(), Gradient.Direction.VERTICAL)).isSameAs(source);
-        assertThat(Gradient.apply(source, Arrays.asList(null, null),
-                Gradient.Direction.VERTICAL)).isSameAs(source);
-        assertThat(Gradient.apply(StyledText.empty(), List.of(RED), null).isEmpty()).isTrue();
+        assertThat(Gradient.apply(source, List.of(), Gradient.Direction.VERTICAL))
+                .isSameAs(source);
+        assertThat(Gradient.apply(source, Arrays.asList(null, null), Gradient.Direction.VERTICAL))
+                .isSameAs(source);
+        assertThat(Gradient.apply(StyledText.empty(), List.of(RED), null).isEmpty())
+                .isTrue();
     }
 
     /** A null entry is dropped rather than treated as a colour between the neighbours. */
     @Test
     void aNullEntryIsIgnoredRatherThanInterpolated() {
-        StyledText painted = Gradient.apply(StyledText.plain("a\nb\nc"),
-                Arrays.asList(RED, null, BLUE), Gradient.Direction.VERTICAL);
+        StyledText painted = Gradient.apply(
+                StyledText.plain("a\nb\nc"), Arrays.asList(RED, null, BLUE), Gradient.Direction.VERTICAL);
         List<StyledText.Span> spans = painted.spans();
         assertThat(spans.get(0).style().foreground()).isEqualTo(RED);
         assertThat(spans.get(4).style().foreground()).isEqualTo(BLUE);
-        assertThat(spans.get(2).style().foreground())
-                .isEqualTo(Gradient.interpolate(List.of(RED, BLUE), 0.5));
+        assertThat(spans.get(2).style().foreground()).isEqualTo(Gradient.interpolate(List.of(RED, BLUE), 0.5));
     }
 
     @Test

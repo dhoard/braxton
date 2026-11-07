@@ -23,7 +23,6 @@
 package io.github.dhoard.braxton.mvu;
 
 import io.github.dhoard.braxton.effect.Command;
-
 import java.util.List;
 import java.util.Objects;
 

@@ -36,22 +36,24 @@ class TerminalValueTest {
         assertThat(TerminalOptions.DEFAULT.mouse()).isFalse();
         assertThat(TerminalOptions.DEFAULT.withMouse(true).mouse()).isTrue();
         assertThat(TerminalOptions.DEFAULT.withMouse(true).alternateScreen()).isTrue();
-        assertThat(TerminalOptions.DEFAULT.withAlternateScreen(false).alternateScreen()).isFalse();
-        assertThat(TerminalOptions.DEFAULT.withBracketedPaste(false).bracketedPaste()).isFalse();
+        assertThat(TerminalOptions.DEFAULT.withAlternateScreen(false).alternateScreen())
+                .isFalse();
+        assertThat(TerminalOptions.DEFAULT.withBracketedPaste(false).bracketedPaste())
+                .isFalse();
         assertThat(TerminalOptions.DEFAULT.withMouse(true).withBracketedPaste(false))
                 .isEqualTo(new TerminalOptions(true, true, false));
     }
 
     @Test
     void capabilitiesCaptureFactsAndDefaultTermIsEmpty() {
-        TerminalCapabilities capabilities = new TerminalCapabilities(true, true, false, true,
-                "xterm-256color");
+        TerminalCapabilities capabilities = new TerminalCapabilities(true, true, false, true, "xterm-256color");
         assertThat(capabilities.color()).isTrue();
         assertThat(capabilities.alternateScreen()).isTrue();
         assertThat(capabilities.bracketedPaste()).isFalse();
         assertThat(capabilities.mouse()).isTrue();
         assertThat(capabilities.term()).isEqualTo("xterm-256color");
-        assertThat(new TerminalCapabilities(false, false, false, false, null).term()).isEmpty();
+        assertThat(new TerminalCapabilities(false, false, false, false, null).term())
+                .isEmpty();
         assertThat(TerminalCapabilities.PLAIN.term()).isEqualTo("dumb");
         assertThat(TerminalCapabilities.PLAIN.color()).isFalse();
     }

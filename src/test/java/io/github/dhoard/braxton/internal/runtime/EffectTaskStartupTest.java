@@ -26,13 +26,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
-
-import org.junit.jupiter.api.Test;
-
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /** An executor may retain a task until after its effect has been invalidated. */
 class EffectTaskStartupTest {
@@ -62,8 +60,7 @@ class EffectTaskStartupTest {
         List<String> bodies = new ArrayList<>();
         List<String> mappings = new ArrayList<>();
         Mailbox mailbox = new Mailbox(8);
-        RuntimeServices environment = new RuntimeServices(() -> 0L, queued::add,
-                new ManualTimers(), message -> { });
+        RuntimeServices environment = new RuntimeServices(() -> 0L, queued::add, new ManualTimers(), message -> {});
         EffectRunner<String> runner = new EffectRunner<>(mailbox, environment, null, 1);
         EffectId id = EffectId.of("group-work");
         runner.interpret(task(id, "obsolete", bodies, mappings));
@@ -77,7 +74,9 @@ class EffectTaskStartupTest {
         }
         // No threads or sleeps: the executor starts the obsolete runnable only after invalidation.
         queued.remove().run();
-        assertThat(bodies).as("invalidated work must not start after cancellation/shutdown").isEmpty();
+        assertThat(bodies)
+                .as("invalidated work must not start after cancellation/shutdown")
+                .isEmpty();
         assertThat(mappings).isEmpty();
         assertThat(mailbox.size()).isZero();
         assertThat(runner.awaitIdle(Duration.ZERO)).isZero();
@@ -98,17 +97,20 @@ class EffectTaskStartupTest {
         assertThat(Thread.currentThread().isInterrupted()).isFalse();
     }
 
-    private Command<String> task(EffectId id, String name, List<String> bodies,
-            List<String> mappings) {
-        return Command.task(id, () -> {
-            bodies.add(name);
-            return name;
-        }, value -> {
-            mappings.add(name);
-            return name;
-        }, failure -> {
-            mappings.add("failed:" + name);
-            return "failed:" + name;
-        });
+    private Command<String> task(EffectId id, String name, List<String> bodies, List<String> mappings) {
+        return Command.task(
+                id,
+                () -> {
+                    bodies.add(name);
+                    return name;
+                },
+                value -> {
+                    mappings.add(name);
+                    return name;
+                },
+                failure -> {
+                    mappings.add("failed:" + name);
+                    return "failed:" + name;
+                });
     }
 }

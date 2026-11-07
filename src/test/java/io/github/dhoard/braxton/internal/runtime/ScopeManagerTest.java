@@ -29,12 +29,10 @@ import io.github.dhoard.braxton.mvu.ComponentId;
 import io.github.dhoard.braxton.mvu.ComponentPath;
 import io.github.dhoard.braxton.mvu.ComponentTree;
 import io.github.dhoard.braxton.testing.AllocationProbe;
-
-import org.junit.jupiter.api.Test;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Random;
+import org.junit.jupiter.api.Test;
 
 class ScopeManagerTest {
     private static ComponentTree.Node node(String key) {
@@ -65,10 +63,8 @@ class ScopeManagerTest {
         var mid = ComponentPath.ROOT.append(ComponentId.of("mid"));
         var leaf = mid.append(ComponentId.of("leaf"));
         var other = ComponentPath.ROOT.append(ComponentId.of("other"));
-        var nested =
-                ComponentTree.of(
-                        new ComponentTree.Node(ComponentId.of("mid"), ComponentTree.of(node("leaf"))),
-                        node("other"));
+        var nested = ComponentTree.of(
+                new ComponentTree.Node(ComponentId.of("mid"), ComponentTree.of(node("leaf"))), node("other"));
         assertThat(scopes.commit(scopes.prepare(nested, 8, 8))).isEmpty();
         for (var path : new ComponentPath[] {mid, leaf, other, ComponentPath.ROOT}) {
             assertThat(scopes.isActive(path)).as("active %s", path).isTrue();
@@ -101,9 +97,7 @@ class ScopeManagerTest {
                 .hasCauseInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> scopes.prepare(ComponentTree.of(node("a")), 1, 4))
                 .isInstanceOf(ComponentFailure.class);
-        var deep =
-                ComponentTree.of(
-                        new ComponentTree.Node(ComponentId.of("a"), ComponentTree.of(node("b"))));
+        var deep = ComponentTree.of(new ComponentTree.Node(ComponentId.of("a"), ComponentTree.of(node("b"))));
         assertThatThrownBy(() -> scopes.prepare(deep, 4, 1)).isInstanceOf(ComponentFailure.class);
         assertThat(scopes.isCurrent(root)).isTrue();
         assertThat(scopes.prepare(deep, 3, 2)).hasSize(3);
@@ -130,8 +124,7 @@ class ScopeManagerTest {
         var nodes = new ArrayList<ComponentTree.Node>();
         int count = random.nextInt(4);
         for (int i = 0; i < count; i++)
-            nodes.add(
-                    new ComponentTree.Node(ComponentId.of("n" + i), randomTree(random, depth - 1)));
+            nodes.add(new ComponentTree.Node(ComponentId.of("n" + i), randomTree(random, depth - 1)));
         Collections.shuffle(nodes, random);
         return new ComponentTree(nodes);
     }
@@ -168,14 +161,11 @@ class ScopeManagerTest {
             }
             var removed = scopes.commit(next);
             assertThat(removed)
-                    .containsExactlyInAnyOrderElementsOf(
-                            previous.keySet().stream()
-                                    .filter(path -> !expected.contains(path))
-                                    .toList());
+                    .containsExactlyInAnyOrderElementsOf(previous.keySet().stream()
+                            .filter(path -> !expected.contains(path))
+                            .toList());
             for (var entry : previous.entrySet()) {
-                assertThat(
-                                scopes.isCurrent(
-                                        new ScopeManager.Origin(entry.getKey(), entry.getValue())))
+                assertThat(scopes.isCurrent(new ScopeManager.Origin(entry.getKey(), entry.getValue())))
                         .isEqualTo(expected.contains(entry.getKey()));
             }
             history.putAll(next);
@@ -186,8 +176,7 @@ class ScopeManagerTest {
     @Test
     void deepTreesAreValidatedIterativelyAndFlatTraversalHasALinearAllocationBound() {
         ComponentTree deep = ComponentTree.empty();
-        for (int i = 0; i < 10_000; i++)
-            deep = ComponentTree.of(new ComponentTree.Node(ComponentId.of("n"), deep));
+        for (int i = 0; i < 10_000; i++) deep = ComponentTree.of(new ComponentTree.Node(ComponentId.of("n"), deep));
         var finalTree = deep;
         assertThatThrownBy(() -> new ScopeManager().prepare(finalTree, 20_000, 64))
                 .isInstanceOf(ComponentFailure.class);

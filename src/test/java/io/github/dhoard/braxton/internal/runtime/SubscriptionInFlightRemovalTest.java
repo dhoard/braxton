@@ -26,10 +26,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -39,13 +35,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 @Timeout(10)
 class SubscriptionInFlightRemovalTest {
     private static Object validPayload(Mailbox.Envelope envelope) {
         assertThat(envelope).isInstanceOf(Mailbox.AppMessage.class);
         var message = (Mailbox.AppMessage) envelope;
-        assertThat(message.valid().getAsBoolean()).as("the emitted message is still live").isTrue();
+        assertThat(message.valid().getAsBoolean())
+                .as("the emitted message is still live")
+                .isTrue();
         return message.payload();
     }
 
@@ -97,8 +97,7 @@ class SubscriptionInFlightRemovalTest {
             tick.set(task);
             return cancellations::incrementAndGet;
         };
-        SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox, timers, 4,
-                message -> { });
+        SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox, timers, 4, message -> {});
         SubscriptionId id = SubscriptionId.of("source");
         AtomicReference<Consumer<Object>> callback = new AtomicReference<>();
         AtomicInteger closes = new AtomicInteger();
@@ -113,10 +112,14 @@ class SubscriptionInFlightRemovalTest {
         };
         Subscription<String> source = interval
                 ? Subscription.interval(id, Duration.ofSeconds(1), mapper::apply)
-                : Subscription.source(id, "old", sink -> {
-                    callback.set(sink);
-                    return closes::incrementAndGet;
-                }, mapper);
+                : Subscription.source(
+                        id,
+                        "old",
+                        sink -> {
+                            callback.set(sink);
+                            return closes::incrementAndGet;
+                        },
+                        mapper);
         manager.reconcile(source);
         Runnable emit = interval ? tick.get() : () -> callback.get().accept("value");
         try (var executor = Executors.newSingleThreadExecutor()) {
@@ -125,14 +128,26 @@ class SubscriptionInFlightRemovalTest {
                 assertThat(mapping.await(3, TimeUnit.SECONDS)).isTrue();
                 switch (action) {
                     case "remove" -> manager.reconcile(Subscription.none());
-                    case "replace" -> manager.reconcile(Subscription.source(id, "replacement",
-                            sink -> { sink.accept("fresh"); return () -> { }; },
-                            Object::toString));
-                    case "refresh" -> manager.reconcile(interval
-                            ? Subscription.interval(id, Duration.ofSeconds(1), time -> "fresh")
-                            : Subscription.source(id, "old", sink -> {
-                                throw new AssertionError("unchanged source must not restart");
-                            }, value -> "fresh"));
+                    case "replace" ->
+                        manager.reconcile(Subscription.source(
+                                id,
+                                "replacement",
+                                sink -> {
+                                    sink.accept("fresh");
+                                    return () -> {};
+                                },
+                                Object::toString));
+                    case "refresh" ->
+                        manager.reconcile(
+                                interval
+                                        ? Subscription.interval(id, Duration.ofSeconds(1), time -> "fresh")
+                                        : Subscription.source(
+                                                id,
+                                                "old",
+                                                sink -> {
+                                                    throw new AssertionError("unchanged source must not restart");
+                                                },
+                                                value -> "fresh"));
                     case "close" -> manager.closeAll();
                     default -> throw new AssertionError(action);
                 }
@@ -152,15 +167,18 @@ class SubscriptionInFlightRemovalTest {
                 assertThat(interval ? cancellations : closes).hasValue(0);
                 return;
             }
-            assertThat(mailbox.poll(0)).as("a removed source cannot publish a late mapping")
+            assertThat(mailbox.poll(0))
+                    .as("a removed source cannot publish a late mapping")
                     .isNull();
             emit.run();
-            assertThat(mappings).as("late callbacks must not invoke application mapping")
+            assertThat(mappings)
+                    .as("late callbacks must not invoke application mapping")
                     .hasValue(1);
             assertThat(mailbox.size()).isZero();
             assertThat(interval ? cancellations : closes).hasValue(1);
             if (interval) {
-                assertThat(tick.get()).as("a removed tick must not schedule a successor")
+                assertThat(tick.get())
+                        .as("a removed tick must not schedule a successor")
                         .isSameAs(emit);
             }
         } finally {

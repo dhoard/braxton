@@ -35,12 +35,10 @@ import io.github.dhoard.braxton.view.ScreenRenderer;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 import io.github.dhoard.braxton.widget.Editor;
-
-import org.junit.jupiter.api.Test;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Test;
 
 class MountTest {
     record Parent(Integer child, Object sibling) {}
@@ -66,17 +64,12 @@ class MountTest {
         public View<Integer> view(Integer model, ViewContext context) {
             check(ComponentFailure.Phase.VIEW);
             return Views.focus(
-                    ElementId.of("input"),
-                    true,
-                    List.of(),
-                    View.InputHandler.none(),
-                    Views.text("" + model));
+                    ElementId.of("input"), true, List.of(), View.InputHandler.none(), Views.text("" + model));
         }
 
         public Subscription<Integer> subscriptions(Integer model) {
             check(ComponentFailure.Phase.SUBSCRIPTIONS);
-            return Subscription.interval(
-                    SubscriptionId.of("tick"), Duration.ofSeconds(1), time -> model);
+            return Subscription.interval(SubscriptionId.of("tick"), Duration.ofSeconds(1), time -> model);
         }
 
         public ComponentTree children(Integer model) {
@@ -122,16 +115,11 @@ class MountTest {
         assertThat(left.update(model, 1).outputs()).containsExactly("3");
         var context = new ViewContext(new Viewport(2, 10));
         var renderer = new ScreenRenderer();
-        var regions =
-                renderer.regions(
-                        Views.column(left.view(model, context), right.view(model, context)),
-                        context.viewport());
+        var regions = renderer.regions(
+                Views.column(left.view(model, context), right.view(model, context)), context.viewport());
         assertThat(regions).hasSize(2);
         assertThat(regions.get(0).id()).isNotEqualTo(regions.get(1).id());
-        assertThat(
-                        Subscription.leaves(
-                                Subscription.batch(
-                                        left.subscriptions(model), right.subscriptions(model))))
+        assertThat(Subscription.leaves(Subscription.batch(left.subscriptions(model), right.subscriptions(model))))
                 .hasSize(2);
         assertThat(left.tree(model).id()).isEqualTo(ComponentId.of("left"));
     }
@@ -141,120 +129,84 @@ class MountTest {
         var parent = new Parent(1, new Object());
         var context = new ViewContext(Viewport.EMPTY);
         for (var phase : ComponentFailure.Phase.values()) {
-            var child =
-                    mount(
-                            "child",
-                            phase,
-                            output -> {
-                                throw new IllegalStateException("private payload");
-                            });
-            Runnable action =
-                    switch (phase) {
-                        case INIT -> () -> child.initialize(new InitContext(null, null));
-                        case UPDATE -> () -> child.update(parent, 1);
-                        case VIEW -> () -> child.view(parent, context);
-                        case SUBSCRIPTIONS -> () -> child.subscriptions(parent);
-                        case CHILDREN -> () -> child.tree(parent).children();
-                        case OUTPUT_ROUTE -> () -> child.initialize(new InitContext(null, null));
-                    };
-            assertThatThrownBy(action::run)
-                    .isInstanceOfSatisfying(
-                            ComponentFailure.class,
-                            failure -> {
-                                assertThat(failure.phase()).isEqualTo(phase);
-                                assertThat(failure.path().toString()).isEqualTo("/child");
-                                assertThat(failure.getMessage()).doesNotContain("private payload");
-                                assertThat(failure.getCause()).hasMessage("private payload");
-                            });
+            var child = mount("child", phase, output -> {
+                throw new IllegalStateException("private payload");
+            });
+            Runnable action = switch (phase) {
+                case INIT -> () -> child.initialize(new InitContext(null, null));
+                case UPDATE -> () -> child.update(parent, 1);
+                case VIEW -> () -> child.view(parent, context);
+                case SUBSCRIPTIONS -> () -> child.subscriptions(parent);
+                case CHILDREN -> () -> child.tree(parent).children();
+                case OUTPUT_ROUTE -> () -> child.initialize(new InitContext(null, null));
+            };
+            assertThatThrownBy(action::run).isInstanceOfSatisfying(ComponentFailure.class, failure -> {
+                assertThat(failure.phase()).isEqualTo(phase);
+                assertThat(failure.path().toString()).isEqualTo("/child");
+                assertThat(failure.getMessage()).doesNotContain("private payload");
+                assertThat(failure.getCause()).hasMessage("private payload");
+            });
         }
     }
 
     @Test
     void structuralReasonsAndFatalErrorsKeepTheirContract() {
         var child = ComponentPath.ROOT.append(ComponentId.of("child"));
-        var rejected =
-                new ComponentFailure(
-                        child,
-                        ComponentFailure.Phase.CHILDREN,
-                        "component depth limit exceeded",
-                        new IllegalArgumentException("component depth limit exceeded"));
-        assertThatThrownBy(
-                        () ->
-                                ComponentFailure.call(
-                                        ComponentPath.ROOT,
-                                        ComponentFailure.Phase.CHILDREN,
-                                        () -> {
-                                            throw rejected;
-                                        }))
-                .isInstanceOfSatisfying(
-                        ComponentFailure.class,
-                        failure -> {
-                            assertThat(failure.path()).isEqualTo(child);
-                            assertThat(failure.detail()).isEqualTo("component depth limit exceeded");
-                            assertThat(failure.getMessage())
-                                    .isEqualTo(
-                                            "component /child failed during CHILDREN:"
-                                                    + " component depth limit exceeded");
-                        });
+        var rejected = new ComponentFailure(
+                child,
+                ComponentFailure.Phase.CHILDREN,
+                "component depth limit exceeded",
+                new IllegalArgumentException("component depth limit exceeded"));
+        assertThatThrownBy(() -> ComponentFailure.call(ComponentPath.ROOT, ComponentFailure.Phase.CHILDREN, () -> {
+                    throw rejected;
+                }))
+                .isInstanceOfSatisfying(ComponentFailure.class, failure -> {
+                    assertThat(failure.path()).isEqualTo(child);
+                    assertThat(failure.detail()).isEqualTo("component depth limit exceeded");
+                    assertThat(failure.getMessage())
+                            .isEqualTo("component /child failed during CHILDREN:" + " component depth limit exceeded");
+                });
         // A thrown application failure carries no structural reason, only path, phase and cause.
-        assertThatThrownBy(
-                        () ->
-                                ComponentFailure.call(
-                                        child,
-                                        ComponentFailure.Phase.UPDATE,
-                                        () -> {
-                                            throw new IllegalStateException("app failure");
-                                        }))
-                .isInstanceOfSatisfying(
-                        ComponentFailure.class,
-                        failure -> {
-                            assertThat(failure.detail()).isNull();
-                            assertThat(failure.getMessage())
-                                    .isEqualTo("component /child failed during UPDATE");
-                        });
+        assertThatThrownBy(() -> ComponentFailure.call(child, ComponentFailure.Phase.UPDATE, () -> {
+                    throw new IllegalStateException("app failure");
+                }))
+                .isInstanceOfSatisfying(ComponentFailure.class, failure -> {
+                    assertThat(failure.detail()).isNull();
+                    assertThat(failure.getMessage()).isEqualTo("component /child failed during UPDATE");
+                });
         // Errors are fatal JVM conditions: they stay unwrapped so their type is preserved.
         var fatal = new StackOverflowError("fatal");
-        assertThatThrownBy(
-                        () ->
-                                ComponentFailure.call(
-                                        child,
-                                        ComponentFailure.Phase.UPDATE,
-                                        () -> {
-                                            throw fatal;
-                                        }))
+        assertThatThrownBy(() -> ComponentFailure.call(child, ComponentFailure.Phase.UPDATE, () -> {
+                    throw fatal;
+                }))
                 .isSameAs(fatal);
     }
 
     @Test
     void nestedDiagnosticsAndMountsAreTypedWithoutConsumerCasts() {
-        Component<Parent, String, String> middle =
-                new Component<>() {
-                    final Mount<Parent, String, String, Integer, Integer, Integer> inner =
-                            mount(
-                                    "inner",
-                                    ComponentFailure.Phase.UPDATE,
-                                    OutputRoute.toOutput(Object::toString));
+        Component<Parent, String, String> middle = new Component<>() {
+            final Mount<Parent, String, String, Integer, Integer, Integer> inner =
+                    mount("inner", ComponentFailure.Phase.UPDATE, OutputRoute.toOutput(Object::toString));
 
-                    public Update<Parent, String, String> init(InitContext c) {
-                        return Update.next(new Parent(1, new Object()));
-                    }
+            public Update<Parent, String, String> init(InitContext c) {
+                return Update.next(new Parent(1, new Object()));
+            }
 
-                    public Update<Parent, String, String> update(Parent m, String msg) {
-                        return inner.update(m, 1);
-                    }
+            public Update<Parent, String, String> update(Parent m, String msg) {
+                return inner.update(m, 1);
+            }
 
-                    public View<String> view(Parent m, ViewContext c) {
-                        return inner.view(m, c);
-                    }
-                };
+            public View<String> view(Parent m, ViewContext c) {
+                return inner.view(m, c);
+            }
+        };
         record Root(Parent middle) {}
-        var outer =
-                Mount.<Root, String, String, Parent, String, String>of(
-                        ComponentId.of("outer"),
-                        middle,
-                        ModelLens.of(Root::middle, (r, c) -> new Root(c)),
-                        value -> value,
-                        OutputRoute.toOutput(value -> value));
+        var outer = Mount.<Root, String, String, Parent, String, String>of(
+                ComponentId.of("outer"),
+                middle,
+                ModelLens.of(Root::middle, (r, c) -> new Root(c)),
+                value -> value,
+                OutputRoute.toOutput(value -> value));
         assertThatThrownBy(() -> outer.update(new Root(new Parent(1, new Object())), "go"))
                 .isInstanceOfSatisfying(
                         ComponentFailure.class,
@@ -265,68 +217,64 @@ class MountTest {
     void threeLevelTaskResultsMapOncePerBoundaryAndRemainInertUntilCompletion() throws Exception {
         var work = new AtomicInteger();
         var mappings = new AtomicInteger();
-        Component<Integer, Integer, Never> leaf =
-                new Component<>() {
-                    public Update<Integer, Integer, Never> init(InitContext context) {
-                        return Update.next(0);
-                    }
+        Component<Integer, Integer, Never> leaf = new Component<>() {
+            public Update<Integer, Integer, Never> init(InitContext context) {
+                return Update.next(0);
+            }
 
-                    public Update<Integer, Integer, Never> update(Integer model, Integer message) {
-                        return Update.next(
-                                model + message,
-                                Command.task(
-                                        EffectId.of("load"),
-                                        () -> {
-                                            work.incrementAndGet();
-                                            return message;
-                                        },
-                                        value -> value,
-                                        failure -> -1));
-                    }
+            public Update<Integer, Integer, Never> update(Integer model, Integer message) {
+                return Update.next(
+                        model + message,
+                        Command.task(
+                                EffectId.of("load"),
+                                () -> {
+                                    work.incrementAndGet();
+                                    return message;
+                                },
+                                value -> value,
+                                failure -> -1));
+            }
 
-                    public View<Integer> view(Integer model, ViewContext context) {
-                        return Views.blank();
-                    }
-                };
-        var inner =
-                Mount.<Parent, String, Never, Integer, Integer, Never>of(
-                        ComponentId.of("inner"),
-                        leaf,
-                        ModelLens.of(Parent::child, (p, c) -> new Parent(c, p.sibling())),
-                        value -> {
-                            mappings.incrementAndGet();
-                            return "middle:" + value;
-                        },
-                        OutputRoute.toMessage(Object::toString));
-        Component<Parent, String, Never> middle =
-                new Component<>() {
-                    public Update<Parent, String, Never> init(InitContext context) {
-                        return Update.next(new Parent(0, new Object()));
-                    }
+            public View<Integer> view(Integer model, ViewContext context) {
+                return Views.blank();
+            }
+        };
+        var inner = Mount.<Parent, String, Never, Integer, Integer, Never>of(
+                ComponentId.of("inner"),
+                leaf,
+                ModelLens.of(Parent::child, (p, c) -> new Parent(c, p.sibling())),
+                value -> {
+                    mappings.incrementAndGet();
+                    return "middle:" + value;
+                },
+                OutputRoute.toMessage(Object::toString));
+        Component<Parent, String, Never> middle = new Component<>() {
+            public Update<Parent, String, Never> init(InitContext context) {
+                return Update.next(new Parent(0, new Object()));
+            }
 
-                    public Update<Parent, String, Never> update(Parent model, String message) {
-                        return inner.update(model, Integer.parseInt(message));
-                    }
+            public Update<Parent, String, Never> update(Parent model, String message) {
+                return inner.update(model, Integer.parseInt(message));
+            }
 
-                    public View<String> view(Parent model, ViewContext context) {
-                        return inner.view(model, context);
-                    }
+            public View<String> view(Parent model, ViewContext context) {
+                return inner.view(model, context);
+            }
 
-                    public ComponentTree children(Parent model) {
-                        return ComponentTree.of(inner.tree(model));
-                    }
-                };
+            public ComponentTree children(Parent model) {
+                return ComponentTree.of(inner.tree(model));
+            }
+        };
         record Root(Parent middle) {}
-        var outer =
-                Mount.<Root, String, Never, Parent, String, Never>of(
-                        ComponentId.of("outer"),
-                        middle,
-                        ModelLens.of(Root::middle, (r, c) -> new Root(c)),
-                        value -> {
-                            mappings.incrementAndGet();
-                            return "outer:" + value;
-                        },
-                        OutputRoute.toMessage(Object::toString));
+        var outer = Mount.<Root, String, Never, Parent, String, Never>of(
+                ComponentId.of("outer"),
+                middle,
+                ModelLens.of(Root::middle, (r, c) -> new Root(c)),
+                value -> {
+                    mappings.incrementAndGet();
+                    return "outer:" + value;
+                },
+                OutputRoute.toMessage(Object::toString));
         var root = new Root(outer.initialize(new InitContext(null, null)).model());
         var result = outer.update(root, "7");
         assertThat(result.model().middle().child()).isEqualTo(7);
@@ -364,30 +312,25 @@ class MountTest {
         assertThat(driver.children().nodes()).isEmpty();
         assertThatThrownBy(() -> driver.send(null)).isInstanceOf(NullPointerException.class);
         var calls = new AtomicInteger();
-        Component<Integer, String, Never> inert =
-                new Component<>() {
-                    public Update<Integer, String, Never> init(InitContext context) {
-                        return Update.next(
-                                0,
-                                Command.task(
-                                        EffectId.of("work"),
-                                        calls::incrementAndGet,
-                                        Object::toString,
-                                        Throwable::toString));
-                    }
+        Component<Integer, String, Never> inert = new Component<>() {
+            public Update<Integer, String, Never> init(InitContext context) {
+                return Update.next(
+                        0,
+                        Command.task(
+                                EffectId.of("work"), calls::incrementAndGet, Object::toString, Throwable::toString));
+            }
 
-                    public Update<Integer, String, Never> update(Integer m, String message) {
-                        return Update.next(m);
-                    }
+            public Update<Integer, String, Never> update(Integer m, String message) {
+                return Update.next(m);
+            }
 
-                    public View<String> view(Integer m, ViewContext c) {
-                        return Views.blank();
-                    }
-                };
-        assertThat(
-                        ComponentDriver.initialize(inert, new InitContext(null, null))
-                                .latest()
-                                .command())
+            public View<String> view(Integer m, ViewContext c) {
+                return Views.blank();
+            }
+        };
+        assertThat(ComponentDriver.initialize(inert, new InitContext(null, null))
+                        .latest()
+                        .command())
                 .isInstanceOf(Command.Task.class);
         assertThat(calls).hasValue(0);
     }
@@ -398,27 +341,33 @@ class MountTest {
             public Update<Integer, Integer, Integer> init(InitContext context) {
                 return Update.next(1);
             }
+
             public Update<Integer, Integer, Integer> update(Integer model, Integer message) {
                 return new Update<>(model, Command.dispatch(message), List.of(message));
             }
+
             public View<Integer> view(Integer model, ViewContext context) {
                 return Views.text("ready");
             }
         };
         var replacements = new AtomicInteger();
         var mount = Mount.<Parent, String, String, Integer, Integer, Integer>of(
-                ComponentId.of("child"), child,
+                ComponentId.of("child"),
+                child,
                 ModelLens.of(Parent::child, (parent, value) -> {
                     replacements.incrementAndGet();
                     return new Parent(value, parent.sibling());
                 }),
-                Object::toString, OutputRoute.toOutput(Object::toString));
+                Object::toString,
+                OutputRoute.toOutput(Object::toString));
         var parent = new Parent(1, new Object());
         var result = mount.update(parent, 7);
         assertThat(result.model()).isSameAs(parent);
         assertThat(replacements).hasValue(0);
         assertThat(result.outputs()).containsExactly("7");
-        assertThat(result.command()).isInstanceOfSatisfying(Command.Scoped.class,
-                scoped -> assertThat(scoped.command()).isEqualTo(Command.dispatch("7")));
+        assertThat(result.command())
+                .isInstanceOfSatisfying(
+                        Command.Scoped.class,
+                        scoped -> assertThat(scoped.command()).isEqualTo(Command.dispatch("7")));
     }
 }

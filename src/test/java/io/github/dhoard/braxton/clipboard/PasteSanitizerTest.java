@@ -81,8 +81,7 @@ class PasteSanitizerTest {
     @Test
     void aCrAndLfSeparatedByARemovedSequenceStayTwoBreaks() {
         assertThat(PasteSanitizer.plainText("a\r\u001B[31m\nb")).isEqualTo("a\n\nb");
-        assertThat(PasteSanitizer.sanitize("a\r\u001B[31m\nb"))
-                .isEqualTo("a\n\nb");
+        assertThat(PasteSanitizer.sanitize("a\r\u001B[31m\nb")).isEqualTo("a\n\nb");
         // The same input without the intervening sequence is one break, as before.
         assertThat(PasteSanitizer.plainText("a\r\nb")).isEqualTo("a\nb");
     }
@@ -92,16 +91,13 @@ class PasteSanitizerTest {
     void aCrInsideADiscardedControlStringStaysDiscarded() {
         assertThat(PasteSanitizer.plainText("a\u001B]0;title\r\nstill-title\u0007b"))
                 .isEqualTo("ab");
-        assertThat(PasteSanitizer.plainText("a\u001B]0;unterminated\rb"))
-                .isEqualTo("a");
-        assertThat(PasteSanitizer.plainText("a\u0090payload\rb\u009Cb"))
-                .isEqualTo("ab");
+        assertThat(PasteSanitizer.plainText("a\u001B]0;unterminated\rb")).isEqualTo("a");
+        assertThat(PasteSanitizer.plainText("a\u0090payload\rb\u009Cb")).isEqualTo("ab");
     }
 
     @Test
     void plainTextLeavesNoCarriageReturnAndKeepsOneLfPerLogicalBreak() {
-        assertThat(PasteSanitizer.plainText("a\r\nb\rc\r\r\nd"))
-                .isEqualTo("a\nb\nc\n\nd");
+        assertThat(PasteSanitizer.plainText("a\r\nb\rc\r\r\nd")).isEqualTo("a\nb\nc\n\nd");
         assertThat(PasteSanitizer.plainText("a\r\nb\rc")).doesNotContain("\r");
     }
 }

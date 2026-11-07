@@ -129,7 +129,6 @@ class GeometryTest {
         assertThat(Border.SINGLE.isVisible()).isTrue();
         assertThat(Border.ROUNDED.isVisible()).isTrue();
         assertThat(Border.DOUBLE.isVisible()).isTrue();
-        assertThat(Alignment.values()).containsExactly(Alignment.START, Alignment.CENTER,
-                Alignment.END);
+        assertThat(Alignment.values()).containsExactly(Alignment.START, Alignment.CENTER, Alignment.END);
     }
 }

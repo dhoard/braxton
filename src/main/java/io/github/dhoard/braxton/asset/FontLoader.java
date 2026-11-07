@@ -61,8 +61,7 @@ public final class FontLoader {
 
     private static final Map<Family, FigletFont> CACHE = new EnumMap<>(Family.class);
 
-    private FontLoader() {
-    }
+    private FontLoader() {}
 
     /** Loads (and caches) a bundled font. */
     public static synchronized FigletFont load(Family family) throws IOException {

@@ -27,12 +27,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
 import io.github.dhoard.braxton.testing.AllocationProbe;
-
-import org.junit.jupiter.api.Test;
-
 import java.text.BreakIterator;
 import java.util.List;
 import java.util.Locale;
+import org.junit.jupiter.api.Test;
 
 class EditorNavigationCostTest {
 
@@ -40,28 +38,23 @@ class EditorNavigationCostTest {
     void verticalMovementSegmentsTheTargetLineOnce() {
         String line = "界".repeat(1024);
         Editor.Model state = new Editor.Model(line + "\n" + line, 1024, 1024, 0);
-        assertThat(
-                        AllocationProbe.bytes(
-                                () ->
-                                        new Editor(Editor.Config.defaults())
-                                                .update(state, new Editor.Msg.MoveDown())))
+        assertThat(AllocationProbe.bytes(
+                        () -> new Editor(Editor.Config.defaults()).update(state, new Editor.Msg.MoveDown())))
                 .isLessThan(2_000_000);
     }
 
     @Test
     void verticalMovementMatchesWholeDraftBoundaryReference() {
-        for (String text : List.of("a\nb", "\n\n", "界🙂\tq\né界\tmore", "a\r\nb",
-                "a\n\u0301b", "👨‍👩‍👧\n🇺🇸abc", "a\n\u200Bb")) {
+        for (String text : List.of(
+                "a\nb", "\n\n", "界🙂\tq\né界\tmore", "a\r\nb", "a\n\u0301b", "👨‍👩‍👧\n🇺🇸abc", "a\n\u200Bb")) {
             for (int i = 0; i <= text.length(); i++) {
-                for (int preferred : new int[]{0, 1, 3, 10}) {
-                    for (int direction : new int[]{-1, 1}) {
+                for (int preferred : new int[] {0, 1, 3, 10}) {
+                    for (int direction : new int[] {-1, 1}) {
                         Editor.Model state = new Editor.Model(text, i, i, preferred);
-                        Editor.Msg action =
-                                direction < 0 ? new Editor.Msg.MoveUp() : new Editor.Msg.MoveDown();
-                        assertThat(
-                                        new Editor(Editor.Config.defaults())
-                                                .update(state, action)
-                                                .model())
+                        Editor.Msg action = direction < 0 ? new Editor.Msg.MoveUp() : new Editor.Msg.MoveDown();
+                        assertThat(new Editor(Editor.Config.defaults())
+                                        .update(state, action)
+                                        .model())
                                 .isEqualTo(reference(state, direction));
                     }
                 }
@@ -97,8 +90,7 @@ class EditorNavigationCostTest {
     }
 
     private static int width(String cluster, int used) {
-        return "\t".equals(cluster) ? 4 - used % 4
-                : TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED);
+        return "\t".equals(cluster) ? 4 - used % 4 : TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED);
     }
 
     @Test

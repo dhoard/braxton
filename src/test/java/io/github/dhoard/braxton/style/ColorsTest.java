@@ -30,7 +30,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
 import org.junit.jupiter.api.Test;
 
 /** The documented palette is distinct data, and each numbered scale darkens as the number grows. */
@@ -63,10 +62,10 @@ class ColorsTest {
         assertThat(palette).hasSize(38);
         List<Color> seen = new ArrayList<>();
         for (Map.Entry<String, Color> entry : palette.entrySet()) {
-            assertThat(seen).as("%s repeats another entry", entry.getKey())
-                    .doesNotContain(entry.getValue());
+            assertThat(seen).as("%s repeats another entry", entry.getKey()).doesNotContain(entry.getValue());
             seen.add(entry.getValue());
-            assertThat(Color.parse(entry.getValue().hex())).as("%s round-trips", entry.getKey())
+            assertThat(Color.parse(entry.getValue().hex()))
+                    .as("%s round-trips", entry.getKey())
                     .contains(entry.getValue());
         }
     }
@@ -76,13 +75,15 @@ class ColorsTest {
     void eachNumberedScaleDarkensAsItsNumberGrows() {
         Map<String, Color> palette = palette();
         for (String scale : SCALES) {
-            List<String> names = palette.keySet().stream().filter(name -> name.startsWith(scale))
+            List<String> names = palette.keySet().stream()
+                    .filter(name -> name.startsWith(scale))
                     .toList();
             assertThat(names).as("entries of %s", scale).hasSizeGreaterThan(1);
             double previous = Double.MAX_VALUE;
             for (String name : names) {
                 double current = luminance(palette.get(name));
-                assertThat(current).as("%s is darker than its predecessor", name)
+                assertThat(current)
+                        .as("%s is darker than its predecessor", name)
                         .isLessThan(previous);
                 previous = current;
             }
@@ -98,7 +99,8 @@ class ColorsTest {
             if ("WHITE".equals(entry.getKey()) || "BLACK".equals(entry.getKey())) {
                 continue;
             }
-            assertThat(luminance(entry.getValue())).as("luminance of %s", entry.getKey())
+            assertThat(luminance(entry.getValue()))
+                    .as("luminance of %s", entry.getKey())
                     .isBetween(luminance(Colors.BLACK), luminance(Colors.WHITE));
         }
     }

@@ -22,14 +22,13 @@
 
 package io.github.dhoard.braxton.internal.clipboard;
 
-import java.nio.charset.StandardCharsets;
-import java.util.function.Consumer;
-
 import io.github.dhoard.braxton.clipboard.ClipboardConfig;
 import io.github.dhoard.braxton.clipboard.ClipboardPath;
 import io.github.dhoard.braxton.clipboard.ClipboardResult;
 import io.github.dhoard.braxton.clipboard.PasteSanitizer;
 import io.github.dhoard.braxton.clipboard.TmuxStrategy;
+import java.nio.charset.StandardCharsets;
+import java.util.function.Consumer;
 
 /**
  * Per-session clipboard behaviour: protocol encoding, transport selection, deduplication, and the
@@ -47,11 +46,10 @@ public final class ClipboardService {
     private final ClipboardBuffer buffer;
     private String lastSequence = "";
 
-    public ClipboardService(ClipboardConfig config, TerminalEnvironment environment,
-            Consumer<String> writer) {
+    public ClipboardService(ClipboardConfig config, TerminalEnvironment environment, Consumer<String> writer) {
         this.config = config == null ? ClipboardConfig.defaults() : config;
         this.environment = environment == null ? TerminalEnvironment.system() : environment;
-        this.writer = writer == null ? sequence -> { } : writer;
+        this.writer = writer == null ? sequence -> {} : writer;
         this.buffer = new ClipboardBuffer(this.config.maxInternalChars());
     }
 
@@ -78,8 +76,7 @@ public final class ClipboardService {
             // The payload limit left nothing to write, and an empty OSC 52 payload clears the
             // clipboard. A copy that can carry no text must not clear what the user already had.
             lastSequence = "";
-            return new ClipboardResult(stored, storedBytes, true, true, false, false,
-                    ClipboardPath.INTERNAL_ONLY);
+            return new ClipboardResult(stored, storedBytes, true, true, false, false, ClipboardPath.INTERNAL_ONLY);
         }
         String sequence = path == ClipboardPath.TMUX_PASSTHROUGH
                 ? TmuxClipboard.passthrough(encoded.sequence())
@@ -94,8 +91,7 @@ public final class ClipboardService {
             writer.accept(sequence);
         } catch (RuntimeException failure) {
             lastSequence = "";
-            return new ClipboardResult(stored, storedBytes, truncated, true, false, false,
-                    ClipboardPath.INTERNAL_ONLY);
+            return new ClipboardResult(stored, storedBytes, truncated, true, false, false, ClipboardPath.INTERNAL_ONLY);
         }
         lastSequence = sequence;
         return new ClipboardResult(stored, storedBytes, truncated, true, true, false, path);
@@ -115,8 +111,7 @@ public final class ClipboardService {
             case OFF -> ClipboardPath.INTERNAL_ONLY;
             case DIRECT -> ClipboardPath.OSC52_DIRECT;
             case TMUX_NATIVE -> tmux ? ClipboardPath.TMUX_NATIVE : ClipboardPath.OSC52_DIRECT;
-            case TMUX_PASSTHROUGH ->
-                    tmux ? ClipboardPath.TMUX_PASSTHROUGH : ClipboardPath.OSC52_DIRECT;
+            case TMUX_PASSTHROUGH -> tmux ? ClipboardPath.TMUX_PASSTHROUGH : ClipboardPath.OSC52_DIRECT;
             case AUTO -> tmux ? ClipboardPath.TMUX_NATIVE : ClipboardPath.OSC52_DIRECT;
         };
     }

@@ -24,7 +24,6 @@ package examples.harness.ai;
 
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -46,6 +45,7 @@ final class HarnessProjection {
 
     /** The pinned identity block: the identity line and the rule beneath it. */
     static final int HEADER_HEIGHT = 2;
+
     static final int FOOTER_HEIGHT = 4;
     static final int INPUT_GAP_ROWS = 1;
     /** Transcript rows the full layout keeps whenever the queue and the draft leave room. */
@@ -68,8 +68,7 @@ final class HarnessProjection {
     private static final String SEPARATOR = " | ";
     private static final String EXIT_HINT = "ctrl+c again to exit";
 
-    private HarnessProjection() {
-    }
+    private HarnessProjection() {}
 
     /**
      * How the terminal height is divided, in paint order. Invisible regions receive zero rows; the
@@ -88,8 +87,7 @@ final class HarnessProjection {
             int stats) {
 
         int rows() {
-            return header + body + queued + gap + statusRule + editorPad + editor + bottomRule
-                    + footer + stats;
+            return header + body + queued + gap + statusRule + editorPad + editor + bottomRule + footer + stats;
         }
     }
 
@@ -137,10 +135,10 @@ final class HarnessProjection {
         }
         int editor = Math.min(draftRows, maxEditorRows(height));
         int fixed = HEADER_HEIGHT + INPUT_GAP_ROWS + 2 + editor + FOOTER_HEIGHT;
-        int queued = queuedBand(state, width, Math.max(0, height - fixed - MIN_BODY_ROWS)).size();
+        int queued = queuedBand(state, width, Math.max(0, height - fixed - MIN_BODY_ROWS))
+                .size();
         int body = Math.max(0, height - fixed - queued);
-        return new Layout(
-                HEADER_HEIGHT, body, queued, INPUT_GAP_ROWS, 1, 0, editor, 1, FOOTER_HEIGHT, 0);
+        return new Layout(HEADER_HEIGHT, body, queued, INPUT_GAP_ROWS, 1, 0, editor, 1, FOOTER_HEIGHT, 0);
     }
 
     /**
@@ -150,8 +148,7 @@ final class HarnessProjection {
      */
     private static int maxEditorRows(int height) {
         int rowsBesideTheBody = HEADER_HEIGHT + INPUT_GAP_ROWS + 2 + FOOTER_HEIGHT;
-        return Math.min(
-                MAX_EDITOR_ROWS, Math.min(Math.max(1, height / 3), Math.max(1, height - rowsBesideTheBody)));
+        return Math.min(MAX_EDITOR_ROWS, Math.min(Math.max(1, height / 3), Math.max(1, height - rowsBesideTheBody)));
     }
 
     // ── geometry ─────────────────────────────────────────────────────────────
@@ -168,8 +165,7 @@ final class HarnessProjection {
     }
 
     /** The visible transcript rows and the scroll position they were read at. */
-    private record Slice(List<StyledText> rows, int start, int total) {
-    }
+    private record Slice(List<StyledText> rows, int start, int total) {}
 
     private static Slice slice(Session.Model state, int width, int rows) {
         if (rows <= 0 || width <= 0) {
@@ -211,8 +207,9 @@ final class HarnessProjection {
      * text carries the transcript only.
      */
     static String visiblePlainText(Harness.Model state) {
-        List<StyledText> rows =
-                slice(state.session(), state.viewport().cols(), layout(state).body()).rows();
+        List<StyledText> rows = slice(
+                        state.session(), state.viewport().cols(), layout(state).body())
+                .rows();
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < rows.size(); i++) {
             if (i > 0) {
@@ -226,8 +223,7 @@ final class HarnessProjection {
     // ── content ──────────────────────────────────────────────────────────────
 
     /** Wrapped content and a pure row factory, deferring styled output until a row is requested. */
-    private record ProjectedRows(int size, IntFunction<StyledText> row) {
-    }
+    private record ProjectedRows(int size, IntFunction<StyledText> row) {}
 
     static List<StyledText> allRows(Harness.Model state, int width) {
         List<StyledText> result = new ArrayList<>();
@@ -244,8 +240,8 @@ final class HarnessProjection {
         List<ProjectedRows> rows = new ArrayList<>();
         List<HarnessEntry> entries = state.entries();
         if (entries.isEmpty()) {
-            entries = List.of(new HarnessEntry.Notice(
-                    "No example transcript is loaded. Fallback mock responses are active."));
+            entries = List.of(
+                    new HarnessEntry.Notice("No example transcript is loaded. Fallback mock responses are active."));
         }
         for (int i = 0; i < entries.size(); i++) {
             if (i > 0) {
@@ -286,18 +282,14 @@ final class HarnessProjection {
         }
         int gap = width - identityWidth - fieldWidth;
         return HarnessRender.fill(
-                identity.append(StyledText.plain(" ".repeat(gap))).append(field),
-                width,
-                HarnessTheme.BACKGROUND);
+                identity.append(StyledText.plain(" ".repeat(gap))).append(field), width, HarnessTheme.BACKGROUND);
     }
 
     /** A full-width horizontal rule in the metrics dim, the style every frame rule wears. */
     static StyledText rule(int width) {
         int columns = Math.max(1, width);
         return HarnessRender.fill(
-                StyledText.of("\u2500".repeat(columns), HarnessTheme.DIM),
-                columns,
-                HarnessTheme.BACKGROUND);
+                StyledText.of("\u2500".repeat(columns), HarnessTheme.DIM), columns, HarnessTheme.BACKGROUND);
     }
 
     /**
@@ -323,12 +315,8 @@ final class HarnessProjection {
             return "";
         }
         long started = state.workStartedNanos();
-        long elapsedMillis = started < 0L
-                ? 0L
-                : Math.max(0, (state.nowNanos() - started) / 1_000_000L);
-        String hint = state.escArmedUntilNanos() > state.nowNanos()
-                ? " - esc again to stop"
-                : " - esc esc to stop";
+        long elapsedMillis = started < 0L ? 0L : Math.max(0, (state.nowNanos() - started) / 1_000_000L);
+        String hint = state.escArmedUntilNanos() > state.nowNanos() ? " - esc again to stop" : " - esc esc to stop";
         return HarnessRender.spinner(elapsedMillis)
                 + " Working ("
                 + HarnessRender.formatElapsed(elapsedMillis / 1000L)
@@ -361,9 +349,7 @@ final class HarnessProjection {
                 }
                 for (String wrapped : HarnessRender.wrap(line, width)) {
                     rendered.add(HarnessRender.fill(
-                            StyledText.of(wrapped, HarnessTheme.QUEUED),
-                            width,
-                            HarnessTheme.BACKGROUND));
+                            StyledText.of(wrapped, HarnessTheme.QUEUED), width, HarnessTheme.BACKGROUND));
                 }
             }
             if (rendered.isEmpty()) {
@@ -402,8 +388,7 @@ final class HarnessProjection {
         int from = Math.max(0, lines.length - limit);
         List<StyledText> out = new ArrayList<>(limit);
         for (int i = from; i < lines.length; i++) {
-            out.add(HarnessRender.fill(
-                    StyledText.of(lines[i], HarnessTheme.QUEUED), columns, HarnessTheme.BACKGROUND));
+            out.add(HarnessRender.fill(StyledText.of(lines[i], HarnessTheme.QUEUED), columns, HarnessTheme.BACKGROUND));
         }
         return out;
     }
@@ -426,8 +411,7 @@ final class HarnessProjection {
                 columns,
                 HarnessTheme.BACKGROUND));
         rows.add(HarnessRender.fill(
-                StyledText.of(
-                        HarnessRender.truncateLeft(state.profile().label(), columns), HarnessTheme.DIM),
+                StyledText.of(HarnessRender.truncateLeft(state.profile().label(), columns), HarnessTheme.DIM),
                 columns,
                 HarnessTheme.BACKGROUND));
         rows.add(statsRow(state, columns));
@@ -441,16 +425,16 @@ final class HarnessProjection {
             return StyledText.empty();
         }
         HarnessTranscript.Usage usage = state.usage();
-        long prompt = usage.uncachedInputTokens() > 0
-                ? usage.uncachedInputTokens() : usage.inputTokens();
+        long prompt = usage.uncachedInputTokens() > 0 ? usage.uncachedInputTokens() : usage.inputTokens();
         long cacheTotal = usage.cachedInputTokens() + usage.uncachedInputTokens();
         List<StyledText> parts = new ArrayList<>();
         parts.add(metric("\u2191 " + count(prompt)));
         parts.add(metric("\u2193 " + count(usage.outputTokens())));
         parts.add(metric("R " + count(usage.cachedInputTokens())));
-        parts.add(metric("CH " + (cacheTotal > 0
-                ? String.format(Locale.ROOT, "%.1f%%", usage.cachedInputTokens() * 100.0 / cacheTotal)
-                : "-")));
+        parts.add(metric("CH "
+                + (cacheTotal > 0
+                        ? String.format(Locale.ROOT, "%.1f%%", usage.cachedInputTokens() * 100.0 / cacheTotal)
+                        : "-")));
         if (state.contextWindow() > 0) {
             parts.add(contextPart(usage, state.contextWindow()));
         }
@@ -465,8 +449,7 @@ final class HarnessProjection {
         }
         int gap = Math.max(2, columns - HarnessRender.visibleLength(stats) - noteWidth);
         return HarnessRender.fill(
-                stats.append(StyledText.plain(" ".repeat(gap)))
-                        .append(StyledText.of(note, HarnessTheme.ACCENT)),
+                stats.append(StyledText.plain(" ".repeat(gap))).append(StyledText.of(note, HarnessTheme.ACCENT)),
                 columns,
                 HarnessTheme.BACKGROUND);
     }
@@ -474,8 +457,7 @@ final class HarnessProjection {
     private static StyledText contextPart(HarnessTranscript.Usage usage, int contextWindow) {
         long tokens = usage.contextTokens();
         double percent = tokens * 100.0 / contextWindow;
-        String label = HarnessRender.formatTokens(contextWindow)
-                + String.format(Locale.ROOT, " (%.1f%%)", percent);
+        String label = HarnessRender.formatTokens(contextWindow) + String.format(Locale.ROOT, " (%.1f%%)", percent);
         if (tokens > 0 && percent > 90) {
             return StyledText.of(label, HarnessTheme.ERROR);
         }

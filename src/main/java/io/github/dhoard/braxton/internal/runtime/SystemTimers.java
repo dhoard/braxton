@@ -39,12 +39,11 @@ final class SystemTimers implements Timers {
 
     private final ScheduledThreadPoolExecutor scheduler = newScheduler();
 
-    private SystemTimers() {
-    }
+    private SystemTimers() {}
 
     private static ScheduledThreadPoolExecutor newScheduler() {
-        ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1,
-                Thread.ofVirtual().name("braxton-timers").factory());
+        ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(
+                1, Thread.ofVirtual().name("braxton-timers").factory());
         // Without this, a cancelled delay keeps its task (and everything it captured) in the queue
         // until the original deadline elapses; a cancelled hour-long timer would pin its state.
         scheduler.setRemoveOnCancelPolicy(true);

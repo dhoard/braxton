@@ -24,13 +24,12 @@ package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.view.Views;
+import org.junit.jupiter.api.Test;
 
 /** The encoder is the only place escape sequences are produced. */
 class AnsiEncoderTest {
@@ -41,14 +40,12 @@ class AnsiEncoderTest {
         screen.put(0, 0, "n", Style.NONE, null, 1);
         screen.put(0, 1, "e", Style.NONE, null, 1);
         screen.put(0, 2, "w", Style.NONE, null, 1);
-        assertThat(AnsiEncoder.encodeRow(screen, 0, true))
-                .isEqualTo("\u001B[1;1Hnew\u001B[1;4H\u001B[0m\u001B[0K");
+        assertThat(AnsiEncoder.encodeRow(screen, 0, true)).isEqualTo("\u001B[1;1Hnew\u001B[1;4H\u001B[0m\u001B[0K");
     }
 
     @Test
     void anEmptyRowResetsStyleBeforeClearingAndAZeroWidthRowWritesNothing() {
-        assertThat(AnsiEncoder.encodeRow(new Screen(1, 6), 0, true))
-                .isEqualTo("\u001B[1;1H\u001B[0m\u001B[2K");
+        assertThat(AnsiEncoder.encodeRow(new Screen(1, 6), 0, true)).isEqualTo("\u001B[1;1H\u001B[0m\u001B[2K");
         assertThat(AnsiEncoder.frame(new Screen(2, 0), true)).isEmpty();
     }
 
@@ -64,8 +61,7 @@ class AnsiEncoderTest {
     void suffixClearingStartsAfterTheWholeWideGlyph() {
         Screen screen = new Screen(1, 4);
         screen.put(0, 0, "界", Style.NONE, null, 2);
-        assertThat(AnsiEncoder.encodeRow(screen, 0, true))
-                .isEqualTo("\u001B[1;1H界\u001B[1;3H\u001B[0m\u001B[0K");
+        assertThat(AnsiEncoder.encodeRow(screen, 0, true)).isEqualTo("\u001B[1;1H界\u001B[1;3H\u001B[0m\u001B[0K");
         Screen full = new Screen(1, 2);
         full.put(0, 0, "界", Style.NONE, null, 2);
         assertThat(AnsiEncoder.encodeRow(full, 0, true)).isEqualTo("\u001B[1;1H界");
@@ -81,8 +77,7 @@ class AnsiEncoderTest {
             screen.put(2, 0, "d", Style.NONE, null, 1);
         }
         next.put(0, 1, "x", Style.NONE, null, 1);
-        assertThat(AnsiEncoder.diff(previous, next, true))
-                .isEqualTo(AnsiEncoder.frame(next, true));
+        assertThat(AnsiEncoder.diff(previous, next, true)).isEqualTo(AnsiEncoder.frame(next, true));
         assertThat(AnsiEncoder.diff(next, next, true)).isEmpty();
     }
 
@@ -101,14 +96,14 @@ class AnsiEncoderTest {
         screen.put(0, 0, " ", Style.bg(Colors.BLACK), null, 1);
         screen.put(0, 1, " ", Style.bg(Colors.BLACK), null, 1);
         assertThat(AnsiEncoder.encodeRow(screen, 0, true))
-                .contains("48;2;0;0;0m  ").endsWith("\u001B[0m")
+                .contains("48;2;0;0;0m  ")
+                .endsWith("\u001B[0m")
                 .doesNotContain("\u001B[0K", "\u001B[2K", "\u001B[1;3H");
     }
 
     @Test
     void sgrEncodesTrueColourAndAttributes() {
-        String sgr = AnsiEncoder.sgr(Style.fg(Colors.ERROR_400).withBold()
-                .withBackground(Colors.BLACK));
+        String sgr = AnsiEncoder.sgr(Style.fg(Colors.ERROR_400).withBold().withBackground(Colors.BLACK));
         assertThat(sgr).contains("1;");
         assertThat(sgr).contains("38;2;240;68;56");
         assertThat(sgr).contains("48;2;0;0;0");
@@ -202,8 +197,7 @@ class AnsiEncoderTest {
         Screen screen = new Screen(1, 6);
         screen.put(0, 0, "界", Style.NONE, null, 2);
         screen.put(0, 2, "a", Style.NONE, null, 1);
-        assertThat(AnsiEncoder.encodeRow(screen, 0, true))
-                .isEqualTo("\u001B[1;1H界a\u001B[1;4H\u001B[0m\u001B[0K");
+        assertThat(AnsiEncoder.encodeRow(screen, 0, true)).isEqualTo("\u001B[1;1H界a\u001B[1;4H\u001B[0m\u001B[0K");
     }
 
     @Test
@@ -240,8 +234,7 @@ class AnsiEncoderTest {
         Screen previous = new Screen(2, 3);
         previous.put(0, 0, "a", Style.NONE, null, 1);
         Screen next = new Screen(2, 3);
-        assertThat(AnsiEncoder.diff(previous, next, true))
-                .isEqualTo("\u001B[1;1H\u001B[0m\u001B[2K");
+        assertThat(AnsiEncoder.diff(previous, next, true)).isEqualTo("\u001B[1;1H\u001B[0m\u001B[2K");
     }
 
     @Test
@@ -255,8 +248,7 @@ class AnsiEncoderTest {
                 .contains("\u001B[1;1H", "\u001B[2;1H", "\u001B[3;1H");
         Screen wider = new Screen(2, 5);
         wider.put(0, 0, "a", Style.NONE, null, 1);
-        assertThat(AnsiEncoder.diff(previous, wider, true))
-                .isEqualTo(AnsiEncoder.frame(wider, true));
+        assertThat(AnsiEncoder.diff(previous, wider, true)).isEqualTo(AnsiEncoder.frame(wider, true));
     }
 
     @Test
@@ -284,7 +276,8 @@ class AnsiEncoderTest {
     void dataCannotInjectEscapesBecauseContentIsSanitizedBeforeEncoding() {
         var content = StyledText.of("x\u001B[31my", Style.NONE);
         var screen = new io.github.dhoard.braxton.internal.render.LayoutEngine()
-                .layout(Views.text(content), new Rect(0, 0, 1, 10)).screen();
+                .layout(Views.text(content), new Rect(0, 0, 1, 10))
+                .screen();
         String row = AnsiEncoder.encodeRow(screen, 0, true);
         assertThat(row).contains("x[31my");
         assertThat(row).doesNotContain("\u001B[31m");
@@ -294,8 +287,7 @@ class AnsiEncoderTest {
     void interiorBlankCellsAreEncodedSoLaterContentKeepsItsColumn() {
         Screen screen = new Screen(1, 4);
         screen.put(0, 1, "b", Style.NONE, null, 1);
-        assertThat(AnsiEncoder.encodeRow(screen, 0, true))
-                .isEqualTo("\u001B[1;1H b\u001B[1;3H\u001B[0m\u001B[0K");
+        assertThat(AnsiEncoder.encodeRow(screen, 0, true)).isEqualTo("\u001B[1;1H b\u001B[1;3H\u001B[0m\u001B[0K");
     }
 
     @Test
@@ -303,16 +295,14 @@ class AnsiEncoderTest {
         Screen screen = new Screen(1, 4);
         screen.put(0, 0, "a", Style.bg(io.github.dhoard.braxton.style.Colors.BLACK), null, 1);
         screen.put(0, 2, "c", Style.NONE, null, 1);
-        assertThat(AnsiEncoder.encodeRow(screen, 0, true))
-                .endsWith("a\u001B[0m c\u001B[1;4H\u001B[0m\u001B[0K");
+        assertThat(AnsiEncoder.encodeRow(screen, 0, true)).endsWith("a\u001B[0m c\u001B[1;4H\u001B[0m\u001B[0K");
     }
 
     @Test
     void trailingBlankCellsAreNotEncoded() {
         Screen screen = new Screen(1, 6);
         screen.put(0, 0, "a", Style.NONE, null, 1);
-        assertThat(AnsiEncoder.encodeRow(screen, 0, true))
-                .isEqualTo("\u001B[1;1Ha\u001B[1;2H\u001B[0m\u001B[0K");
+        assertThat(AnsiEncoder.encodeRow(screen, 0, true)).isEqualTo("\u001B[1;1Ha\u001B[1;2H\u001B[0m\u001B[0K");
     }
 
     @Test
@@ -323,14 +313,22 @@ class AnsiEncoderTest {
         String frame = AnsiEncoder.frame(screen, true);
         assertThat(frame.indexOf("\u001B[1;1H")).isLessThan(frame.indexOf("\u001B[2;1H"));
     }
+
     @Test
     void disablingColorKeepsTextAndOtherAttributesWithoutEmittingRgbControls() {
-        Screen screen = new Screen(1,3);
-        screen.put(0,0,"x",io.github.dhoard.braxton.style.Style.NONE.withBold()
-                .withForeground(new io.github.dhoard.braxton.style.Color(255,0,0))
-                .withBackground(new io.github.dhoard.braxton.style.Color(0,0,255)),null,1);
-        String plain = AnsiEncoder.frame(screen,false);
+        Screen screen = new Screen(1, 3);
+        screen.put(
+                0,
+                0,
+                "x",
+                io.github.dhoard.braxton.style.Style.NONE
+                        .withBold()
+                        .withForeground(new io.github.dhoard.braxton.style.Color(255, 0, 0))
+                        .withBackground(new io.github.dhoard.braxton.style.Color(0, 0, 255)),
+                null,
+                1);
+        String plain = AnsiEncoder.frame(screen, false);
         assertThat(plain).contains("x", "\u001b[1m").doesNotContain("38;2", "48;2");
-        assertThat(AnsiEncoder.frame(screen,true)).contains("38;2", "48;2");
+        assertThat(AnsiEncoder.frame(screen, true)).contains("38;2", "48;2");
     }
 }

@@ -27,7 +27,6 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.internal.clipboard.ClipboardService;
 import io.github.dhoard.braxton.mvu.ComponentPath;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -77,10 +76,9 @@ public final class EffectRunner<Msg> {
     private final List<Thread> running = new ArrayList<>();
 
     private ScopeManager scopes;
-    private Consumer<Mailbox.AppMessage> dispatch =
-            mailboxMessage -> {
-                throw new IllegalStateException("local dispatch requires an owner queue");
-            };
+    private Consumer<Mailbox.AppMessage> dispatch = mailboxMessage -> {
+        throw new IllegalStateException("local dispatch requires an owner queue");
+    };
 
     public void bindScopes(ScopeManager scopes, Consumer<Mailbox.AppMessage> dispatch) {
         this.scopes = scopes;
@@ -112,8 +110,7 @@ public final class EffectRunner<Msg> {
     private boolean quitRequested;
     private int quitStatus;
 
-    public EffectRunner(Mailbox mailbox, RuntimeServices environment,
-            ClipboardService clipboard, int maxEffects) {
+    public EffectRunner(Mailbox mailbox, RuntimeServices environment, ClipboardService clipboard, int maxEffects) {
         this.mailbox = mailbox;
         this.environment = environment;
         this.clipboard = clipboard;
@@ -141,7 +138,7 @@ public final class EffectRunner<Msg> {
     private void interpret(Command<Msg> command, ComponentPath path) {
         if (quitRequested || command == null) return;
         switch (command) {
-            case Command.None<Msg> none -> { }
+            case Command.None<Msg> none -> {}
             case Command.Batch<Msg> batch -> {
                 for (Command<Msg> item : batch.commands()) {
                     interpret(item, path);
@@ -158,26 +155,16 @@ public final class EffectRunner<Msg> {
                 if (!live(target)) return;
                 interpret(scoped.command(), target);
             }
-            case Command.Dispatch<Msg> local ->
-                    dispatch.accept(new Mailbox.AppMessage(local.message(), origin(path)));
+            case Command.Dispatch<Msg> local -> dispatch.accept(new Mailbox.AppMessage(local.message(), origin(path)));
             case Command.Delay<Msg> delay ->
-                    startDelay(
-                            new Command.Delay<>(
-                                    delay.id().scoped(path),
-                                    delay.delay(),
-                                    delay.message(),
-                                    delay.rejected()));
+                startDelay(
+                        new Command.Delay<>(delay.id().scoped(path), delay.delay(), delay.message(), delay.rejected()));
             case Command.Task<Msg> task ->
-                    startTask(
-                            new Command.Task<>(
-                                    task.id().scoped(path),
-                                    task.work(),
-                                    task.onSuccess(),
-                                    task.onFailure()));
+                startTask(new Command.Task<>(task.id().scoped(path), task.work(), task.onSuccess(), task.onFailure()));
             case Command.Cancel<Msg> cancel -> cancel(cancel.id().scoped(path));
             case Command.CancelAll<Msg> cancel -> cancelScope(path);
             case Command.ReadClipboard<Msg> read ->
-                    deliver(read.mapper().apply(clipboard.internalText()), origin(path));
+                deliver(read.mapper().apply(clipboard.internalText()), origin(path));
             case Command.Copy<Msg> copy -> {
                 ClipboardResult result = clipboard.copy(copy.text());
                 deliver(copy.mapper().apply(result), origin(path));
@@ -196,17 +183,16 @@ public final class EffectRunner<Msg> {
                 deliver(command.rejected(), origin(command.id().path()));
                 return;
             }
-            entry =
-                    new Entry(
-                            command.id(),
-                            nextEpoch++,
-                            false,
-                            command.delay(),
-                            origin(command.id().path()));
+            entry = new Entry(
+                    command.id(),
+                    nextEpoch++,
+                    false,
+                    command.delay(),
+                    origin(command.id().path()));
             replaceLocked(entry);
         }
-        Timers.Handle handle = environment.timers().schedule(
-                command.delay().toNanos(), () -> fireDelay(command, entry));
+        Timers.Handle handle =
+                environment.timers().schedule(command.delay().toNanos(), () -> fireDelay(command, entry));
         synchronized (lock) {
             entry.timer = handle;
             if (!isCurrent(entry)) {
@@ -229,17 +215,15 @@ public final class EffectRunner<Msg> {
         Entry entry;
         synchronized (lock) {
             if (entries.size() >= maxEffects && !entries.containsKey(command.id())) {
-                deliverFailure(command,
-                        new IllegalStateException("effect quota exhausted: " + command.id()));
+                deliverFailure(command, new IllegalStateException("effect quota exhausted: " + command.id()));
                 return;
             }
-            entry =
-                    new Entry(
-                            command.id(),
-                            nextEpoch++,
-                            true,
-                            Duration.ZERO,
-                            origin(command.id().path()));
+            entry = new Entry(
+                    command.id(),
+                    nextEpoch++,
+                    true,
+                    Duration.ZERO,
+                    origin(command.id().path()));
             replaceLocked(entry);
         }
         Executor executor = environment.effectExecutor();
@@ -319,8 +303,10 @@ public final class EffectRunner<Msg> {
                 finish(entry);
                 accept(entry);
             }
-            environment.diagnostics().accept("effect " + command.id()
-                    + ": failure mapper threw " + mapperFailure.getClass().getSimpleName());
+            environment
+                    .diagnostics()
+                    .accept("effect " + command.id() + ": failure mapper threw "
+                            + mapperFailure.getClass().getSimpleName());
         }
     }
 
@@ -440,10 +426,9 @@ public final class EffectRunner<Msg> {
             if (entry != null) accept(entry);
             return;
         }
-        Mailbox.Envelope envelope =
-                entry == null
-                        ? new Mailbox.AppMessage(message, origin)
-                        : new Mailbox.AppMessage(message, origin, () -> accept(entry));
+        Mailbox.Envelope envelope = entry == null
+                ? new Mailbox.AppMessage(message, origin)
+                : new Mailbox.AppMessage(message, origin, () -> accept(entry));
         if (Thread.currentThread() == owner) {
             mailbox.enqueueFromOwner(envelope);
             return;

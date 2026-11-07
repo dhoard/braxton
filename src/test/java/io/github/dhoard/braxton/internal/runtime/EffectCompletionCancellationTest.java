@@ -26,14 +26,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
-
-import org.junit.jupiter.api.Test;
-
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import org.junit.jupiter.api.Test;
 
 /** Mapping a completion does not end the effect's cancellable lifetime. */
 class EffectCompletionCancellationTest {
@@ -74,17 +72,21 @@ class EffectCompletionCancellationTest {
         Mailbox mailbox = new Mailbox(8);
         AtomicReference<Thread> worker = new AtomicReference<>();
         AtomicReference<Throwable> uncaught = new AtomicReference<>();
-        RuntimeServices environment = new RuntimeServices(() -> 0L, task -> {
-            Thread thread = Thread.ofVirtual().unstarted(() -> {
-                try {
-                    task.run();
-                } catch (Throwable failure) {
-                    uncaught.set(failure);
-                }
-            });
-            worker.set(thread);
-            thread.start();
-        }, new ManualTimers(), message -> { });
+        RuntimeServices environment = new RuntimeServices(
+                () -> 0L,
+                task -> {
+                    Thread thread = Thread.ofVirtual().unstarted(() -> {
+                        try {
+                            task.run();
+                        } catch (Throwable failure) {
+                            uncaught.set(failure);
+                        }
+                    });
+                    worker.set(thread);
+                    thread.start();
+                },
+                new ManualTimers(),
+                message -> {});
         EffectRunner<String> runner = new EffectRunner<>(mailbox, environment, null, 1);
         CountDownLatch mapping = new CountDownLatch(1);
         CompletableFuture<Void> release = new CompletableFuture<>();
@@ -96,20 +98,26 @@ class EffectCompletionCancellationTest {
             Thread.interrupted();
             return "obsolete";
         };
-        runner.interpret(Command.task(ID, () -> {
-            if (failureMode == 1) {
-                throw new IllegalStateException("work failed");
-            }
-            return "value";
-        }, value -> {
-            if (failureMode == 2) {
-                throw new IllegalArgumentException("success mapper failed");
-            }
-            return blockedMapper.apply(value);
-        }, failure -> blockedMapper.apply(failure)));
+        runner.interpret(Command.task(
+                ID,
+                () -> {
+                    if (failureMode == 1) {
+                        throw new IllegalStateException("work failed");
+                    }
+                    return "value";
+                },
+                value -> {
+                    if (failureMode == 2) {
+                        throw new IllegalArgumentException("success mapper failed");
+                    }
+                    return blockedMapper.apply(value);
+                },
+                failure -> blockedMapper.apply(failure)));
         Thread obsolete = worker.get();
         try {
-            assertThat(mapping.await(3, TimeUnit.SECONDS)).as("completion mapper started").isTrue();
+            assertThat(mapping.await(3, TimeUnit.SECONDS))
+                    .as("completion mapper started")
+                    .isTrue();
             if (invalidation == null) {
                 runner.cancelAll();
             } else {

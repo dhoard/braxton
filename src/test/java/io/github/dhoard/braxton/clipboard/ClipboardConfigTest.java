@@ -54,8 +54,11 @@ class ClipboardConfigTest {
         assertThat(defaults.maxPayloadBytes()).isEqualTo(ClipboardConfig.DEFAULT_MAX_PAYLOAD_BYTES);
         assertThat(defaults.maxInternalChars()).isEqualTo(ClipboardConfig.DEFAULT_MAX_INTERNAL_CHARS);
         assertThat(defaults.tmuxStrategy()).isEqualTo(ClipboardConfig.DEFAULT_TMUX_STRATEGY);
-        ClipboardConfig clamped = ClipboardConfig.builder().maxPayloadBytes(0).maxInternalChars(-5)
-                .tmuxStrategy(null).build();
+        ClipboardConfig clamped = ClipboardConfig.builder()
+                .maxPayloadBytes(0)
+                .maxInternalChars(-5)
+                .tmuxStrategy(null)
+                .build();
         assertThat(clamped.maxPayloadBytes()).isEqualTo(1);
         assertThat(clamped.maxInternalChars()).isEqualTo(1);
         assertThat(clamped.tmuxStrategy()).isEqualTo(ClipboardConfig.DEFAULT_TMUX_STRATEGY);
@@ -66,23 +69,43 @@ class ClipboardConfigTest {
 
     @Test
     void invalidPropertiesFallBackToDefaults() {
-        assertThat(withProperty("braxton.clipboard.maxPayloadBytes", "abc",
-                () -> Integer.toString(ClipboardConfig.fromSystemProperties().maxPayloadBytes())))
+        assertThat(withProperty(
+                        "braxton.clipboard.maxPayloadBytes",
+                        "abc",
+                        () -> Integer.toString(
+                                ClipboardConfig.fromSystemProperties().maxPayloadBytes())))
                 .isEqualTo(Integer.toString(ClipboardConfig.DEFAULT_MAX_PAYLOAD_BYTES));
-        assertThat(withProperty("braxton.clipboard.maxPayloadBytes", "0",
-                () -> Integer.toString(ClipboardConfig.fromSystemProperties().maxPayloadBytes())))
+        assertThat(withProperty(
+                        "braxton.clipboard.maxPayloadBytes",
+                        "0",
+                        () -> Integer.toString(
+                                ClipboardConfig.fromSystemProperties().maxPayloadBytes())))
                 .isEqualTo("1");
-        assertThat(withProperty("braxton.clipboard.enabled", "nonsense",
-                () -> Boolean.toString(ClipboardConfig.fromSystemProperties().osc52Enabled())))
+        assertThat(withProperty(
+                        "braxton.clipboard.enabled",
+                        "nonsense",
+                        () -> Boolean.toString(
+                                ClipboardConfig.fromSystemProperties().osc52Enabled())))
                 .isEqualTo("true");
-        assertThat(withProperty("braxton.clipboard.enabled", "false",
-                () -> Boolean.toString(ClipboardConfig.fromSystemProperties().osc52Enabled())))
+        assertThat(withProperty(
+                        "braxton.clipboard.enabled",
+                        "false",
+                        () -> Boolean.toString(
+                                ClipboardConfig.fromSystemProperties().osc52Enabled())))
                 .isEqualTo("false");
-        assertThat(withProperty("braxton.clipboard.tmux", "direct",
-                () -> ClipboardConfig.fromSystemProperties().tmuxStrategy().name()))
+        assertThat(withProperty(
+                        "braxton.clipboard.tmux",
+                        "direct",
+                        () -> ClipboardConfig.fromSystemProperties()
+                                .tmuxStrategy()
+                                .name()))
                 .isEqualTo("DIRECT");
-        assertThat(withProperty("braxton.clipboard.tmux", "nope",
-                () -> ClipboardConfig.fromSystemProperties().tmuxStrategy().name()))
+        assertThat(withProperty(
+                        "braxton.clipboard.tmux",
+                        "nope",
+                        () -> ClipboardConfig.fromSystemProperties()
+                                .tmuxStrategy()
+                                .name()))
                 .isEqualTo(ClipboardConfig.DEFAULT_TMUX_STRATEGY.name());
     }
 
@@ -91,12 +114,17 @@ class ClipboardConfigTest {
         assertThat(PasteMode.parse(" aggressive ", PasteMode.NORMAL)).isEqualTo(PasteMode.AGGRESSIVE);
         assertThat(PasteMode.parse("other", PasteMode.NORMAL)).isEqualTo(PasteMode.NORMAL);
         assertThat(PasteMode.parse(null, PasteMode.AGGRESSIVE)).isEqualTo(PasteMode.AGGRESSIVE);
-        assertThat(TmuxStrategy.parse("Tmux_Passthrough", TmuxStrategy.AUTO))
-                .isEqualTo(TmuxStrategy.TMUX_PASSTHROUGH);
+        assertThat(TmuxStrategy.parse("Tmux_Passthrough", TmuxStrategy.AUTO)).isEqualTo(TmuxStrategy.TMUX_PASSTHROUGH);
         assertThat(TmuxStrategy.parse("", TmuxStrategy.OFF)).isEqualTo(TmuxStrategy.OFF);
-        assertThat(withProperty("braxton.paste.mode", "aggressive",
-                () -> PasteMode.configuredDefault().name())).isEqualTo("AGGRESSIVE");
-        assertThat(withProperty("braxton.paste.mode", "junk",
-                () -> PasteMode.configuredDefault().name())).isEqualTo("NORMAL");
+        assertThat(withProperty(
+                        "braxton.paste.mode",
+                        "aggressive",
+                        () -> PasteMode.configuredDefault().name()))
+                .isEqualTo("AGGRESSIVE");
+        assertThat(withProperty(
+                        "braxton.paste.mode",
+                        "junk",
+                        () -> PasteMode.configuredDefault().name()))
+                .isEqualTo("NORMAL");
     }
 }

@@ -23,7 +23,6 @@
 package io.github.dhoard.braxton.mvu;
 
 import io.github.dhoard.braxton.layout.Viewport;
-
 import java.util.Objects;
 
 /**

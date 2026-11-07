@@ -22,10 +22,9 @@
 
 package io.github.dhoard.braxton.internal.clipboard;
 
+import io.github.dhoard.braxton.internal.text.Graphemes;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-
-import io.github.dhoard.braxton.internal.text.Graphemes;
 
 /**
  * OSC 52 clipboard encoding.
@@ -52,8 +51,7 @@ public final class Osc52 {
      */
     private static final int CLUSTER_LOOKAHEAD = 64;
 
-    private Osc52() {
-    }
+    private Osc52() {}
 
     /**
      * Encodes {@code text} for the system clipboard without a size limit.
@@ -65,7 +63,8 @@ public final class Osc52 {
         // Nothing to encode means nothing to write. An empty payload would otherwise reach the
         // terminal as a sequence that clears the clipboard.
         return text == null || text.isEmpty()
-                ? "" : encode(text, CLIPBOARD_SELECTION, Integer.MAX_VALUE).sequence();
+                ? ""
+                : encode(text, CLIPBOARD_SELECTION, Integer.MAX_VALUE).sequence();
     }
 
     /**
@@ -177,8 +176,7 @@ public final class Osc52 {
     private static int settledPrefixEnd(String text, int window, int maxBytes) {
         int used = 0;
         int end = 0;
-        for (String cluster : Graphemes.iterate(window == text.length() ? text
-                : text.substring(0, window))) {
+        for (String cluster : Graphemes.iterate(window == text.length() ? text : text.substring(0, window))) {
             int size = utf8Length(cluster, Integer.MAX_VALUE);
             if (used + size > maxBytes) {
                 return end;
@@ -201,8 +199,7 @@ public final class Osc52 {
         int bytes = 0;
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            if (Character.isHighSurrogate(c) && i + 1 < text.length()
-                    && Character.isLowSurrogate(text.charAt(i + 1))) {
+            if (Character.isHighSurrogate(c) && i + 1 < text.length() && Character.isLowSurrogate(text.charAt(i + 1))) {
                 bytes += 4;
                 i++;
             } else if (c < 0x80) {

@@ -29,7 +29,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /**
@@ -58,15 +57,17 @@ class Unicode16WidthReproducibilityTest {
             while (next < merged.size() && merged.get(next)[1] < codePoint) {
                 next++;
             }
-            boolean expected = next < merged.size() && merged.get(next)[0] <= codePoint
-                    && codePoint <= merged.get(next)[1];
+            boolean expected =
+                    next < merged.size() && merged.get(next)[0] <= codePoint && codePoint <= merged.get(next)[1];
             if (Unicode16Width.isWide(codePoint) != expected) {
                 throw new AssertionError("U+" + Integer.toHexString(codePoint).toUpperCase()
                         + " is " + (expected ? "wide" : "narrow") + " in the pinned data but the"
                         + " generated table disagrees");
             }
         }
-        assertThat(merged).as("the generated table holds one range per merged run").hasSize(122);
+        assertThat(merged)
+                .as("the generated table holds one range per merged run")
+                .hasSize(122);
     }
 
     private static List<int[]> ranges(Path file, String... wanted) throws IOException {
@@ -95,8 +96,8 @@ class Unicode16WidthReproducibilityTest {
     }
 
     private static List<int[]> merge(List<int[]> ranges) {
-        ranges.sort((left, right) -> left[0] == right[0]
-                ? Integer.compare(left[1], right[1]) : Integer.compare(left[0], right[0]));
+        ranges.sort((left, right) ->
+                left[0] == right[0] ? Integer.compare(left[1], right[1]) : Integer.compare(left[0], right[0]));
         List<int[]> merged = new ArrayList<>();
         for (int[] range : ranges) {
             if (!merged.isEmpty() && range[0] <= merged.get(merged.size() - 1)[1] + 1) {

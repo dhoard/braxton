@@ -22,9 +22,6 @@
 
 package io.github.dhoard.braxton.widget;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
@@ -32,6 +29,8 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A block quote: a coloured bar, the quoted content, and an optional background.

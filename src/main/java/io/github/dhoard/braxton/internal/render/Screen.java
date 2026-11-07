@@ -22,12 +22,11 @@
 
 package io.github.dhoard.braxton.internal.render;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A fixed-size grid of painted cells.
@@ -51,6 +50,7 @@ public final class Screen {
     private final boolean[] continuation;
     /** Remembered results of {@link #inherit(Style, Color)}, oldest slot overwritten first. */
     private final Inherited[] inherited = new Inherited[INHERITED_CAP];
+
     private int inheritedSlot;
 
     public Screen(int rows, int cols) {
@@ -174,7 +174,8 @@ public final class Screen {
      */
     private Style inherit(Style style, Color background) {
         for (Inherited known : inherited) {
-            if (known != null && known.style().equals(style)
+            if (known != null
+                    && known.style().equals(style)
                     && known.background().equals(background)) {
                 return known.merged();
             }
@@ -186,8 +187,7 @@ public final class Screen {
     }
 
     /** One remembered {@link #inherit(Style, Color)} result. */
-    private record Inherited(Style style, Color background, Style merged) {
-    }
+    private record Inherited(Style style, Color background, Style merged) {}
 
     /** Drops a continuation flag whose wide glyph was just overwritten by a narrower one. */
     private void clearOrphanedContinuation(int row, int col) {
@@ -212,9 +212,7 @@ public final class Screen {
             // The cleared half keeps its ancestor's background and stays a blank that occupies
             // its column; an empty cell would silently drop a column from the row.
             Color beneath = previous.style().background();
-            Cell blank = beneath == null
-                    ? Cell.EMPTY
-                    : new Cell(" ", inherit(Style.NONE, beneath), null);
+            Cell blank = beneath == null ? Cell.EMPTY : new Cell(" ", inherit(Style.NONE, beneath), null);
             cells[index(row, col - 1)] = blank;
             cells[index(row, col)] = blank;
             continuation[index(row, col)] = false;
@@ -288,7 +286,8 @@ public final class Screen {
     @Override
     public int hashCode() {
         return 31 * (31 * java.util.Arrays.hashCode(cells) + java.util.Arrays.hashCode(continuation))
-                + rows * 31 + cols;
+                + rows * 31
+                + cols;
     }
 
     @Override

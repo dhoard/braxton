@@ -24,19 +24,15 @@ package io.github.dhoard.braxton.internal.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-
-import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.internal.runtime.RuntimeServices;
 import io.github.dhoard.braxton.clipboard.ClipboardConfig;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.internal.clipboard.ClipboardService;
 import io.github.dhoard.braxton.internal.clipboard.TerminalEnvironment;
-import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
 
 /** Cancelling a finished effect is a no-op and cancelAll does not block new work afterwards. */
 class EffectLifecycleEdgeTest {
@@ -45,10 +41,9 @@ class EffectLifecycleEdgeTest {
     void cancellingACompletedDelayIsANoOpAndCancelAllDoesNotBlockLaterWork() throws Exception {
         Mailbox mailbox = new Mailbox(16);
         ManualTimers timers = new ManualTimers();
-        RuntimeServices environment = new RuntimeServices(() -> 1_000L, Runnable::run, timers,
-                message -> { });
-        ClipboardService clipboard = new ClipboardService(ClipboardConfig.defaults(),
-                new TerminalEnvironment(Map.of("TERM", "dumb")), message -> { });
+        RuntimeServices environment = new RuntimeServices(() -> 1_000L, Runnable::run, timers, message -> {});
+        ClipboardService clipboard = new ClipboardService(
+                ClipboardConfig.defaults(), new TerminalEnvironment(Map.of("TERM", "dumb")), message -> {});
         EffectRunner<String> runner = new EffectRunner<>(mailbox, environment, clipboard, 4);
         runner.bindOwner(Thread.currentThread());
         EffectId id = EffectId.of("a");

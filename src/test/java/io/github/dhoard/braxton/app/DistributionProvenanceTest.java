@@ -34,7 +34,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /**
@@ -51,7 +50,8 @@ class DistributionProvenanceTest {
     @Test
     void theProvenanceDigestsDescribeThePinnedData() throws IOException {
         List<String> rows = Files.readAllLines(provenancePath()).stream()
-                .filter(line -> line.startsWith("| `")).toList();
+                .filter(line -> line.startsWith("| `"))
+                .toList();
         assertThat(rows).as("the provenance table lists three pinned files").hasSize(3);
         for (String row : rows) {
             String[] cells = row.split("\\|");
@@ -65,13 +65,16 @@ class DistributionProvenanceTest {
 
     @Test
     void theLicenseAndProvenanceShipWithTheArtifact() throws IOException {
-        for (String resource : List.of("/META-INF/LICENSE", "/META-INF/NOTICE",
+        for (String resource : List.of(
+                "/META-INF/LICENSE",
+                "/META-INF/NOTICE",
                 "/META-INF/braxton/unicode-16.0.0/LICENSE.txt",
                 "/META-INF/braxton/unicode-16.0.0/PROVENANCE.md")) {
             try (InputStream stream = getClass().getResourceAsStream(resource)) {
                 assertThat(stream).as("%s is on the classpath", resource).isNotNull();
                 assertThat(new String(stream.readAllBytes(), StandardCharsets.UTF_8))
-                        .as("%s is not empty", resource).isNotBlank();
+                        .as("%s is not empty", resource)
+                        .isNotBlank();
             }
         }
     }
@@ -85,16 +88,17 @@ class DistributionProvenanceTest {
                     .forEach(path -> fonts.add(path.getFileName().toString()));
         }
         assertThat(fonts).hasSize(10);
-        assertThat(fonts).allSatisfy(font -> assertThat(notice)
-                .as("NOTICE names %s", font)
-                .contains(font.substring(0, font.indexOf('.'))));
-        assertThat(notice).as("the third-party section names its licence")
-                .contains("FIGlet").contains("Redistribution and use in source and binary forms");
+        assertThat(fonts)
+                .allSatisfy(font ->
+                        assertThat(notice).as("NOTICE names %s", font).contains(font.substring(0, font.indexOf('.'))));
+        assertThat(notice)
+                .as("the third-party section names its licence")
+                .contains("FIGlet")
+                .contains("Redistribution and use in source and binary forms");
     }
 
     private static Path provenancePath() {
-        return Path.of("src", "main", "resources", "META-INF", "braxton", "unicode-16.0.0",
-                "PROVENANCE.md");
+        return Path.of("src", "main", "resources", "META-INF", "braxton", "unicode-16.0.0", "PROVENANCE.md");
     }
 
     private static String sha256(Path file) throws IOException {

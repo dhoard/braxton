@@ -24,20 +24,18 @@ package io.github.dhoard.braxton.internal.input;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.ByteArrayInputStream;
+import io.github.dhoard.braxton.input.InputEvent;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-
 import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.input.InputEvent;
 
 /** Mouse reports are decoded only where they carry a key identity; the rest are skipped. */
 @org.junit.jupiter.api.extension.ExtendWith(io.github.dhoard.braxton.internal.input.TestReaders.class)
 class MouseMappingTest {
 
     private static String decode(String bytes) throws IOException {
-        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(bytes.getBytes(StandardCharsets.UTF_8))));
+        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                new ByteAtATime(bytes.getBytes(StandardCharsets.UTF_8))));
         StringBuilder out = new StringBuilder();
         while (true) {
             var event = decoder.read();
@@ -66,7 +64,9 @@ class MouseMappingTest {
     void x10WheelReportsMapAndClicksAreIgnored() throws IOException {
         assertThat(decode("\u001B[M`!!")).isEqualTo("wheelup ");
         assertThat(decode("\u001B[Ma!!")).isEqualTo("wheeldown ");
-        assertThat(decode("\u001B[M !!")).as("a click with no identity is skipped").isEmpty();
+        assertThat(decode("\u001B[M !!"))
+                .as("a click with no identity is skipped")
+                .isEmpty();
     }
 
     /** Serves a byte at a time, like a terminal delivering a sequence in pieces. */

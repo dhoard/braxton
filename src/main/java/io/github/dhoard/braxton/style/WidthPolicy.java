@@ -39,6 +39,5 @@ public record WidthPolicy(boolean wideEmoji) {
     /** Diagnostics/tests: every cluster occupies one column regardless of its code points. */
     public static final WidthPolicy ONE_COLUMN = new WidthPolicy(false);
 
-    public WidthPolicy {
-    }
+    public WidthPolicy {}
 }

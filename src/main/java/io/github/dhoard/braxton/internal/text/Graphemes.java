@@ -30,13 +30,14 @@ import java.util.NoSuchElementException;
 /** Streaming segmentation with the same boundaries as the public text measurement API. */
 public final class Graphemes {
     private static final String[] ASCII = new String[128];
+
     static {
         for (int i = 0; i < ASCII.length; i++) {
             ASCII[i] = String.valueOf((char) i);
         }
     }
-    private Graphemes() {
-    }
+
+    private Graphemes() {}
 
     public static Iterable<String> iterate(String text) {
         String value = text == null ? "" : text;

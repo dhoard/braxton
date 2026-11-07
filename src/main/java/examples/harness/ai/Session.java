@@ -31,7 +31,6 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -57,68 +56,30 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
             int scrollBack) {
         public Model {
             status = status == null ? Status.LOADING : status;
-            entries =
-                    List.copyOf(
-                            entries.size() > Harness.Model.MAX_ENTRIES
-                                    ? entries.subList(
-                                            entries.size() - Harness.Model.MAX_ENTRIES,
-                                            entries.size())
-                                    : entries);
+            entries = List.copyOf(
+                    entries.size() > Harness.Model.MAX_ENTRIES
+                            ? entries.subList(entries.size() - Harness.Model.MAX_ENTRIES, entries.size())
+                            : entries);
             profile = profile == null ? HarnessTranscript.Profile.DEFAULT : profile;
             usage = usage == null ? HarnessTranscript.Usage.EMPTY : usage;
-            contextWindow =
-                    contextWindow <= 0
-                            ? HarnessTranscript.Profile.DEFAULT_CONTEXT_WINDOW
-                            : contextWindow;
+            contextWindow = contextWindow <= 0 ? HarnessTranscript.Profile.DEFAULT_CONTEXT_WINDOW : contextWindow;
             turns = List.copyOf(turns);
         }
 
         public Model withStatus(Status value) {
-            return new Model(
-                    value,
-                    entries,
-                    profile,
-                    usage,
-                    contextWindow,
-                    turns,
-                    replayIndex,
-                    scrollBack);
+            return new Model(value, entries, profile, usage, contextWindow, turns, replayIndex, scrollBack);
         }
 
         public Model withEntries(List<HarnessEntry> value) {
-            return new Model(
-                    status,
-                    value,
-                    profile,
-                    usage,
-                    contextWindow,
-                    turns,
-                    replayIndex,
-                    scrollBack);
+            return new Model(status, value, profile, usage, contextWindow, turns, replayIndex, scrollBack);
         }
 
         public Model withScroll(int value) {
-            return new Model(
-                    status,
-                    entries,
-                    profile,
-                    usage,
-                    contextWindow,
-                    turns,
-                    replayIndex,
-                    value);
+            return new Model(status, entries, profile, usage, contextWindow, turns, replayIndex, value);
         }
 
         public Model withReplayIndex(int value) {
-            return new Model(
-                    status,
-                    entries,
-                    profile,
-                    usage,
-                    contextWindow,
-                    turns,
-                    value,
-                    scrollBack);
+            return new Model(status, entries, profile, usage, contextWindow, turns, value, scrollBack);
         }
 
         /**
@@ -135,8 +96,7 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
             HarnessTranscript.Usage nextUsage = usage;
             if (transcript.turns().isEmpty()) {
                 seeded.add(new HarnessEntry.Notice(
-                        "No example transcript is loaded. Fallback mock responses are active.",
-                        nowMillis));
+                        "No example transcript is loaded. Fallback mock responses are active.", nowMillis));
             } else {
                 HarnessTranscript.HarnessTurn first = transcript.turns().get(0);
                 if (!first.userText().isBlank()) {
@@ -153,28 +113,24 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
                 }
                 replay = 1;
             }
-            Model next =
-                    new Model(
-                            Status.READY,
-                            seeded,
-                            nextProfile,
-                            nextUsage,
-                            transcript.contextWindow(),
-                            transcript.turns(),
-                            replay,
-                            scrollBack);
+            Model next = new Model(
+                    Status.READY,
+                    seeded,
+                    nextProfile,
+                    nextUsage,
+                    transcript.contextWindow(),
+                    transcript.turns(),
+                    replay,
+                    scrollBack);
             return next.withEntries(next.entries());
         }
 
-        public Model withMetadata(
-                HarnessTranscript.Profile nextProfile, HarnessTranscript.Usage nextUsage) {
+        public Model withMetadata(HarnessTranscript.Profile nextProfile, HarnessTranscript.Usage nextUsage) {
             return new Model(
                     status,
                     entries,
                     nextProfile == null ? profile : nextProfile,
-                    nextUsage == null || HarnessTranscript.Usage.EMPTY.equals(nextUsage)
-                            ? usage
-                            : nextUsage,
+                    nextUsage == null || HarnessTranscript.Usage.EMPTY.equals(nextUsage) ? usage : nextUsage,
                     contextWindow,
                     turns,
                     replayIndex,
@@ -195,8 +151,7 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
 
         record Replay(int value) implements Msg {}
 
-        record Metadata(HarnessTranscript.Profile profile, HarnessTranscript.Usage usage)
-                implements Msg {}
+        record Metadata(HarnessTranscript.Profile profile, HarnessTranscript.Usage usage) implements Msg {}
     }
 
     private final Supplier<HarnessTranscript> loader;
@@ -219,8 +174,8 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
 
     static Model initial(List<String> warnings, long nowMillis) {
         var entries = new ArrayList<HarnessEntry>();
-        entries.add(new HarnessEntry.Notice(
-                "Bundled example transcript. Type a prompt; no model is called.", nowMillis));
+        entries.add(
+                new HarnessEntry.Notice("Bundled example transcript. Type a prompt; no model is called.", nowMillis));
         for (String warning : warnings.subList(0, Math.min(3, warnings.size())))
             entries.add(new HarnessEntry.Notice("Transcript warning: " + warning, nowMillis));
         return new Model(Status.LOADING, entries, null, null, 0, List.of(), 0, 0);
@@ -239,22 +194,20 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
 
     @Override
     public Update<Model, Msg, Never> update(Model model, Msg message) {
-        Model next =
-                switch (message) {
-                    case Msg.Loaded loaded ->
-                            model.withTranscript(
-                                    loaded.transcript() == null
-                                            ? HarnessTranscript.empty(List.of("empty transcript"))
-                                            : loaded.transcript(),
-                                    now());
-                    case Msg.Failed failed -> failed(model, failed.failure());
-                    case Msg.Metadata metadata ->
-                            model.withMetadata(metadata.profile(), metadata.usage());
-                    case Msg.StatusValue value -> model.withStatus(value.value());
-                    case Msg.Entries value -> model.withEntries(value.value());
-                    case Msg.Scroll value -> model.withScroll(value.value());
-                    case Msg.Replay value -> model.withReplayIndex(value.value());
-                };
+        Model next = switch (message) {
+            case Msg.Loaded loaded ->
+                model.withTranscript(
+                        loaded.transcript() == null
+                                ? HarnessTranscript.empty(List.of("empty transcript"))
+                                : loaded.transcript(),
+                        now());
+            case Msg.Failed failed -> failed(model, failed.failure());
+            case Msg.Metadata metadata -> model.withMetadata(metadata.profile(), metadata.usage());
+            case Msg.StatusValue value -> model.withStatus(value.value());
+            case Msg.Entries value -> model.withEntries(value.value());
+            case Msg.Scroll value -> model.withScroll(value.value());
+            case Msg.Replay value -> model.withReplayIndex(value.value());
+        };
         return Update.next(next);
     }
 
@@ -262,7 +215,9 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
         var entries = new ArrayList<>(model.entries());
         entries.add(new HarnessEntry.Failure(
                 "Could not read the bundled example transcript ("
-                        + (failure == null ? "unknown error" : failure.getClass().getSimpleName())
+                        + (failure == null
+                                ? "unknown error"
+                                : failure.getClass().getSimpleName())
                         + "); fallback responses are active.",
                 now()));
         return model.withStatus(Status.READY).withEntries(entries);
@@ -272,7 +227,9 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
     public View<Msg> view(Model model, ViewContext context) {
         return Views.column(
                 HarnessProjection.window(
-                                model, context.viewport().cols(), context.viewport().rows())
+                                model,
+                                context.viewport().cols(),
+                                context.viewport().rows())
                         .stream()
                         .map(Views::<Msg>text)
                         .toList());

@@ -24,14 +24,13 @@ package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.layout.Insets;
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import org.junit.jupiter.api.Test;
 
 /** Wide-glyph bookkeeping in the painted cell grid. */
 class ScreenTest {
@@ -60,9 +59,9 @@ class ScreenTest {
 
     @Test
     void aFillCoveringTheSecondHalfOfAWideGlyphDoesNotLeaveHalfAGlyph() {
-        View<?> view = Views.overlay(Views.text("\u65E5"), Views.row(
-                Views.fixed(1, Views.blank()),
-                Views.fixed(1, Views.fill(Style.bg(Colors.BLUE_400)))));
+        View<?> view = Views.overlay(
+                Views.text("\u65E5"),
+                Views.row(Views.fixed(1, Views.blank()), Views.fixed(1, Views.fill(Style.bg(Colors.BLUE_400)))));
         Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, 1, 4)).screen();
         assertThat(screen.cell(0, 0).text()).isEmpty();
         assertThat(screen.cell(0, 1).style().background()).isEqualTo(Colors.BLUE_400);
@@ -90,9 +89,11 @@ class ScreenTest {
 
     @Test
     void aWideOverlayGlyphDoesNotLeaveAStaleContinuationBehind() {
-        View<?> view = Views.overlay(Views.text("\u65E5\u5F0F"), Views.row(
-                Views.fixed(4, Views.padding(Insets.symmetric(0, 1), Views.text("\u672C"))),
-                Views.fixed(1, Views.text("x"))));
+        View<?> view = Views.overlay(
+                Views.text("\u65E5\u5F0F"),
+                Views.row(
+                        Views.fixed(4, Views.padding(Insets.symmetric(0, 1), Views.text("\u672C"))),
+                        Views.fixed(1, Views.text("x"))));
         Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, 1, 5)).screen();
         assertThat(screen.cell(0, 1).text()).isEqualTo("\u672C");
         assertThat(screen.isContinuation(0, 2)).isTrue();

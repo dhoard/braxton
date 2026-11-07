@@ -22,11 +22,10 @@
 
 package io.github.dhoard.braxton.widget;
 
-import java.util.List;
-
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
+import java.util.List;
 
 /**
  * Tab expansion shared by the widgets that lay out text themselves.
@@ -47,8 +46,7 @@ final class TabStops {
     /** Columns between stops, matching the layout engine's text wrapping. */
     static final int WIDTH = 4;
 
-    private TabStops() {
-    }
+    private TabStops() {}
 
     /** {@code text} with every tab replaced by spaces up to the next stop on its own line. */
     static StyledText expand(StyledText text) {
@@ -89,8 +87,10 @@ final class TabStops {
             while (remaining > 0) {
                 int room = spans.get(index).text().length() - offset;
                 if (room == 0) {
-                    out = out.append(StyledText.of(run.toString(),
-                            spans.get(index).style(), spans.get(index).link()));
+                    out = out.append(StyledText.of(
+                            run.toString(),
+                            spans.get(index).style(),
+                            spans.get(index).link()));
                     run.setLength(0);
                     index++;
                     offset = 0;
@@ -108,7 +108,7 @@ final class TabStops {
                 from += take;
             }
         }
-        return out.append(StyledText.of(run.toString(),
-                spans.get(index).style(), spans.get(index).link()));
+        return out.append(StyledText.of(
+                run.toString(), spans.get(index).style(), spans.get(index).link()));
     }
 }

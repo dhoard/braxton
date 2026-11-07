@@ -24,21 +24,21 @@ package io.github.dhoard.braxton.view;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /** Headless rendering measures with the same policy it lays out with. */
 class ScreenRendererTest {
 
     @Test
     void columnsUsesTheConfiguredWidthPolicy() {
-        assertThat(new ScreenRenderer(WidthPolicy.ONE_COLUMN).columns("\u65E5\u672C")).isEqualTo(2);
-        assertThat(new ScreenRenderer(WidthPolicy.PINNED).columns("\u65E5\u672C")).isEqualTo(4);
+        assertThat(new ScreenRenderer(WidthPolicy.ONE_COLUMN).columns("\u65E5\u672C"))
+                .isEqualTo(2);
+        assertThat(new ScreenRenderer(WidthPolicy.PINNED).columns("\u65E5\u672C"))
+                .isEqualTo(4);
     }
 
     @Test
@@ -57,8 +57,7 @@ class ScreenRendererTest {
         ScreenRenderer renderer = new ScreenRenderer();
         String text = "a b\n\u65E5\u672C c";
         io.github.dhoard.braxton.view.View<String> view = io.github.dhoard.braxton.view.Views.column(
-                io.github.dhoard.braxton.view.Views.padding(1,
-                        io.github.dhoard.braxton.view.Views.text(text)));
+                io.github.dhoard.braxton.view.Views.padding(1, io.github.dhoard.braxton.view.Views.text(text)));
         for (io.github.dhoard.braxton.layout.Viewport viewport : java.util.List.of(
                 new io.github.dhoard.braxton.layout.Viewport(1, 1),
                 new io.github.dhoard.braxton.layout.Viewport(3, 5),
@@ -71,17 +70,15 @@ class ScreenRendererTest {
             assertThat(lines).isEqualTo(screen.plainLines());
             assertThat(renderer.plainText(view, viewport)).isEqualTo(String.join("\n", lines));
             assertThat(lines).allSatisfy(line -> {
-                assertThat(TextMeasure.columns(line)).as("line [%s]", line)
-                        .isLessThanOrEqualTo(viewport.cols());
+                assertThat(TextMeasure.columns(line)).as("line [%s]", line).isLessThanOrEqualTo(viewport.cols());
                 // Only U+0020 is padding, so only U+0020 is trimmed from the end of a row.
                 assertThat(line).as("trailing blanks are trimmed").doesNotEndWith(" ");
             });
         }
-        io.github.dhoard.braxton.view.View<String> spaced = io.github.dhoard.braxton.view.Views.text(
-                "a  b");
-        assertThat(renderer.plainLines(spaced,
-                new io.github.dhoard.braxton.layout.Viewport(1, 6)))
-                .as("interior blanks are kept as columns").containsExactly("a  b");
+        io.github.dhoard.braxton.view.View<String> spaced = io.github.dhoard.braxton.view.Views.text("a  b");
+        assertThat(renderer.plainLines(spaced, new io.github.dhoard.braxton.layout.Viewport(1, 6)))
+                .as("interior blanks are kept as columns")
+                .containsExactly("a  b");
     }
 
     @Test
@@ -89,17 +86,13 @@ class ScreenRendererTest {
         // Every padding path pads with U+0020, so a row-final Unicode space other than a blank is a
         // painted cell: the cell view and both plain-text views of one screen must report it.
         ScreenRenderer renderer = new ScreenRenderer();
-        View<String> view = Views.column(
-                Views.text("first"),
-                Views.text("\u3000"),
-                Views.text("last"));
+        View<String> view = Views.column(Views.text("first"), Views.text("\u3000"), Views.text("last"));
         Viewport viewport = new Viewport(3, 8);
         List<String> lines = renderer.plainLines(view, viewport);
         RenderedScreen screen = renderer.screen(view, viewport);
         assertThat(lines).containsExactly("first", "\u3000", "last");
         assertThat(screen.plainLines()).as("one screen, two views").isEqualTo(lines);
-        assertThat(screen.plainText()).as("rows joined with newlines")
-                .isEqualTo(String.join("\n", lines));
+        assertThat(screen.plainText()).as("rows joined with newlines").isEqualTo(String.join("\n", lines));
         assertThat(screen.cell(1, 0).text()).isEqualTo("\u3000");
         assertThat(screen.cell(1, 0).columns()).isEqualTo(2);
         assertThat(screen.isContinuation(1, 1)).isTrue();

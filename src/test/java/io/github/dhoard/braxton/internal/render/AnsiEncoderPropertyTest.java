@@ -24,17 +24,15 @@ package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.style.Style;
+import org.junit.jupiter.api.Test;
 
 /** A styled row always closes its styling, whatever the mix of cells. */
 class AnsiEncoderPropertyTest {
 
     @Test
     void everyStyledRowEndsItsStylingAndLinks() {
-        Style[] styles = {Style.NONE, Style.NONE.withBold(), Style.NONE.withInvert(),
-                Style.NONE.withUnderline()};
+        Style[] styles = {Style.NONE, Style.NONE.withBold(), Style.NONE.withInvert(), Style.NONE.withUnderline()};
         for (Style first : styles) {
             for (Style second : styles) {
                 Screen screen = new Screen(1, 4);
@@ -50,8 +48,9 @@ class AnsiEncoderPropertyTest {
                 int linkTransitions = row.split("\u001B\\]8;;", -1).length - 1;
                 assertThat(linkTransitions).as("the link opens and closes").isGreaterThanOrEqualTo(2);
                 assertThat(row.replaceAll("\u001B\\[[0-9;]*[A-Za-z]", "")
-                        .replaceAll("\u001B\\]8;;[^\u001B]*\u001B\\\\", ""))
-                        .as("only the cells' text is visible").isEqualTo("abc");
+                                .replaceAll("\u001B\\]8;;[^\u001B]*\u001B\\\\", ""))
+                        .as("only the cells' text is visible")
+                        .isEqualTo("abc");
             }
         }
     }

@@ -29,15 +29,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Random;
-
 import org.junit.jupiter.api.Test;
 
 class TextMeasureStreamingTest {
 
     @Test
     void streamingSegmentationRetainsTheJdkBoundaries() {
-        List<String> units = List.of("a", " ", "\n", "\t", "\r", "é", "\u0301", "界", "🙂",
-                "\u200B", "\u200D", "\uFE0E", "\uFE0F", "🇺", "🇸", "\uD800", "\uDC00");
+        List<String> units = List.of(
+                "a", " ", "\n", "\t", "\r", "é", "\u0301", "界", "🙂", "\u200B", "\u200D", "\uFE0E", "\uFE0F", "🇺",
+                "🇸", "\uD800", "\uDC00");
         Random random = new Random(48291);
         for (int sample = 0; sample < 500; sample++) {
             StringBuilder text = new StringBuilder();
@@ -55,8 +55,10 @@ class TextMeasureStreamingTest {
             assertThat(TextMeasure.graphemes(value)).isEqualTo(expected);
             assertThat(TextMeasure.graphemeCount(value)).isEqualTo(expected.size());
             for (WidthPolicy policy : List.of(WidthPolicy.PINNED, WidthPolicy.ONE_COLUMN)) {
-                assertThat(TextMeasure.columns(value, policy)).isEqualTo(expected.stream()
-                        .mapToInt(cluster -> referenceWidth(cluster, policy)).sum());
+                assertThat(TextMeasure.columns(value, policy))
+                        .isEqualTo(expected.stream()
+                                .mapToInt(cluster -> referenceWidth(cluster, policy))
+                                .sum());
                 for (int columns = 0; columns < 8; columns++) {
                     StringBuilder clipped = new StringBuilder();
                     int used = 0;
@@ -92,13 +94,13 @@ class TextMeasureStreamingTest {
                 continue;
             }
             int type = Character.getType(codePoint);
-            if (type == Character.NON_SPACING_MARK || type == Character.ENCLOSING_MARK
+            if (type == Character.NON_SPACING_MARK
+                    || type == Character.ENCLOSING_MARK
                     || type == Character.COMBINING_SPACING_MARK) {
                 mark = true;
             } else if (type != Character.FORMAT) {
                 base = true;
-                wide |= policy.wideEmoji()
-                        && io.github.dhoard.braxton.internal.text.Unicode16Width.isWide(codePoint);
+                wide |= policy.wideEmoji() && io.github.dhoard.braxton.internal.text.Unicode16Width.isWide(codePoint);
             }
         }
         // A cluster with no base of its own is painted behind the dotted circle that stands in for

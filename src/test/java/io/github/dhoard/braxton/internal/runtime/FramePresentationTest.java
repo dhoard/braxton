@@ -39,12 +39,6 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
-import org.jline.terminal.Terminal;
-import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -52,6 +46,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import org.jline.terminal.Terminal;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 /** Frame boundaries and failure state, using real JLine output over owned streams. */
 @Timeout(10)
@@ -98,7 +96,8 @@ class FramePresentationTest {
     private static boolean ffmModuleHasNativeAccess() {
         try {
             return Class.forName("org.jline.terminal.ffm.FfmTerminalProvider")
-                    .getModule().isNativeAccessEnabled();
+                    .getModule()
+                    .isNativeAccessEnabled();
         } catch (ClassNotFoundException absent) {
             return false;
         }
@@ -154,26 +153,23 @@ class FramePresentationTest {
     void presentationResamplesSizeChangedDuringInitialization() {
         try (var fixture = new JLineTestTerminal()) {
             var seen = new AtomicReference<Viewport>();
-            Component<Integer, String, Never> p =
-                    new Component<>() {
-                        public Update<Integer, String, Never> init(InitContext context) {
-                            fixture.resize(new io.github.dhoard.braxton.layout.Size(4, 10));
-                            return Update.next(0, Command.quit());
-                        }
+            Component<Integer, String, Never> p = new Component<>() {
+                public Update<Integer, String, Never> init(InitContext context) {
+                    fixture.resize(new io.github.dhoard.braxton.layout.Size(4, 10));
+                    return Update.next(0, Command.quit());
+                }
 
-                        public Update<Integer, String, Never> update(
-                                Integer model, String message) {
-                            return Update.next(model);
-                        }
+                public Update<Integer, String, Never> update(Integer model, String message) {
+                    return Update.next(model);
+                }
 
-                        public View<String> view(Integer model, ViewContext context) {
-                            Viewport viewport = context.viewport();
-                            seen.set(viewport);
-                            return Views.text("x".repeat(viewport.cols()));
-                        }
-                    };
-            var loop = new RuntimeLoop<>(p, RuntimeOptions.defaults(), fixture.terminal(),
-                    RuntimeServices.system());
+                public View<String> view(Integer model, ViewContext context) {
+                    Viewport viewport = context.viewport();
+                    seen.set(viewport);
+                    return Views.text("x".repeat(viewport.cols()));
+                }
+            };
+            var loop = new RuntimeLoop<>(p, RuntimeOptions.defaults(), fixture.terminal(), RuntimeServices.system());
             assertThat(loop.run().kind()).isEqualTo(ExitResult.Kind.QUIT);
             assertThat(seen.get()).isEqualTo(new Viewport(4, 10));
             assertThat(loop.screen().rows()).isEqualTo(4);
@@ -185,8 +181,8 @@ class FramePresentationTest {
     void nonemptyFramesHaveOneOrderedBracketAndEmptyDiffsHaveNoOutput() {
         try (var fixture = new JLineTestTerminal()) {
             AtomicInteger views = new AtomicInteger();
-            var result = JLineTestTerminal.run(program(views::incrementAndGet, true),
-                    RuntimeOptions.defaults(), fixture);
+            var result =
+                    JLineTestTerminal.run(program(views::incrementAndGet, true), RuntimeOptions.defaults(), fixture);
             assertThat(result.kind()).isEqualTo(ExitResult.Kind.QUIT);
             assertThat(views.get()).isEqualTo(2);
             // ExternalTerminal may flush transport chunks independently of frame ownership.
@@ -202,7 +198,8 @@ class FramePresentationTest {
             assertThat(frame.split(java.util.regex.Pattern.quote(END), -1)).hasSize(2);
             assertThat(output.split(java.util.regex.Pattern.quote(BEGIN), -1)).hasSize(2);
             assertThat(output).contains(END + "\u001b[?2004l");
-            assertThat(fixture.writes().stream().filter(s -> s.contains("ready"))).hasSize(1);
+            assertThat(fixture.writes().stream().filter(s -> s.contains("ready")))
+                    .hasSize(1);
         }
     }
 
@@ -214,27 +211,31 @@ class FramePresentationTest {
                 AtomicBoolean once = new AtomicBoolean();
                 AtomicInteger ends = new AtomicInteger();
                 AtomicInteger flushes = new AtomicInteger();
-                var p = program(() -> {
-                    fixture.beforeWrite(text -> {
-                        if (text.equals(END)) ends.incrementAndGet();
-                        boolean selected = stage.equals("begin") && text.equals(BEGIN)
-                                || stage.equals("payload") && text.contains("ready")
-                                || stage.equals("end") && text.equals(END);
-                        if (selected && once.compareAndSet(false, true)) throw failure;
-                        if (stage.equals("writer") && text.contains("ready")) fixture.failOutput();
-                    });
-                    fixture.beforeFlush(() -> {
-                        flushes.incrementAndGet();
-                        if (stage.equals("flush") && once.compareAndSet(false, true)) throw failure;
-                    });
-                }, false);
-                var loop = new RuntimeLoop<>(p, RuntimeOptions.defaults(), fixture.terminal(),
-                        RuntimeServices.system());
+                var p = program(
+                        () -> {
+                            fixture.beforeWrite(text -> {
+                                if (text.equals(END)) ends.incrementAndGet();
+                                boolean selected = stage.equals("begin") && text.equals(BEGIN)
+                                        || stage.equals("payload") && text.contains("ready")
+                                        || stage.equals("end") && text.equals(END);
+                                if (selected && once.compareAndSet(false, true)) throw failure;
+                                if (stage.equals("writer") && text.contains("ready")) fixture.failOutput();
+                            });
+                            fixture.beforeFlush(() -> {
+                                flushes.incrementAndGet();
+                                if (stage.equals("flush") && once.compareAndSet(false, true)) throw failure;
+                            });
+                        },
+                        false);
+                var loop =
+                        new RuntimeLoop<>(p, RuntimeOptions.defaults(), fixture.terminal(), RuntimeServices.system());
                 var result = loop.run();
                 assertThat(result.kind()).as(stage).isEqualTo(ExitResult.Kind.FAILURE);
                 if (stage.equals("writer")) assertThat(result.failure()).hasMessage("terminal output failed");
                 else assertThat(result.failure()).as(stage).isSameAs(failure);
-                assertThat(ends.get()).as("frame and restoration closure: " + stage).isEqualTo(2);
+                assertThat(ends.get())
+                        .as("frame and restoration closure: " + stage)
+                        .isEqualTo(2);
                 assertThat(flushes.get()).as(stage).isGreaterThanOrEqualTo(2);
                 assertThat(field(loop, "currentScreen")).as(stage).isNull();
                 assertThat(field(loop, "viewDirty")).as(stage).isEqualTo(true);
@@ -251,15 +252,17 @@ class FramePresentationTest {
             var flushing = new IllegalStateException("flush");
             AtomicBoolean endOnce = new AtomicBoolean();
             AtomicBoolean flushOnce = new AtomicBoolean();
-            var p = program(() -> {
-                fixture.beforeWrite(text -> {
-                    if (text.contains("ready")) throw primary;
-                    if (text.equals(END) && endOnce.compareAndSet(false, true)) throw ending;
-                });
-                fixture.beforeFlush(() -> {
-                    if (flushOnce.compareAndSet(false, true)) throw flushing;
-                });
-            }, false);
+            var p = program(
+                    () -> {
+                        fixture.beforeWrite(text -> {
+                            if (text.contains("ready")) throw primary;
+                            if (text.equals(END) && endOnce.compareAndSet(false, true)) throw ending;
+                        });
+                        fixture.beforeFlush(() -> {
+                            if (flushOnce.compareAndSet(false, true)) throw flushing;
+                        });
+                    },
+                    false);
             var result = JLineTestTerminal.run(p, RuntimeOptions.defaults(), fixture);
             assertThat(result.failure()).isSameAs(primary);
             assertThat(primary.getSuppressed()).containsExactly(ending);
@@ -278,8 +281,8 @@ class FramePresentationTest {
     @Test
     void aSecondRunIsRejectedBeforeAnyTerminalWork() {
         try (var fixture = new JLineTestTerminal()) {
-            var loop = new RuntimeLoop<>(program(() -> {}, false), RuntimeOptions.defaults(),
-                    fixture.terminal(), RuntimeServices.system());
+            var loop = new RuntimeLoop<>(
+                    program(() -> {}, false), RuntimeOptions.defaults(), fixture.terminal(), RuntimeServices.system());
             assertThat(loop.run().kind()).isEqualTo(ExitResult.Kind.QUIT);
             var second = loop.run();
             assertThat(second.kind()).isEqualTo(ExitResult.Kind.FAILURE);
@@ -292,8 +295,7 @@ class FramePresentationTest {
 
     @Test
     void anUnsuppliedTerminalWithoutNativeAccessFailsAndReleasesTheConsoleClaim() {
-        Assumptions.assumeFalse(ffmModuleHasNativeAccess(),
-                "the FFM module has native access in this JVM");
+        Assumptions.assumeFalse(ffmModuleHasNativeAccess(), "the FFM module has native access in this JVM");
         var first = new RuntimeLoop<>(program(() -> {}, false), RuntimeOptions.defaults()).run();
         assertThat(first.kind()).isEqualTo(ExitResult.Kind.FAILURE);
         assertThat(first.failure()).hasMessageContaining("--enable-native-access");
@@ -337,8 +339,7 @@ class FramePresentationTest {
         try {
             var result = new RuntimeLoop<>(program(() -> {}, false), RuntimeOptions.defaults()).run();
             assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
-            assertThat(result.failure())
-                    .hasMessage("another Braxton application owns the terminal");
+            assertThat(result.failure()).hasMessage("another Braxton application owns the terminal");
         } finally {
             claimed.set(false);
         }
@@ -349,7 +350,9 @@ class FramePresentationTest {
         try (var fixture = new JLineTestTerminal()) {
             var loop = new RuntimeLoop<>(
                     liveProgram(viewport -> Views.text("ready")),
-                    RuntimeOptions.defaults(), fixture.terminal(), RuntimeServices.system());
+                    RuntimeOptions.defaults(),
+                    fixture.terminal(),
+                    RuntimeServices.system());
             var result = new AtomicReference<ExitResult>();
             Thread owner = Thread.ofVirtual().start(() -> result.set(loop.run()));
             try {
@@ -371,7 +374,9 @@ class FramePresentationTest {
         try (var fixture = new JLineTestTerminal()) {
             var loop = new RuntimeLoop<>(
                     liveProgram(viewport -> Views.text("ready")),
-                    RuntimeOptions.defaults(), fixture.terminal(), RuntimeServices.system());
+                    RuntimeOptions.defaults(),
+                    fixture.terminal(),
+                    RuntimeServices.system());
             var result = new AtomicReference<ExitResult>();
             Thread owner = Thread.ofVirtual().start(() -> result.set(loop.run()));
             try {
@@ -386,8 +391,7 @@ class FramePresentationTest {
             }
             assertThat(owner.isAlive()).isFalse();
             assertThat(result.get().kind()).isEqualTo(ExitResult.Kind.FAILURE);
-            assertThat(result.get().failure())
-                    .hasMessage("input reader stopped unexpectedly");
+            assertThat(result.get().failure()).hasMessage("input reader stopped unexpectedly");
             assertThat(result.get().cleanupFailures()).isEmpty();
         }
     }
@@ -395,14 +399,12 @@ class FramePresentationTest {
     @Test
     void mouseOptionsEnterAndLeaveMouseMode() {
         try (var fixture = new JLineTestTerminal()) {
-            var options = RuntimeOptions.defaults()
-                    .withTerminal(TerminalOptions.DEFAULT.withMouse(true));
+            var options = RuntimeOptions.defaults().withTerminal(TerminalOptions.DEFAULT.withMouse(true));
             var result = JLineTestTerminal.run(program(() -> {}, false), options, fixture);
             assertThat(result.kind()).isEqualTo(ExitResult.Kind.QUIT);
             String output = fixture.outputText();
             assertThat(output).contains(AnsiEncoder.ENABLE_MOUSE, AnsiEncoder.DISABLE_MOUSE);
-            assertThat(output.indexOf(AnsiEncoder.ENABLE_MOUSE))
-                    .isLessThan(output.indexOf(AnsiEncoder.DISABLE_MOUSE));
+            assertThat(output.indexOf(AnsiEncoder.ENABLE_MOUSE)).isLessThan(output.indexOf(AnsiEncoder.DISABLE_MOUSE));
         }
     }
 
@@ -411,7 +413,9 @@ class FramePresentationTest {
         try (var fixture = new JLineTestTerminal()) {
             var loop = new RuntimeLoop<>(
                     liveProgram(viewport -> Views.text(viewport.rows() + "x" + viewport.cols())),
-                    RuntimeOptions.defaults(), fixture.terminal(), RuntimeServices.system());
+                    RuntimeOptions.defaults(),
+                    fixture.terminal(),
+                    RuntimeServices.system());
             var result = new AtomicReference<ExitResult>();
             Thread owner = Thread.ofVirtual().start(() -> result.set(loop.run()));
             try {
@@ -435,7 +439,9 @@ class FramePresentationTest {
             var services = RuntimeServices.system().withDiagnostics(diagnostics::add);
             var loop = new RuntimeLoop<>(
                     liveProgram(viewport -> Views.text(viewport.rows() + "x" + viewport.cols())),
-                    RuntimeOptions.defaults(), fixture.terminal(), services);
+                    RuntimeOptions.defaults(),
+                    fixture.terminal(),
+                    services);
             var result = new AtomicReference<ExitResult>();
             Thread owner = Thread.ofVirtual().start(() -> result.set(loop.run()));
             try {
@@ -462,8 +468,7 @@ class FramePresentationTest {
                 if (text.contains(AnsiEncoder.SHOW_CURSOR)) fixture.failOutput();
             });
             Terminal terminal = (Terminal) java.lang.reflect.Proxy.newProxyInstance(
-                    Terminal.class.getClassLoader(), new Class<?>[] {Terminal.class},
-                    (proxy, method, arguments) -> {
+                    Terminal.class.getClassLoader(), new Class<?>[] {Terminal.class}, (proxy, method, arguments) -> {
                         if (method.getName().equals("endSynchronizedUpdate")) {
                             if (ends.incrementAndGet() == 2) throw endFailure;
                             return null;
@@ -474,8 +479,8 @@ class FramePresentationTest {
                             throw failure.getCause();
                         }
                     });
-            var loop = new RuntimeLoop<>(program(() -> {}, false), RuntimeOptions.defaults(),
-                    terminal, RuntimeServices.system());
+            var loop = new RuntimeLoop<>(
+                    program(() -> {}, false), RuntimeOptions.defaults(), terminal, RuntimeServices.system());
             var result = loop.run();
             assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
             assertThat(result.failure()).hasMessage("terminal output failed");
@@ -487,8 +492,8 @@ class FramePresentationTest {
     @Test
     void stoppingRuntimeRejectsControlAndFrameOutput() {
         try (var fixture = new JLineTestTerminal()) {
-            var loop = new RuntimeLoop<>(program(() -> {}, false), RuntimeOptions.defaults(),
-                    fixture.terminal(), RuntimeServices.system());
+            var loop = new RuntimeLoop<>(
+                    program(() -> {}, false), RuntimeOptions.defaults(), fixture.terminal(), RuntimeServices.system());
             assertThat(loop.run().kind()).isEqualTo(ExitResult.Kind.QUIT);
             assertThatThrownBy(() -> invoke(loop, "writeOutput", "late"))
                     .isInstanceOf(IllegalStateException.class)
@@ -518,16 +523,18 @@ class FramePresentationTest {
             var entered = new CountDownLatch(1);
             var release = new CountDownLatch(1);
             AtomicBoolean once = new AtomicBoolean();
-            var p = program(() -> fixture.beforeFlush(() -> {
-                if (!once.compareAndSet(false, true)) return;
-                entered.countDown();
-                try {
-                    if (!release.await(5, TimeUnit.SECONDS)) throw new AssertionError("frame not released");
-                } catch (InterruptedException failure) {
-                    Thread.currentThread().interrupt();
-                    throw new AssertionError(failure);
-                }
-            }), false);
+            var p = program(
+                    () -> fixture.beforeFlush(() -> {
+                        if (!once.compareAndSet(false, true)) return;
+                        entered.countDown();
+                        try {
+                            if (!release.await(5, TimeUnit.SECONDS)) throw new AssertionError("frame not released");
+                        } catch (InterruptedException failure) {
+                            Thread.currentThread().interrupt();
+                            throw new AssertionError(failure);
+                        }
+                    }),
+                    false);
             var loop = new RuntimeLoop<>(p, RuntimeOptions.defaults(), fixture.terminal(), RuntimeServices.system());
             var result = new AtomicReference<ExitResult>();
             var shutdownFailure = new AtomicReference<Throwable>();
@@ -536,8 +543,11 @@ class FramePresentationTest {
             try {
                 assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
                 shutdown = Thread.ofVirtual().start(() -> {
-                    try { loop.shutdownRestore(); }
-                    catch (Throwable failure) { shutdownFailure.set(failure); }
+                    try {
+                        loop.shutdownRestore();
+                    } catch (Throwable failure) {
+                        shutdownFailure.set(failure);
+                    }
                 });
                 long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
                 while (!(boolean) field(loop, "stopping") && System.nanoTime() < deadline) Thread.yield();
@@ -557,7 +567,8 @@ class FramePresentationTest {
             assertThat(output.indexOf("ready")).isLessThan(output.indexOf("\u001b[?25h"));
             assertThat(output.substring(output.indexOf("\u001b[?25h"))).doesNotContain(BEGIN);
             // Orderly restoration is once-only even when cleanup follows the shutdown task.
-            assertThat(output.split(java.util.regex.Pattern.quote("\u001b[?25h"), -1)).hasSize(2);
+            assertThat(output.split(java.util.regex.Pattern.quote("\u001b[?25h"), -1))
+                    .hasSize(2);
         }
     }
 }

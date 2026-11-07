@@ -32,8 +32,7 @@ public record TerminalOptions(boolean alternateScreen, boolean mouse, boolean br
 
     public static final TerminalOptions DEFAULT = new TerminalOptions(true, false, true);
 
-    public TerminalOptions {
-    }
+    public TerminalOptions {}
 
     public TerminalOptions withMouse(boolean value) {
         return new TerminalOptions(alternateScreen, value, bracketedPaste);

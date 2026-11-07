@@ -22,8 +22,11 @@
 
 package io.github.dhoard.braxton.benchmark;
 
+import io.github.dhoard.braxton.internal.render.AnsiEncoder;
+import io.github.dhoard.braxton.internal.render.Screen;
+import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.view.View;
 import java.util.concurrent.TimeUnit;
-
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -36,12 +39,6 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
-
-import io.github.dhoard.braxton.internal.render.AnsiEncoder;
-import io.github.dhoard.braxton.internal.render.Screen;
-import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
 
 /**
  * One frame end to end through the headless path the runtime paints with: rebuild the screen from a
@@ -59,7 +56,8 @@ public class FramePipelineBenchmark {
     @Param({"24x80", "40x120"})
     public String viewport;
 
-    private final io.github.dhoard.braxton.internal.render.LayoutEngine engine = new io.github.dhoard.braxton.internal.render.LayoutEngine();
+    private final io.github.dhoard.braxton.internal.render.LayoutEngine engine =
+            new io.github.dhoard.braxton.internal.render.LayoutEngine();
 
     private View<Object> root;
     private Viewport parsed;
@@ -84,6 +82,7 @@ public class FramePipelineBenchmark {
 
     @Benchmark
     public void paintAndDiffFrame(Blackhole sink) {
-        sink.consume(AnsiEncoder.diff(previous, engine.layout(root, parsed.bounds()).screen(), true));
+        sink.consume(
+                AnsiEncoder.diff(previous, engine.layout(root, parsed.bounds()).screen(), true));
     }
 }

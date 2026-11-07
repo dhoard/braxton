@@ -24,13 +24,11 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.style.TextMeasure;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-
 import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.style.TextMeasure;
 
 /**
  * The row charge the widgets share, against the whole-prefix measurement it replaces.
@@ -46,10 +44,27 @@ class GridRowPaddingTest {
 
     /** Pieces whose seam with a previous cluster is the whole point of the row charge. */
     private static final String[] PIECES = {
-        "a", "bc", "xyz", " ", "  ", "\t", "",
-        "\u4E2D", "\uD83D\uDE00", "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67",
-        "\uD83C\uDDFA\uD83C\uDDF8", "\uD83C\uDDFB", "e\u0301", "\u0301", "\u0301\u0301",
-        "\uFE0F", "\uFE0E", "\u2764\uFE0F", "\u200B", "\u00AD", "\uDB40\uDC01"
+        "a",
+        "bc",
+        "xyz",
+        " ",
+        "  ",
+        "\t",
+        "",
+        "\u4E2D",
+        "\uD83D\uDE00",
+        "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67",
+        "\uD83C\uDDFA\uD83C\uDDF8",
+        "\uD83C\uDDFB",
+        "e\u0301",
+        "\u0301",
+        "\u0301\u0301",
+        "\uFE0F",
+        "\uFE0E",
+        "\u2764\uFE0F",
+        "\u200B",
+        "\u00AD",
+        "\uDB40\uDC01"
     };
 
     /** The pre-change charge: the columns the whole row gains when {@code cell} is appended. */
@@ -123,7 +138,6 @@ class GridRowPaddingTest {
         assertThat(GridRows.Row.after("\u2502").pad("\u0301", 1)).isEqualTo(1);
         assertThat(GridRows.Row.after("").pad("\u0301", 1)).isZero();
         assertThat(GridRows.Row.after(null).pad("ab", 3)).isEqualTo(1);
-        assertThat(GridRows.Row.after("\u2502 ").pad("ab", 3))
-                .isEqualTo(wholeRowPad("\u2502 ", "ab", 3));
+        assertThat(GridRows.Row.after("\u2502 ").pad("ab", 3)).isEqualTo(wholeRowPad("\u2502 ", "ab", 3));
     }
 }

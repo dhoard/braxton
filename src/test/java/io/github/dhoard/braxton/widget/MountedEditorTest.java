@@ -42,7 +42,6 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.ScreenRenderer;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
 import org.junit.jupiter.api.Test;
 
 /**
@@ -65,27 +64,22 @@ class MountedEditorTest {
     }
 
     private static final class TwoEditors implements Component<Model, Msg, Never> {
-        private final Mount<Model, Msg, Never, Editor.Model, Editor.Msg, Editor.Output> left =
-                Mount.of(
-                        ComponentId.of("left"),
-                        new Editor(Editor.Config.defaults()),
-                        ModelLens.of(Model::left, (m, c) -> new Model(c, m.right(), m.showRight())),
-                        Msg.Left::new,
-                        OutputRoute.toMessage(Msg.LeftOutput::new));
-        private final Mount<Model, Msg, Never, Editor.Model, Editor.Msg, Editor.Output> right =
-                Mount.of(
-                        ComponentId.of("right"),
-                        new Editor(Editor.Config.defaults()),
-                        ModelLens.of(Model::right, (m, c) -> new Model(m.left(), c, m.showRight())),
-                        Msg.Right::new,
-                        OutputRoute.toMessage(Msg.RightOutput::new));
+        private final Mount<Model, Msg, Never, Editor.Model, Editor.Msg, Editor.Output> left = Mount.of(
+                ComponentId.of("left"),
+                new Editor(Editor.Config.defaults()),
+                ModelLens.of(Model::left, (m, c) -> new Model(c, m.right(), m.showRight())),
+                Msg.Left::new,
+                OutputRoute.toMessage(Msg.LeftOutput::new));
+        private final Mount<Model, Msg, Never, Editor.Model, Editor.Msg, Editor.Output> right = Mount.of(
+                ComponentId.of("right"),
+                new Editor(Editor.Config.defaults()),
+                ModelLens.of(Model::right, (m, c) -> new Model(m.left(), c, m.showRight())),
+                Msg.Right::new,
+                OutputRoute.toMessage(Msg.RightOutput::new));
 
         public Update<Model, Msg, Never> init(InitContext context) {
-            return Update.next(
-                    new Model(
-                            left.initialize(context).model(),
-                            right.initialize(context).model(),
-                            true));
+            return Update.next(new Model(
+                    left.initialize(context).model(), right.initialize(context).model(), true));
         }
 
         public Update<Model, Msg, Never> update(Model model, Msg message) {
@@ -129,19 +123,15 @@ class MountedEditorTest {
         var leftRegions = renderer.regions(leftFocused, CONTEXT.viewport());
         assertThat(leftRegions).hasSize(1);
         assertThat(leftRegions.get(0).id().value()).isEqualTo("input");
-        assertThat(leftRegions.get(0).id().path())
-                .isEqualTo(ComponentPath.ROOT.append(ComponentId.of("left")));
-        assertThat(InputRouter.route(leftFocused, typed).orElseThrow())
-                .isInstanceOf(Msg.Left.class);
+        assertThat(leftRegions.get(0).id().path()).isEqualTo(ComponentPath.ROOT.append(ComponentId.of("left")));
+        assertThat(InputRouter.route(leftFocused, typed).orElseThrow()).isInstanceOf(Msg.Left.class);
 
         var rightFocused = component.view(model(false, true, true), CONTEXT);
         var rightRegions = renderer.regions(rightFocused, CONTEXT.viewport());
         assertThat(rightRegions).hasSize(1);
-        assertThat(rightRegions.get(0).id().path())
-                .isEqualTo(ComponentPath.ROOT.append(ComponentId.of("right")));
+        assertThat(rightRegions.get(0).id().path()).isEqualTo(ComponentPath.ROOT.append(ComponentId.of("right")));
         assertThat(rightRegions.get(0).id()).isNotEqualTo(leftRegions.get(0).id());
-        assertThat(InputRouter.route(rightFocused, typed).orElseThrow())
-                .isInstanceOf(Msg.Right.class);
+        assertThat(InputRouter.route(rightFocused, typed).orElseThrow()).isInstanceOf(Msg.Right.class);
     }
 
     @Test
@@ -152,8 +142,7 @@ class MountedEditorTest {
 
         // The right editor declared focus last, then its parent removed it.
         var unmounted = component.view(model(true, true, false), CONTEXT);
-        assertThat(InputRouter.route(unmounted, typed).orElseThrow())
-                .isInstanceOf(Msg.Left.class);
+        assertThat(InputRouter.route(unmounted, typed).orElseThrow()).isInstanceOf(Msg.Left.class);
         assertThat(renderer.regions(unmounted, CONTEXT.viewport()))
                 .extracting(region -> region.id().path())
                 .containsExactly(ComponentPath.ROOT.append(ComponentId.of("left")));

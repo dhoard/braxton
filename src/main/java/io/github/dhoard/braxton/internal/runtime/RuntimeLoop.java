@@ -43,14 +43,6 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.View;
-
-import org.jline.terminal.Terminal;
-import org.jline.terminal.TerminalBuilder;
-import org.jline.terminal.impl.ffm.FfmTerminalProvider;
-import org.jline.terminal.spi.TerminalExt;
-import org.jline.utils.InfoCmp;
-import org.jline.utils.ShutdownHooks;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -58,6 +50,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
+import org.jline.terminal.impl.ffm.FfmTerminalProvider;
+import org.jline.terminal.spi.TerminalExt;
+import org.jline.utils.InfoCmp;
+import org.jline.utils.ShutdownHooks;
 
 /**
  * The single runtime owner.
@@ -107,8 +105,7 @@ public final class RuntimeLoop<M, Msg> {
     private ClipboardService clipboard;
 
     private final ScopeManager scopes = new ScopeManager();
-    private final java.util.ArrayDeque<Mailbox.AppMessage> localMessages =
-            new java.util.ArrayDeque<>();
+    private final java.util.ArrayDeque<Mailbox.AppMessage> localMessages = new java.util.ArrayDeque<>();
     private int localDispatches;
     private M model;
     private View<Msg> currentView;
@@ -126,10 +123,7 @@ public final class RuntimeLoop<M, Msg> {
 
     /** Internal construction seam: an actual JLine terminal, never a Braxton backend abstraction. */
     public RuntimeLoop(
-            Component<M, Msg, Never> program,
-            RuntimeOptions options,
-            Terminal terminal,
-            RuntimeServices services) {
+            Component<M, Msg, Never> program, RuntimeOptions options, Terminal terminal, RuntimeServices services) {
         this.program = java.util.Objects.requireNonNull(program, "program");
         this.options = options == null ? RuntimeOptions.defaults() : options;
         this.suppliedTerminal = terminal;
@@ -202,8 +196,7 @@ public final class RuntimeLoop<M, Msg> {
             entry.append(AnsiEncoder.HIDE_CURSOR);
             if (options.terminal().bracketedPaste() && capabilities.bracketedPaste())
                 entry.append(AnsiEncoder.ENABLE_BRACKETED_PASTE);
-            if (options.terminal().mouse() && capabilities.mouse())
-                entry.append(AnsiEncoder.ENABLE_MOUSE);
+            if (options.terminal().mouse() && capabilities.mouse()) entry.append(AnsiEncoder.ENABLE_MOUSE);
             writeOutput(entry.toString());
         }
     }
@@ -211,8 +204,7 @@ public final class RuntimeLoop<M, Msg> {
     private Size terminalSize() {
         try {
             var size = terminal.getSize();
-            if (size.getRows() > 0 && size.getColumns() > 0)
-                return new Size(size.getRows(), size.getColumns());
+            if (size.getRows() > 0 && size.getColumns() > 0) return new Size(size.getRows(), size.getColumns());
         } catch (RuntimeException unavailable) {
             services.diagnostics().accept("terminal size temporarily unavailable");
         }
@@ -304,8 +296,7 @@ public final class RuntimeLoop<M, Msg> {
             if (!modesEntered || terminal == null) return;
             modesEntered = false;
             StringBuilder exit = new StringBuilder();
-            if (options.terminal().mouse() && capabilities.mouse())
-                exit.append(AnsiEncoder.DISABLE_MOUSE);
+            if (options.terminal().mouse() && capabilities.mouse()) exit.append(AnsiEncoder.DISABLE_MOUSE);
             if (options.terminal().bracketedPaste() && capabilities.bracketedPaste())
                 exit.append(AnsiEncoder.DISABLE_BRACKETED_PASTE);
             exit.append(AnsiEncoder.RESET).append(AnsiEncoder.SHOW_CURSOR);
@@ -329,8 +320,7 @@ public final class RuntimeLoop<M, Msg> {
 
     public ExitResult run() {
         if (!started.compareAndSet(false, true)) {
-            return ExitResult.failure(
-                    new IllegalStateException("runtime can only run once"), List.of());
+            return ExitResult.failure(new IllegalStateException("runtime can only run once"), List.of());
         }
         ExitResult result;
         try {
@@ -339,26 +329,17 @@ public final class RuntimeLoop<M, Msg> {
             viewport = new Viewport(size.rows(), size.cols());
             mailbox = new Mailbox(options.mailboxCapacity());
             RuntimeServices environment = services;
-            clipboard = new ClipboardService(
-                    options.clipboard(), TerminalEnvironment.system(), this::writeOutput);
-            effects = new EffectRunner<>(
-                    mailbox, environment, clipboard, options.maxConcurrentEffects());
+            clipboard = new ClipboardService(options.clipboard(), TerminalEnvironment.system(), this::writeOutput);
+            effects = new EffectRunner<>(mailbox, environment, clipboard, options.maxConcurrentEffects());
             effects.bindOwner(Thread.currentThread());
             effects.bindScopes(scopes, this::enqueueLocal);
             subscriptions = new SubscriptionManager<>(
-                    mailbox,
-                    environment.timers(),
-                    options.maxSubscriptions(),
-                    environment.diagnostics());
+                    mailbox, environment.timers(), options.maxSubscriptions(), environment.diagnostics());
             subscriptions.bindOwner(Thread.currentThread());
             subscriptions.bindScopes(scopes);
 
             InitContext context = new InitContext(viewport, capabilities);
-            commit(
-                    ComponentFailure.call(
-                            ComponentPath.ROOT,
-                            ComponentFailure.Phase.INIT,
-                            () -> program.init(context)));
+            commit(ComponentFailure.call(ComponentPath.ROOT, ComponentFailure.Phase.INIT, () -> program.init(context)));
             drainLocal();
             present();
             terminal.resume();
@@ -385,8 +366,7 @@ public final class RuntimeLoop<M, Msg> {
             if (resizePending.getAndSet(false) || now - nextResizeAt >= 0) {
                 nextResizeAt = now + TimeUnit.MILLISECONDS.toNanos(RESIZE_POLL_MILLIS);
                 Size size = terminalSize();
-                if (size.rows() != viewport.rows() || size.cols() != viewport.cols())
-                    applyResize();
+                if (size.rows() != viewport.rows() || size.cols() != viewport.cols()) applyResize();
             }
             if (effects.quitRequested()) {
                 return ExitResult.quit(effects.quitStatus());
@@ -403,8 +383,7 @@ public final class RuntimeLoop<M, Msg> {
                 // fault), shut down instead of hanging with no way to receive Ctrl+C.
                 if (!inputThread.isAlive() && mailbox.size() == 0) {
                     return ExitResult.failure(
-                            new IllegalStateException("input reader stopped unexpectedly"),
-                            List.of());
+                            new IllegalStateException("input reader stopped unexpectedly"), List.of());
                 }
                 continue;
             }
@@ -421,10 +400,7 @@ public final class RuntimeLoop<M, Msg> {
                 applyInput(input);
             }
             drainLocal();
-            if (viewDirty
-                    && (envelope instanceof Mailbox.Input
-                            || effects.quitRequested()
-                            || frameReady())) {
+            if (viewDirty && (envelope instanceof Mailbox.Input || effects.quitRequested() || frameReady())) {
                 present();
             }
             if (effects.quitRequested()) {
@@ -442,8 +418,7 @@ public final class RuntimeLoop<M, Msg> {
             return POLL_MILLIS;
         }
         long remaining = Math.max(0L, nextFrameAtNanos - System.nanoTime());
-        return Math.max(
-                1L, Math.min(POLL_MILLIS, TimeUnit.NANOSECONDS.toMillis(remaining + 999_999L)));
+        return Math.max(1L, Math.min(POLL_MILLIS, TimeUnit.NANOSECONDS.toMillis(remaining + 999_999L)));
     }
 
     @SuppressWarnings("unchecked")
@@ -451,11 +426,8 @@ public final class RuntimeLoop<M, Msg> {
         if (message.origin() != null && !scopes.isCurrent(message.origin())) return;
         if (!message.valid().getAsBoolean()) return;
         Msg value = (Msg) message.payload();
-        Update<M, Msg, Never> transition =
-                ComponentFailure.call(
-                        ComponentPath.ROOT,
-                        ComponentFailure.Phase.UPDATE,
-                        () -> program.update(model, value));
+        Update<M, Msg, Never> transition = ComponentFailure.call(
+                ComponentPath.ROOT, ComponentFailure.Phase.UPDATE, () -> program.update(model, value));
         commit(transition);
     }
 
@@ -466,15 +438,11 @@ public final class RuntimeLoop<M, Msg> {
         }
         InputEvent event = stamp(input.event());
         Optional<Msg> routed = InputRouter.route(currentView, event);
-        routed.ifPresent(
-                message -> {
-                    Update<M, Msg, Never> transition =
-                            ComponentFailure.call(
-                                    ComponentPath.ROOT,
-                                    ComponentFailure.Phase.UPDATE,
-                                    () -> program.update(model, message));
-                    commit(transition);
-                });
+        routed.ifPresent(message -> {
+            Update<M, Msg, Never> transition = ComponentFailure.call(
+                    ComponentPath.ROOT, ComponentFailure.Phase.UPDATE, () -> program.update(model, message));
+            commit(transition);
+        });
     }
 
     private InputEvent stamp(InputEvent event) {
@@ -494,42 +462,31 @@ public final class RuntimeLoop<M, Msg> {
     private void enqueueLocal(Mailbox.AppMessage message) {
         if (++localDispatches > options.maxLocalDispatchesPerTurn()) {
             var origin = message.origin();
-            throw new IllegalStateException(
-                    "local dispatch limit exceeded for component "
-                            + (origin == null ? "root" : origin.path().toString()));
+            throw new IllegalStateException("local dispatch limit exceeded for component "
+                    + (origin == null ? "root" : origin.path().toString()));
         }
         localMessages.addLast(message);
     }
 
     private void drainLocal() {
-        while (!effects.quitRequested() && !localMessages.isEmpty())
-            applyMessage(localMessages.removeFirst());
+        while (!effects.quitRequested() && !localMessages.isEmpty()) applyMessage(localMessages.removeFirst());
         if (effects.quitRequested()) localMessages.clear();
     }
 
     private View<Msg> componentView() {
         return ComponentFailure.call(
-                ComponentPath.ROOT,
-                ComponentFailure.Phase.VIEW,
-                () -> program.view(model, new ViewContext(viewport)));
+                ComponentPath.ROOT, ComponentFailure.Phase.VIEW, () -> program.view(model, new ViewContext(viewport)));
     }
 
     private void commit(Update<M, Msg, Never> transition) {
         if (stopping) return;
-        if (!transition.outputs().isEmpty())
-            throw new IllegalArgumentException("root component emitted output");
+        if (!transition.outputs().isEmpty()) throw new IllegalArgumentException("root component emitted output");
         M candidate = transition.model();
-        var tree =
-                ComponentFailure.call(
-                        ComponentPath.ROOT,
-                        ComponentFailure.Phase.CHILDREN,
-                        () -> program.children(candidate));
+        var tree = ComponentFailure.call(
+                ComponentPath.ROOT, ComponentFailure.Phase.CHILDREN, () -> program.children(candidate));
         var nextScopes = scopes.prepare(tree, options.maxComponents(), options.maxComponentDepth());
-        var sources =
-                ComponentFailure.call(
-                        ComponentPath.ROOT,
-                        ComponentFailure.Phase.SUBSCRIPTIONS,
-                        () -> program.subscriptions(candidate));
+        var sources = ComponentFailure.call(
+                ComponentPath.ROOT, ComponentFailure.Phase.SUBSCRIPTIONS, () -> program.subscriptions(candidate));
         validateSubscriptions(sources, nextScopes);
         boolean changed = candidate != model;
         model = candidate;
@@ -542,8 +499,7 @@ public final class RuntimeLoop<M, Msg> {
     }
 
     private void validateSubscriptions(
-            io.github.dhoard.braxton.effect.Subscription<Msg> sources,
-            java.util.Map<ComponentPath, Long> nextScopes) {
+            io.github.dhoard.braxton.effect.Subscription<Msg> sources, java.util.Map<ComponentPath, Long> nextScopes) {
         ComponentPath path = ComponentPath.ROOT;
         try {
             var leaves = io.github.dhoard.braxton.effect.Subscription.leaves(sources);
@@ -552,13 +508,11 @@ public final class RuntimeLoop<M, Msg> {
             for (var leaf : leaves) {
                 path = leaf.id().path();
                 if (!nextScopes.containsKey(path))
-                    throw new IllegalArgumentException(
-                            "subscription belongs to undeclared component " + path);
+                    throw new IllegalArgumentException("subscription belongs to undeclared component " + path);
             }
         } catch (IllegalArgumentException invalid) {
             // These are framework declaration errors, not thrown component/payload diagnostics.
-            throw new ComponentFailure(
-                    path, ComponentFailure.Phase.SUBSCRIPTIONS, invalid.getMessage(), invalid);
+            throw new ComponentFailure(path, ComponentFailure.Phase.SUBSCRIPTIONS, invalid.getMessage(), invalid);
         }
     }
 
@@ -590,8 +544,7 @@ public final class RuntimeLoop<M, Msg> {
 
     private Thread startInputThread() {
         return Thread.ofVirtual().name("braxton-input").start(() -> {
-            InputDecoder decoder =
-                    new InputDecoder(terminal.reader(), options.input(), () -> stopping);
+            InputDecoder decoder = new InputDecoder(terminal.reader(), options.input(), () -> stopping);
             while (!stopping && !Thread.currentThread().isInterrupted()) {
                 try {
                     Optional<InputEvent> event = decoder.read();
@@ -685,8 +638,7 @@ public final class RuntimeLoop<M, Msg> {
                 effects.cancelAll();
                 int remaining = effects.awaitIdle(options.shutdownGrace());
                 if (remaining > 0) {
-                    services.diagnostics()
-                            .accept("shutdown: " + remaining + " effect task(s) still running");
+                    services.diagnostics().accept("shutdown: " + remaining + " effect task(s) still running");
                 }
             } catch (Throwable failure) {
                 cleanupFailures.add(failure);

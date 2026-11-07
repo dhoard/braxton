@@ -24,12 +24,11 @@ package io.github.dhoard.braxton.internal.input;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.dhoard.braxton.input.*;
 import org.jline.utils.NonBlockingPumpReader;
 import org.jline.utils.NonBlockingReader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-
-import io.github.dhoard.braxton.input.*;
 
 @Timeout(5)
 class JLineReaderTest {
@@ -45,8 +44,7 @@ class JLineReaderTest {
 
     @Test
     void eofResolvesAnIncompleteSurrogateWithoutLosingTheFollowingCharacter() throws Exception {
-        try (var reader = org.jline.utils.NonBlocking.nonBlocking(
-                "test", new java.io.StringReader("\uD83Dx"))) {
+        try (var reader = org.jline.utils.NonBlocking.nonBlocking("test", new java.io.StringReader("\uD83Dx"))) {
             var decoder = new InputDecoder(reader);
             assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text())
                     .isEqualTo("\uFFFD");
@@ -76,8 +74,7 @@ class JLineReaderTest {
 
     @Test
     void isolatedHighSurrogateAtEofIsReplacedOnce() throws Exception {
-        try (var reader = org.jline.utils.NonBlocking.nonBlocking(
-                "test", new java.io.StringReader("\uD83D"))) {
+        try (var reader = org.jline.utils.NonBlocking.nonBlocking("test", new java.io.StringReader("\uD83D"))) {
             var cursor = new ScalarInput(reader, 100);
             assertThat(cursor.read()).isEqualTo(0xFFFD);
             assertThat(cursor.read()).isEqualTo(-1);

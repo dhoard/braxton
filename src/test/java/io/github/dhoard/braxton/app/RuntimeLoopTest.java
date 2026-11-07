@@ -23,7 +23,6 @@
 package io.github.dhoard.braxton.app;
 
 import static io.github.dhoard.braxton.internal.runtime.JLineTestTerminal.run;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.effect.Command;
@@ -45,13 +44,11 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 /** End-to-end runtime behaviour over an in-memory terminal: one owner, no native access. */
 class RuntimeLoopTest {
@@ -75,23 +72,21 @@ class RuntimeLoopTest {
 
         @Override
         public View<String> view(Integer model, ViewContext context) {
-            return Views.keyed(List.of(
-                    Binding.of("a", "inc"),
-                    Binding.of("space", "inc"),
-                    Binding.of("q", "quit")), Views.text("count: " + model), List.of());
+            return Views.keyed(
+                    List.of(Binding.of("a", "inc"), Binding.of("space", "inc"), Binding.of("q", "quit")),
+                    Views.text("count: " + model),
+                    List.of());
         }
     }
 
     private static RuntimeOptions options() {
-        return RuntimeOptions.defaults().withLimits(32,8,8);
+        return RuntimeOptions.defaults().withLimits(32, 8, 8);
     }
 
     /** A sealed message type with no null case, so a null message fails the run. */
-    private sealed interface ResizeMessage permits SizeChanged {
-    }
+    private sealed interface ResizeMessage permits SizeChanged {}
 
-    private record SizeChanged(Size size) implements ResizeMessage {
-    }
+    private record SizeChanged(Size size) implements ResizeMessage {}
 
     /** Renders the viewport it was given, so a resize is visible in the output. */
     private record Measured() implements Component<Integer, String, Never> {
@@ -129,8 +124,7 @@ class RuntimeLoopTest {
     void aResizeIsMeasuredAndPaintedWithoutAnotherMessage() throws Exception {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
         RuntimeOptions options = options();
-        Thread run = Thread.ofVirtual().name("resize-test")
-                .start(() -> run(new Measured(), options, terminal));
+        Thread run = Thread.ofVirtual().name("resize-test").start(() -> run(new Measured(), options, terminal));
         await(() -> terminal.outputText().contains("size: 6x20"));
 
         terminal.resize(new Size(4, 10));
@@ -150,38 +144,35 @@ class RuntimeLoopTest {
         // sealed-message dispatch throw and ends the run with a failure.
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
         RuntimeOptions options = options();
-        Component<Integer, ResizeMessage, Never> program =
-                new Component<>() {
-                    @Override
-                    public Update<Integer, ResizeMessage, Never> init(InitContext context) {
-                        return Update.next(0);
-                    }
+        Component<Integer, ResizeMessage, Never> program = new Component<>() {
+            @Override
+            public Update<Integer, ResizeMessage, Never> init(InitContext context) {
+                return Update.next(0);
+            }
 
-                    @Override
-                    public Update<Integer, ResizeMessage, Never> update(
-                            Integer model, ResizeMessage message) {
-                        return switch (message) {
-                            case SizeChanged changed -> Update.next(changed.size().rows());
-                        };
-                    }
-
-                    @Override
-                    public View<ResizeMessage> view(Integer model, ViewContext context) {
-                        Viewport viewport = context.viewport();
-                        return Views.text("size: " + viewport.rows() + "x" + viewport.cols());
-                    }
-
-                    @Override
-                    public Subscription<ResizeMessage> subscriptions(Integer model) {
-                        return Subscription.resize(
-                                SubscriptionId.of("resize"),
-                                size -> size.rows() > 4 ? new SizeChanged(size) : null);
-                    }
+            @Override
+            public Update<Integer, ResizeMessage, Never> update(Integer model, ResizeMessage message) {
+                return switch (message) {
+                    case SizeChanged changed -> Update.next(changed.size().rows());
                 };
+            }
+
+            @Override
+            public View<ResizeMessage> view(Integer model, ViewContext context) {
+                Viewport viewport = context.viewport();
+                return Views.text("size: " + viewport.rows() + "x" + viewport.cols());
+            }
+
+            @Override
+            public Subscription<ResizeMessage> subscriptions(Integer model) {
+                return Subscription.resize(
+                        SubscriptionId.of("resize"), size -> size.rows() > 4 ? new SizeChanged(size) : null);
+            }
+        };
         java.util.concurrent.atomic.AtomicReference<ExitResult> result =
                 new java.util.concurrent.atomic.AtomicReference<>();
-        Thread run = Thread.ofVirtual().name("declining-resize")
-                .start(() -> result.set(run(program, options, terminal)));
+        Thread run =
+                Thread.ofVirtual().name("declining-resize").start(() -> result.set(run(program, options, terminal)));
         await(() -> terminal.outputText().contains("size: 6x20"));
 
         terminal.resize(new Size(4, 10));
@@ -191,7 +182,8 @@ class RuntimeLoopTest {
         run.join(5_000L);
         assertThat(run.isAlive()).isFalse();
         assertThat(result.get().kind())
-                .as("a mapper that declines a size must not fail the run: %s",
+                .as(
+                        "a mapper that declines a size must not fail the run: %s",
                         result.get().failure())
                 .isEqualTo(ExitResult.Kind.INPUT_CLOSED);
     }
@@ -199,11 +191,18 @@ class RuntimeLoopTest {
     @Test
     @Timeout(15)
     void unavailableSizeUsesFallbackAndTheRunRemainsUsable() {
-        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6,20));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
         terminal.failSize(new IllegalStateException("temporary size failure"));
         terminal.feed("q");
         ExitResult result = run(new Counter(), RuntimeOptions.defaults(), terminal);
-        assertThat(result.kind()).as("%s %s", result.failure(), result.failure() == null ? "" : java.util.Arrays.toString(result.failure().getStackTrace())).isEqualTo(ExitResult.Kind.QUIT);
+        assertThat(result.kind())
+                .as(
+                        "%s %s",
+                        result.failure(),
+                        result.failure() == null
+                                ? ""
+                                : java.util.Arrays.toString(result.failure().getStackTrace()))
+                .isEqualTo(ExitResult.Kind.QUIT);
         assertThat(terminal.isOpen()).isFalse();
     }
 
@@ -212,8 +211,7 @@ class RuntimeLoopTest {
     void theInputReaderIsVirtualAndTheOwnerMeasuresTheTerminal() throws Exception {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
         RuntimeOptions options = options();
-        Thread run = Thread.ofVirtual().name("reader-kinds")
-                .start(() -> run(new Counter(), options, terminal));
+        Thread run = Thread.ofVirtual().name("reader-kinds").start(() -> run(new Counter(), options, terminal));
         await(() -> terminal.readOnVirtualThread() && terminal.measured());
         terminal.endInput();
         run.join(5_000L);
@@ -275,8 +273,10 @@ class RuntimeLoopTest {
 
         @Override
         public View<String> view(Integer model, ViewContext context) {
-            return Views.keyed(List.of(Binding.of("a", "a"), Binding.of("b", "b"),
-                    Binding.of("c", "c")), Views.text("count: " + model), List.of());
+            return Views.keyed(
+                    List.of(Binding.of("a", "a"), Binding.of("b", "b"), Binding.of("c", "c")),
+                    Views.text("count: " + model),
+                    List.of());
         }
     }
 
@@ -288,11 +288,11 @@ class RuntimeLoopTest {
         SlowStart program = new SlowStart();
         java.util.concurrent.atomic.AtomicReference<ExitResult> outcome =
                 new java.util.concurrent.atomic.AtomicReference<>();
-        Thread runner = Thread.ofVirtual().start(
-                () -> outcome.set(run(program, options, terminal)));
+        Thread runner = Thread.ofVirtual().start(() -> outcome.set(run(program, options, terminal)));
         terminal.feed("a");
         assertThat(program.entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
-                .as("the first update is running").isTrue();
+                .as("the first update is running")
+                .isTrue();
         // Two more keys: the first fills the one free slot, the second finds it full while the
         // owner is still inside update.
         terminal.feed("bc");
@@ -317,11 +317,11 @@ class RuntimeLoopTest {
         SlowStart program = new SlowStart();
         java.util.concurrent.atomic.AtomicReference<ExitResult> outcome =
                 new java.util.concurrent.atomic.AtomicReference<>();
-        Thread runner = Thread.ofVirtual().start(
-                () -> outcome.set(run(program, options, terminal)));
+        Thread runner = Thread.ofVirtual().start(() -> outcome.set(run(program, options, terminal)));
         terminal.feed("a");
         assertThat(program.entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
-                .as("the first update is running").isTrue();
+                .as("the first update is running")
+                .isTrue();
         // The owner is busy, so this fills the one-slot mailbox; end-of-input then finds it full.
         terminal.feed("b");
         Thread.sleep(200L);
@@ -437,21 +437,24 @@ class RuntimeLoopTest {
     }
 
     /** Starts a task that ignores interruption, then asks to quit after one tick. */
-    private record HangingEffect(CountDownLatch started)
-            implements Component<Integer, String, Never> {
+    private record HangingEffect(CountDownLatch started) implements Component<Integer, String, Never> {
 
         @Override
         public Update<Integer, String, Never> init(InitContext context) {
-            Command<String> work = Command.task(EffectId.of("work"), () -> {
-                started.countDown();
-                while (true) {
-                    try {
-                        Thread.sleep(60_000L);
-                    } catch (InterruptedException ignored) {
-                        // Deliberately ignores cancellation: shutdown must not hang on it.
-                    }
-                }
-            }, value -> "done", failure -> "failed");
+            Command<String> work = Command.task(
+                    EffectId.of("work"),
+                    () -> {
+                        started.countDown();
+                        while (true) {
+                            try {
+                                Thread.sleep(60_000L);
+                            } catch (InterruptedException ignored) {
+                                // Deliberately ignores cancellation: shutdown must not hang on it.
+                            }
+                        }
+                    },
+                    value -> "done",
+                    failure -> "failed");
             return Update.next(0, work);
         }
 
@@ -462,8 +465,10 @@ class RuntimeLoopTest {
 
         @Override
         public Subscription<String> subscriptions(Integer model) {
-            return Subscription.interval(io.github.dhoard.braxton.effect.SubscriptionId.of("tick"),
-                    java.time.Duration.ofMillis(20), time -> "tick");
+            return Subscription.interval(
+                    io.github.dhoard.braxton.effect.SubscriptionId.of("tick"),
+                    java.time.Duration.ofMillis(20),
+                    time -> "tick");
         }
 
         @Override
@@ -479,20 +484,18 @@ class RuntimeLoopTest {
         CountDownLatch started = new CountDownLatch(1);
         List<String> diagnostics = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         ManualTimers ignored = new ManualTimers();
-        RuntimeOptions options = RuntimeOptions.defaults()
-                .withLimits(32, 8, 8)
-                ;
-        RuntimeServices services = RuntimeServices.system()
-                        .withTimers(Timers.system())
-                        .withDiagnostics(diagnostics::add);
-        Thread run = Thread.ofVirtual().name("hanging-effect")
+        RuntimeOptions options = RuntimeOptions.defaults().withLimits(32, 8, 8);
+        RuntimeServices services =
+                RuntimeServices.system().withTimers(Timers.system()).withDiagnostics(diagnostics::add);
+        Thread run = Thread.ofVirtual()
+                .name("hanging-effect")
                 .start(() -> run(new HangingEffect(started), options, terminal, services));
         assertThat(started.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
         run.join(10_000L);
-        assertThat(run.isAlive()).as("shutdown must not wait for a task that ignores interruption")
+        assertThat(run.isAlive())
+                .as("shutdown must not wait for a task that ignores interruption")
                 .isFalse();
-        assertThat(diagnostics).anySatisfy(message ->
-                assertThat(message).contains("still running"));
+        assertThat(diagnostics).anySatisfy(message -> assertThat(message).contains("still running"));
     }
 
     /** Throws from update on "boom" and from view while the model says "explode". */
@@ -516,8 +519,8 @@ class RuntimeLoopTest {
             if ("explode".equals(model)) {
                 throw new IllegalStateException("view failed");
             }
-            return Views.keyed(List.of(Binding.of("x", "boom"), Binding.of("y", "explode")),
-                    Views.text("safe"), List.of());
+            return Views.keyed(
+                    List.of(Binding.of("x", "boom"), Binding.of("y", "explode")), Views.text("safe"), List.of());
         }
     }
 
@@ -526,8 +529,7 @@ class RuntimeLoopTest {
     void aThrowingUpdateOrViewEndsTheRunAsAFailureAndClosesTheSession() throws Exception {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(3, 12));
         RuntimeOptions options = options();
-        Thread run = Thread.ofVirtual().name("crashing-update")
-                .start(() -> run(new Crashing(), options, terminal));
+        Thread run = Thread.ofVirtual().name("crashing-update").start(() -> run(new Crashing(), options, terminal));
         await(() -> terminal.outputText().contains("safe"));
         terminal.feed("x");
         run.join(5_000L);
@@ -535,34 +537,35 @@ class RuntimeLoopTest {
         assertThat(terminal.isOpen()).as("the session is closed on failure").isFalse();
 
         JLineTestTerminal second = new JLineTestTerminal(new Size(3, 12));
-        Thread crashingView = Thread.ofVirtual().name("crashing-view")
-                .start(() -> run(new Crashing(), options, second));
+        Thread crashingView =
+                Thread.ofVirtual().name("crashing-view").start(() -> run(new Crashing(), options, second));
         await(() -> second.outputText().contains("safe"));
         second.feed("y");
         crashingView.join(5_000L);
-        assertThat(crashingView.isAlive()).as("a throwing view must end the run").isFalse();
+        assertThat(crashingView.isAlive())
+                .as("a throwing view must end the run")
+                .isFalse();
         assertThat(second.isOpen()).as("the session is closed on failure").isFalse();
     }
 
     @Test
     void anEmptyProgramStillPresentsOneFrame() {
-        Component<Integer, String, Never> empty =
-                new Component<>() {
-                    @Override
-                    public Update<Integer, String, Never> init(InitContext context) {
-                        return Update.next(0);
-                    }
+        Component<Integer, String, Never> empty = new Component<>() {
+            @Override
+            public Update<Integer, String, Never> init(InitContext context) {
+                return Update.next(0);
+            }
 
-                    @Override
-                    public Update<Integer, String, Never> update(Integer model, String message) {
-                        return Update.next(model);
-                    }
+            @Override
+            public Update<Integer, String, Never> update(Integer model, String message) {
+                return Update.next(model);
+            }
 
-                    @Override
-                    public View<String> view(Integer model, ViewContext context) {
-                        return Views.text("hello");
-                    }
-                };
+            @Override
+            public View<String> view(Integer model, ViewContext context) {
+                return Views.text("hello");
+            }
+        };
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 10));
         terminal.endInput();
         ExitResult result = run(empty, options(), terminal);
@@ -577,34 +580,27 @@ class RuntimeLoopTest {
         // process, the owner must neither call update nor rebuild the view nor repaint, however
         // many poll and resize intervals elapse.
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 12));
-        java.util.concurrent.atomic.AtomicInteger updates =
-                new java.util.concurrent.atomic.AtomicInteger();
-        java.util.concurrent.atomic.AtomicInteger views =
-                new java.util.concurrent.atomic.AtomicInteger();
-        Component<Integer, String, Never> program =
-                new Component<>() {
-                    @Override
-                    public Update<Integer, String, Never> init(InitContext context) {
-                        return Update.next(0);
-                    }
+        java.util.concurrent.atomic.AtomicInteger updates = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger views = new java.util.concurrent.atomic.AtomicInteger();
+        Component<Integer, String, Never> program = new Component<>() {
+            @Override
+            public Update<Integer, String, Never> init(InitContext context) {
+                return Update.next(0);
+            }
 
-                    @Override
-                    public Update<Integer, String, Never> update(Integer model, String message) {
-                        updates.incrementAndGet();
-                        return Update.next(model + 1);
-                    }
+            @Override
+            public Update<Integer, String, Never> update(Integer model, String message) {
+                updates.incrementAndGet();
+                return Update.next(model + 1);
+            }
 
-                    @Override
-                    public View<String> view(Integer model, ViewContext context) {
-                        views.incrementAndGet();
-                        return Views.keyed(
-                                List.of(Binding.of("a", "inc")),
-                                Views.text("idle " + model),
-                                List.of());
-                    }
-                };
-        Thread run = Thread.ofVirtual().name("idle-test")
-                .start(() -> run(program, options(), terminal));
+            @Override
+            public View<String> view(Integer model, ViewContext context) {
+                views.incrementAndGet();
+                return Views.keyed(List.of(Binding.of("a", "inc")), Views.text("idle " + model), List.of());
+            }
+        };
+        Thread run = Thread.ofVirtual().name("idle-test").start(() -> run(program, options(), terminal));
         // The owner writes its first frame after buildView returns, so waiting for the write
         // (not for the view counter) is what makes the baseline frame complete: sampling the log
         // while the owner is still inside its first pass records an empty frame and then reports
@@ -632,37 +628,36 @@ class RuntimeLoopTest {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 20));
         Thread caller = Thread.currentThread();
         List<Thread> callbacks = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
-        Component<Integer, String, Never> program =
-                new Component<>() {
-                    @Override
-                    public Update<Integer, String, Never> init(InitContext context) {
-                        callbacks.add(Thread.currentThread());
-                        return Update.next(0);
-                    }
+        Component<Integer, String, Never> program = new Component<>() {
+            @Override
+            public Update<Integer, String, Never> init(InitContext context) {
+                callbacks.add(Thread.currentThread());
+                return Update.next(0);
+            }
 
-                    @Override
-                    public Update<Integer, String, Never> update(Integer model, String message) {
-                        callbacks.add(Thread.currentThread());
-                        return Update.next(model + 1);
-                    }
+            @Override
+            public Update<Integer, String, Never> update(Integer model, String message) {
+                callbacks.add(Thread.currentThread());
+                return Update.next(model + 1);
+            }
 
-                    @Override
-                    public View<String> view(Integer model, ViewContext context) {
-                        callbacks.add(Thread.currentThread());
-                        return Views.keyed(
-                                List.of(Binding.of("a", "inc")),
-                                Views.text("n " + model),
-                                List.of());
-                    }
-                };
+            @Override
+            public View<String> view(Integer model, ViewContext context) {
+                callbacks.add(Thread.currentThread());
+                return Views.keyed(List.of(Binding.of("a", "inc")), Views.text("n " + model), List.of());
+            }
+        };
         terminal.feed("a");
         terminal.endInput();
         ExitResult result = run(program, options(), terminal);
 
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(callbacks).as("init, update and view all run on the caller's thread")
-                .isNotEmpty().allSatisfy(thread -> assertThat(thread).isSameAs(caller));
-        assertThat(terminal.readOnVirtualThread()).as("the input reader is a virtual thread")
+        assertThat(callbacks)
+                .as("init, update and view all run on the caller's thread")
+                .isNotEmpty()
+                .allSatisfy(thread -> assertThat(thread).isSameAs(caller));
+        assertThat(terminal.readOnVirtualThread())
+                .as("the input reader is a virtual thread")
                 .isTrue();
         // Viewport sampling is now performed by the model owner through JLine.
     }
@@ -676,47 +671,44 @@ class RuntimeLoopTest {
         java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.CountDownLatch finished = new java.util.concurrent.CountDownLatch(1);
-        java.util.concurrent.atomic.AtomicInteger updates =
-                new java.util.concurrent.atomic.AtomicInteger();
-        Component<Integer, String, Never> program =
-                new Component<>() {
-                    @Override
-                    public Update<Integer, String, Never> init(InitContext context) {
-                        return Update.next(
-                                0,
-                                Command.task(
-                                        EffectId.of("stubborn"),
-                                        () -> {
-                                            started.countDown();
-                                            while (true) {
-                                                try {
-                                                    release.await();
-                                                    break;
-                                                } catch (InterruptedException ignored) {
-                                                    // Deliberately uncooperative: the runtime must
-                                                    // not force it.
-                                                }
-                                            }
-                                            finished.countDown();
-                                            return "late";
-                                        },
-                                        value -> "done",
-                                        failure -> "failed"));
-                    }
+        java.util.concurrent.atomic.AtomicInteger updates = new java.util.concurrent.atomic.AtomicInteger();
+        Component<Integer, String, Never> program = new Component<>() {
+            @Override
+            public Update<Integer, String, Never> init(InitContext context) {
+                return Update.next(
+                        0,
+                        Command.task(
+                                EffectId.of("stubborn"),
+                                () -> {
+                                    started.countDown();
+                                    while (true) {
+                                        try {
+                                            release.await();
+                                            break;
+                                        } catch (InterruptedException ignored) {
+                                            // Deliberately uncooperative: the runtime must
+                                            // not force it.
+                                        }
+                                    }
+                                    finished.countDown();
+                                    return "late";
+                                },
+                                value -> "done",
+                                failure -> "failed"));
+            }
 
-                    @Override
-                    public Update<Integer, String, Never> update(Integer model, String message) {
-                        updates.incrementAndGet();
-                        return Update.next(model);
-                    }
+            @Override
+            public Update<Integer, String, Never> update(Integer model, String message) {
+                updates.incrementAndGet();
+                return Update.next(model);
+            }
 
-                    @Override
-                    public View<String> view(Integer model, ViewContext context) {
-                        return Views.text("working");
-                    }
-                };
-        java.util.List<String> diagnostics =
-                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+            @Override
+            public View<String> view(Integer model, ViewContext context) {
+                return Views.text("working");
+            }
+        };
+        java.util.List<String> diagnostics = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         java.util.concurrent.ExecutorService executor =
                 java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 20));
@@ -725,38 +717,44 @@ class RuntimeLoopTest {
                 .withEffectExecutor(executor)
                 .withDiagnostics(diagnostics::add)
                 .withNanoTime(() -> 1_000L);
-        RuntimeOptions options =
-                new RuntimeOptions(
-                        java.time.Duration.ofMillis(200),
-                        32,
-                        8,
-                        8,
-                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
-                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
-                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
-                        io.github.dhoard.braxton.clipboard.ClipboardConfig.defaults(),
-                        io.github.dhoard.braxton.app.TerminalOptions.DEFAULT,
-                        null);
+        RuntimeOptions options = new RuntimeOptions(
+                java.time.Duration.ofMillis(200),
+                32,
+                8,
+                8,
+                RuntimeOptions.DEFAULT_MAX_COMPONENTS,
+                RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
+                RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
+                io.github.dhoard.braxton.clipboard.ClipboardConfig.defaults(),
+                io.github.dhoard.braxton.app.TerminalOptions.DEFAULT,
+                null);
         java.util.concurrent.atomic.AtomicReference<ExitResult> result =
                 new java.util.concurrent.atomic.AtomicReference<>();
-        Thread run = Thread.ofVirtual().name("grace-test")
+        Thread run = Thread.ofVirtual()
+                .name("grace-test")
                 .start(() -> result.set(run(program, options, terminal, environment)));
         try {
             assertThat(started.await(10, java.util.concurrent.TimeUnit.SECONDS))
-                    .as("the stubborn task starts").isTrue();
+                    .as("the stubborn task starts")
+                    .isTrue();
             long startedAt = System.nanoTime();
             terminal.endInput();
             run.join(10_000L);
             long elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000L;
 
-            assertThat(run.isAlive()).as("the run ends without waiting for the task").isFalse();
-            assertThat(elapsedMillis).as("shutdown waits for the grace period, then returns")
-                    .isGreaterThanOrEqualTo(150L).isLessThan(5_000L);
+            assertThat(run.isAlive())
+                    .as("the run ends without waiting for the task")
+                    .isFalse();
+            assertThat(elapsedMillis)
+                    .as("shutdown waits for the grace period, then returns")
+                    .isGreaterThanOrEqualTo(150L)
+                    .isLessThan(5_000L);
             assertThat(result.get().kind())
-                    .as("a task that ignores interruption is not a failure").isEqualTo(
-                            ExitResult.Kind.INPUT_CLOSED);
-            assertThat(diagnostics).anySatisfy(message ->
-                    assertThat(message).contains("shutdown").contains("still running"));
+                    .as("a task that ignores interruption is not a failure")
+                    .isEqualTo(ExitResult.Kind.INPUT_CLOSED);
+            assertThat(diagnostics)
+                    .anySatisfy(
+                            message -> assertThat(message).contains("shutdown").contains("still running"));
         } finally {
             release.countDown();
             finished.await(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -773,62 +771,56 @@ class RuntimeLoopTest {
         // The documented contract for Command.batch: "interpreted in order; a Quit ends the batch".
         // At the runtime level that must also end the run with the quit's status and leave nothing
         // from the rest of the batch running.
-        java.util.List<String> diagnostics =
-                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
-        java.util.concurrent.atomic.AtomicInteger updates =
-                new java.util.concurrent.atomic.AtomicInteger();
-        java.util.concurrent.atomic.AtomicInteger tasks =
-                new java.util.concurrent.atomic.AtomicInteger();
+        java.util.List<String> diagnostics = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        java.util.concurrent.atomic.AtomicInteger updates = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger tasks = new java.util.concurrent.atomic.AtomicInteger();
         ManualTimers timers = new ManualTimers();
-        Component<Integer, String, Never> program =
-                new Component<>() {
-                    @Override
-                    public Update<Integer, String, Never> init(InitContext context) {
-                        return Update.next(
-                                0,
-                                Command.batch(
-                                        Command.delay(
-                                                EffectId.of("before"),
-                                                java.time.Duration.ofSeconds(1),
-                                                "before",
-                                                "rejected"),
-                                        Command.quit(5),
-                                        Command.task(
-                                                EffectId.of("after"),
-                                                () -> {
-                                                    tasks.incrementAndGet();
-                                                    return "after";
-                                                },
-                                                value -> "after",
-                                                failure -> "after")));
-                    }
+        Component<Integer, String, Never> program = new Component<>() {
+            @Override
+            public Update<Integer, String, Never> init(InitContext context) {
+                return Update.next(
+                        0,
+                        Command.batch(
+                                Command.delay(
+                                        EffectId.of("before"), java.time.Duration.ofSeconds(1), "before", "rejected"),
+                                Command.quit(5),
+                                Command.task(
+                                        EffectId.of("after"),
+                                        () -> {
+                                            tasks.incrementAndGet();
+                                            return "after";
+                                        },
+                                        value -> "after",
+                                        failure -> "after")));
+            }
 
-                    @Override
-                    public Update<Integer, String, Never> update(Integer model, String message) {
-                        updates.incrementAndGet();
-                        return Update.next(model);
-                    }
+            @Override
+            public Update<Integer, String, Never> update(Integer model, String message) {
+                updates.incrementAndGet();
+                return Update.next(model);
+            }
 
-                    @Override
-                    public View<String> view(Integer model, ViewContext context) {
-                        return Views.text("batch");
-                    }
-                };
+            @Override
+            public View<String> view(Integer model, ViewContext context) {
+                return Views.text("batch");
+            }
+        };
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(3, 10));
-        RuntimeOptions options = RuntimeOptions.defaults().withLimits(32, 8, 8)
-                ;
+        RuntimeOptions options = RuntimeOptions.defaults().withLimits(32, 8, 8);
         RuntimeServices services = RuntimeServices.system()
-                        .withTimers(timers)
-                        .withEffectExecutor(Runnable::run)
-                        .withDiagnostics(diagnostics::add)
-                        .withNanoTime(() -> 1_000L);
+                .withTimers(timers)
+                .withEffectExecutor(Runnable::run)
+                .withDiagnostics(diagnostics::add)
+                .withNanoTime(() -> 1_000L);
         ExitResult result = run(program, options, terminal, services);
 
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.QUIT);
         assertThat(result.status()).isEqualTo(5);
         assertThat(tasks).as("a task after the quit never starts").hasValue(0);
         timers.advance(5_000_000_000L);
-        assertThat(updates).as("nothing from the batch reaches update after the quit").hasValue(0);
+        assertThat(updates)
+                .as("nothing from the batch reaches update after the quit")
+                .hasValue(0);
         assertThat(timers.pending()).as("the cancelled delay is gone").isZero();
         assertThat(diagnostics).isEmpty();
     }
@@ -842,76 +834,69 @@ class RuntimeLoopTest {
         Timers uncancellable = (delayNanos, task) -> () -> {
             throw new IllegalStateException("cancel failed");
         };
-        RuntimeOptions options = RuntimeOptions.defaults().withLimits(32, 8, 8)
-                ;
+        RuntimeOptions options = RuntimeOptions.defaults().withLimits(32, 8, 8);
         RuntimeServices services = RuntimeServices.system()
-                        .withTimers(uncancellable)
-                        .withEffectExecutor(Runnable::run)
-                        .withNanoTime(() -> 1_000L);
+                .withTimers(uncancellable)
+                .withEffectExecutor(Runnable::run)
+                .withNanoTime(() -> 1_000L);
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(3, 10));
-        Component<Integer, String, Never> program =
-                new Component<>() {
-                    @Override
-                    public Update<Integer, String, Never> init(InitContext context) {
-                        return Update.next(
-                                0,
-                                Command.delay(
-                                        EffectId.of("slow"),
-                                        java.time.Duration.ofSeconds(30),
-                                        "late",
-                                        "rejected"));
-                    }
+        Component<Integer, String, Never> program = new Component<>() {
+            @Override
+            public Update<Integer, String, Never> init(InitContext context) {
+                return Update.next(
+                        0, Command.delay(EffectId.of("slow"), java.time.Duration.ofSeconds(30), "late", "rejected"));
+            }
 
-                    @Override
-                    public Update<Integer, String, Never> update(Integer model, String message) {
-                        throw new IllegalStateException("update broke");
-                    }
+            @Override
+            public Update<Integer, String, Never> update(Integer model, String message) {
+                throw new IllegalStateException("update broke");
+            }
 
-                    @Override
-                    public View<String> view(Integer model, ViewContext context) {
-                        return Views.keyed(
-                                List.of(Binding.of("a", "inc")), Views.text("safe"), List.of());
-                    }
-                };
-        java.util.concurrent.atomic.AtomicReference<ExitResult> result = new java.util.concurrent.atomic.AtomicReference<>();
-        Thread run = Thread.ofVirtual().name("cleanup-failure-test")
+            @Override
+            public View<String> view(Integer model, ViewContext context) {
+                return Views.keyed(List.of(Binding.of("a", "inc")), Views.text("safe"), List.of());
+            }
+        };
+        java.util.concurrent.atomic.AtomicReference<ExitResult> result =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        Thread run = Thread.ofVirtual()
+                .name("cleanup-failure-test")
                 .start(() -> result.set(run(program, options, terminal, services)));
         await(() -> terminal.outputText().contains("safe"));
         terminal.feed("a");
         run.join(5_000L);
         assertThat(run.isAlive()).isFalse();
-        assertThat(result.get().kind()).as("a throwing update ends the run").isEqualTo(
-                ExitResult.Kind.FAILURE);
+        assertThat(result.get().kind()).as("a throwing update ends the run").isEqualTo(ExitResult.Kind.FAILURE);
         assertThat(result.get().failure())
                 .isInstanceOf(ComponentFailure.class)
                 .hasCauseInstanceOf(IllegalStateException.class);
         assertThat(result.get().failure().getCause())
                 .as("the primary cause is not replaced")
                 .hasMessage("update broke");
-        assertThat(result.get().cleanupFailures()).as("the cleanup failure is still reported")
+        assertThat(result.get().cleanupFailures())
+                .as("the cleanup failure is still reported")
                 .anySatisfy(failure -> assertThat(failure).hasMessage("cancel failed"));
     }
 
     @Test
     void theSessionIsClosedEvenWhenStartupFails() {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 10));
-        Component<Integer, String, Never> broken =
-                new Component<>() {
-                    @Override
-                    public Update<Integer, String, Never> init(InitContext context) {
-                        throw new IllegalStateException("boom");
-                    }
+        Component<Integer, String, Never> broken = new Component<>() {
+            @Override
+            public Update<Integer, String, Never> init(InitContext context) {
+                throw new IllegalStateException("boom");
+            }
 
-                    @Override
-                    public Update<Integer, String, Never> update(Integer model, String message) {
-                        return Update.next(model);
-                    }
+            @Override
+            public Update<Integer, String, Never> update(Integer model, String message) {
+                return Update.next(model);
+            }
 
-                    @Override
-                    public View<String> view(Integer model, ViewContext context) {
-                        return Views.text("");
-                    }
-                };
+            @Override
+            public View<String> view(Integer model, ViewContext context) {
+                return Views.text("");
+            }
+        };
         ExitResult result = run(broken, options(), terminal);
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
         assertThat(result.failure()).isInstanceOf(ComponentFailure.class);
@@ -940,7 +925,7 @@ class RuntimeLoopTest {
 
     @Test
     void aFailingJLineCloseIsCarriedAsACleanupFailure() {
-        JLineTestTerminal terminal = new JLineTestTerminal(new Size(3,10));
+        JLineTestTerminal terminal = new JLineTestTerminal(new Size(3, 10));
         terminal.failClose(new IllegalStateException("terminal restore failed"));
         ExitResult result = run(new Quitting(), RuntimeOptions.defaults(), terminal);
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
@@ -994,12 +979,15 @@ class RuntimeLoopTest {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(6, 20));
         RuntimeOptions tight = options().withLimits(2, 4, 4);
         AtomicReference<ExitResult> result = new AtomicReference<>();
-        Thread run = Thread.ofVirtual().name("burst-test")
-                .start(() -> result.set(run(new Bursting(5), tight, terminal)));
+        Thread run =
+                Thread.ofVirtual().name("burst-test").start(() -> result.set(run(new Bursting(5), tight, terminal)));
         run.join(8_000L);
-        assertThat(run.isAlive()).as("the run ends instead of waiting for itself").isFalse();
+        assertThat(run.isAlive())
+                .as("the run ends instead of waiting for itself")
+                .isFalse();
         assertThat(result.get().kind()).isEqualTo(ExitResult.Kind.FAILURE);
-        assertThat(result.get().failure()).isInstanceOf(IllegalStateException.class)
+        assertThat(result.get().failure())
+                .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("mailbox overflow");
         assertThat(terminal.isOpen()).as("the session is still restored").isFalse();
     }
@@ -1015,7 +1003,8 @@ class RuntimeLoopTest {
 
         JLineTestTerminal burstTerminal = new JLineTestTerminal(new Size(6, 20));
         AtomicReference<ExitResult> burst = new AtomicReference<>();
-        Thread burstRun = Thread.ofVirtual().name("burst-control")
+        Thread burstRun = Thread.ofVirtual()
+                .name("burst-control")
                 .start(() -> burst.set(run(new Bursting(5), options(), burstTerminal)));
         await(() -> burstTerminal.outputText().contains("burst: 5"));
         burstTerminal.endInput();
@@ -1031,7 +1020,10 @@ class RuntimeLoopTest {
         terminal.endInput();
         run(new Counter(), options(), terminal);
         assertThat(terminal.writes()).isNotEmpty();
-        assertThat(terminal.outputText()).contains("\u001B[?1049h").contains("\u001B[?1049l").contains("count: 1");
+        assertThat(terminal.outputText())
+                .contains("\u001B[?1049h")
+                .contains("\u001B[?1049l")
+                .contains("count: 1");
         assertThat(terminal.writes().stream().filter(write -> write.contains("count:")))
                 .allSatisfy(write -> assertThat(write).doesNotContain("\u001B[?1049"));
     }

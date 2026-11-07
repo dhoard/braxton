@@ -26,7 +26,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /** Every bundled FIGlet font loads and renders through the artwork path the widget uses. */
@@ -40,10 +39,13 @@ class FontLoaderTest {
             assertThat(font.height()).as("%s height", family).isPositive();
             List<String> rows = font.render("Ag");
             assertThat(rows).as("%s rows", family).hasSize(font.height());
-            assertThat(rows).as("%s is not blank", family).anySatisfy(row ->
-                    assertThat(row).isNotBlank());
+            assertThat(rows)
+                    .as("%s is not blank", family)
+                    .anySatisfy(row -> assertThat(row).isNotBlank());
             for (String row : rows) {
-                assertThat(row).as("%s row %s", family, row).doesNotContain("\u0000")
+                assertThat(row)
+                        .as("%s row %s", family, row)
+                        .doesNotContain("\u0000")
                         .doesNotContain(String.valueOf(font.hardBlank()));
             }
         }
@@ -53,7 +55,8 @@ class FontLoaderTest {
     void twoRenderCallsAgreeAndUnknownCharactersAreSkipped() throws IOException {
         FigletFont font = FontLoader.load(FontLoader.Family.SMALL);
         assertThat(font.render("Hi")).isEqualTo(font.render("Hi"));
-        assertThat(font.render("\u65E5")).as("characters outside 32..126 are skipped")
+        assertThat(font.render("\u65E5"))
+                .as("characters outside 32..126 are skipped")
                 .containsOnly("");
         assertThat(font.render("")).hasSize(font.height());
     }
@@ -62,8 +65,7 @@ class FontLoaderTest {
     void aMissingResourceFailsWithADiagnostic() {
         // Family resources are fixed, so a missing one is exercised through the arbitrary-stream
         // overload with a null stream, which the parser reports as a missing font.
-        assertThat(org.assertj.core.api.Assertions.catchThrowable(() ->
-                FigletFont.parse(null, "/fonts/none.flf")))
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> FigletFont.parse(null, "/fonts/none.flf")))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("font not found");
     }

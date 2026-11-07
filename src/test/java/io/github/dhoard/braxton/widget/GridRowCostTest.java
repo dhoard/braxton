@@ -24,11 +24,6 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
@@ -36,6 +31,9 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.testing.AllocationProbe;
 import io.github.dhoard.braxton.view.ScreenRenderer;
 import io.github.dhoard.braxton.view.View;
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /**
  * What assembling one grid row costs, in cells.
@@ -90,8 +88,7 @@ class GridRowCostTest {
             data.add(cells);
         }
         TableSelector.Model model = new TableSelector.Model(header, data, 0, 0, true);
-        return new TableSelector(
-                new TableSelector.Config(model, Style.NONE.withInvert(), Style.NONE, Style.NONE))
+        return new TableSelector(new TableSelector.Config(model, Style.NONE.withInvert(), Style.NONE, Style.NONE))
                 .view(model, new ViewContext(new Viewport(rows, 400)));
     }
 
@@ -106,7 +103,8 @@ class GridRowCostTest {
         long narrow = AllocationProbe.bytes(() -> table(rows, 8).renderLines());
         long wide = AllocationProbe.bytes(() -> table(rows, 256).renderLines());
         assertThat(bytesPerCell(wide, rows, 256))
-                .as("per-cell bytes for 256 columns against %s for 8 (total %s / %s)",
+                .as(
+                        "per-cell bytes for 256 columns against %s for 8 (total %s / %s)",
                         bytesPerCell(narrow, rows, 8), wide, narrow)
                 .isLessThan(2 * bytesPerCell(narrow, rows, 8));
         // One cell's paint, its pad and its styled value: what a row of any width must cost.
@@ -123,7 +121,8 @@ class GridRowCostTest {
         long narrowBytes = AllocationProbe.bytes(() -> Markup.parse(narrow));
         long wideBytes = AllocationProbe.bytes(() -> Markup.parse(wide));
         assertThat(bytesPerCell(wideBytes, rows, 256))
-                .as("per-cell bytes for 256 columns against %s for 8 (total %s / %s)",
+                .as(
+                        "per-cell bytes for 256 columns against %s for 8 (total %s / %s)",
                         bytesPerCell(narrowBytes, rows, 8), wideBytes, narrowBytes)
                 .isLessThan(2 * bytesPerCell(narrowBytes, rows, 8));
         assertThat(bytesPerCell(wideBytes, rows, 256))
@@ -135,12 +134,11 @@ class GridRowCostTest {
     void aTableSelectorRowCostsTheSamePerCellAtAnyColumnCount() {
         int rows = 20;
         ScreenRenderer renderer = new ScreenRenderer();
-        long narrow = AllocationProbe.bytes(
-                () -> renderer.plainLines(selector(rows, 8), new Viewport(rows, 400)));
-        long wide = AllocationProbe.bytes(
-                () -> renderer.plainLines(selector(rows, 256), new Viewport(rows, 400)));
+        long narrow = AllocationProbe.bytes(() -> renderer.plainLines(selector(rows, 8), new Viewport(rows, 400)));
+        long wide = AllocationProbe.bytes(() -> renderer.plainLines(selector(rows, 256), new Viewport(rows, 400)));
         assertThat(bytesPerCell(wide, rows, 256))
-                .as("per-cell bytes for 256 columns against %s for 8 (total %s / %s)",
+                .as(
+                        "per-cell bytes for 256 columns against %s for 8 (total %s / %s)",
                         bytesPerCell(narrow, rows, 8), wide, narrow)
                 .isLessThan(2 * bytesPerCell(narrow, rows, 8));
         assertThat(bytesPerCell(wide, rows, 256))

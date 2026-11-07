@@ -24,7 +24,6 @@ package io.github.dhoard.braxton.internal.input;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
-
 import org.jline.utils.NonBlockingReader;
 
 /** Bounded scalar-aware paste parsing. Overflow is drained through the marker or idle deadline. */
@@ -43,8 +42,7 @@ public final class PasteDecoder {
         return read(in, DEFAULT_MAX_BYTES, DEFAULT_IDLE_TIMEOUT_MILLIS);
     }
 
-    public static Result read(NonBlockingReader in, int maxBytes, long idleMillis)
-            throws IOException {
+    public static Result read(NonBlockingReader in, int maxBytes, long idleMillis) throws IOException {
         return read(new ScalarInput(in, 100), maxBytes, idleMillis);
     }
 

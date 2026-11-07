@@ -24,20 +24,18 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.internal.render.LayoutEngine;
-import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.view.ScreenRenderer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+import org.junit.jupiter.api.Test;
 
 /** A quote keeps one width: a bar, a space, the expanded line, and padding to the widest line. */
 class QuoteTest {
@@ -47,10 +45,10 @@ class QuoteTest {
     @Test
     void everyRowIsTheBarSpaceContentAndPaddingToTheWidestLine() {
         Quote quote = Quote.of().append(StyledText.plain("ab")).append("c");
-        assertThat(List.of(quote.render().plainText().split("\n", -1)))
-                .containsExactly(BAR + " ab", BAR + " c ");
-        assertThat(quote.render().lines()).allSatisfy(
-                line -> assertThat(TextMeasure.columns(line.plainText())).isEqualTo(4));
+        assertThat(List.of(quote.render().plainText().split("\n", -1))).containsExactly(BAR + " ab", BAR + " c ");
+        assertThat(quote.render().lines())
+                .allSatisfy(line ->
+                        assertThat(TextMeasure.columns(line.plainText())).isEqualTo(4));
     }
 
     /** Tabs expand to the same four-column stops the text view paints, so the block stays square. */
@@ -70,21 +68,25 @@ class QuoteTest {
     @Test
     void aTabAfterAClusterASpanBoundarySplitKeepsThePlainRows() {
         Style bold = Style.NONE.withBold();
-        assertSplitRowsAreThePlainRows("a\u0301\tb", BAR + " a\u0301   b",
-                StyledText.concat(StyledText.of("a", Style.NONE),
-                        StyledText.of("\u0301\tb", bold)));
-        assertSplitRowsAreThePlainRows("a\uFE0F\tb", BAR + " a\uFE0F  b",
-                StyledText.concat(StyledText.of("a", Style.NONE),
-                        StyledText.of("\uFE0F\tb", bold)));
+        assertSplitRowsAreThePlainRows(
+                "a\u0301\tb",
+                BAR + " a\u0301   b",
+                StyledText.concat(StyledText.of("a", Style.NONE), StyledText.of("\u0301\tb", bold)));
+        assertSplitRowsAreThePlainRows(
+                "a\uFE0F\tb",
+                BAR + " a\uFE0F  b",
+                StyledText.concat(StyledText.of("a", Style.NONE), StyledText.of("\uFE0F\tb", bold)));
     }
 
-    private static void assertSplitRowsAreThePlainRows(String value, String expected,
-            StyledText split) {
+    private static void assertSplitRowsAreThePlainRows(String value, String expected, StyledText split) {
         assertThat(split.plainText()).as("the same plain text").isEqualTo(value);
         assertThat(List.of(Quote.of().append(split).render().plainText().split("\n", -1)))
                 .as("rows of \"%s\"", value)
-                .isEqualTo(List.of(Quote.of().append(StyledText.plain(value))
-                        .render().plainText().split("\n", -1)))
+                .isEqualTo(List.of(Quote.of()
+                        .append(StyledText.plain(value))
+                        .render()
+                        .plainText()
+                        .split("\n", -1)))
                 .containsExactly(expected);
         assertThat(TextMeasure.columns(expected)).as("columns of \"%s\"", value).isEqualTo(7);
     }
@@ -111,8 +113,13 @@ class QuoteTest {
         }
         // The flattened bar is still one prefix on each of several quoted lines, and the block
         // keeps its single width.
-        assertThat(List.of(Quote.of().bar(">\n>").append("ab").append("c")
-                .render().plainText().split("\n", -1)))
+        assertThat(List.of(Quote.of()
+                        .bar(">\n>")
+                        .append("ab")
+                        .append("c")
+                        .render()
+                        .plainText()
+                        .split("\n", -1)))
                 .containsExactly("> > ab", "> > c ");
     }
 
@@ -131,7 +138,8 @@ class QuoteTest {
             if (span.text().contains("\n")) {
                 continue;
             }
-            assertThat(span.style().background()).as("background on [%s]", span.text())
+            assertThat(span.style().background())
+                    .as("background on [%s]", span.text())
                     .isEqualTo(background);
         }
         assertThat(spans.get(1).text()).isEqualTo(" ");
@@ -145,7 +153,8 @@ class QuoteTest {
         assertThat(spans.get(0).text()).isEqualTo(BAR);
         assertThat(spans.get(0).style().foreground()).isEqualTo(border);
         for (StyledText.Span span : spans.subList(1, spans.size())) {
-            assertThat(span.style().foreground()).as("border colour on [%s]", span.text())
+            assertThat(span.style().foreground())
+                    .as("border colour on [%s]", span.text())
                     .isNull();
         }
     }
@@ -185,11 +194,11 @@ class QuoteTest {
             int barWidth = TextMeasure.columns(BAR);
             for (int line = 0; line < lines; line++) {
                 String row = rendered.get(line).plainText();
-                assertThat(TextMeasure.columns(row)).as("row %d of %s", line, expected)
+                assertThat(TextMeasure.columns(row))
+                        .as("row %d of %s", line, expected)
                         .isEqualTo(width);
                 assertThat(row).startsWith(BAR + " " + expected.get(line));
-                assertThat(TextMeasure.columns(row.substring(barWidth + 1)))
-                        .isEqualTo(width - barWidth - 1);
+                assertThat(TextMeasure.columns(row.substring(barWidth + 1))).isEqualTo(width - barWidth - 1);
             }
         }
     }
@@ -202,8 +211,8 @@ class QuoteTest {
      */
     @Test
     void aLineOpeningWithABaselessClusterKeepsTheBlockWidth() {
-        for (String content : List.of("\u0301", "\u0301x", "\uFE0F", "\uFE0Fx", "\uFE0Ex",
-                "\u200D", "\u200B", "\uFEFFx", "\u00ADx")) {
+        for (String content : List.of(
+                "\u0301", "\u0301x", "\uFE0F", "\uFE0Fx", "\uFE0Ex", "\u200D", "\u200B", "\uFEFFx", "\u00ADx")) {
             Quote quote = Quote.of()
                     .append(StyledText.plain("ab"))
                     .append(StyledText.plain(content))
@@ -211,7 +220,8 @@ class QuoteTest {
             List<StyledText> rows = quote.render().lines();
             assertThat(rows).as("rows for content %s", show(content)).hasSize(2);
             // The line with its own base is the control: the block's width is its four columns.
-            assertThat(rows.get(0).plainText()).as("control row for %s", show(content))
+            assertThat(rows.get(0).plainText())
+                    .as("control row for %s", show(content))
                     .isEqualTo(BAR + " ab");
             for (int row = 0; row < rows.size(); row++) {
                 String text = rows.get(row).plainText();
@@ -220,7 +230,8 @@ class QuoteTest {
                         .isEqualTo(4);
             }
             // The quoted content survives the padding unchanged, in the row it is painted in.
-            assertThat(rows.get(1).plainText()).as("row for content %s", show(content))
+            assertThat(rows.get(1).plainText())
+                    .as("row for content %s", show(content))
                     .startsWith(BAR + " " + content);
         }
     }
@@ -232,12 +243,15 @@ class QuoteTest {
     @Test
     void thePadOfARowIsChargedInsideTheBarAndItsSpace() {
         Color background = Color.parse("#102030").orElseThrow();
-        Quote mark = Quote.of().append(StyledText.plain("ab"))
-                .append(StyledText.plain("\u0301x")).background(background);
-        assertThat(List.of(mark.render().plainText().split("\n", -1)))
-                .containsExactly(BAR + " ab", BAR + " \u0301x ");
-        Quote selector = Quote.of().append(StyledText.plain("ab"))
-                .append(StyledText.plain("\uFE0Fx")).background(background);
+        Quote mark = Quote.of()
+                .append(StyledText.plain("ab"))
+                .append(StyledText.plain("\u0301x"))
+                .background(background);
+        assertThat(List.of(mark.render().plainText().split("\n", -1))).containsExactly(BAR + " ab", BAR + " \u0301x ");
+        Quote selector = Quote.of()
+                .append(StyledText.plain("ab"))
+                .append(StyledText.plain("\uFE0Fx"))
+                .background(background);
         assertThat(List.of(selector.render().plainText().split("\n", -1)))
                 .containsExactly(BAR + " ab", BAR + " \uFE0Fx");
     }
@@ -257,25 +271,30 @@ class QuoteTest {
                 StyledText.plain("\uFE0Fx"),
                 StyledText.of("\u0301", Style.NONE.withBold()).append(StyledText.plain("x")));
         for (StyledText content : contents) {
-            Quote quote = Quote.of().append(StyledText.plain("ab"))
-                    .append(content).background(background);
+            Quote quote =
+                    Quote.of().append(StyledText.plain("ab")).append(content).background(background);
             List<StyledText> rows = quote.render().lines();
             int width = TextMeasure.columns(rows.get(0).plainText());
-            assertThat(width).as("block width for %s", show(content.plainText())).isEqualTo(4);
+            assertThat(width)
+                    .as("block width for %s", show(content.plainText()))
+                    .isEqualTo(4);
             assertThat(new LayoutEngine().intrinsicWidth(quote.view(), width + 8))
-                    .as("width measured for %s", show(content.plainText())).isEqualTo(width);
-            RenderedScreen screen = new ScreenRenderer().screen(quote.view(),
-                    new Viewport(rows.size(), width + 2));
-            assertThat(screen.rows()).as("painted rows for %s", show(content.plainText()))
+                    .as("width measured for %s", show(content.plainText()))
+                    .isEqualTo(width);
+            RenderedScreen screen = new ScreenRenderer().screen(quote.view(), new Viewport(rows.size(), width + 2));
+            assertThat(screen.rows())
+                    .as("painted rows for %s", show(content.plainText()))
                     .isEqualTo(rows.size());
             for (int row = 0; row < rows.size(); row++) {
                 assertThat(paintedColumns(screen, row))
-                        .as("painted columns of row %d for %s, painted as %s",
+                        .as(
+                                "painted columns of row %d for %s, painted as %s",
                                 row, show(content.plainText()), paintedCells(screen, row))
                         .isEqualTo(width);
                 // The band the background paints ends on the block's last column and no further.
                 assertThat(lastPaintedColumn(screen, row))
-                        .as("last painted column of row %d for %s, painted as %s",
+                        .as(
+                                "last painted column of row %d for %s, painted as %s",
                                 row, show(content.plainText()), paintedCells(screen, row))
                         .isEqualTo(width - 1);
                 for (int col = 1; col < width; col++) {
@@ -283,8 +302,7 @@ class QuoteTest {
                         continue;
                     }
                     assertThat(screen.cell(row, col).style().background())
-                            .as("background at row %d column %d for %s",
-                                    row, col, show(content.plainText()))
+                            .as("background at row %d column %d for %s", row, col, show(content.plainText()))
                             .isEqualTo(background);
                 }
             }
@@ -297,8 +315,20 @@ class QuoteTest {
      */
     @Test
     void everyRenderedRowKeepsOneWidthWhenLinesOpenWithBaselessClusters() {
-        String[] atoms = {"a", "bc", " ", "\u65E5", "\uD83D\uDE00", "e\u0301",
-                "\u0301", "\uFE0F", "\uFE0E", "\u200D", "\u200B", "\u2502"};
+        String[] atoms = {
+            "a",
+            "bc",
+            " ",
+            "\u65E5",
+            "\uD83D\uDE00",
+            "e\u0301",
+            "\u0301",
+            "\uFE0F",
+            "\uFE0E",
+            "\u200D",
+            "\u200B",
+            "\u2502"
+        };
         Random random = new Random(17L);
         for (int iteration = 0; iteration < 200; iteration++) {
             Quote quote = Quote.of().background(Color.parse("#102030").orElseThrow());
@@ -317,14 +347,15 @@ class QuoteTest {
             int width = TextMeasure.columns(rendered.get(0).plainText());
             for (int line = 0; line < lines; line++) {
                 assertThat(TextMeasure.columns(rendered.get(line).plainText()))
-                        .as("row %d of %s", line, expected).isEqualTo(width);
+                        .as("row %d of %s", line, expected)
+                        .isEqualTo(width);
             }
-            RenderedScreen screen = new ScreenRenderer().screen(quote.view(),
-                    new Viewport(lines, width + 2));
+            RenderedScreen screen = new ScreenRenderer().screen(quote.view(), new Viewport(lines, width + 2));
             assertThat(screen.rows()).as("painted rows of %s", expected).isEqualTo(lines);
             for (int row = 0; row < lines; row++) {
                 assertThat(paintedColumns(screen, row))
-                        .as("painted columns of row %d of %s", row, expected).isEqualTo(width);
+                        .as("painted columns of row %d of %s", row, expected)
+                        .isEqualTo(width);
             }
         }
     }
@@ -355,8 +386,10 @@ class QuoteTest {
     private static List<String> paintedCells(RenderedScreen screen, int row) {
         List<String> cells = new ArrayList<>();
         for (int col = 0; col < screen.cols(); col++) {
-            cells.add(screen.isContinuation(row, col)
-                    ? "<continuation>" : show(screen.cell(row, col).text()));
+            cells.add(
+                    screen.isContinuation(row, col)
+                            ? "<continuation>"
+                            : show(screen.cell(row, col).text()));
         }
         return cells;
     }
@@ -368,8 +401,7 @@ class QuoteTest {
         StringBuilder text = new StringBuilder("\"");
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
-            text.append(c >= 0x20 && c < 0x7F
-                    ? String.valueOf(c) : String.format("\\u%04x", (int) c));
+            text.append(c >= 0x20 && c < 0x7F ? String.valueOf(c) : String.format("\\u%04x", (int) c));
         }
         return text.append('"').toString();
     }
@@ -383,16 +415,17 @@ class QuoteTest {
         java.util.List<String> pinned = new io.github.dhoard.braxton.view.ScreenRenderer()
                 .plainLines(quote.view(), new io.github.dhoard.braxton.layout.Viewport(2, 10));
         java.util.List<String> oneColumn = new io.github.dhoard.braxton.view.ScreenRenderer(
-                io.github.dhoard.braxton.style.WidthPolicy.ONE_COLUMN)
+                        io.github.dhoard.braxton.style.WidthPolicy.ONE_COLUMN)
                 .plainLines(quote.view(), new io.github.dhoard.braxton.layout.Viewport(2, 10));
-        assertThat(oneColumn).as("the widget's own widths do not follow the renderer policy")
+        assertThat(oneColumn)
+                .as("the widget's own widths do not follow the renderer policy")
                 .isEqualTo(pinned);
         assertThat(pinned.stream().map(TextMeasure::columns).distinct())
-                .as("under the pinned policy both rows are the same width").hasSize(1);
+                .as("under the pinned policy both rows are the same width")
+                .hasSize(1);
         assertThat(oneColumn.stream()
-                .map(line -> TextMeasure.columns(line,
-                        io.github.dhoard.braxton.style.WidthPolicy.ONE_COLUMN))
-                .distinct())
+                        .map(line -> TextMeasure.columns(line, io.github.dhoard.braxton.style.WidthPolicy.ONE_COLUMN))
+                        .distinct())
                 .as("under a one-column policy the mixed row is short by the wide glyph")
                 .hasSize(2);
     }

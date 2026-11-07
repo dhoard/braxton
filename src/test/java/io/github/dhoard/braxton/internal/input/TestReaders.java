@@ -22,20 +22,18 @@
 
 package io.github.dhoard.braxton.internal.input;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import org.jline.utils.NonBlocking;
 import org.jline.utils.NonBlockingReader;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-
 /** Actual JLine decoders, closed after each parser test. */
 public final class TestReaders implements AfterEachCallback {
-    private static final ThreadLocal<List<NonBlockingReader>> READERS =
-            ThreadLocal.withInitial(ArrayList::new);
+    private static final ThreadLocal<List<NonBlockingReader>> READERS = ThreadLocal.withInitial(ArrayList::new);
 
     public static NonBlockingReader utf8(InputStream input) {
         NonBlockingReader reader = NonBlocking.nonBlocking("test", input, StandardCharsets.UTF_8);

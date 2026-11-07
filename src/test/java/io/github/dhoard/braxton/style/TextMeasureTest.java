@@ -29,8 +29,7 @@ import org.junit.jupiter.api.Test;
 /** Grapheme segmentation and terminal-column measurement are separate contracts. */
 class TextMeasureTest {
 
-    private static final String FAMILY = new String(new int[] {
-            0x1F469, 0x200D, 0x1F469, 0x200D, 0x1F467}, 0, 5);
+    private static final String FAMILY = new String(new int[] {0x1F469, 0x200D, 0x1F469, 0x200D, 0x1F467}, 0, 5);
 
     @Test
     void combiningMarksAndZwjSequencesAreSingleGraphemes() {
@@ -41,10 +40,10 @@ class TextMeasureTest {
 
     @Test
     void invisibleFormatCharactersOccupyNoColumn() {
-        for (String format : new String[] {"\u200B", "\u200C", "\u200D", "\u2060", "\u200E",
-                "\uFEFF"}) {
-            assertThat(TextMeasure.columns(format)).as("columns of U+%04X",
-                    (int) format.charAt(0)).isZero();
+        for (String format : new String[] {"\u200B", "\u200C", "\u200D", "\u2060", "\u200E", "\uFEFF"}) {
+            assertThat(TextMeasure.columns(format))
+                    .as("columns of U+%04X", (int) format.charAt(0))
+                    .isZero();
         }
         assertThat(TextMeasure.columns("a\u200Bb")).isEqualTo(2);
         assertThat(TextMeasure.columns("a\uFEFFb\u200Bc")).isEqualTo(3);
@@ -143,7 +142,8 @@ class TextMeasureTest {
         // Snapping down always lands on a boundary, never inside a cluster.
         for (int index = 0; index <= text.length(); index++) {
             assertThat(TextMeasure.isBoundary(text, TextMeasure.boundaryBefore(text, index)))
-                    .as("boundaryBefore(%d)", index).isTrue();
+                    .as("boundaryBefore(%d)", index)
+                    .isTrue();
         }
     }
 

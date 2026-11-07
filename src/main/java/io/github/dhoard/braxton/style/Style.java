@@ -29,13 +29,19 @@ package io.github.dhoard.braxton.style;
  * {@code with*} methods to derive a changed style; a style instance is shared freely across span
  * values and is safe to compare.</p>
  */
-public record Style(Color foreground, Color background, boolean bold, boolean italic,
-        boolean underline, boolean strikethrough, boolean invert, boolean hidden) {
+public record Style(
+        Color foreground,
+        Color background,
+        boolean bold,
+        boolean italic,
+        boolean underline,
+        boolean strikethrough,
+        boolean invert,
+        boolean hidden) {
 
     public static final Style NONE = new Style(null, null, false, false, false, false, false, false);
 
-    public Style {
-    }
+    public Style {}
 
     public static Style fg(Color foreground) {
         return NONE.withForeground(foreground);
@@ -79,8 +85,14 @@ public record Style(Color foreground, Color background, boolean bold, boolean it
 
     /** True when this style would emit no SGR parameters at all. */
     public boolean isPlain() {
-        return foreground == null && background == null && !bold && !italic && !underline
-                && !strikethrough && !invert && !hidden;
+        return foreground == null
+                && background == null
+                && !bold
+                && !italic
+                && !underline
+                && !strikethrough
+                && !invert
+                && !hidden;
     }
 
     /** Applies {@code overlay} on top of this style, inheriting unspecified colours. */

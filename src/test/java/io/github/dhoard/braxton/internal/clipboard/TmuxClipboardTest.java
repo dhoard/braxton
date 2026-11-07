@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.internal.clipboard;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Random;
-
 import org.junit.jupiter.api.Test;
 
 /** The tmux passthrough wrapper doubles every ESC and is applied at most once. */
@@ -86,19 +85,19 @@ class TmuxClipboardTest {
     void wrappingIsAppliedAtMostOnce() {
         String wrapped = TmuxClipboard.passthrough(OSC52);
         assertThat(TmuxClipboard.passthrough(wrapped)).isEqualTo(wrapped);
-        assertThat(TmuxClipboard.passthrough(TmuxClipboard.passthrough(TmuxClipboard.passthrough(
-                OSC52)))).isEqualTo(wrapped);
+        assertThat(TmuxClipboard.passthrough(TmuxClipboard.passthrough(TmuxClipboard.passthrough(OSC52))))
+                .isEqualTo(wrapped);
         // A body that already looks like a passthrough is left exactly as it is.
         assertThat(TmuxClipboard.passthrough(PREFIX)).isEqualTo(PREFIX);
-        assertThat(TmuxClipboard.passthrough(PREFIX + "x" + SUFFIX))
-                .isEqualTo(PREFIX + "x" + SUFFIX);
+        assertThat(TmuxClipboard.passthrough(PREFIX + "x" + SUFFIX)).isEqualTo(PREFIX + "x" + SUFFIX);
     }
 
     @Test
     void everyEscapeInThePayloadIsDoubledAndTheLengthIsExact() {
         Random random = new Random(71L);
-        String[] pieces = {"\u001b", "]", "52;", "c", "a", "\u0007", "\u001b\\", "x", "\u001b]0;t\u0007",
-            PREFIX, SUFFIX, "\u001b[1m"};
+        String[] pieces = {
+            "\u001b", "]", "52;", "c", "a", "\u0007", "\u001b\\", "x", "\u001b]0;t\u0007", PREFIX, SUFFIX, "\u001b[1m"
+        };
         for (int iteration = 0; iteration < 3_000; iteration++) {
             StringBuilder sequence = new StringBuilder();
             int count = random.nextInt(6);
@@ -114,7 +113,8 @@ class TmuxClipboardTest {
             assertThat(doublesEveryEscape(body)).as("iteration %d", iteration).isTrue();
             assertThat(unescape(body)).as("iteration %d", iteration).isEqualTo(source);
             assertThat(escapes(body)).as("iteration %d", iteration).isEqualTo(2 * escapes(source));
-            assertThat(wrapped.length()).as("iteration %d", iteration)
+            assertThat(wrapped.length())
+                    .as("iteration %d", iteration)
                     .isEqualTo(PREFIX.length() + body.length() + SUFFIX.length());
         }
     }

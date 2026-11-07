@@ -27,7 +27,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /** Transcript records: turn assembly, tool lifecycle, and forward-compatible warnings. */
@@ -79,8 +78,9 @@ class TranscriptJsonlReaderTest {
         assertThat(tools).anySatisfy(tool -> assertThat(tool.call()).startsWith("$ "));
         assertThat(tools).anySatisfy(tool -> assertThat(tool.call()).startsWith("$ read "));
         assertThat(tools).anySatisfy(tool -> assertThat(tool.call()).startsWith("$ edit "));
-        assertThat(tools).anySatisfy(tool -> assertThat(tool.result().lines().count())
-                .isGreaterThan(HarnessProjection.TOOL_PREVIEW_LINES));
+        assertThat(tools)
+                .anySatisfy(tool ->
+                        assertThat(tool.result().lines().count()).isGreaterThan(HarnessProjection.TOOL_PREVIEW_LINES));
     }
 
     @Test
@@ -108,7 +108,8 @@ class TranscriptJsonlReaderTest {
         assertThat(transcript.turns().get(0).responses())
                 .filteredOn(HarnessEntry.Failure.class::isInstance)
                 .singleElement()
-                .satisfies(entry -> assertThat(((HarnessEntry.Failure) entry).text()).isEqualTo("boom"));
+                .satisfies(entry ->
+                        assertThat(((HarnessEntry.Failure) entry).text()).isEqualTo("boom"));
     }
 
     private static boolean wellFormed(String text) {

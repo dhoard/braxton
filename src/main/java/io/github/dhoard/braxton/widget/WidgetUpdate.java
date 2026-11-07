@@ -22,11 +22,10 @@
 
 package io.github.dhoard.braxton.widget;
 
+import io.github.dhoard.braxton.mvu.Update;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
-
-import io.github.dhoard.braxton.mvu.Update;
 
 /**
  * The one place a bundled widget turns a reduction into an {@code Update}.
@@ -43,8 +42,7 @@ import io.github.dhoard.braxton.mvu.Update;
  */
 final class WidgetUpdate {
 
-    private WidgetUpdate() {
-    }
+    private WidgetUpdate() {}
 
     /**
      * Applies {@code reduce} to {@code message} and turns the result into an {@code Update}.
@@ -55,10 +53,7 @@ final class WidgetUpdate {
      * @param refocus re-applies the incoming focus to the reduced state
      */
     static <M, Msg, O> Update<M, Msg, O> settled(
-            M model,
-            Msg message,
-            Function<Msg, WidgetResult<M, O>> reduce,
-            UnaryOperator<M> refocus) {
+            M model, Msg message, Function<Msg, WidgetResult<M, O>> reduce, UnaryOperator<M> refocus) {
         Objects.requireNonNull(model, "model");
         Objects.requireNonNull(message, "message");
         WidgetResult<M, O> result = reduce.apply(message);

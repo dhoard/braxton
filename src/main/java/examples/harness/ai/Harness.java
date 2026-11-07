@@ -42,7 +42,6 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.widget.Editor;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -74,8 +73,7 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
 
         public record Active(HarnessTranscript.HarnessTurn turn, int blockIndex) {}
 
-        private static final Session SESSION =
-                new Session(() -> HarnessTranscript.empty(List.of()), List.of());
+        private static final Session SESSION = new Session(() -> HarnessTranscript.empty(List.of()), List.of());
 
         public Model {
             Objects.requireNonNull(session, "session");
@@ -89,17 +87,7 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
 
         public static Harness.Model initial(Size size, String path, List<String> warnings) {
             return new Harness.Model(
-                    Session.initial(warnings),
-                    Editor.Model.empty(),
-                    List.of(),
-                    null,
-                    0L,
-                    0L,
-                    0L,
-                    0L,
-                    0L,
-                    size,
-                    path);
+                    Session.initial(warnings), Editor.Model.empty(), List.of(), null, 0L, 0L, 0L, 0L, 0L, size, path);
         }
 
         public boolean working() {
@@ -312,19 +300,23 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
         }
 
         public Harness.Model withStatus(Session.Status value) {
-            return withSession(SESSION.update(session, new Session.Msg.StatusValue(value)).model());
+            return withSession(
+                    SESSION.update(session, new Session.Msg.StatusValue(value)).model());
         }
 
         public Harness.Model withEntries(List<HarnessEntry> value) {
-            return withSession(SESSION.update(session, new Session.Msg.Entries(value)).model());
+            return withSession(
+                    SESSION.update(session, new Session.Msg.Entries(value)).model());
         }
 
         public Harness.Model withScroll(int value) {
-            return withSession(SESSION.update(session, new Session.Msg.Scroll(value)).model());
+            return withSession(
+                    SESSION.update(session, new Session.Msg.Scroll(value)).model());
         }
 
         public Harness.Model withReplayIndex(int value) {
-            return withSession(SESSION.update(session, new Session.Msg.Replay(value)).model());
+            return withSession(
+                    SESSION.update(session, new Session.Msg.Replay(value)).model());
         }
 
         public Harness.Model withTranscript(HarnessTranscript value) {
@@ -333,10 +325,9 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
             return withSession(session.withTranscript(value, 0L));
         }
 
-        public Harness.Model withMetadata(
-                HarnessTranscript.Profile profile, HarnessTranscript.Usage usage) {
-            return withSession(
-                    SESSION.update(session, new Session.Msg.Metadata(profile, usage)).model());
+        public Harness.Model withMetadata(HarnessTranscript.Profile profile, HarnessTranscript.Usage usage) {
+            return withSession(SESSION.update(session, new Session.Msg.Metadata(profile, usage))
+                    .model());
         }
 
         public Harness.Model disarmQuit() {
@@ -427,12 +418,10 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
     private static final EffectId RESPONSE_ID = EffectId.of("response");
     private static final SubscriptionId TICK_ID = SubscriptionId.of("tick");
     private static final SubscriptionId RESIZE_ID = SubscriptionId.of("resize");
-    static final Mount<Harness.Model, Harness.Msg, Never, Session.Model, Session.Msg, Never>
-            SESSION =
-                    sessionMount(new Session(() -> HarnessTranscript.empty(List.of()), List.of()));
+    static final Mount<Harness.Model, Harness.Msg, Never, Session.Model, Session.Msg, Never> SESSION =
+            sessionMount(new Session(() -> HarnessTranscript.empty(List.of()), List.of()));
 
-    static Mount<Harness.Model, Harness.Msg, Never, Session.Model, Session.Msg, Never> sessionMount(
-            Session session) {
+    static Mount<Harness.Model, Harness.Msg, Never, Session.Model, Session.Msg, Never> sessionMount(Session session) {
         return Mount.of(
                 ComponentId.of("session"),
                 session,
@@ -441,8 +430,8 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                 OutputRoute.toOutput(value -> value));
     }
 
-    static Mount<Harness.Model, Harness.Msg, Never, Editor.Model, Editor.Msg, Editor.Output>
-            composer(int visibleLines) {
+    static Mount<Harness.Model, Harness.Msg, Never, Editor.Model, Editor.Msg, Editor.Output> composer(
+            int visibleLines) {
         return Mount.of(
                 ComponentId.of("composer"),
                 new Editor(editorOptions().withVisibleLines(visibleLines)),
@@ -451,25 +440,22 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                 OutputRoute.toMessage(Harness.Msg.ComposerOutput::new));
     }
 
-    private static final Mount<
-                    Harness.Model, Harness.Msg, Never, Editor.Model, Editor.Msg, Editor.Output>
-            COMPOSER = composer(6);
+    private static final Mount<Harness.Model, Harness.Msg, Never, Editor.Model, Editor.Msg, Editor.Output> COMPOSER =
+            composer(6);
 
     /**
      * The program's own session mount. The update path goes through this instance so the session
      * stamps entries with the program's clock; the static mount serves the view and the model
      * withers, neither of which needs a clock.
      */
-    private final Mount<Harness.Model, Harness.Msg, Never, Session.Model, Session.Msg, Never>
-            session;
+    private final Mount<Harness.Model, Harness.Msg, Never, Session.Model, Session.Msg, Never> session;
 
     private final Supplier<HarnessTranscript> loader;
     private final String projectPath;
     private final List<String> startupWarnings;
     private final LongSupplier clock;
 
-    public Harness(
-            Supplier<HarnessTranscript> loader, String projectPath, List<String> startupWarnings) {
+    public Harness(Supplier<HarnessTranscript> loader, String projectPath, List<String> startupWarnings) {
         this(loader, projectPath, startupWarnings, System::currentTimeMillis);
     }
 
@@ -479,10 +465,7 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
      * model and the message, and tests can pin the time.
      */
     public Harness(
-            Supplier<HarnessTranscript> loader,
-            String projectPath,
-            List<String> startupWarnings,
-            LongSupplier clock) {
+            Supplier<HarnessTranscript> loader, String projectPath, List<String> startupWarnings, LongSupplier clock) {
         this.loader = loader == null ? () -> HarnessTranscript.empty(List.of()) : loader;
         this.projectPath = projectPath == null ? "" : projectPath;
         this.startupWarnings = List.copyOf(startupWarnings == null ? List.of() : startupWarnings);
@@ -506,8 +489,7 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
 
     @Override
     public Update<Harness.Model, Harness.Msg, Never> init(InitContext context) {
-        Harness.Model state =
-                Harness.Model.initial(context.viewport().size(), projectPath, startupWarnings);
+        Harness.Model state = Harness.Model.initial(context.viewport().size(), projectPath, startupWarnings);
         var initialized = session.initialize(context);
         var editor = COMPOSER.initialize(context);
         return Update.next(
@@ -518,10 +500,7 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
     @Override
     public View<Harness.Msg> view(Harness.Model model, ViewContext context) {
         Viewport viewport = context.viewport();
-        Harness.Model sized =
-                model.viewport().equals(viewport.size())
-                        ? model
-                        : model.withViewport(viewport.size());
+        Harness.Model sized = model.viewport().equals(viewport.size()) ? model : model.withViewport(viewport.size());
         return HarnessView.view(sized);
     }
 
@@ -536,22 +515,19 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
     }
 
     @Override
-    public Update<Harness.Model, Harness.Msg, Never> update(
-            Harness.Model model, Harness.Msg message) {
+    public Update<Harness.Model, Harness.Msg, Never> update(Harness.Model model, Harness.Msg message) {
         model = disarmQuitOnUserAction(model, message);
         return switch (message) {
             case Harness.Msg.SessionMsg sessionMessage -> session.update(model, sessionMessage.message());
             case Harness.Msg.ComposerMsg editor ->
-                    mirrored(model) ? Update.next(model) : COMPOSER.update(model, editor.action());
+                mirrored(model) ? Update.next(model) : COMPOSER.update(model, editor.action());
             case Harness.Msg.ComposerOutput output ->
-                    mirrored(model) ? Update.next(model) : editorOutput(model, output.output());
+                mirrored(model) ? Update.next(model) : editorOutput(model, output.output());
             case Harness.Msg.Submit submit -> submit(model, submit.text());
             case Harness.Msg.Tick tick -> tick(model, tick.nowNanos());
             case Harness.Msg.Resized resized -> Update.next(model.withViewport(resized.size()));
-            case Harness.Msg.ScrollUp up ->
-                    Update.next(scrollBy(model, HarnessProjection.SCROLL_STEP));
-            case Harness.Msg.ScrollDown down ->
-                    Update.next(scrollBy(model, -HarnessProjection.SCROLL_STEP));
+            case Harness.Msg.ScrollUp up -> Update.next(scrollBy(model, HarnessProjection.SCROLL_STEP));
+            case Harness.Msg.ScrollDown down -> Update.next(scrollBy(model, -HarnessProjection.SCROLL_STEP));
             case Harness.Msg.PageUp pageUp -> Update.next(scrollBy(model, pageRows(model)));
             case Harness.Msg.PageDown pageDown -> Update.next(scrollBy(model, -pageRows(model)));
             case Harness.Msg.ScrollBottom bottom -> Update.next(model.withScroll(0));
@@ -559,11 +535,7 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
             case Harness.Msg.ResponseBlock block -> responseBlock(model, block);
             case Harness.Msg.Copied copied -> Update.next(appendNotice(model, clipboardStatus(copied.result())));
             case Harness.Msg.CopyVisible copy ->
-                    Update.next(
-                            model,
-                            Command.copy(
-                                    HarnessProjection.visiblePlainText(model),
-                                    Harness.Msg.Copied::new));
+                Update.next(model, Command.copy(HarnessProjection.visiblePlainText(model), Harness.Msg.Copied::new));
             case Harness.Msg.CopyLastReply copy -> copyLastReply(model);
             case Harness.Msg.FocusComposer focus -> Update.next(model);
             case Harness.Msg.UnhandledKey ignored -> Update.next(model);
@@ -632,30 +604,23 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
      * The only exit gesture: a second Ctrl+C at or before the armed deadline. An expired or absent
      * deadline is discarded and the current press becomes the new first press.
      */
-    private Update<Harness.Model, Harness.Msg, Never> quitRequest(
-            Harness.Model model, long atNanos) {
+    private Update<Harness.Model, Harness.Msg, Never> quitRequest(Harness.Model model, long atNanos) {
         if (model.quitArmedUntilNanos() > 0L && atNanos <= model.quitArmedUntilNanos()) {
             return Update.next(model.withQuitArmed(0L), Command.quit());
         }
         return Update.next(model.withQuitArmed(atNanos + QUIT_WINDOW_NANOS));
     }
 
-    private Update<Harness.Model, Harness.Msg, Never> editorOutput(
-            Harness.Model model, Editor.Output output) {
+    private Update<Harness.Model, Harness.Msg, Never> editorOutput(Harness.Model model, Editor.Output output) {
         return switch (output) {
             case Editor.Output.Submit submit -> submit(model, submit.text());
             case Editor.Output.Copy copy ->
-                    copy.text().isEmpty()
-                            ? Update.next(appendNotice(model, "Nothing to copy."))
-                            : Update.next(
-                                    model, Command.copy(copy.text(), Harness.Msg.Copied::new));
+                copy.text().isEmpty()
+                        ? Update.next(appendNotice(model, "Nothing to copy."))
+                        : Update.next(model, Command.copy(copy.text(), Harness.Msg.Copied::new));
             case Editor.Output.PasteRequest request ->
-                    Update.next(
-                            model,
-                            Command.readClipboard(
-                                    text ->
-                                            new Harness.Msg.ComposerMsg(
-                                                    new Editor.Msg.Paste(text))));
+                Update.next(
+                        model, Command.readClipboard(text -> new Harness.Msg.ComposerMsg(new Editor.Msg.Paste(text))));
         };
     }
 
@@ -673,16 +638,14 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
             return Update.next(appendNotice(model, "Transcript is still loading."));
         }
         if (model.outstandingPrompts() >= MAX_OUTSTANDING) {
-            return Update.next(appendNotice(
-                    model, "Queue full (" + MAX_OUTSTANDING + "); prompt not submitted."));
+            return Update.next(appendNotice(model, "Queue full (" + MAX_OUTSTANDING + "); prompt not submitted."));
         }
         List<HarnessEntry> entries = new ArrayList<>(model.entries());
         entries.add(new HarnessEntry.User(clean, nowMillis()));
-        Harness.Model next =
-                COMPOSER.update(model, new Editor.Msg.Clear())
-                        .model()
-                        .withEntries(entries)
-                        .withScroll(0);
+        Harness.Model next = COMPOSER.update(model, new Editor.Msg.Clear())
+                .model()
+                .withEntries(entries)
+                .withScroll(0);
         if (next.working()) {
             List<String> pending = new ArrayList<>(next.pending());
             pending.add(clean);
@@ -691,16 +654,14 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
         return startTurn(next, clean);
     }
 
-    private Update<Harness.Model, Harness.Msg, Never> startTurn(
-            Harness.Model model, String prompt) {
+    private Update<Harness.Model, Harness.Msg, Never> startTurn(Harness.Model model, String prompt) {
         HarnessTranscript.HarnessTurn turn = HarnessMock.turnFor(model, prompt);
         long generation = model.generation() + 1;
-        Harness.Model next =
-                model.withActive(new Harness.Model.Active(turn, 0))
-                        .withGeneration(generation)
-                        .withWorkStarted(-1L)
-                        .withEscArmed(0)
-                        .withScroll(0);
+        Harness.Model next = model.withActive(new Harness.Model.Active(turn, 0))
+                .withGeneration(generation)
+                .withWorkStarted(-1L)
+                .withEscArmed(0)
+                .withScroll(0);
         if (HarnessMock.hasRecordedTurn(model)) {
             // Each started prompt consumes one recorded turn; the fallback answers once they end.
             next = next.withReplayIndex(model.replayIndex() + 1);
@@ -733,9 +694,7 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
         List<HarnessEntry> entries = new ArrayList<>(model.entries());
         // The block enters the session now, so the header shows when the replay produced it.
         entries.add(turn.responses().get(block.ordinal()).at(nowMillis()));
-        Harness.Model next =
-                model.withEntries(entries)
-                        .withActive(new Harness.Model.Active(turn, block.ordinal() + 1));
+        Harness.Model next = model.withEntries(entries).withActive(new Harness.Model.Active(turn, block.ordinal() + 1));
         if (block.ordinal() + 1 < turn.responses().size()) {
             return Update.next(next, responseDelay(next, block.ordinal() + 1));
         }
@@ -745,9 +704,8 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
     private Update<Harness.Model, Harness.Msg, Never> finishTurn(Harness.Model model) {
         Harness.Model next = model;
         if (model.active() != null) {
-            next =
-                    next.withMetadata(
-                            model.active().turn().profile(), model.active().turn().usage());
+            next = next.withMetadata(
+                    model.active().turn().profile(), model.active().turn().usage());
         }
         if (next.pending().isEmpty()) {
             return Update.next(next.withActive(null).withWorkStarted(0));
@@ -773,18 +731,15 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                             ? "Stopped."
                             : "Stopped; "
                                     + discarded
-                                    + (discarded == 1
-                                            ? " queued prompt"
-                                            : " queued prompts")
+                                    + (discarded == 1 ? " queued prompt" : " queued prompts")
                                     + " discarded.",
                     nowMillis()));
-            Harness.Model next =
-                    model.withEntries(entries)
-                            .withActive(null)
-                            .withPending(List.of())
-                            .withEscArmed(0)
-                            .withGeneration(model.generation() + 1)
-                            .withWorkStarted(0);
+            Harness.Model next = model.withEntries(entries)
+                    .withActive(null)
+                    .withPending(List.of())
+                    .withEscArmed(0)
+                    .withGeneration(model.generation() + 1)
+                    .withWorkStarted(0);
             return Update.next(next, Command.cancelAll());
         }
         return Update.next(model.withEscArmed(atNanos + ESC_WINDOW_NANOS));
@@ -835,9 +790,7 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
             return "Clipboard already holds this text.";
         }
         if (result.systemWriteRequested()) {
-            return result.truncated()
-                    ? "Copied (truncated) and wrote OSC 52."
-                    : "Copied and wrote OSC 52.";
+            return result.truncated() ? "Copied (truncated) and wrote OSC 52." : "Copied and wrote OSC 52.";
         }
         return result.truncated()
                 ? "Copied internally (truncated); terminal clipboard not written."

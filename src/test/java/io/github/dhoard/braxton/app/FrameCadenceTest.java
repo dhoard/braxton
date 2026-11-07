@@ -23,7 +23,6 @@
 package io.github.dhoard.braxton.app;
 
 import static io.github.dhoard.braxton.internal.runtime.JLineTestTerminal.run;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.effect.Command;
@@ -40,74 +39,74 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 @Timeout(15)
 class FrameCadenceTest {
-    private static RuntimeOptions options() { return RuntimeOptions.defaults(); }
+    private static RuntimeOptions options() {
+        return RuntimeOptions.defaults();
+    }
 
     @Test
     void aBurstAppliesEveryStateAndEffectInOrderButPresentsFewerFrames() {
         AtomicInteger views = new AtomicInteger();
         List<Integer> effects = new ArrayList<>();
-        Component<Integer, String, Never> program =
-                new Component<>() {
-                    public Update<Integer, String, Never> init(InitContext context) {
-                        return Update.next(0);
-                    }
+        Component<Integer, String, Never> program = new Component<>() {
+            public Update<Integer, String, Never> init(InitContext context) {
+                return Update.next(0);
+            }
 
-                    public Update<Integer, String, Never> update(Integer model, String message) {
-                        if (!"inc".equals(message)) {
-                            return Update.next(model);
-                        }
-                        int next = model + 1;
-                        Command<String> effect =
-                                Command.task(
-                                        EffectId.of("effect-" + next),
-                                        () -> {
-                                            effects.add(next);
-                                            return next;
-                                        },
-                                        value -> "ack",
-                                        failure -> "failure");
-                        return Update.next(
-                                next,
-                                next == 200 ? Command.batch(effect, Command.quit(7)) : effect);
-                    }
+            public Update<Integer, String, Never> update(Integer model, String message) {
+                if (!"inc".equals(message)) {
+                    return Update.next(model);
+                }
+                int next = model + 1;
+                Command<String> effect = Command.task(
+                        EffectId.of("effect-" + next),
+                        () -> {
+                            effects.add(next);
+                            return next;
+                        },
+                        value -> "ack",
+                        failure -> "failure");
+                return Update.next(next, next == 200 ? Command.batch(effect, Command.quit(7)) : effect);
+            }
 
-                    public View<String> view(Integer model, ViewContext context) {
-                        views.incrementAndGet();
-                        return Views.text("count=" + model);
-                    }
+            public View<String> view(Integer model, ViewContext context) {
+                views.incrementAndGet();
+                return Views.text("count=" + model);
+            }
 
-                    public Subscription<String> subscriptions(Integer model) {
-                        return Subscription.source(
-                                SubscriptionId.of("burst"),
-                                "burst",
-                                emitter -> {
-                                    for (int i = 0; i < 200; i++) {
-                                        emitter.accept("inc");
-                                    }
-                                    return () -> {};
-                                },
-                                value -> (String) value);
-                    }
-                };
+            public Subscription<String> subscriptions(Integer model) {
+                return Subscription.source(
+                        SubscriptionId.of("burst"),
+                        "burst",
+                        emitter -> {
+                            for (int i = 0; i < 200; i++) {
+                                emitter.accept("inc");
+                            }
+                            return () -> {};
+                        },
+                        value -> (String) value);
+            }
+        };
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 20));
         ExitResult result = run(program, options(), terminal);
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.QUIT);
         assertThat(result.status()).isEqualTo(7);
-        assertThat(effects).containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, 200).boxed().toList());
-        assertThat(views.get()).as("a burst must not layout one screen per app message").isLessThan(100);
+        assertThat(effects)
+                .containsExactlyElementsOf(
+                        java.util.stream.IntStream.rangeClosed(1, 200).boxed().toList());
+        assertThat(views.get())
+                .as("a burst must not layout one screen per app message")
+                .isLessThan(100);
         assertThat(terminal.outputText()).contains("count=200");
     }
 
@@ -134,8 +133,8 @@ class FrameCadenceTest {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 20));
         CountDownLatch updated = new CountDownLatch(1);
         AtomicReference<ExitResult> result = new AtomicReference<>();
-        Thread owner = Thread.ofVirtual().start(() -> result.set(
-                run(singleUpdate(null, updated), options(), terminal)));
+        Thread owner =
+                Thread.ofVirtual().start(() -> result.set(run(singleUpdate(null, updated), options(), terminal)));
         try {
             assertThat(updated.await(5, TimeUnit.SECONDS)).isTrue();
         } finally {
@@ -147,8 +146,7 @@ class FrameCadenceTest {
         assertThat(terminal.outputText()).contains("count=1");
     }
 
-    private static Component<Integer, String, Never> singleUpdate(
-            CountDownLatch painted, CountDownLatch updated) {
+    private static Component<Integer, String, Never> singleUpdate(CountDownLatch painted, CountDownLatch updated) {
         return new Component<>() {
             public Update<Integer, String, Never> init(InitContext context) {
                 return Update.next(0);
@@ -186,38 +184,35 @@ class FrameCadenceTest {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 20));
         CountDownLatch switched = new CountDownLatch(1);
         AtomicReference<ExitResult> result = new AtomicReference<>();
-        Component<Integer, String, Never> program =
-                new Component<>() {
-                    public Update<Integer, String, Never> init(InitContext context) {
-                        return Update.next(0);
-                    }
+        Component<Integer, String, Never> program = new Component<>() {
+            public Update<Integer, String, Never> init(InitContext context) {
+                return Update.next(0);
+            }
 
-                    public Update<Integer, String, Never> update(Integer model, String message) {
-                        if ("switch".equals(message)) {
-                            switched.countDown();
-                            return Update.next(1);
-                        }
-                        return Update.next(model, Command.quit(9));
-                    }
+            public Update<Integer, String, Never> update(Integer model, String message) {
+                if ("switch".equals(message)) {
+                    switched.countDown();
+                    return Update.next(1);
+                }
+                return Update.next(model, Command.quit(9));
+            }
 
-                    public View<String> view(Integer model, ViewContext context) {
-                        return Views.keyed(
-                                List.of(Binding.of(model == 0 ? "a" : "b", "quit")),
-                                Views.text("state=" + model),
-                                List.of());
-                    }
+            public View<String> view(Integer model, ViewContext context) {
+                return Views.keyed(
+                        List.of(Binding.of(model == 0 ? "a" : "b", "quit")), Views.text("state=" + model), List.of());
+            }
 
-                    public Subscription<String> subscriptions(Integer model) {
-                        return Subscription.source(
-                                SubscriptionId.of("switch"),
-                                "switch",
-                                emitter -> {
-                                    emitter.accept("switch");
-                                    return () -> {};
-                                },
-                                value -> (String) value);
-                    }
-                };
+            public Subscription<String> subscriptions(Integer model) {
+                return Subscription.source(
+                        SubscriptionId.of("switch"),
+                        "switch",
+                        emitter -> {
+                            emitter.accept("switch");
+                            return () -> {};
+                        },
+                        value -> (String) value);
+            }
+        };
         Thread owner = Thread.ofVirtual().start(() -> result.set(run(program, options(), terminal)));
         try {
             assertThat(switched.await(5, TimeUnit.SECONDS)).isTrue();

@@ -24,25 +24,23 @@ package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
+import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.WidthPolicy;
-import io.github.dhoard.braxton.layout.Rect;
+import io.github.dhoard.braxton.testing.AllocationProbe;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-import io.github.dhoard.braxton.testing.AllocationProbe;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 class ClippedLayoutCostTest {
 
     @Test
     void clippedTextDoesNotMaterializeOffscreenWrappedRows() {
         LayoutEngine engine = new LayoutEngine();
-        for (View<Object> view : List.of(Views.<Object>text("x\n".repeat(20000)),
-                Views.<Object>column(Views.text("x\n".repeat(20000))))) {
+        for (View<Object> view : List.of(
+                Views.<Object>text("x\n".repeat(20000)), Views.<Object>column(Views.text("x\n".repeat(20000))))) {
             assertThat(AllocationProbe.bytes(() -> engine.layout(view, new Rect(0, 0, 24, 80))))
                     .isLessThan(1_000_000);
         }
@@ -54,7 +52,10 @@ class ClippedLayoutCostTest {
         View<Object> view = Views.text("a" + "\u200B".repeat(4096));
         assertThat(AllocationProbe.bytes(() -> engine.layout(view, new Rect(0, 0, 1, 80))))
                 .isLessThan(2_000_000);
-        assertThat(engine.layout(view, new Rect(0, 0, 1, 80)).screen().cell(0, 0).text())
+        assertThat(engine.layout(view, new Rect(0, 0, 1, 80))
+                        .screen()
+                        .cell(0, 0)
+                        .text())
                 .isEqualTo("a" + "\u200B".repeat(4096));
     }
 
@@ -69,7 +70,8 @@ class ClippedLayoutCostTest {
                     Screen expected = new Screen(rows, cols);
                     List<StyledText> lines = engine.wrapLines(text, cols);
                     for (int i = 0; i < Math.min(rows, lines.size()); i++) {
-                        Screen one = engine.layout(Views.text(lines.get(i)), new Rect(0, 0, 1, cols)).screen();
+                        Screen one = engine.layout(Views.text(lines.get(i)), new Rect(0, 0, 1, cols))
+                                .screen();
                         for (int c = 0; c < cols; c++) {
                             if (!one.isContinuation(0, c)) {
                                 Cell cell = one.cell(0, c);
@@ -78,7 +80,8 @@ class ClippedLayoutCostTest {
                             }
                         }
                     }
-                    assertThat(engine.layout(Views.text(text), new Rect(0, 0, rows, cols)).screen())
+                    assertThat(engine.layout(Views.text(text), new Rect(0, 0, rows, cols))
+                                    .screen())
                             .isEqualTo(expected);
                     assertThat(engine.intrinsicHeight(Views.text(text), cols)).isEqualTo(lines.size());
                 }

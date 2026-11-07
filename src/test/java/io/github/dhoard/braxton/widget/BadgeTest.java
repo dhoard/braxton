@@ -25,25 +25,21 @@ package io.github.dhoard.braxton.widget;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.util.List;
-import java.util.Random;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import java.util.List;
+import java.util.Random;
+import org.junit.jupiter.api.Test;
 
 /** A badge is one row of padded pills, joined by arrows only when a pathway is requested. */
 class BadgeTest {
 
     @Test
     void everyPillIsPaddedByOneColumnAndAdjacentPillsTouch() {
-        Badge badge = Badge.of()
-                .append(StyledText.plain("a"))
-                .append(StyledText.plain("bc"));
+        Badge badge = Badge.of().append(StyledText.plain("a")).append(StyledText.plain("bc"));
         assertThat(badge.render().plainText()).isEqualTo(" a  bc ");
         assertThat(badge.columns()).isEqualTo(7);
     }
@@ -83,8 +79,11 @@ class BadgeTest {
                     .as("prepared %s", raw.replace("\n", "\\n").replace("\r", "\\r"))
                     .isEqualTo(" a b ");
         }
-        assertThat(Badge.of().append(StyledText.plain(LineBreaks.singleRow("a\rb")))
-                .render().plainText()).isEqualTo(" a b ");
+        assertThat(Badge.of()
+                        .append(StyledText.plain(LineBreaks.singleRow("a\rb")))
+                        .render()
+                        .plainText())
+                .isEqualTo(" a b ");
     }
 
     @Test
@@ -104,9 +103,12 @@ class BadgeTest {
         Badge badge = Badge.of().append(StyledText.of("x", Style.NONE.withBold()), background);
         List<StyledText.Span> spans = badge.render().spans();
         assertThat(spans).allSatisfy(span -> {
-            assertThat(span.style().background()).as("background on [%s]", span.text()).isNotNull();
+            assertThat(span.style().background())
+                    .as("background on [%s]", span.text())
+                    .isNotNull();
             assertThat(span.style().bold() || span.text().isBlank())
-                    .as("own styling kept on [%s]", span.text()).isTrue();
+                    .as("own styling kept on [%s]", span.text())
+                    .isTrue();
         });
         assertThat(spans.get(0).text()).isEqualTo(" ");
         assertThat(spans.get(spans.size() - 1).text()).isEqualTo(" ");
@@ -116,8 +118,8 @@ class BadgeTest {
     void theSegmentsAreAnImmutableCopy() {
         Badge badge = Badge.of().append(StyledText.plain("a"));
         List<Badge.Segment> segments = badge.segments();
-        assertThatThrownBy(() -> segments.add(new Badge.Segment(StyledText.plain("b"),
-                Style.NONE))).isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> segments.add(new Badge.Segment(StyledText.plain("b"), Style.NONE)))
+                .isInstanceOf(UnsupportedOperationException.class);
         assertThat(Badge.of().render().plainText()).isEmpty();
     }
 
@@ -148,7 +150,8 @@ class BadgeTest {
                 expected += 3 * (pills - 1);
                 assertThat(badge.render().plainText().split("\u2192", -1)).hasSize(pills);
             }
-            assertThat(badge.columns()).as("width of [%s]", badge.render().plainText())
+            assertThat(badge.columns())
+                    .as("width of [%s]", badge.render().plainText())
                     .isEqualTo(expected);
         }
     }

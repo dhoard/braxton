@@ -28,10 +28,6 @@ import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.InputOptions;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.Modifiers;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -39,6 +35,8 @@ import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 /** Terminal bytes become normalized events exactly once. */
 @org.junit.jupiter.api.extension.ExtendWith(io.github.dhoard.braxton.internal.input.TestReaders.class)
@@ -84,7 +82,8 @@ class InputDecoderTest {
     }
 
     private static Optional<InputEvent> read(byte[] bytes) throws IOException {
-        return new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(bytes))).read();
+        return new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(bytes)))
+                .read();
     }
 
     private static Optional<InputEvent> read(String text) throws IOException {
@@ -164,13 +163,11 @@ class InputDecoderTest {
         InputEvent.KeyInput lineFeed = (InputEvent.KeyInput) read("\n").orElseThrow();
         assertThat(lineFeed.key()).isEqualTo(Key.of("j", Modifiers.CTRL));
         assertThat(lineFeed.text()).isEmpty();
-        assertThat(
-                        io.github.dhoard.braxton.widget.Editor.actionFor(
-                                lineFeed, io.github.dhoard.braxton.widget.Editor.Config.defaults()))
+        assertThat(io.github.dhoard.braxton.widget.Editor.actionFor(
+                        lineFeed, io.github.dhoard.braxton.widget.Editor.Config.defaults()))
                 .contains(new io.github.dhoard.braxton.widget.Editor.Msg.Newline());
-        assertThat(
-                        io.github.dhoard.braxton.widget.Editor.actionFor(
-                                enter, io.github.dhoard.braxton.widget.Editor.Config.defaults()))
+        assertThat(io.github.dhoard.braxton.widget.Editor.actionFor(
+                        enter, io.github.dhoard.braxton.widget.Editor.Config.defaults()))
                 .as("only CR submits")
                 .contains(new io.github.dhoard.braxton.widget.Editor.Msg.Submit());
     }
@@ -222,8 +219,7 @@ class InputDecoderTest {
         assertThat(altEnter.key()).isEqualTo(Key.parse("alt+enter"));
         assertThat(altEnter.text()).isEmpty();
 
-        assertThat(((InputEvent.KeyInput) read("\u001B\t").orElseThrow()).key())
-                .isEqualTo(Key.parse("alt+tab"));
+        assertThat(((InputEvent.KeyInput) read("\u001B\t").orElseThrow()).key()).isEqualTo(Key.parse("alt+tab"));
         assertThat(read("\u001B\u0008").orElseThrow())
                 .as("ESC BS names the same gesture as the ESC DEL pair")
                 .isEqualTo(read("\u001B\u007F").orElseThrow());
@@ -244,14 +240,18 @@ class InputDecoderTest {
             if (control == 0x1B) {
                 continue; // two Escape presses stay two separate gestures
             }
-            InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(new byte[] {0x1B, (byte) control, 'x'})));
+            InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                    new ByteAtATime(new byte[] {0x1B, (byte) control, 'x'})));
             InputEvent.KeyInput gesture = (InputEvent.KeyInput) decoder.read().orElseThrow();
 
-            assertThat(gesture.key()).as("ESC plus 0x%02X is not a bare Escape", control)
+            assertThat(gesture.key())
+                    .as("ESC plus 0x%02X is not a bare Escape", control)
                     .isNotEqualTo(Key.ESCAPE);
             assertThat(gesture.key().name().chars().allMatch(c -> !Character.isISOControl(c)))
-                    .as("ESC plus 0x%02X names no control character", control).isTrue();
-            assertThat(gesture.text()).as("ESC plus 0x%02X carries no control text", control)
+                    .as("ESC plus 0x%02X names no control character", control)
+                    .isTrue();
+            assertThat(gesture.text())
+                    .as("ESC plus 0x%02X carries no control text", control)
                     .isEmpty();
             InputEvent.KeyInput bare =
                     (InputEvent.KeyInput) read(new byte[] {(byte) control}).orElseThrow();
@@ -259,14 +259,17 @@ class InputDecoderTest {
                     .as("ESC plus 0x%02X names the key the bare byte names", control)
                     .isEqualTo(bare.key().name());
             assertThat(gesture.key().modifiers().alt())
-                    .as("ESC plus 0x%02X is Alt-modified", control).isTrue();
+                    .as("ESC plus 0x%02X is Alt-modified", control)
+                    .isTrue();
             assertThat(gesture.key().modifiers().ctrl())
                     .as("ESC plus 0x%02X keeps the Ctrl the bare byte names", control)
                     .isEqualTo(bare.key().modifiers().ctrl());
 
             assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text())
-                    .as("the key after ESC plus 0x%02X", control).isEqualTo("x");
-            assertThat(decoder.read()).as("nothing is left after ESC plus 0x%02X", control)
+                    .as("the key after ESC plus 0x%02X", control)
+                    .isEqualTo("x");
+            assertThat(decoder.read())
+                    .as("nothing is left after ESC plus 0x%02X", control)
                     .isEmpty();
         }
     }
@@ -277,10 +280,12 @@ class InputDecoderTest {
      */
     @Test
     void twoAltEnterPressesAreNeverTwoEscapePresses() throws IOException {
-        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(new byte[] {0x1B, 0x0D, 0x1B, 0x0D})));
+        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                new ByteAtATime(new byte[] {0x1B, 0x0D, 0x1B, 0x0D})));
         for (int press = 0; press < 2; press++) {
             assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).key())
-                    .as("press %d", press).isEqualTo(Key.parse("alt+enter"));
+                    .as("press %d", press)
+                    .isEqualTo(Key.parse("alt+enter"));
         }
         assertThat(decoder.read()).isEmpty();
     }
@@ -292,7 +297,8 @@ class InputDecoderTest {
 
     @Test
     void aSecondEscapeIsDeliveredAsItsOwnEvent() throws IOException {
-        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(new byte[] {0x1B, 0x1B})));
+        InputDecoder decoder = new InputDecoder(
+                io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(new byte[] {0x1B, 0x1B})));
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).key()).isEqualTo(Key.ESCAPE);
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).key()).isEqualTo(Key.ESCAPE);
         assertThat(decoder.read()).isEmpty();
@@ -313,11 +319,13 @@ class InputDecoderTest {
 
     @Test
     void anInvalidUtf8LeadByteDoesNotSwallowTheFollowingCharacter() throws IOException {
-        InputDecoder stray = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(new byte[] {(byte) 0x80, 'a'})));
+        InputDecoder stray = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                new ByteAtATime(new byte[] {(byte) 0x80, 'a'})));
         assertThat(((InputEvent.KeyInput) stray.read().orElseThrow()).text()).isEqualTo("\uFFFD");
         assertThat(((InputEvent.KeyInput) stray.read().orElseThrow()).text()).isEqualTo("a");
 
-        InputDecoder overlong = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(new byte[] {(byte) 0xC0, 'b'})));
+        InputDecoder overlong = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                new ByteAtATime(new byte[] {(byte) 0xC0, 'b'})));
         assertThat(((InputEvent.KeyInput) overlong.read().orElseThrow()).text()).isEqualTo("\uFFFD");
         assertThat(((InputEvent.KeyInput) overlong.read().orElseThrow()).text()).isEqualTo("b");
     }
@@ -331,7 +339,8 @@ class InputDecoderTest {
     @Test
     void aC1ControlScalarIsSkippedRatherThanBecomingAKey() throws IOException {
         for (int control = 0x80; control <= 0x9F; control++) {
-            InputEvent event = read(new byte[] {(byte) 0xC2, (byte) control, 'x'}).orElseThrow();
+            InputEvent event =
+                    read(new byte[] {(byte) 0xC2, (byte) control, 'x'}).orElseThrow();
             assertThat(event).isInstanceOf(InputEvent.KeyInput.class);
             assertThat(((InputEvent.KeyInput) event).key()).isEqualTo(Key.of("x"));
         }
@@ -340,8 +349,8 @@ class InputDecoderTest {
     /** Skipping a C1 scalar must not end the stream or swallow the keystroke after it. */
     @Test
     void aC1ControlScalarDoesNotEndTheStream() throws IOException {
-        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(
-                new byte[] {'a', (byte) 0xC2, (byte) 0x85, 'b'})));
+        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                new ByteAtATime(new byte[] {'a', (byte) 0xC2, (byte) 0x85, 'b'})));
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("a");
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("b");
         assertThat(decoder.read()).isEmpty();
@@ -354,28 +363,57 @@ class InputDecoderTest {
      * exactly as it drops a stray continuation byte or an overlong lead.
      */
     @Test
-    void malformedSequencesFollowJLineReplacementDecoding()
-            throws IOException {
-        InputDecoder overlong = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(new byte[] {(byte) 0xE0, (byte) 0x80, (byte) 0x80})), new io.github.dhoard.braxton.input.InputOptions(java.time.Duration.ofMillis(5),64,1024,java.time.Duration.ofMillis(5L),java.time.Duration.ofMillis(100)));
-        InputDecoder surrogate = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(new byte[] {(byte) 0xED, (byte) 0xA0, (byte) 0x80})), new io.github.dhoard.braxton.input.InputOptions(java.time.Duration.ofMillis(5),64,1024,java.time.Duration.ofMillis(5L),java.time.Duration.ofMillis(100)));
-        InputDecoder outOfRange = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(
-                new byte[] {(byte) 0xF4, (byte) 0x90, (byte) 0x80, (byte) 0x80})), new io.github.dhoard.braxton.input.InputOptions(java.time.Duration.ofMillis(5),64,1024,java.time.Duration.ofMillis(5L),java.time.Duration.ofMillis(100)));
+    void malformedSequencesFollowJLineReplacementDecoding() throws IOException {
+        InputDecoder overlong = new InputDecoder(
+                io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                        new ByteAtATime(new byte[] {(byte) 0xE0, (byte) 0x80, (byte) 0x80})),
+                new io.github.dhoard.braxton.input.InputOptions(
+                        java.time.Duration.ofMillis(5),
+                        64,
+                        1024,
+                        java.time.Duration.ofMillis(5L),
+                        java.time.Duration.ofMillis(100)));
+        InputDecoder surrogate = new InputDecoder(
+                io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                        new ByteAtATime(new byte[] {(byte) 0xED, (byte) 0xA0, (byte) 0x80})),
+                new io.github.dhoard.braxton.input.InputOptions(
+                        java.time.Duration.ofMillis(5),
+                        64,
+                        1024,
+                        java.time.Duration.ofMillis(5L),
+                        java.time.Duration.ofMillis(100)));
+        InputDecoder outOfRange = new InputDecoder(
+                io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                        new ByteAtATime(new byte[] {(byte) 0xF4, (byte) 0x90, (byte) 0x80, (byte) 0x80})),
+                new io.github.dhoard.braxton.input.InputOptions(
+                        java.time.Duration.ofMillis(5),
+                        64,
+                        1024,
+                        java.time.Duration.ofMillis(5L),
+                        java.time.Duration.ofMillis(100)));
 
         for (InputDecoder decoder : java.util.List.of(overlong, surrogate, outOfRange)) {
             int replacements = 0;
-            for (Optional<InputEvent> event; (event = decoder.read()).isPresent();) {
+            for (Optional<InputEvent> event; (event = decoder.read()).isPresent(); ) {
                 assertThat(((InputEvent.KeyInput) event.get()).text()).isEqualTo("\uFFFD");
                 replacements++;
             }
-            assertThat(replacements).isBetween(1,4);
+            assertThat(replacements).isBetween(1, 4);
         }
     }
 
     /** Dropping an ill-formed sequence must not swallow the character that follows it. */
     @Test
     void theCharacterAfterAnIllFormedSequenceIsStillDecoded() throws IOException {
-        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(
-                new byte[] {(byte) 0xED, (byte) 0xA0, (byte) 0x80, 'x'})), new io.github.dhoard.braxton.input.InputOptions(java.time.Duration.ofMillis(5),64,1024,java.time.Duration.ofMillis(5L),java.time.Duration.ofMillis(100)));
+        InputDecoder decoder = new InputDecoder(
+                io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                        new ByteAtATime(new byte[] {(byte) 0xED, (byte) 0xA0, (byte) 0x80, 'x'})),
+                new io.github.dhoard.braxton.input.InputOptions(
+                        java.time.Duration.ofMillis(5),
+                        64,
+                        1024,
+                        java.time.Duration.ofMillis(5L),
+                        java.time.Duration.ofMillis(100)));
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("\uFFFD");
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("x");
     }
@@ -397,8 +435,7 @@ class InputDecoderTest {
 
     @Test
     void inputAfterAPasteIsLeftInTheStream() throws IOException {
-        ByteAtATime stream = new ByteAtATime(
-                "\u001B[200~hi\u001B[201~x".getBytes(StandardCharsets.UTF_8));
+        ByteAtATime stream = new ByteAtATime("\u001B[200~hi\u001B[201~x".getBytes(StandardCharsets.UTF_8));
         InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(stream));
         assertThat(decoder.read().orElseThrow()).isInstanceOf(InputEvent.PasteInput.class);
         InputEvent.KeyInput key = (InputEvent.KeyInput) decoder.read().orElseThrow();
@@ -408,16 +445,29 @@ class InputDecoderTest {
     @Test
     void aPasteLimitNeverLeavesABrokenCharacter() throws IOException {
         String body = "\uD83D\uDE00ab";
-        ByteAtATime stream = new ByteAtATime(
-                ("\u001B[200~" + body + "\u001B[201~").getBytes(StandardCharsets.UTF_8));
-        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(stream), new io.github.dhoard.braxton.input.InputOptions(java.time.Duration.ofMillis(1),64,3,java.time.Duration.ofMillis(4096),java.time.Duration.ofMillis(100)));
+        ByteAtATime stream = new ByteAtATime(("\u001B[200~" + body + "\u001B[201~").getBytes(StandardCharsets.UTF_8));
+        InputDecoder decoder = new InputDecoder(
+                io.github.dhoard.braxton.internal.input.TestReaders.utf8(stream),
+                new io.github.dhoard.braxton.input.InputOptions(
+                        java.time.Duration.ofMillis(1),
+                        64,
+                        3,
+                        java.time.Duration.ofMillis(4096),
+                        java.time.Duration.ofMillis(100)));
         InputEvent.PasteInput paste = (InputEvent.PasteInput) decoder.read().orElseThrow();
         assertThat(paste.text()).isEmpty();
 
-        ByteAtATime roomy = new ByteAtATime(
-                ("\u001B[200~ab" + body + "\u001B[201~").getBytes(StandardCharsets.UTF_8));
-        InputEvent.PasteInput limited =
-                (InputEvent.PasteInput) new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(roomy), new io.github.dhoard.braxton.input.InputOptions(java.time.Duration.ofMillis(1),64,2,java.time.Duration.ofMillis(4096),java.time.Duration.ofMillis(100))).read().orElseThrow();
+        ByteAtATime roomy = new ByteAtATime(("\u001B[200~ab" + body + "\u001B[201~").getBytes(StandardCharsets.UTF_8));
+        InputEvent.PasteInput limited = (InputEvent.PasteInput) new InputDecoder(
+                        io.github.dhoard.braxton.internal.input.TestReaders.utf8(roomy),
+                        new io.github.dhoard.braxton.input.InputOptions(
+                                java.time.Duration.ofMillis(1),
+                                64,
+                                2,
+                                java.time.Duration.ofMillis(4096),
+                                java.time.Duration.ofMillis(100)))
+                .read()
+                .orElseThrow();
         assertThat(limited.text()).isEqualTo("ab");
     }
 
@@ -430,8 +480,7 @@ class InputDecoderTest {
 
     @Test
     void ignoredMouseEventsDoNotLookLikeEndOfInput() throws IOException {
-        ByteAtATime stream = new ByteAtATime(
-                "\u001B[<0;10;5M\u001B[<0;10;5ma".getBytes(StandardCharsets.UTF_8));
+        ByteAtATime stream = new ByteAtATime("\u001B[<0;10;5M\u001B[<0;10;5ma".getBytes(StandardCharsets.UTF_8));
         InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(stream));
         InputEvent.KeyInput key = (InputEvent.KeyInput) decoder.read().orElseThrow();
         assertThat(key.text()).isEqualTo("a");
@@ -442,8 +491,8 @@ class InputDecoderTest {
     void anOverLongCsiIsSkippedWholeInsteadOfLeakingItsTailAsText() throws IOException {
         // Past the length cap the decoder stopped consuming, so the sequence's remaining parameter
         // bytes and its final byte arrived as ordinary text and were inserted into the draft.
-        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(
-                ("\u001B[" + "1".repeat(70) + "mX").getBytes(StandardCharsets.UTF_8))));
+        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                new ByteAtATime(("\u001B[" + "1".repeat(70) + "mX").getBytes(StandardCharsets.UTF_8))));
         InputEvent event = decoder.read().orElseThrow();
         assertThat(((InputEvent.KeyInput) event).text()).isEqualTo("X");
         assertThat(decoder.read()).isEmpty();
@@ -454,8 +503,8 @@ class InputDecoderTest {
         // An unsupported CSI with modifiers, an unknown numeric CSI, an X10 click whose three
         // payload bytes must be consumed, and an SGR click are all skipped; the printable input,
         // the paste and the text after it must arrive unchanged and in order.
-        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(
-                "\u001B[1;5A\u001B[99~\u001B[M!!!\u001B[<0;10;5Mx\u001B[200~p\u001B[201~y"
+        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                new ByteAtATime("\u001B[1;5A\u001B[99~\u001B[M!!!\u001B[<0;10;5Mx\u001B[200~p\u001B[201~y"
                         .getBytes(StandardCharsets.UTF_8))));
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("x");
         assertThat(decoder.read().orElseThrow()).isEqualTo(new InputEvent.PasteInput("p"));
@@ -471,11 +520,9 @@ class InputDecoderTest {
      * its key, including a bracketed paste marker.
      */
     @Test
-    void anEscapeInsideACsiBodyStartsTheNextSequenceRatherThanLeakingItsTail()
-            throws IOException {
+    void anEscapeInsideACsiBodyStartsTheNextSequenceRatherThanLeakingItsTail() throws IOException {
         InputDecoder decoder = new InputDecoder(TestReaders.utf8(new ByteAtATime(
-                ("\u001B[" + "\u001B[A\u001B[5~\u001B[200~hi\u001B[201~")
-                        .getBytes(StandardCharsets.UTF_8))));
+                ("\u001B[" + "\u001B[A\u001B[5~\u001B[200~hi\u001B[201~").getBytes(StandardCharsets.UTF_8))));
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).key())
                 .as("the arrow key after the abandoned CSI")
                 .isEqualTo(Key.UP);
@@ -485,15 +532,16 @@ class InputDecoderTest {
         assertThat(decoder.read().orElseThrow())
                 .as("the paste marker survives the abandoned CSI")
                 .isEqualTo(new InputEvent.PasteInput("hi"));
-        assertThat(decoder.read()).as("no keystroke the user never pressed is left over")
+        assertThat(decoder.read())
+                .as("no keystroke the user never pressed is left over")
                 .isEmpty();
     }
 
     /** Key repeat while Meta+[ is held leaves several CSIs open; only the last one carries a key. */
     @Test
     void repeatedIncompleteCsiStillDeliversTheKeyThatFollows() throws IOException {
-        InputDecoder decoder = new InputDecoder(TestReaders.utf8(new ByteAtATime(
-                ("\u001B[".repeat(3) + "\u001B[A").getBytes(StandardCharsets.UTF_8))));
+        InputDecoder decoder = new InputDecoder(
+                TestReaders.utf8(new ByteAtATime(("\u001B[".repeat(3) + "\u001B[A").getBytes(StandardCharsets.UTF_8))));
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).key()).isEqualTo(Key.UP);
         assertThat(decoder.read()).isEmpty();
     }
@@ -505,20 +553,25 @@ class InputDecoderTest {
      */
     @Test
     void anEscapeInsideAnIncompleteSequenceNeverTypesTheBytesThatFollow() throws IOException {
-        InputDecoder alt = new InputDecoder(
-                TestReaders.utf8(new ByteAtATime("\u001B[\u001Bx".getBytes(StandardCharsets.UTF_8))));
+        InputDecoder alt =
+                new InputDecoder(TestReaders.utf8(new ByteAtATime("\u001B[\u001Bx".getBytes(StandardCharsets.UTF_8))));
         InputEvent.KeyInput altX = (InputEvent.KeyInput) alt.read().orElseThrow();
-        assertThat(altX.key()).as("Meta+[ then Alt+x names the key that was pressed")
+        assertThat(altX.key())
+                .as("Meta+[ then Alt+x names the key that was pressed")
                 .isEqualTo(Key.of("x", Modifiers.ALT));
         assertThat(altX.text()).isEqualTo("x");
-        assertThat(alt.read()).as("no keystroke the user never pressed is left over").isEmpty();
+        assertThat(alt.read())
+                .as("no keystroke the user never pressed is left over")
+                .isEmpty();
 
-        InputDecoder ss3 = new InputDecoder(
-                TestReaders.utf8(new ByteAtATime("\u001BO\u001B[A".getBytes(StandardCharsets.UTF_8))));
+        InputDecoder ss3 =
+                new InputDecoder(TestReaders.utf8(new ByteAtATime("\u001BO\u001B[A".getBytes(StandardCharsets.UTF_8))));
         assertThat(((InputEvent.KeyInput) ss3.read().orElseThrow()).key())
                 .as("the arrow key after the abandoned SS3 introducer")
                 .isEqualTo(Key.UP);
-        assertThat(ss3.read()).as("no keystroke the user never pressed is left over").isEmpty();
+        assertThat(ss3.read())
+                .as("no keystroke the user never pressed is left over")
+                .isEmpty();
     }
 
     /**
@@ -529,16 +582,15 @@ class InputDecoderTest {
      */
     @Test
     @Timeout(5)
-    void anIncompleteCsiIsAbandonedAtTheEscapeTimeoutRatherThanSwallowingTheNextKey()
-            throws IOException {
+    void anIncompleteCsiIsAbandonedAtTheEscapeTimeoutRatherThanSwallowingTheNextKey() throws IOException {
         // One arrow key whose final byte arrives 40 ms after its introducer.
         byte[] splitArrowKey = "\u001B[A".getBytes(StandardCharsets.UTF_8);
-        InputDecoder decoder = new InputDecoder(TestReaders.utf8(
-                new ByteAtATime(splitArrowKey, 2, 40L)), new InputOptions(
-                        Duration.ofMillis(5), 64, 1024, Duration.ofMillis(250),
-                        Duration.ofMillis(100)));
+        InputDecoder decoder = new InputDecoder(
+                TestReaders.utf8(new ByteAtATime(splitArrowKey, 2, 40L)),
+                new InputOptions(Duration.ofMillis(5), 64, 1024, Duration.ofMillis(250), Duration.ofMillis(100)));
         InputEvent.KeyInput key = (InputEvent.KeyInput) decoder.read().orElseThrow();
-        assertThat(key.key()).as("the abandoned CSI did not adopt the byte that arrived later")
+        assertThat(key.key())
+                .as("the abandoned CSI did not adopt the byte that arrived later")
                 .isEqualTo(Key.of("a"));
         assertThat(key.text()).isEqualTo("A");
         assertThat(decoder.read()).isEmpty();
@@ -551,6 +603,9 @@ class InputDecoderTest {
 
     @Test
     void endOfInputIsEmpty() throws IOException {
-        assertThat(new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteArrayInputStream(new byte[0]))).read()).isEmpty();
+        assertThat(new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                                new ByteArrayInputStream(new byte[0])))
+                        .read())
+                .isEmpty();
     }
 }

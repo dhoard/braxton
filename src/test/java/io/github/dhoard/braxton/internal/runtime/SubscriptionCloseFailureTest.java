@@ -25,15 +25,12 @@ package io.github.dhoard.braxton.internal.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.effect.SubscriptionId;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.effect.Subscription;
-import io.github.dhoard.braxton.effect.SubscriptionId;
-import io.github.dhoard.braxton.internal.runtime.JLineTestTerminal;
 
 /** A source that fails to close is reported, not propagated. */
 class SubscriptionCloseFailureTest {
@@ -41,24 +38,28 @@ class SubscriptionCloseFailureTest {
     @Test
     void aFailingCloseIsReportedThroughDiagnostics() {
         List<String> diagnostics = new ArrayList<>();
-        SubscriptionManager<String> manager = new SubscriptionManager<>(new Mailbox(8),
-                new ManualTimers(), 4, diagnostics::add);
-        Subscription<String> failing = Subscription.source(SubscriptionId.of("bad"), "cfg",
+        SubscriptionManager<String> manager =
+                new SubscriptionManager<>(new Mailbox(8), new ManualTimers(), 4, diagnostics::add);
+        Subscription<String> failing = Subscription.source(
+                SubscriptionId.of("bad"),
+                "cfg",
                 emitter -> () -> {
                     throw new IllegalStateException("cannot close");
-                }, value -> "value");
+                },
+                value -> "value");
         manager.reconcile(failing);
         manager.closeAll();
-        assertThat(diagnostics).anySatisfy(message ->
-                assertThat(message).contains("bad").contains("close failed"));
+        assertThat(diagnostics)
+                .anySatisfy(message -> assertThat(message).contains("bad").contains("close failed"));
         manager.closeAll();
         assertThat(diagnostics).hasSize(1);
     }
 
     @Test
     void anIntervalWithAnOverflowingPeriodIsRejectedAtConstruction() {
-        assertThatThrownBy(() -> Subscription.interval(SubscriptionId.of("t"),
-                Duration.ofSeconds(Long.MAX_VALUE), time -> "t"))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("nanoseconds");
+        assertThatThrownBy(() ->
+                        Subscription.interval(SubscriptionId.of("t"), Duration.ofSeconds(Long.MAX_VALUE), time -> "t"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("nanoseconds");
     }
 }

@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.internal.clipboard;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Random;
-
 import org.junit.jupiter.api.Test;
 
 /** The bounded in-process buffer truncates only at a grapheme-cluster boundary. */
@@ -33,8 +32,7 @@ class ClipboardBufferTest {
 
     private static final String EMOJI = "\uD83D\uDE00";
     private static final String WIDE = "\u65E5\u672C";
-    private static final String FAMILY =
-            "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
+    private static final String FAMILY = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
 
     @Test
     void aBoundThatFitsKeepsTheTextExactly() {
@@ -99,8 +97,9 @@ class ClipboardBufferTest {
 
     @Test
     void storedTextIsAlwaysAPrefixThatEndsAfterAWholeGraphemeCluster() {
-        String[] pieces = {"a", "bc", " ", EMOJI, FAMILY, WIDE, "\u0301", "e\u0301", "\u200D",
-                "\uFE0F", "\n", "\uD800", "\uDC00"};
+        String[] pieces = {
+            "a", "bc", " ", EMOJI, FAMILY, WIDE, "\u0301", "e\u0301", "\u200D", "\uFE0F", "\n", "\uD800", "\uDC00"
+        };
         Random random = new Random(29L);
         for (int iteration = 0; iteration < 5_000; iteration++) {
             StringBuilder source = new StringBuilder();
@@ -112,14 +111,13 @@ class ClipboardBufferTest {
             int bound = 1 + random.nextInt(8);
             boolean truncated = text.length() > bound;
             String stored = new ClipboardBuffer(bound).set(text);
-            assertThat(stored).as("iteration %d bound %d", iteration, bound)
+            assertThat(stored)
+                    .as("iteration %d bound %d", iteration, bound)
                     .hasSizeLessThanOrEqualTo(bound)
                     .isEqualTo(truncated ? truncateToClusters(text, bound) : text);
-            assertThat(stored).as("iteration %d is a prefix", iteration)
-                    .isEqualTo(text.substring(0, stored.length()));
+            assertThat(stored).as("iteration %d is a prefix", iteration).isEqualTo(text.substring(0, stored.length()));
             if (truncated) {
-                assertThat(stored.isEmpty()
-                        || !Character.isHighSurrogate(stored.charAt(stored.length() - 1)))
+                assertThat(stored.isEmpty() || !Character.isHighSurrogate(stored.charAt(stored.length() - 1)))
                         .as("iteration %d keeps no trailing lone high surrogate", iteration)
                         .isTrue();
             }
@@ -134,7 +132,8 @@ class ClipboardBufferTest {
         String cluster = "e" + "\u0301".repeat(200);
         String source = "a".repeat(10) + cluster + "z".repeat(300);
         for (int bound : new int[] {10, 11, 100, 210, 211, 300, 511}) {
-            assertThat(new ClipboardBuffer(bound).set(source)).as("bound %d", bound)
+            assertThat(new ClipboardBuffer(bound).set(source))
+                    .as("bound %d", bound)
                     .isEqualTo(truncateToClusters(source, bound));
         }
         assertThat(new ClipboardBuffer(100).set(source)).isEqualTo("a".repeat(10));
@@ -146,9 +145,26 @@ class ClipboardBufferTest {
     void aSourceLongerThanTheSegmentedWindowKeepsTheWholeClusterPrefix() {
         // The window is the bound plus a fixed lookahead, so a copy that long exercises the path
         // that segments only part of the source; the reference segments all of it.
-        String[] pieces = {"a", "bc", " ", EMOJI, FAMILY, WIDE, "\u0301", "e\u0301", "\u200D",
-                "\uFE0F", "\n", "\uD800", "\uDC00", "\uD83C\uDDFA\uD83C\uDDF8",
-                "\uD83D\uDC4D\uD83C\uDFFD", "\uAC00", "\u1100\u1161\u11A8", "\u0E01\u0E33"};
+        String[] pieces = {
+            "a",
+            "bc",
+            " ",
+            EMOJI,
+            FAMILY,
+            WIDE,
+            "\u0301",
+            "e\u0301",
+            "\u200D",
+            "\uFE0F",
+            "\n",
+            "\uD800",
+            "\uDC00",
+            "\uD83C\uDDFA\uD83C\uDDF8",
+            "\uD83D\uDC4D\uD83C\uDFFD",
+            "\uAC00",
+            "\u1100\u1161\u11A8",
+            "\u0E01\u0E33"
+        };
         Random random = new Random(41L);
         for (int iteration = 0; iteration < 1_000; iteration++) {
             StringBuilder source = new StringBuilder();
@@ -160,11 +176,11 @@ class ClipboardBufferTest {
             int bound = 1 + random.nextInt(random.nextBoolean() ? 64 : 600);
             boolean truncated = text.length() > bound;
             String stored = new ClipboardBuffer(bound).set(text);
-            assertThat(stored).as("iteration %d bound %d", iteration, bound)
+            assertThat(stored)
+                    .as("iteration %d bound %d", iteration, bound)
                     .hasSizeLessThanOrEqualTo(bound)
                     .isEqualTo(truncated ? truncateToClusters(text, bound) : text);
-            assertThat(stored).as("iteration %d is a prefix", iteration)
-                    .isEqualTo(text.substring(0, stored.length()));
+            assertThat(stored).as("iteration %d is a prefix", iteration).isEqualTo(text.substring(0, stored.length()));
         }
     }
 
@@ -183,8 +199,7 @@ class ClipboardBufferTest {
      * implementation's steps.
      */
     private static String truncateToClusters(String text, int bound) {
-        java.text.BreakIterator iterator =
-                java.text.BreakIterator.getCharacterInstance(java.util.Locale.ROOT);
+        java.text.BreakIterator iterator = java.text.BreakIterator.getCharacterInstance(java.util.Locale.ROOT);
         iterator.setText(text);
         int end = 0;
         while (true) {

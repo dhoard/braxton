@@ -26,7 +26,6 @@ import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.mvu.ComponentPath;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -95,39 +94,35 @@ public final class SubscriptionManager<Msg> {
                 }
                 generation = ++scheduleGeneration;
             }
-            Timers.Handle scheduled =
-                    timers.schedule(
-                            periodNanos,
-                            () -> {
-                                Function<Long, Msg> current = mapper.get();
-                                if (current == null) {
-                                    return;
-                                }
-                                try {
-                                    Msg message = current.apply(System.nanoTime());
-                                    // Mapping runs on the source thread and can outlive removal,
-                                    // so the source's lifetime is rechecked before publishing the
-                                    // mapped value, not only before invoking application code. A
-                                    // mapper refresh alone keeps this source live.
-                                    if (message != null && mapper.get() != null) {
-                                        emitter.accept(message, () -> mapper.get() != null);
-                                    }
-                                } catch (RuntimeException failure) {
-                                    // A mapper is application code. Letting the failure escape
-                                    // ends this tick chain while reconcile still keeps the
-                                    // resource, which would leave a declared subscription
-                                    // permanently dead and unreported, so the failure is reported
-                                    // and the interval keeps ticking.
-                                    diagnostics.accept(
-                                            "subscription "
-                                                    + id
-                                                    + " mapper threw "
-                                                    + failure.getClass().getSimpleName());
-                                }
-                                if (mapper.get() != null) {
-                                    scheduleNext();
-                                }
-                            });
+            Timers.Handle scheduled = timers.schedule(periodNanos, () -> {
+                Function<Long, Msg> current = mapper.get();
+                if (current == null) {
+                    return;
+                }
+                try {
+                    Msg message = current.apply(System.nanoTime());
+                    // Mapping runs on the source thread and can outlive removal,
+                    // so the source's lifetime is rechecked before publishing the
+                    // mapped value, not only before invoking application code. A
+                    // mapper refresh alone keeps this source live.
+                    if (message != null && mapper.get() != null) {
+                        emitter.accept(message, () -> mapper.get() != null);
+                    }
+                } catch (RuntimeException failure) {
+                    // A mapper is application code. Letting the failure escape
+                    // ends this tick chain while reconcile still keeps the
+                    // resource, which would leave a declared subscription
+                    // permanently dead and unreported, so the failure is reported
+                    // and the interval keeps ticking.
+                    diagnostics.accept("subscription "
+                            + id
+                            + " mapper threw "
+                            + failure.getClass().getSimpleName());
+                }
+                if (mapper.get() != null) {
+                    scheduleNext();
+                }
+            });
             synchronized (timerLock) {
                 // Removal can finish while schedule is returning. A callback can also run and
                 // schedule its successor before its own handle returns; that older registration
@@ -174,8 +169,12 @@ public final class SubscriptionManager<Msg> {
         final AutoCloseable resource;
         final Consumer<String> diagnostics;
 
-        ExternalLive(SubscriptionId id, Object configuration,
-                AtomicReference<Function<Object, Msg>> mapper, AutoCloseable resource, long epoch,
+        ExternalLive(
+                SubscriptionId id,
+                Object configuration,
+                AtomicReference<Function<Object, Msg>> mapper,
+                AutoCloseable resource,
+                long epoch,
                 Consumer<String> diagnostics) {
             super(id, configuration);
             this.mapper = mapper;
@@ -235,12 +234,11 @@ public final class SubscriptionManager<Msg> {
     private boolean closed;
     private Thread owner = Thread.currentThread();
 
-    public SubscriptionManager(Mailbox mailbox, Timers timers, int maxSubscriptions,
-            Consumer<String> diagnostics) {
+    public SubscriptionManager(Mailbox mailbox, Timers timers, int maxSubscriptions, Consumer<String> diagnostics) {
         this.mailbox = mailbox;
         this.timers = timers;
         this.maxSubscriptions = Math.max(0, maxSubscriptions);
-        this.diagnostics = diagnostics == null ? message -> { } : diagnostics;
+        this.diagnostics = diagnostics == null ? message -> {} : diagnostics;
     }
 
     /** Marks the thread allowed to enqueue without waiting for itself. */
@@ -252,8 +250,7 @@ public final class SubscriptionManager<Msg> {
     public void reconcile(Subscription<Msg> subscription) {
         List<Subscription<Msg>> leaves = Subscription.leaves(subscription);
         if (leaves.size() > maxSubscriptions) {
-            throw new IllegalArgumentException("too many subscriptions: " + leaves.size()
-                    + " > " + maxSubscriptions);
+            throw new IllegalArgumentException("too many subscriptions: " + leaves.size() + " > " + maxSubscriptions);
         }
         List<Live> toClose = new ArrayList<>();
         Throwable rejected = null;
@@ -270,7 +267,8 @@ public final class SubscriptionManager<Msg> {
             try {
                 for (Subscription<Msg> leaf : leaves) {
                     Live existing = live.get(leaf.id());
-                    if (existing != null && sameKind(existing, leaf)
+                    if (existing != null
+                            && sameKind(existing, leaf)
                             && existing.configuration.equals(leaf.configuration())) {
                         refreshed.put(existing, leaf);
                         next.put(leaf.id(), existing);
@@ -319,14 +317,11 @@ public final class SubscriptionManager<Msg> {
 
     @SuppressWarnings("unchecked")
     private void refreshMapper(Live existing, Subscription<Msg> leaf) {
-        if (existing instanceof IntervalLive<?> interval
-                && leaf instanceof Subscription.Interval<Msg> source) {
+        if (existing instanceof IntervalLive<?> interval && leaf instanceof Subscription.Interval<Msg> source) {
             ((IntervalLive<Msg>) interval).mapper.set(source.onTick());
-        } else if (existing instanceof ResizeLive<?> resize
-                && leaf instanceof Subscription.Resize<Msg> source) {
+        } else if (existing instanceof ResizeLive<?> resize && leaf instanceof Subscription.Resize<Msg> source) {
             ((ResizeLive<Msg>) resize).mapper.set(source.onResize());
-        } else if (existing instanceof ExternalLive<?> external
-                && leaf instanceof Subscription.Source<Msg> source) {
+        } else if (existing instanceof ExternalLive<?> external && leaf instanceof Subscription.Source<Msg> source) {
             ((ExternalLive<Msg>) external).mapper.set(source.mapper());
         }
     }
@@ -365,22 +360,20 @@ public final class SubscriptionManager<Msg> {
         }
         if (leaf instanceof Subscription.Source<Msg> source) {
             AtomicReference<Function<Object, Msg>> mapper = new AtomicReference<>(source.mapper());
-            Consumer<Object> emitter =
-                    value -> {
-                        Function<Object, Msg> current = mapper.get();
-                        if (current != null) {
-                            Msg message = current.apply(value);
-                            // Removal/failed startup may have invalidated this callback while its
-                            // application mapper was running. A captured function is not liveness.
-                            if (mapper.get() != null) {
-                                enqueue(message, origin, () -> mapper.get() != null);
-                            }
-                        }
-                    };
+            Consumer<Object> emitter = value -> {
+                Function<Object, Msg> current = mapper.get();
+                if (current != null) {
+                    Msg message = current.apply(value);
+                    // Removal/failed startup may have invalidated this callback while its
+                    // application mapper was running. A captured function is not liveness.
+                    if (mapper.get() != null) {
+                        enqueue(message, origin, () -> mapper.get() != null);
+                    }
+                }
+            };
             try {
                 AutoCloseable resource = source.start().apply(emitter);
-                return new ExternalLive<>(source.id(), source.configuration(), mapper, resource, epoch,
-                        diagnostics);
+                return new ExternalLive<>(source.id(), source.configuration(), mapper, resource, epoch, diagnostics);
             } catch (RuntimeException | Error failure) {
                 // start may have handed this emitter to another thread before failing. No Live
                 // was returned for reconcile to close, so invalidate that callback here instead.
@@ -407,10 +400,7 @@ public final class SubscriptionManager<Msg> {
                     // would hand the owner's update a value outside the application's message type.
                     if (message != null) {
                         mailbox.enqueueFromOwner(
-                                new Mailbox.AppMessage(
-                                        message,
-                                        origin(source.id),
-                                        () -> resize.mapper.get() != null));
+                                new Mailbox.AppMessage(message, origin(source.id), () -> resize.mapper.get() != null));
                     }
                 }
             }
@@ -434,8 +424,7 @@ public final class SubscriptionManager<Msg> {
      * would wait for itself and wedge the run. An owner-side overflow is fatal by design, exactly as
      * for a resize or an effect delivered on the owner thread.</p>
      */
-    private void enqueue(
-            Object message, ScopeManager.Origin origin, java.util.function.BooleanSupplier valid) {
+    private void enqueue(Object message, ScopeManager.Origin origin, java.util.function.BooleanSupplier valid) {
         if (message == null) {
             return;
         }

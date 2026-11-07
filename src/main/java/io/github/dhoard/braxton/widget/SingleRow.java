@@ -42,8 +42,7 @@ import io.github.dhoard.braxton.style.StyledText;
  */
 final class SingleRow {
 
-    private SingleRow() {
-    }
+    private SingleRow() {}
 
     /** {@code text} flat enough to paint on one row; a null value is empty. */
     static StyledText of(StyledText text) {
@@ -52,8 +51,7 @@ final class SingleRow {
         }
         StyledText result = StyledText.empty();
         for (StyledText.Span span : text.spans()) {
-            result = result.append(StyledText.of(
-                    LineBreaks.singleRowAndTabs(span.text()), span.style(), span.link()));
+            result = result.append(StyledText.of(LineBreaks.singleRowAndTabs(span.text()), span.style(), span.link()));
         }
         return result;
     }

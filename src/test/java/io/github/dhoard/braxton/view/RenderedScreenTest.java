@@ -26,7 +26,6 @@ import static org.assertj.core.api.Assertions.*;
 
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Style;
-
 import org.junit.jupiter.api.Test;
 
 class RenderedScreenTest {
@@ -38,10 +37,8 @@ class RenderedScreenTest {
         assertThat(snapshot.cell(0, 1).columns()).isZero();
         assertThat(snapshot.cell(0, 2).text()).isEqualTo("x");
         assertThat(snapshot.plainText()).isEqualTo("界x");
-        assertThatThrownBy(() -> snapshot.cells().getFirst().clear())
-                .isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> snapshot.cells().clear())
-                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> snapshot.cells().getFirst().clear()).isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> snapshot.cells().clear()).isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
@@ -68,8 +65,7 @@ class RenderedScreenTest {
         padded.add(new RenderedScreen.Cell("x", Style.NONE, null, 1, false));
         padded.add(new RenderedScreen.Cell(" ", Style.NONE, null, 1, false));
         padded.add(new RenderedScreen.Cell(" ", Style.NONE, null, 1, false));
-        var snapshot = new RenderedScreen(2, 3, java.util.List.of(painted, padded),
-                java.util.List.of());
+        var snapshot = new RenderedScreen(2, 3, java.util.List.of(painted, padded), java.util.List.of());
         assertThat(snapshot.plainLine(0)).isEqualTo("a\u3000");
         assertThat(snapshot.plainLine(1)).as("blank padding is still trimmed").isEqualTo("x");
         assertThat(snapshot.plainLines()).containsExactly("a\u3000", "x");

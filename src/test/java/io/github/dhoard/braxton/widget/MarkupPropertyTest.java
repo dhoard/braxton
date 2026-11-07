@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.widget;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /** Rendered markup is inert text and its tables keep one row width. */
@@ -38,10 +37,12 @@ class MarkupPropertyTest {
         String plain = Markup.parse(xml).plainText();
         // Raw escape characters are not valid XML and are rejected with a diagnostic instead.
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> Markup.parse("<root>\u001B[31m</root>"))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("invalid markup");
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("invalid markup");
         for (char c : plain.toCharArray()) {
             assertThat(c == '\n' || c == '\t' || (c >= 0x20 && c != 0x7F && !(c >= 0x80 && c <= 0x9F)))
-                    .as("control 0x%x", (int) c).isTrue();
+                    .as("control 0x%x", (int) c)
+                    .isTrue();
         }
     }
 
@@ -51,7 +52,9 @@ class MarkupPropertyTest {
                 + "<tr><td>ccc</td><td>\u672C\u672C</td></tr></table></root>";
         List<String> lines = Markup.parse(xml).plainText().lines().toList();
         assertThat(lines).hasSize(2);
-        assertThat(lines.stream().map(io.github.dhoard.braxton.style.TextMeasure::columns).distinct())
+        assertThat(lines.stream()
+                        .map(io.github.dhoard.braxton.style.TextMeasure::columns)
+                        .distinct())
                 .hasSize(1);
     }
 
@@ -69,9 +72,12 @@ class MarkupPropertyTest {
                         + "<td>" + cell + "</td></tr>"
                         + "<tr><td>ccc</td><td>\u672C\u672C</td></tr></table></root>";
                 List<String> lines = Markup.parse(xml).plainText().lines().toList();
-                assertThat(lines).as("cell 0x%x gap %d", (int) cell.charAt(0), gap).hasSize(2);
+                assertThat(lines)
+                        .as("cell 0x%x gap %d", (int) cell.charAt(0), gap)
+                        .hasSize(2);
                 assertThat(lines.stream()
-                        .map(io.github.dhoard.braxton.style.TextMeasure::columns).distinct())
+                                .map(io.github.dhoard.braxton.style.TextMeasure::columns)
+                                .distinct())
                         .as("rows of cell 0x%x gap %d", (int) cell.charAt(0), gap)
                         .hasSize(1);
             }
@@ -80,14 +86,15 @@ class MarkupPropertyTest {
 
     @Test
     void aParentLinkAppliesToChildrenAndABackgroundIsInherited() {
-        var linked = Markup.parse("<root><a href=\"https://x\"><span>one</span><span>two</span>"
-                + "</a></root>");
-        assertThat(linked.spans()).filteredOn(span -> !span.text().isBlank())
+        var linked = Markup.parse("<root><a href=\"https://x\"><span>one</span><span>two</span>" + "</a></root>");
+        assertThat(linked.spans())
+                .filteredOn(span -> !span.text().isBlank())
                 .allSatisfy(span -> assertThat(span.link()).isEqualTo("https://x"));
-        var background = Markup.parse("<root><span bg-color=\"#102030\"><span>inner</span>"
-                + "</span></root>");
-        assertThat(background.spans()).filteredOn(span -> !span.text().isBlank())
+        var background = Markup.parse("<root><span bg-color=\"#102030\"><span>inner</span>" + "</span></root>");
+        assertThat(background.spans())
+                .filteredOn(span -> !span.text().isBlank())
                 .allSatisfy(span -> assertThat(span.style().background())
-                        .isEqualTo(io.github.dhoard.braxton.style.Color.parse("#102030").orElseThrow()));
+                        .isEqualTo(io.github.dhoard.braxton.style.Color.parse("#102030")
+                                .orElseThrow()));
     }
 }

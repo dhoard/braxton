@@ -24,16 +24,14 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
-import java.util.Random;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.internal.render.LayoutEngine;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.ScreenRenderer;
+import java.util.List;
+import java.util.Random;
+import org.junit.jupiter.api.Test;
 
 /** The bar clamps its fill, renders nothing unusable, and never draws past its width. */
 class ProgressBarTest {
@@ -48,15 +46,12 @@ class ProgressBarTest {
         assertThat(ProgressBar.of(4).render(0.5, 0)).isEqualTo(StyledText.empty());
         assertThat(ProgressBar.of(4).render(0.5, -1)).isEqualTo(StyledText.empty());
         assertThat(ProgressBar.of(4).render(0.5, Double.NaN)).isEqualTo(StyledText.empty());
-        assertThat(ProgressBar.of(4).render(0.5, Double.POSITIVE_INFINITY))
-                .isEqualTo(StyledText.empty());
+        assertThat(ProgressBar.of(4).render(0.5, Double.POSITIVE_INFINITY)).isEqualTo(StyledText.empty());
         // NaN has no place on the 0..1 scale; an infinite value still clamps to an end of it.
         assertThat(ProgressBar.of(4).render(Double.NaN, 1.0)).isEqualTo(StyledText.empty());
         // An infinite value still renders the bar, clamped to one end of the scale.
-        assertThat(ProgressBar.of(4).icons(4, Double.NEGATIVE_INFINITY, 1.0))
-                .containsOnly(INACTIVE);
-        assertThat(ProgressBar.of(4).icons(4, Double.POSITIVE_INFINITY, 1.0))
-                .containsOnly(ACTIVE);
+        assertThat(ProgressBar.of(4).icons(4, Double.NEGATIVE_INFINITY, 1.0)).containsOnly(INACTIVE);
+        assertThat(ProgressBar.of(4).icons(4, Double.POSITIVE_INFINITY, 1.0)).containsOnly(ACTIVE);
         assertThat(ProgressBar.of(4).columns(Double.NEGATIVE_INFINITY, 1.0)).isEqualTo(4);
         assertThat(ProgressBar.of(4).columns(Double.POSITIVE_INFINITY, 1.0)).isEqualTo(4);
     }
@@ -90,21 +85,20 @@ class ProgressBarTest {
     @Test
     void theBarIsOneRowAndSpansExactlyItsWidthInCells() {
         ProgressBar spaced = ProgressBar.of(3).buffer(2);
-        assertThat(spaced.render(1.0, 1.0).plainText())
-                .isEqualTo(ACTIVE + "  " + ACTIVE + "  " + ACTIVE);
+        assertThat(spaced.render(1.0, 1.0).plainText()).isEqualTo(ACTIVE + "  " + ACTIVE + "  " + ACTIVE);
         assertThat(spaced.columns(1.0, 1.0)).isEqualTo(3 + 2 * 2);
-        assertThat(ProgressBar.of(3).buffer(-5).render(1.0, 1.0).plainText())
-                .isEqualTo(ACTIVE.repeat(3));
+        assertThat(ProgressBar.of(3).buffer(-5).render(1.0, 1.0).plainText()).isEqualTo(ACTIVE.repeat(3));
         assertThat(ProgressBar.of(3).columns(1.0, 1.0)).isEqualTo(3);
     }
 
     @Test
     void iconsAndLabelsAreFlattenedToOneRow() {
-        ProgressBar multi = ProgressBar.of(2).icons(ACTIVE + "\n" + ACTIVE, "a\tb")
-                .prepend(StyledText.plain("pre\nfix")).append(StyledText.plain("\npost"));
+        ProgressBar multi = ProgressBar.of(2)
+                .icons(ACTIVE + "\n" + ACTIVE, "a\tb")
+                .prepend(StyledText.plain("pre\nfix"))
+                .append(StyledText.plain("\npost"));
         // Half filled: the first cell draws the flattened active icon, the second the inactive one.
-        assertThat(multi.render(0.5, 1.0).plainText()).isEqualTo("pre fix" + ACTIVE + " " + ACTIVE
-                + "a b" + " post");
+        assertThat(multi.render(0.5, 1.0).plainText()).isEqualTo("pre fix" + ACTIVE + " " + ACTIVE + "a b" + " post");
         assertThat(multi.render(0.5, 1.0).plainText().lines()).hasSize(1);
         assertThat(multi.render(1.0, 1.0).plainText()).doesNotContain("a b");
     }
@@ -147,10 +141,14 @@ class ProgressBarTest {
         // Prepended/appended labels arrive as StyledText, so Span has already deleted a bare CR;
         // only the raw icon path can repair the caller's original string. Pin the styled-input
         // result so the Box.title(String) correction does not silently spread to every surface.
-        String withCr = ProgressBar.of(1).prepend(StyledText.plain("a\rb"))
-                .render(1.0, 1.0).plainText();
-        String withLf = ProgressBar.of(1).prepend(StyledText.plain("a\nb"))
-                .render(1.0, 1.0).plainText();
+        String withCr = ProgressBar.of(1)
+                .prepend(StyledText.plain("a\rb"))
+                .render(1.0, 1.0)
+                .plainText();
+        String withLf = ProgressBar.of(1)
+                .prepend(StyledText.plain("a\nb"))
+                .render(1.0, 1.0)
+                .plainText();
         assertThat(withCr).isEqualTo("ab" + ACTIVE);
         assertThat(withLf).isEqualTo("a b" + ACTIVE);
     }
@@ -176,8 +174,10 @@ class ProgressBarTest {
             List<String> icons = bar.icons(width, value, max);
             assertThat(icons).as("iteration %d", iteration).hasSize(width);
             assertThat(icons.stream().filter(ACTIVE::equals).count())
-                    .as("iteration %d width %d", iteration, width).isEqualTo(filled);
-            assertThat(icons.subList(0, filled)).as("iteration %d fills from the left", iteration)
+                    .as("iteration %d width %d", iteration, width)
+                    .isEqualTo(filled);
+            assertThat(icons.subList(0, filled))
+                    .as("iteration %d fills from the left", iteration)
                     .allMatch(ACTIVE::equals);
             assertThat(icons.subList(filled, icons.size()))
                     .as("iteration %d leaves the rest inactive", iteration)

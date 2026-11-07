@@ -47,8 +47,7 @@ package io.github.dhoard.braxton.style;
  */
 public final class LineBreaks {
 
-    private LineBreaks() {
-    }
+    private LineBreaks() {}
 
     /**
      * Converts LF, CRLF, and lone CR to one LF each. Tabs and every other character are preserved.

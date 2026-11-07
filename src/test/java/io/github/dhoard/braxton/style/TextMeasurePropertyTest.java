@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.style;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Random;
-
 import org.junit.jupiter.api.Test;
 
 /** Truncation and fitting keep the column budget and never split a cluster. */
@@ -45,19 +44,23 @@ class TextMeasurePropertyTest {
             for (WidthPolicy policy : java.util.List.of(WidthPolicy.PINNED, WidthPolicy.ONE_COLUMN)) {
                 String cut = TextMeasure.truncate(value, budget, policy);
                 assertThat(value.startsWith(cut)).as("truncate is a prefix").isTrue();
-                assertThat(TextMeasure.columns(cut, policy)).as("width %s of [%s] at %d", policy, value, budget)
+                assertThat(TextMeasure.columns(cut, policy))
+                        .as("width %s of [%s] at %d", policy, value, budget)
                         .isLessThanOrEqualTo(budget);
-                assertThat(TextMeasure.graphemes(cut)).allSatisfy(cluster ->
-                        assertThat(TextMeasure.graphemes(value)).as("no invented cluster").contains(cluster));
-
+                assertThat(TextMeasure.graphemes(cut))
+                        .allSatisfy(cluster -> assertThat(TextMeasure.graphemes(value))
+                                .as("no invented cluster")
+                                .contains(cluster));
             }
             String pinnedCut = TextMeasure.truncate(value, budget, WidthPolicy.PINNED);
             String fitted = TextMeasure.fit(value, budget);
             assertThat(TextMeasure.columns(fitted, WidthPolicy.PINNED))
-                    .as("fit always fills its budget").isEqualTo(budget);
+                    .as("fit always fills its budget")
+                    .isEqualTo(budget);
             assertThat(fitted).startsWith(pinnedCut);
             assertThat(TextMeasure.fit(value, budget)).isEqualTo(fitted);
-            assertThat(TextMeasure.graphemeCount(value)).isEqualTo(TextMeasure.graphemes(value).size());
+            assertThat(TextMeasure.graphemeCount(value))
+                    .isEqualTo(TextMeasure.graphemes(value).size());
             assertThat(TextMeasure.columns(value)).isEqualTo(TextMeasure.columns(value));
         }
     }

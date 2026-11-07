@@ -32,11 +32,7 @@ import java.util.List;
  * the user's actual text.</p>
  */
 public record HarnessTranscript(
-        List<HarnessTurn> turns,
-        Profile profile,
-        Usage usage,
-        int contextWindow,
-        List<String> warnings) {
+        List<HarnessTurn> turns, Profile profile, Usage usage, int contextWindow, List<String> warnings) {
 
     public HarnessTranscript {
         turns = List.copyOf(turns);
@@ -47,11 +43,7 @@ public record HarnessTranscript(
     }
 
     /** One example turn: the prompt it was recorded under and the response blocks. */
-    public record HarnessTurn(
-            String userText,
-            List<HarnessEntry> responses,
-            Usage usage,
-            Profile profile) {
+    public record HarnessTurn(String userText, List<HarnessEntry> responses, Usage usage, Profile profile) {
 
         public HarnessTurn {
             userText = userText == null ? "" : userText;
@@ -77,8 +69,7 @@ public record HarnessTranscript(
     public record Profile(String provider, String model, String reasoning) {
 
         public static final int DEFAULT_CONTEXT_WINDOW = 1_048_576;
-        public static final Profile DEFAULT =
-                new Profile("local", "qwen3.8-flash-next", "high");
+        public static final Profile DEFAULT = new Profile("local", "qwen3.8-flash-next", "high");
 
         public Profile {
             provider = blankToDefault(provider, "local");
@@ -88,8 +79,7 @@ public record HarnessTranscript(
 
         /** The footer's provider/model line, including the reasoning suffix when present. */
         public String label() {
-            return provider + " | " + model
-                    + (reasoning.isBlank() ? "" : " \u2022 " + reasoning);
+            return provider + " | " + model + (reasoning.isBlank() ? "" : " \u2022 " + reasoning);
         }
 
         private static String blankToDefault(String value, String fallback) {
@@ -121,7 +111,6 @@ public record HarnessTranscript(
     }
 
     public static HarnessTranscript empty(List<String> warnings) {
-        return new HarnessTranscript(List.of(), Profile.DEFAULT, Usage.EMPTY,
-                Profile.DEFAULT_CONTEXT_WINDOW, warnings);
+        return new HarnessTranscript(List.of(), Profile.DEFAULT, Usage.EMPTY, Profile.DEFAULT_CONTEXT_WINDOW, warnings);
     }
 }

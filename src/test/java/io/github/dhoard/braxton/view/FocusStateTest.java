@@ -25,14 +25,12 @@ package io.github.dhoard.braxton.view;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /** Focus identity and order-preserving traversal. */
 class FocusStateTest {
 
-    private static final List<ElementId> ORDER =
-            List.of(ElementId.of("a"), ElementId.of("b"), ElementId.of("c"));
+    private static final List<ElementId> ORDER = List.of(ElementId.of("a"), ElementId.of("b"), ElementId.of("c"));
 
     @Test
     void traversalWrapsInBothDirections() {
@@ -63,8 +61,10 @@ class FocusStateTest {
         assertThat(FocusState.NONE.isFocused(null)).isFalse();
         assertThat(FocusState.of(ElementId.of("a")).clear().isFocused(null)).isFalse();
         assertThat(FocusState.of(null).isFocused(null)).isFalse();
-        assertThat(FocusState.of(ElementId.of("a")).isFocused(ElementId.of("a"))).isTrue();
-        assertThat(FocusState.of(ElementId.of("a")).isFocused(ElementId.of("b"))).isFalse();
+        assertThat(FocusState.of(ElementId.of("a")).isFocused(ElementId.of("a")))
+                .isTrue();
+        assertThat(FocusState.of(ElementId.of("a")).isFocused(ElementId.of("b")))
+                .isFalse();
     }
 
     @Test
@@ -75,14 +75,18 @@ class FocusStateTest {
                 .isEqualTo(FocusState.of(ElementId.of("a")).hashCode());
         assertThat(FocusState.of(ElementId.of("a")).current()).contains(ElementId.of("a"));
         assertThat(FocusState.NONE.current()).isEmpty();
-        assertThat(FocusState.of(ElementId.of("a")).isFocused(ElementId.of("a"))).isTrue();
+        assertThat(FocusState.of(ElementId.of("a")).isFocused(ElementId.of("a")))
+                .isTrue();
         assertThat(FocusState.of(ElementId.of("a")).isFocused(null)).isFalse();
         assertThat(FocusState.NONE.toString()).isEqualTo("FocusState[none]");
         assertThat(FocusState.of(ElementId.of("a")).toString()).isEqualTo("FocusState[a]");
         assertThat(FocusState.of(ElementId.of("a")).clear()).isSameAs(FocusState.NONE);
         assertThat(FocusState.ofOptional(java.util.Optional.empty())).isEmpty();
-        assertThat(FocusState.ofOptional(java.util.Optional.of(ElementId.of("z")))).isPresent();
-        assertThat(FocusState.ofOptional(java.util.Optional.of(ElementId.of("z"))).orElseThrow()
-                .current()).contains(ElementId.of("z"));
+        assertThat(FocusState.ofOptional(java.util.Optional.of(ElementId.of("z"))))
+                .isPresent();
+        assertThat(FocusState.ofOptional(java.util.Optional.of(ElementId.of("z")))
+                        .orElseThrow()
+                        .current())
+                .contains(ElementId.of("z"));
     }
 }

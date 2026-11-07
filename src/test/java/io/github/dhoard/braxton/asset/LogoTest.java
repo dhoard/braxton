@@ -25,13 +25,11 @@ package io.github.dhoard.braxton.asset;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.io.IOException;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
+import java.io.IOException;
+import org.junit.jupiter.api.Test;
 
 /** A FIGlet logo applies one style, with an optional shadow colour over the whole art. */
 class LogoTest {
@@ -43,10 +41,11 @@ class LogoTest {
         StyledText rendered = logo.render();
         assertThat(rendered.plainText().split("\n", -1)).hasSize(font.height());
         assertThat(rendered.plainText()).contains("|");
-        assertThat(rendered.spans()).filteredOn(span -> !span.text().isBlank())
-                .allSatisfy(span -> assertThat(span.style().foreground())
-                        .isEqualTo(Colors.ERROR_400));
-        assertThat(rendered.spans()).filteredOn(span -> !span.text().isBlank())
+        assertThat(rendered.spans())
+                .filteredOn(span -> !span.text().isBlank())
+                .allSatisfy(span -> assertThat(span.style().foreground()).isEqualTo(Colors.ERROR_400));
+        assertThat(rendered.spans())
+                .filteredOn(span -> !span.text().isBlank())
                 .allSatisfy(span -> assertThat(span.style().bold()).isTrue());
         assertThat(logo.view()).isNotNull();
     }
@@ -54,17 +53,17 @@ class LogoTest {
     @Test
     void aShadowColourReplacesTheForegroundAndNullsKeepTheCurrentStyle() throws IOException {
         FigletFont font = FontLoader.load(FontLoader.Family.SMALL);
-        Logo logo = Logo.of("A", font).style(Style.NONE).color(Colors.ERROR_400)
-                .shadowColor(Colors.SUCCESS_400);
-        assertThat(logo.render().spans()).filteredOn(span -> !span.text().isBlank())
-                .allSatisfy(span -> assertThat(span.style().foreground())
-                        .isEqualTo(Colors.SUCCESS_400));
+        Logo logo = Logo.of("A", font).style(Style.NONE).color(Colors.ERROR_400).shadowColor(Colors.SUCCESS_400);
+        assertThat(logo.render().spans())
+                .filteredOn(span -> !span.text().isBlank())
+                .allSatisfy(span -> assertThat(span.style().foreground()).isEqualTo(Colors.SUCCESS_400));
         Logo plain = Logo.of("A", font).style(null).color(null).shadowColor(null);
-        assertThat(plain.render().spans()).filteredOn(span -> !span.text().isBlank())
+        assertThat(plain.render().spans())
+                .filteredOn(span -> !span.text().isBlank())
                 .allSatisfy(span -> assertThat(span.style()).isEqualTo(Style.NONE));
-        assertThat(Logo.of(null, font).render().plainText())
-                .isEqualTo(String.join("\n", font.render("")));
-        assertThatThrownBy(() -> Logo.of("A", null)).isInstanceOf(IllegalArgumentException.class)
+        assertThat(Logo.of(null, font).render().plainText()).isEqualTo(String.join("\n", font.render("")));
+        assertThatThrownBy(() -> Logo.of("A", null))
+                .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("font");
     }
 }

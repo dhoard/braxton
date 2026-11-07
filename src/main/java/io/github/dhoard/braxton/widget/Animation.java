@@ -36,8 +36,7 @@ public final class Animation {
 
     private static final String[] SPINNER = {"\u25C7", "\u25C8", "\u25C6", "\u25C8"};
 
-    private Animation() {
-    }
+    private Animation() {}
 
     /** A four-frame spinner advancing every 250 ms. */
     public static StyledText spinner(long nowNanos, long startedNanos, Style style) {

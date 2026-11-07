@@ -26,7 +26,6 @@ import io.github.dhoard.braxton.mvu.ComponentFailure;
 import io.github.dhoard.braxton.mvu.ComponentId;
 import io.github.dhoard.braxton.mvu.ComponentPath;
 import io.github.dhoard.braxton.mvu.ComponentTree;
-
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -54,17 +53,13 @@ public final class ScopeManager {
             Pending level = pending.removeLast();
             Set<ComponentId> siblings = new HashSet<>();
             for (ComponentTree.Node node : level.tree().nodes()) {
-                if (!siblings.add(node.id()))
-                    throw invalid(level.parent(), "duplicate component id");
+                if (!siblings.add(node.id())) throw invalid(level.parent(), "duplicate component id");
                 ComponentPath path = level.parent().append(node.id());
-                if (path.segments().size() > maxDepth)
-                    throw invalid(path, "component depth limit exceeded");
+                if (path.segments().size() > maxDepth) throw invalid(path, "component depth limit exceeded");
                 if (next.size() >= maxCount) throw invalid(path, "component count limit exceeded");
                 Long retained = active.get(path);
                 next.put(path, retained == null ? nextEpoch++ : retained);
-                var children =
-                        ComponentFailure.call(
-                                level.parent(), ComponentFailure.Phase.CHILDREN, node::children);
+                var children = ComponentFailure.call(level.parent(), ComponentFailure.Phase.CHILDREN, node::children);
                 if (!children.nodes().isEmpty()) pending.add(new Pending(path, children));
             }
         }
@@ -73,15 +68,13 @@ public final class ScopeManager {
 
     private static ComponentFailure invalid(ComponentPath path, String message) {
         return new ComponentFailure(
-                path,
-                ComponentFailure.Phase.CHILDREN,
-                message,
-                new IllegalArgumentException(message));
+                path, ComponentFailure.Phase.CHILDREN, message, new IllegalArgumentException(message));
     }
 
     public List<ComponentPath> commit(Map<ComponentPath, Long> candidate) {
-        var removed =
-                active.keySet().stream().filter(path -> !candidate.containsKey(path)).toList();
+        var removed = active.keySet().stream()
+                .filter(path -> !candidate.containsKey(path))
+                .toList();
         active = candidate;
         lastRemoved = removed;
         return removed;
@@ -114,7 +107,6 @@ public final class ScopeManager {
     }
 
     public boolean isCurrent(Origin origin) {
-        return origin != null
-                && Objects.equals(active.get(origin.path()), origin.epoch());
+        return origin != null && Objects.equals(active.get(origin.path()), origin.epoch());
     }
 }

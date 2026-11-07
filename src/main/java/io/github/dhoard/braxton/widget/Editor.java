@@ -38,7 +38,6 @@ import io.github.dhoard.braxton.style.WidthPolicy;
 import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -101,8 +100,7 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
                 if (supplied.charAt(index) == '\r') {
                     // The pair test matches LineBreaks: a CR is followed by its LF in the supplied
                     // text, wherever the offset happens to sit.
-                    boolean pair =
-                            index + 1 < supplied.length() && supplied.charAt(index + 1) == '\n';
+                    boolean pair = index + 1 < supplied.length() && supplied.charAt(index + 1) == '\n';
                     if (pair) {
                         if (index + 1 >= limit) {
                             break;
@@ -337,19 +335,16 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
             HIDDEN
         }
 
-        public static final Key DEFAULT_COPY_KEY =
-                Key.of("c", io.github.dhoard.braxton.input.Modifiers.ALT);
-        public static final Key DEFAULT_PASTE_KEY =
-                Key.of("v", io.github.dhoard.braxton.input.Modifiers.CTRL);
+        public static final Key DEFAULT_COPY_KEY = Key.of("c", io.github.dhoard.braxton.input.Modifiers.ALT);
+        public static final Key DEFAULT_PASTE_KEY = Key.of("v", io.github.dhoard.braxton.input.Modifiers.CTRL);
 
         public Config {
             maxLength = maxLength == null ? OptionalInt.empty() : maxLength;
-            maxLength.ifPresent(
-                    limit -> {
-                        if (limit < 0) {
-                            throw new IllegalArgumentException("maxLength must not be negative");
-                        }
-                    });
+            maxLength.ifPresent(limit -> {
+                if (limit < 0) {
+                    throw new IllegalArgumentException("maxLength must not be negative");
+                }
+            });
             pasteMode = pasteMode == null ? PasteMode.NORMAL : pasteMode;
             masking = masking == null ? Masking.NONE : masking;
             copyKey = copyKey == null ? DEFAULT_COPY_KEY : copyKey;
@@ -563,8 +558,8 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
 
     @Override
     public Update<Model, Msg, Output> update(Model model, Msg message) {
-        return WidgetUpdate.settled(model, message, action -> reduce(model, config, action),
-                state -> state.withFocus(model.focused()));
+        return WidgetUpdate.settled(
+                model, message, action -> reduce(model, config, action), state -> state.withFocus(model.focused()));
     }
 
     @Override
@@ -578,8 +573,7 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
         return switch (action) {
             case Msg.Clear clear -> Result.unchanged(Model.empty());
             case Msg.Insert insert -> Result.unchanged(insert(state, opts, insert.text()));
-            case Msg.Paste paste ->
-                    Result.unchanged(insert(state, opts, sanitize(paste.text(), opts)));
+            case Msg.Paste paste -> Result.unchanged(insert(state, opts, sanitize(paste.text(), opts)));
             case Msg.Backspace backspace -> Result.unchanged(backspace(state));
             case Msg.Delete delete -> Result.unchanged(delete(state));
             case Msg.MoveLeft left -> Result.unchanged(moveHorizontal(state, -1));
@@ -591,8 +585,7 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
             case Msg.SelectAll all -> Result.unchanged(selectAll(state));
             case Msg.Newline newline -> Result.unchanged(insert(state, opts, "\n"));
             case Msg.Submit submit -> new Result(state, new Output.Submit(state.text()));
-            case Msg.Copy copy ->
-                    new Result(state, new Output.Copy(opts.canCopy() ? copyText(state) : ""));
+            case Msg.Copy copy -> new Result(state, new Output.Copy(opts.canCopy() ? copyText(state) : ""));
             case Msg.PasteRequest request -> new Result(state, new Output.PasteRequest());
         };
     }
@@ -609,8 +602,7 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
     }
 
     private static String sanitize(String text, Config options) {
-        return PasteSanitizer.sanitize(
-                text, options.pasteMode(), options.collapsePasteBlankLines());
+        return PasteSanitizer.sanitize(text, options.pasteMode(), options.collapsePasteBlankLines());
     }
 
     /**
@@ -703,10 +695,9 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
     }
 
     private static Model moveHorizontal(Model state, int direction) {
-        int caret =
-                direction < 0
-                        ? TextMeasure.previousBoundary(state.text(), state.caret())
-                        : TextMeasure.boundaryAfter(state.text(), state.caret());
+        int caret = direction < 0
+                ? TextMeasure.previousBoundary(state.text(), state.caret())
+                : TextMeasure.boundaryAfter(state.text(), state.caret());
         return new Model(state.text(), caret, caret, 0);
     }
 
@@ -727,29 +718,17 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
         boolean masking = options.masking() != Config.Masking.NONE;
         // A vertical move keeps the column the caret was at on the line it came from, even when a
         // shorter line in between clamps it; horizontal moves and edits reset the preference.
-        int column =
-                state.preferredColumn() > 0
-                        ? state.preferredColumn()
-                        : visualColumn(
-                                state.text(),
-                                lineStart,
-                                state.caret(),
-                                prefixOf(state, options, prompt, line),
-                                masking);
+        int column = state.preferredColumn() > 0
+                ? state.preferredColumn()
+                : visualColumn(state.text(), lineStart, state.caret(), prefixOf(state, options, prompt, line), masking);
         int targetLine = Math.max(0, Math.min(state.lineCount() - 1, line + direction));
         int targetStart = state.lineStart(targetLine);
         int targetEnd = state.lineEnd(targetLine);
         // The row the block lands on carries its own prefix: only the first line of the window
         // paints the prompt, and the rest the blank stand-in. The cell a draft cluster joins can
         // therefore differ between the row the caret left and the row it arrives on.
-        int caret =
-                indexAtColumn(
-                        state.text(),
-                        targetStart,
-                        targetEnd,
-                        column,
-                        prefixOf(state, options, prompt, targetLine),
-                        masking);
+        int caret = indexAtColumn(
+                state.text(), targetStart, targetEnd, column, prefixOf(state, options, prompt, targetLine), masking);
         return new Model(state.text(), caret, caret, column);
     }
 
@@ -773,8 +752,7 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
      * real width, and a masked line counts one cell per cluster because the mask glyph is all that
      * row draws.
      */
-    private static int visualColumn(
-            String text, int lineStart, int index, PaintedPrefix prefix, boolean masking) {
+    private static int visualColumn(String text, int lineStart, int index, PaintedPrefix prefix, boolean masking) {
         int end = Math.max(lineStart, Math.min(index, text.length()));
         int used = prefix.columns();
         PaintedPrefix joinable = prefix;
@@ -790,12 +768,7 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
      * The row is counted from {@code prefix} for the same reason {@link #visualColumn} is.
      */
     private static int indexAtColumn(
-            String text,
-            int lineStart,
-            int lineEnd,
-            int column,
-            PaintedPrefix prefix,
-            boolean masking) {
+            String text, int lineStart, int lineEnd, int column, PaintedPrefix prefix, boolean masking) {
         int position = lineStart;
         int used = prefix.columns();
         PaintedPrefix joinable = prefix;
@@ -820,16 +793,14 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
      * its prefix ends with whenever it has no base character of its own, and the clusters behind a
      * tab, which join the space that stop ends with ({@link #cellBehind}).
      */
-    private static int paintedCells(
-            String cluster, int used, boolean masking, PaintedPrefix prefix) {
+    private static int paintedCells(String cluster, int used, boolean masking, PaintedPrefix prefix) {
         if (masking) {
             return 1;
         }
         String cell = prefix.cell();
         if (cell != null
                 && TextMeasure.graphemeCount(cell + cluster) == 1
-                && (!prefix.tabStop()
-                        || TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED) == 0)) {
+                && (!prefix.tabStop() || TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED) == 0)) {
             // The cluster continues the cell the row already painted, so it costs the columns that
             // cell gains or loses - the join LayoutEngine makes when a span boundary splits one
             // cluster of the row's plain text. A bare combining mark adds no column this way, and a
@@ -883,9 +854,7 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
 
     /** The prefix of {@code line} in the window the editor paints while the caret is on that line. */
     private static PaintedPrefix prefixOf(Model state, Config options, String prompt, int line) {
-        return line == firstVisibleLine(state, options, line)
-                ? promptPrefix(options, prompt)
-                : indentPrefix(prompt);
+        return line == firstVisibleLine(state, options, line) ? promptPrefix(options, prompt) : indentPrefix(prompt);
     }
 
     /** The prefix the first visible line paints: the prompt as the text view draws it. */
@@ -934,15 +903,10 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
      * application maps each produced {@link Msg} into its own message type.
      */
     private static <Message> View<Message> paint(
-            ElementId id,
-            Model state,
-            Config options,
-            boolean focused,
-            Function<Msg, Message> map) {
+            ElementId id, Model state, Config options, boolean focused, Function<Msg, Message> map) {
         Config opts = options == null ? Config.defaults() : options;
         View.InputHandler<Message> handler = event -> actionFor(event, opts).map(map);
-        return Views.focus(
-                id, focused, List.of(), handler, Views.text(render(state, opts, focused)));
+        return Views.focus(id, focused, List.of(), handler, Views.text(render(state, opts, focused)));
     }
 
     /**
@@ -973,16 +937,8 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
             }
             int newline = state.text().indexOf('\n', start);
             int end = newline < 0 ? state.text().length() : newline;
-            result =
-                    result.append(
-                            renderLine(
-                                    state,
-                                    opts,
-                                    focused,
-                                    start,
-                                    end,
-                                    line == first,
-                                    line == first ? promptPrefix : indentPrefix));
+            result = result.append(renderLine(
+                    state, opts, focused, start, end, line == first, line == first ? promptPrefix : indentPrefix));
             start = end + 1;
         }
         return result;
@@ -998,13 +954,7 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
     }
 
     private static StyledText renderLine(
-            Model state,
-            Config opts,
-            boolean focused,
-            int start,
-            int end,
-            boolean firstLine,
-            PaintedPrefix prefix) {
+            Model state, Config opts, boolean focused, int start, int end, boolean firstLine, PaintedPrefix prefix) {
         StyledText out = StyledText.empty();
         if (!opts.prompt().isEmpty()) {
             if (firstLine) {
@@ -1037,10 +987,8 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
         // boundary.
         for (String cluster : TextMeasure.graphemes(text)) {
             int next = position + cluster.length();
-            boolean selected =
-                    selectionStart >= 0 && position >= selectionStart && position < selectionEnd;
-            String display =
-                    opts.masking() == Config.Masking.HIDDEN ? "" : masking ? MASK : cluster;
+            boolean selected = selectionStart >= 0 && position >= selectionStart && position < selectionEnd;
+            String display = opts.masking() == Config.Masking.HIDDEN ? "" : masking ? MASK : cluster;
             boolean cursor = focused && state.caret() == position;
             // The cells this cluster occupies where it is painted: one mask glyph, or the gap a tab
             // advances to its stop. The caret's column arithmetic uses the same rule, so a vertical
@@ -1093,11 +1041,10 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
         }
         Key key = keyInput.key();
         String name = key.name().toLowerCase(Locale.ROOT);
-        boolean plainModifiers =
-                key.modifiers().none()
-                        || (key.modifiers().shift()
-                                && !key.modifiers().ctrl()
-                                && !key.modifiers().alt());
+        boolean plainModifiers = key.modifiers().none()
+                || (key.modifiers().shift()
+                        && !key.modifiers().ctrl()
+                        && !key.modifiers().alt());
 
         // The configured copy and paste keys are matched before printable text. Otherwise a
         // binding such as shift+c, which also carries text, could never fire: the gesture would

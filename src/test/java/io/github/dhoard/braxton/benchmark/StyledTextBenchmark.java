@@ -22,8 +22,10 @@
 
 package io.github.dhoard.braxton.benchmark;
 
+import io.github.dhoard.braxton.style.Colors;
+import io.github.dhoard.braxton.style.Style;
+import io.github.dhoard.braxton.style.StyledText;
 import java.util.concurrent.TimeUnit;
-
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -36,10 +38,6 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
-
-import io.github.dhoard.braxton.style.Colors;
-import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.style.StyledText;
 
 /**
  * Styled-run assembly: the immutable {@code append}/{@code concat} path every widget uses to build a

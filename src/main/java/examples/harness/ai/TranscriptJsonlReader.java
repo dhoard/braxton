@@ -26,7 +26,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-
+import io.github.dhoard.braxton.style.TextMeasure;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -39,8 +39,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-
-import io.github.dhoard.braxton.style.TextMeasure;
 
 /**
  * Reads the newline-delimited transcript format used by the bundled example and by recorded agent
@@ -85,10 +83,10 @@ final class TranscriptJsonlReader {
                         warnings.add("Line " + lineNumber + ": record is not an object");
                         continue;
                     }
-                    readRecord(parsed.getAsJsonObject(), state, inputTexts, turns, pendingTools,
-                            warnings);
+                    readRecord(parsed.getAsJsonObject(), state, inputTexts, turns, pendingTools, warnings);
                 } catch (RuntimeException failure) {
-                    warnings.add("Line " + lineNumber + ": " + failure.getClass().getSimpleName());
+                    warnings.add(
+                            "Line " + lineNumber + ": " + failure.getClass().getSimpleName());
                 }
             }
         }
@@ -98,23 +96,23 @@ final class TranscriptJsonlReader {
             if (turn.userText.isBlank() && turn.responses.isEmpty()) {
                 continue;
             }
-            built.add(new HarnessTranscript.HarnessTurn(turn.userText, turn.responses,
-                    turn.usage, turn.profile));
+            built.add(new HarnessTranscript.HarnessTurn(turn.userText, turn.responses, turn.usage, turn.profile));
         }
-        HarnessTranscript.Profile profile = state.profile == null
-                ? HarnessTranscript.Profile.DEFAULT : state.profile;
-        HarnessTranscript.Usage usage = state.usage == null
-                ? HarnessTranscript.Usage.EMPTY : state.usage;
-        return new HarnessTranscript(built, profile, usage,
-                HarnessTranscript.Profile.DEFAULT_CONTEXT_WINDOW, warnings);
+        HarnessTranscript.Profile profile = state.profile == null ? HarnessTranscript.Profile.DEFAULT : state.profile;
+        HarnessTranscript.Usage usage = state.usage == null ? HarnessTranscript.Usage.EMPTY : state.usage;
+        return new HarnessTranscript(built, profile, usage, HarnessTranscript.Profile.DEFAULT_CONTEXT_WINDOW, warnings);
     }
 
     HarnessTranscript read(InputStream source) throws IOException {
         return read(new InputStreamReader(source, StandardCharsets.UTF_8));
     }
 
-    private static void readRecord(JsonObject record, State state, Map<String, String> inputTexts,
-            Map<String, TurnBuilder> turns, Map<String, PendingTool> pendingTools,
+    private static void readRecord(
+            JsonObject record,
+            State state,
+            Map<String, String> inputTexts,
+            Map<String, TurnBuilder> turns,
+            Map<String, PendingTool> pendingTools,
             List<String> warnings) {
         // Only event records are read. A record of another kind (a newer log's header, for
         // instance) is forward-compatible noise, not a malformed event, so it is ignored before
@@ -186,7 +184,10 @@ final class TranscriptJsonlReader {
                 String result = HarnessRender.sanitize(string(payload, "text"));
                 boolean error = booleanValue(payload, "error", false);
                 boolean truncated = booleanValue(payload, "truncated", false);
-                turn.responses.add(new HarnessEntry.Tool(call, result, truncated,
+                turn.responses.add(new HarnessEntry.Tool(
+                        call,
+                        result,
+                        truncated,
                         error ? HarnessEntry.ToolStatus.ERROR : HarnessEntry.ToolStatus.SUCCESS));
                 updateProfile(turn, payload, state);
             }
@@ -200,8 +201,7 @@ final class TranscriptJsonlReader {
                 updateProfile(turn, payload, state);
                 updateUsage(turn, payload, state);
                 String text = HarnessRender.sanitize(string(payload, "text"));
-                turn.responses.add(new HarnessEntry.Failure(
-                        text.isBlank() ? "The example turn failed." : text));
+                turn.responses.add(new HarnessEntry.Failure(text.isBlank() ? "The example turn failed." : text));
             }
             case "metrics" -> {
                 TurnBuilder turn = turnFor(turns, turnId(payload, state));
@@ -214,8 +214,8 @@ final class TranscriptJsonlReader {
         }
     }
 
-    private static void readTool(JsonObject tool, TurnBuilder turn,
-            Map<String, PendingTool> pendingTools, State state) {
+    private static void readTool(
+            JsonObject tool, TurnBuilder turn, Map<String, PendingTool> pendingTools, State state) {
         String name = string(tool, "name");
         String arguments = string(tool, "arguments");
         String callId = string(tool, "toolCallId");
@@ -234,11 +234,14 @@ final class TranscriptJsonlReader {
             }
             // Nothing will complete this call, so keep it visibly pending instead of claiming
             // a successful result that was never recorded.
-            turn.responses.add(new HarnessEntry.Tool(formatCall(name, arguments), result,
-                    truncated, HarnessEntry.ToolStatus.PENDING));
+            turn.responses.add(new HarnessEntry.Tool(
+                    formatCall(name, arguments), result, truncated, HarnessEntry.ToolStatus.PENDING));
             return;
         }
-        turn.responses.add(new HarnessEntry.Tool(formatCall(name, arguments), result, truncated,
+        turn.responses.add(new HarnessEntry.Tool(
+                formatCall(name, arguments),
+                result,
+                truncated,
                 error ? HarnessEntry.ToolStatus.ERROR : HarnessEntry.ToolStatus.SUCCESS));
     }
 
@@ -258,8 +261,7 @@ final class TranscriptJsonlReader {
             return;
         }
         HarnessTranscript.Profile parsed = new HarnessTranscript.Profile(
-                string(profile, "provider"), string(profile, "model"),
-                string(profile, "reasoning"));
+                string(profile, "provider"), string(profile, "model"), string(profile, "reasoning"));
         turn.profile = parsed;
         state.profile = parsed;
     }
@@ -274,28 +276,25 @@ final class TranscriptJsonlReader {
     }
 
     private static void updateMetrics(TurnBuilder turn, JsonObject payload, State state) {
-        HarnessTranscript.Usage base = turn.usage == null
-                ? HarnessTranscript.Usage.EMPTY : turn.usage;
+        HarnessTranscript.Usage base = turn.usage == null ? HarnessTranscript.Usage.EMPTY : turn.usage;
         HarnessTranscript.Usage merged = mergeUsage(base, payload, true);
         turn.usage = merged;
         state.usage = mergeUsage(state.usage, payload, true);
     }
 
-    private static HarnessTranscript.Usage mergeUsage(HarnessTranscript.Usage base,
-            JsonObject values) {
+    private static HarnessTranscript.Usage mergeUsage(HarnessTranscript.Usage base, JsonObject values) {
         return mergeUsage(base, values, false);
     }
 
-    private static HarnessTranscript.Usage mergeUsage(HarnessTranscript.Usage base,
-            JsonObject values, boolean metrics) {
+    private static HarnessTranscript.Usage mergeUsage(
+            HarnessTranscript.Usage base, JsonObject values, boolean metrics) {
         HarnessTranscript.Usage safe = base == null ? HarnessTranscript.Usage.EMPTY : base;
         long input = longValue(values, "inputTokens", safe.inputTokens());
         long output = longValue(values, "outputTokens", safe.outputTokens());
         long cached = longValue(values, "cachedInputTokens", safe.cachedInputTokens());
         long uncached = longValue(values, "uncachedInputTokens", safe.uncachedInputTokens());
         long context = metrics
-                ? longValue(values, "currentContextTokens",
-                        Math.max(safe.contextTokens(), input + output))
+                ? longValue(values, "currentContextTokens", Math.max(safe.contextTokens(), input + output))
                 : Math.max(safe.contextTokens(), input + output);
         Double rate = doubleValue(values, "generationTokensPerSecond", safe.generationRate());
         return new HarnessTranscript.Usage(input, output, cached, uncached, context, rate);
@@ -315,12 +314,9 @@ final class TranscriptJsonlReader {
             case "write" -> "write" + suffix(path);
             case "edit" -> "edit" + suffix(path);
             case "bash" -> defaultString(string(args, "command"), "...");
-            case "grep" -> "grep /" + defaultString(string(args, "pattern"), "")
-                    + "/ in " + defaultString(path, ".");
-            case "find" -> "find " + defaultString(string(args, "pattern"), "")
-                    + " in " + defaultString(path, ".");
-            default -> tool + (arguments == null || arguments.isBlank()
-                    ? "" : " " + compact(arguments));
+            case "grep" -> "grep /" + defaultString(string(args, "pattern"), "") + "/ in " + defaultString(path, ".");
+            case "find" -> "find " + defaultString(string(args, "pattern"), "") + " in " + defaultString(path, ".");
+            default -> tool + (arguments == null || arguments.isBlank() ? "" : " " + compact(arguments));
         };
         return HarnessRender.sanitize("$ " + call).replace("\n", " ");
     }
@@ -379,13 +375,17 @@ final class TranscriptJsonlReader {
 
     private static boolean booleanValue(JsonObject parent, String key, boolean fallback) {
         JsonElement element = parent == null ? null : parent.get(key);
-        return element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isBoolean()
-                ? element.getAsBoolean() : fallback;
+        return element != null
+                        && element.isJsonPrimitive()
+                        && element.getAsJsonPrimitive().isBoolean()
+                ? element.getAsBoolean()
+                : fallback;
     }
 
     private static long longValue(JsonObject parent, String key, long fallback) {
         JsonElement element = parent == null ? null : parent.get(key);
-        if (element == null || !element.isJsonPrimitive()
+        if (element == null
+                || !element.isJsonPrimitive()
                 || !element.getAsJsonPrimitive().isNumber()) {
             return fallback;
         }
@@ -394,7 +394,8 @@ final class TranscriptJsonlReader {
 
     private static Double doubleValue(JsonObject parent, String key, Double fallback) {
         JsonElement element = parent == null ? null : parent.get(key);
-        if (element == null || !element.isJsonPrimitive()
+        if (element == null
+                || !element.isJsonPrimitive()
                 || !element.getAsJsonPrimitive().isNumber()) {
             return fallback;
         }
@@ -415,6 +416,5 @@ final class TranscriptJsonlReader {
         final List<HarnessEntry> responses = new ArrayList<>();
     }
 
-    private record PendingTool(String name, String arguments) {
-    }
+    private record PendingTool(String name, String arguments) {}
 }

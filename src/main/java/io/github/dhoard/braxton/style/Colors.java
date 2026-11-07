@@ -74,8 +74,7 @@ public final class Colors {
     public static final Color CYAN_400 = rgb("#0ba5ec");
     public static final Color TEAL_400 = rgb("#15b79e");
 
-    private Colors() {
-    }
+    private Colors() {}
 
     private static Color rgb(String hex) {
         return Color.parse(hex).orElseThrow(() -> new IllegalArgumentException("bad palette " + hex));

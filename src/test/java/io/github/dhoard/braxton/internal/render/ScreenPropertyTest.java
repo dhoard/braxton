@@ -24,11 +24,9 @@ package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.Random;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.style.Style;
+import java.util.Random;
+import org.junit.jupiter.api.Test;
 
 /** Randomized painting keeps the wide-glyph bookkeeping consistent. */
 class ScreenPropertyTest {
@@ -36,8 +34,7 @@ class ScreenPropertyTest {
     @Test
     void everyContinuationCellFollowsItsWideGlyph() {
         // Glyph and the width a caller must pass for it: a wide cluster is two columns.
-        String[][] glyphs = {{"a", "1"}, {"\u65E5", "2"}, {"\uD83D\uDE00", "2"}, {" ", "1"},
-                {"\u0301", "1"}};
+        String[][] glyphs = {{"a", "1"}, {"\u65E5", "2"}, {"\uD83D\uDE00", "2"}, {" ", "1"}, {"\u0301", "1"}};
         Random random = new Random(11L);
         for (int iteration = 0; iteration < 500; iteration++) {
             int cols = 1 + random.nextInt(8);
@@ -48,22 +45,29 @@ class ScreenPropertyTest {
                 if (random.nextInt(4) == 0) {
                     screen.clear(row, col);
                 } else {
-                    screen.fill(new io.github.dhoard.braxton.layout.Rect(row, col,
-                            random.nextInt(2), 1 + random.nextInt(2)), Style.NONE.withBold());
+                    screen.fill(
+                            new io.github.dhoard.braxton.layout.Rect(
+                                    row, col, random.nextInt(2), 1 + random.nextInt(2)),
+                            Style.NONE.withBold());
                 }
                 String[] glyph = glyphs[random.nextInt(glyphs.length)];
                 screen.put(row, col, glyph[0], Style.NONE, null, Integer.parseInt(glyph[1]));
                 for (int c = 0; c < cols; c++) {
                     if (screen.isContinuation(row, c)) {
-                        assertThat(c).as("a continuation needs a cell before it").isPositive();
-                        assertThat(screen.isContinuation(row, c - 1)).as("no two continuations in a row")
+                        assertThat(c)
+                                .as("a continuation needs a cell before it")
+                                .isPositive();
+                        assertThat(screen.isContinuation(row, c - 1))
+                                .as("no two continuations in a row")
                                 .isFalse();
-                        assertThat(screen.cell(row, c - 1).text()).as("the glyph precedes its continuation")
+                        assertThat(screen.cell(row, c - 1).text())
+                                .as("the glyph precedes its continuation")
                                 .isNotEmpty();
                     }
                 }
                 assertThat(io.github.dhoard.braxton.style.TextMeasure.columns(screen.plainLine(row)))
-                        .as("a painted row never exceeds the grid").isLessThanOrEqualTo(cols);
+                        .as("a painted row never exceeds the grid")
+                        .isLessThanOrEqualTo(cols);
             }
         }
     }

@@ -31,7 +31,6 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.view.ScreenRenderer;
 import io.github.dhoard.braxton.view.View;
-
 import java.util.Objects;
 
 /** Deterministic single-component test driver. Commands (including dispatch and quit) remain inert
@@ -51,16 +50,12 @@ public final class ComponentDriver<M, Msg, Out> {
         Objects.requireNonNull(component, "component");
         return new ComponentDriver<>(
                 component,
-                Objects.requireNonNull(
-                        component.init(Objects.requireNonNull(context, "context")), "update"));
+                Objects.requireNonNull(component.init(Objects.requireNonNull(context, "context")), "update"));
     }
 
     public Update<M, Msg, Out> send(Msg message) {
-        latest =
-                Objects.requireNonNull(
-                        component.update(
-                                latest.model(), Objects.requireNonNull(message, "message")),
-                        "update");
+        latest = Objects.requireNonNull(
+                component.update(latest.model(), Objects.requireNonNull(message, "message")), "update");
         return latest;
     }
 

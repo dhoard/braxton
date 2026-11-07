@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.internal.input;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.util.concurrent.TimeUnit;
-
 import org.jline.utils.NonBlockingReader;
 
 /** Parser cursor: scalar assembly and lookahead across JLine's timed UTF-16 reads. */
@@ -41,10 +40,7 @@ final class ScalarInput {
         this(reader, intervalMillis, () -> false);
     }
 
-    ScalarInput(
-            NonBlockingReader reader,
-            long intervalMillis,
-            java.util.function.BooleanSupplier cancelled) {
+    ScalarInput(NonBlockingReader reader, long intervalMillis, java.util.function.BooleanSupplier cancelled) {
         this.cancelled = cancelled;
         this.reader = java.util.Objects.requireNonNull(reader);
         this.intervalMillis = Math.max(1, Math.min(100, intervalMillis));
@@ -56,8 +52,7 @@ final class ScalarInput {
 
     int read() throws IOException {
         while (true) {
-            int value =
-                    readUntil(System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(intervalMillis));
+            int value = readUntil(System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(intervalMillis));
             if (value != NonBlockingReader.READ_EXPIRED) return value;
         }
     }
@@ -73,8 +68,7 @@ final class ScalarInput {
                 throw new InterruptedIOException("input interrupted");
             long remaining = deadline - System.nanoTime();
             if (remaining <= 0) return NonBlockingReader.READ_EXPIRED;
-            long millis = Math.max(
-                    1, Math.min(intervalMillis, TimeUnit.NANOSECONDS.toMillis(remaining) + 1));
+            long millis = Math.max(1, Math.min(intervalMillis, TimeUnit.NANOSECONDS.toMillis(remaining) + 1));
             int value;
             if (rawPending >= 0) {
                 value = rawPending;

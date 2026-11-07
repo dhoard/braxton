@@ -22,9 +22,6 @@
 
 package io.github.dhoard.braxton.widget;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
@@ -33,6 +30,8 @@ import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A framed block with an optional title in the top edge.
@@ -155,13 +154,14 @@ public final class Box {
                     // The clip above charges this same joined sequence, so the pad cannot go
                     // negative; the guard only keeps a row that somehow overran from asking for a
                     // negative count of spaces.
-                    .append(StyledText.of(" ".repeat(Math.max(0, limit - 1 - painted))
-                            + vertical, style));
+                    .append(StyledText.of(" ".repeat(Math.max(0, limit - 1 - painted)) + vertical, style));
         }
-        out = out.append("\n").append(StyledText.of(
-                Border.glyph(border.bottomLeft())
-                        + Border.glyph(border.horizontal()).repeat(limit - 2)
-                        + Border.glyph(border.bottomRight()), style));
+        out = out.append("\n")
+                .append(StyledText.of(
+                        Border.glyph(border.bottomLeft())
+                                + Border.glyph(border.horizontal()).repeat(limit - 2)
+                                + Border.glyph(border.bottomRight()),
+                        style));
         return out;
     }
 
@@ -271,8 +271,7 @@ public final class Box {
                 break;
             }
             int taken = Math.min(remaining, span.text().length());
-            result = result.append(StyledText.of(
-                    span.text().substring(0, taken), span.style(), span.link()));
+            result = result.append(StyledText.of(span.text().substring(0, taken), span.style(), span.link()));
             remaining -= taken;
         }
         return result;

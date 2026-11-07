@@ -30,10 +30,8 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.testing.ComponentDriver;
 import io.github.dhoard.braxton.widget.ScrollView.Msg;
-
 import java.util.ArrayList;
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /**
@@ -56,12 +54,9 @@ class ScrollViewStateTest {
         return rows("L", count);
     }
 
-    private static ComponentDriver<ScrollView.Model, Msg, Never> pane(int visibleRows,
-            boolean follow, int count) {
-        var driver =
-                ComponentDriver.initialize(
-                        new ScrollView(new ScrollView.Config(visibleRows, follow)),
-                        new InitContext(null, null));
+    private static ComponentDriver<ScrollView.Model, Msg, Never> pane(int visibleRows, boolean follow, int count) {
+        var driver = ComponentDriver.initialize(
+                new ScrollView(new ScrollView.Config(visibleRows, follow)), new InitContext(null, null));
         driver.send(new Msg.ContentChanged(rows(count)));
         return driver;
     }
@@ -86,8 +81,8 @@ class ScrollViewStateTest {
         assertThat(driver.model().topLine()).isZero();
         assertThat(driver.model().lineCount()).isZero();
         assertThat(ScrollView.visibleLines(driver.model())).isEmpty();
-        for (Msg message : List.of(new Msg.Up(1), new Msg.Down(3), new Msg.PageUp(),
-                new Msg.PageDown(), new Msg.Home(), new Msg.End())) {
+        for (Msg message : List.of(
+                new Msg.Up(1), new Msg.Down(3), new Msg.PageUp(), new Msg.PageDown(), new Msg.Home(), new Msg.End())) {
             ScrollView.Model before = driver.model();
             assertThat(driver.send(message).model())
                     .as("an empty pane has no state left to change: %s", message)
@@ -101,8 +96,13 @@ class ScrollViewStateTest {
             var driver = pane(5, false, count);
             assertThat(driver.model().topLine()).isZero();
             assertThat(window(driver.model())).hasSize(count);
-            for (Msg message : List.of(new Msg.Down(1), new Msg.Down(100), new Msg.PageDown(),
-                    new Msg.End(), new Msg.Up(1), new Msg.Home())) {
+            for (Msg message : List.of(
+                    new Msg.Down(1),
+                    new Msg.Down(100),
+                    new Msg.PageDown(),
+                    new Msg.End(),
+                    new Msg.Up(1),
+                    new Msg.Home())) {
                 ScrollView.Model before = driver.model();
                 assertThat(driver.send(message).model())
                         .as("%d rows in a five-row window, %s", count, message)
@@ -281,7 +281,8 @@ class ScrollViewStateTest {
 
         assertThat(driver.send(new Msg.ContentChanged(content)).model()).isSameAs(before);
         assertThat(driver.send(new Msg.ViewportChanged(3)).model()).isSameAs(before);
-        assertThat(driver.send(new Msg.ContentChanged(null)).model().lineCount()).isZero();
+        assertThat(driver.send(new Msg.ContentChanged(null)).model().lineCount())
+                .isZero();
     }
 
     @Test
@@ -339,9 +340,9 @@ class ScrollViewStateTest {
         assertThat(new ScrollView.Model(-5, false, true, 3, content).topLine()).isZero();
         assertThat(new ScrollView.Model(999, false, true, 3, content).topLine()).isEqualTo(7);
         assertThat(new ScrollView.Model(5, true, true, 3, content).topLine()).isEqualTo(7);
-        assertThat(new ScrollView.Model(0, false, true, -3, content).visibleRows()).isZero();
-        assertThat(new ScrollView.Model(0, false, true, 3, null).content()).isEqualTo(
-                ScrollView.Content.empty());
+        assertThat(new ScrollView.Model(0, false, true, -3, content).visibleRows())
+                .isZero();
+        assertThat(new ScrollView.Model(0, false, true, 3, null).content()).isEqualTo(ScrollView.Content.empty());
     }
 
     @Test
@@ -359,10 +360,8 @@ class ScrollViewStateTest {
                 return StyledText.plain("r" + index);
             }
         };
-        var driver =
-                ComponentDriver.initialize(
-                        new ScrollView(new ScrollView.Config(10, false)),
-                        new InitContext(null, null));
+        var driver = ComponentDriver.initialize(
+                new ScrollView(new ScrollView.Config(10, false)), new InitContext(null, null));
         driver.send(new Msg.ContentChanged(huge));
 
         assertThat(driver.send(new Msg.Down(Integer.MAX_VALUE)).model().topLine())
@@ -381,6 +380,7 @@ class ScrollViewStateTest {
         assertThatThrownBy(() -> ScrollView.Config.defaults().withVisibleRows(-2))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("visibleRows");
-        assertThat(ScrollView.Config.defaults().withVisibleRows(0).visibleRows()).isZero();
+        assertThat(ScrollView.Config.defaults().withVisibleRows(0).visibleRows())
+                .isZero();
     }
 }

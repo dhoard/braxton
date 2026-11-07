@@ -51,8 +51,7 @@ public final class Application {
      *
      * @return how the run ended; never null
      */
-    public static <M, Msg> ExitResult run(
-            Component<M, Msg, Never> program, RuntimeOptions options) {
+    public static <M, Msg> ExitResult run(Component<M, Msg, Never> program, RuntimeOptions options) {
         if (program == null) throw new IllegalArgumentException("program is required");
         return new RuntimeLoop<>(program, options).run();
     }

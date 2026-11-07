@@ -22,14 +22,19 @@
 
 package io.github.dhoard.braxton.widget;
 
+import io.github.dhoard.braxton.style.Color;
+import io.github.dhoard.braxton.style.LineBreaks;
+import io.github.dhoard.braxton.style.Style;
+import io.github.dhoard.braxton.style.StyledText;
+import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.view.Views;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -38,14 +43,6 @@ import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
-
-import io.github.dhoard.braxton.style.Color;
-import io.github.dhoard.braxton.style.LineBreaks;
-import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
 
 /**
  * Renders XML-style rich text into {@link StyledText}.
@@ -100,8 +97,7 @@ public final class Markup {
     };
     private static final int DEFAULT_GAP = 2;
 
-    private Markup() {
-    }
+    private Markup() {}
 
     /** Parses and renders markup; throws {@link IllegalArgumentException} for invalid input. */
     public static StyledText parse(String xml) {
@@ -221,8 +217,7 @@ public final class Markup {
                 }
             }
             if (reset) {
-                style = new Style(style.foreground(), style.background(), false, false, false,
-                        false, false, false);
+                style = new Style(style.foreground(), style.background(), false, false, false, false, false, false);
             }
         }
         return style;
@@ -230,21 +225,21 @@ public final class Markup {
 
     private static StyledText renderList(Element list, Style style, String link) {
         String bullet = list.hasAttribute("icon") && !list.getAttribute("icon").isBlank()
-                ? list.getAttribute("icon") : DEFAULT_BULLET;
+                ? list.getAttribute("icon")
+                : DEFAULT_BULLET;
         int gap = parseInt(list.getAttribute("gap"), DEFAULT_GAP);
         // The bullet prefixes one line, so it is normalized the way every other one-line
         // decoration is: a line break becomes a space and a tab advances to the same four-column
         // stops the text view paints. Measuring the raw icon instead (a tab and a break are one
         // column to TextMeasure.columns) hung continuation lines under a column the painted
         // prefix never reaches, or split the item across rows.
-        StyledText prefix = TabStops.expand(StyledText.of(
-                " ".repeat(Math.max(0, gap)) + singleLine(bullet) + " ", style, link));
+        StyledText prefix =
+                TabStops.expand(StyledText.of(" ".repeat(Math.max(0, gap)) + singleLine(bullet) + " ", style, link));
         String prefixText = prefix.plainText();
         StyledText out = StyledText.empty();
         NodeList children = list.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
-            if (!(children.item(i) instanceof Element item)
-                    || !"li".equalsIgnoreCase(item.getTagName())) {
+            if (!(children.item(i) instanceof Element item) || !"li".equalsIgnoreCase(item.getTagName())) {
                 continue;
             }
             // An item is an attribute-bearing element wherever it sits, which is what the renderNode
@@ -252,8 +247,7 @@ public final class Markup {
             // discarded the item's own color, bg-color and style list; the bullet and the
             // continuation indent stay the list's decoration and keep the list's attributes.
             StyledText content = renderNode(item, style, link);
-            StyledText rendered = prefix
-                    .append(indentAfterFirstLine(content, prefixText, style, link));
+            StyledText rendered = prefix.append(indentAfterFirstLine(content, prefixText, style, link));
             out = out.append(rendered);
             if (!rendered.plainText().endsWith("\n")) {
                 out = out.append(StyledText.of("\n", style, link));
@@ -275,10 +269,10 @@ public final class Markup {
      * there, so the column a line's text starts at is measured with the prefix and that line joined
      * rather than from the prefix measured on its own.
      */
-    private static StyledText indentAfterFirstLine(StyledText content, String prefix, Style style,
-            String link) {
+    private static StyledText indentAfterFirstLine(StyledText content, String prefix, Style style, String link) {
         List<StyledText> lines = content.lines();
-        int columns = paintedPrefixColumns(prefix, lines.isEmpty() ? "" : lines.get(0).plainText());
+        int columns =
+                paintedPrefixColumns(prefix, lines.isEmpty() ? "" : lines.get(0).plainText());
         StyledText out = StyledText.empty();
         for (int i = 0; i < lines.size(); i++) {
             if (i > 0) {
@@ -334,8 +328,7 @@ public final class Markup {
         List<List<StyledText>> rows = new ArrayList<>();
         NodeList children = table.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
-            if (children.item(i) instanceof Element row
-                    && "tr".equalsIgnoreCase(row.getTagName())) {
+            if (children.item(i) instanceof Element row && "tr".equalsIgnoreCase(row.getTagName())) {
                 // The grid needs each cell as a separate value, so the row is walked here instead of
                 // going through renderNode; that means its own attributes have to be read at this
                 // level so they inherit into its cells the way renderNode's "tr" arm inherits them.
@@ -343,8 +336,7 @@ public final class Markup {
                 List<StyledText> cells = new ArrayList<>();
                 NodeList rowChildren = row.getChildNodes();
                 for (int j = 0; j < rowChildren.getLength(); j++) {
-                    if (rowChildren.item(j) instanceof Element cell
-                            && "td".equalsIgnoreCase(cell.getTagName())) {
+                    if (rowChildren.item(j) instanceof Element cell && "td".equalsIgnoreCase(cell.getTagName())) {
                         // The same for the cell: renderNode applies its attributes and its children
                         // inherit them. The pad added below is the grid's decoration.
                         cells.add(renderNode(cell, rowStyle, link));
@@ -373,8 +365,7 @@ public final class Markup {
             List<List<StyledText>> cellLines = new ArrayList<>(columns);
             int height = 1;
             for (int column = 0; column < columns; column++) {
-                StyledText cell = column < row.size()
-                        ? TabStops.expand(row.get(column)) : StyledText.empty();
+                StyledText cell = column < row.size() ? TabStops.expand(row.get(column)) : StyledText.empty();
                 List<StyledText> lines = cell.lines();
                 cellLines.add(lines);
                 height = Math.max(height, lines.size());
@@ -394,8 +385,7 @@ public final class Markup {
                     // part of the pad: the pad plus the gap is the number the previous
                     // Math.max(gap, pad + gap) produced, and the next cell meets that last space.
                     int pad = paintedRow.pad(value.plainText(), widths[column], gap);
-                    rendered = rendered.append(value)
-                            .append(StyledText.of(" ".repeat(pad), style));
+                    rendered = rendered.append(value).append(StyledText.of(" ".repeat(pad), style));
                 }
                 renderedRows.add(rendered);
             }

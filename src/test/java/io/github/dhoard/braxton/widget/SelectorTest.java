@@ -33,11 +33,9 @@ import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.ScreenRenderer;
 import io.github.dhoard.braxton.view.View;
-
-import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.Test;
 
 /** The single-choice list marks its selection, styles it, and maps its keys. */
 class SelectorTest {
@@ -53,8 +51,7 @@ class SelectorTest {
         return new Selector(new Selector.Config(java.util.List.of(), ACTIVE, INACTIVE))
                 .view(
                         (state).withFocus(focused),
-                        new io.github.dhoard.braxton.mvu.ViewContext(
-                                io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                        new io.github.dhoard.braxton.mvu.ViewContext(io.github.dhoard.braxton.layout.Viewport.EMPTY))
                 .map(action -> action.getClass().getSimpleName());
     }
 
@@ -78,12 +75,11 @@ class SelectorTest {
         assertThat(rendered).containsExactly("\u276F alpha", "  beta");
         // The marker is two cells wide whether or not it is drawn, so every row starts on the
         // same column as the option text.
-        assertThat(rendered).allSatisfy(line ->
-                assertThat(TextMeasure.columns(line)).isEqualTo(2 + TextMeasure.columns(
-                        line.stripLeading().isEmpty() ? " " : line.substring(2))));
+        assertThat(rendered)
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                        .isEqualTo(2 + TextMeasure.columns(line.stripLeading().isEmpty() ? " " : line.substring(2))));
 
-        var screen = new ScreenRenderer().screen(view(state("alpha", "beta"), true),
-                new Viewport(6, 40));
+        var screen = new ScreenRenderer().screen(view(state("alpha", "beta"), true), new Viewport(6, 40));
         assertThat(activeFlags(screen, 0, 0)).as("selected row").isEqualTo("invert");
         assertThat(activeFlags(screen, 1, 0)).as("other row").isEqualTo("italic");
     }
@@ -93,10 +89,8 @@ class SelectorTest {
         // A highlight says "keys land here", which is a property of focus, not of selection. The
         // marker stays so the selection is still legible, and the active style is withheld - the
         // same rule TableSelector follows and the same one Editor follows by dropping its caret.
-        assertThat(lines(state("alpha", "beta"), false))
-                .containsExactly("\u276F alpha", "  beta");
-        var screen = new ScreenRenderer().screen(view(state("alpha", "beta"), false),
-                new Viewport(6, 40));
+        assertThat(lines(state("alpha", "beta"), false)).containsExactly("\u276F alpha", "  beta");
+        var screen = new ScreenRenderer().screen(view(state("alpha", "beta"), false), new Viewport(6, 40));
         assertThat(activeFlags(screen, 0, 0)).as("selected row").isEqualTo("italic");
         assertThat(activeFlags(screen, 1, 0)).as("other row").isEqualTo("italic");
     }
@@ -105,109 +99,85 @@ class SelectorTest {
     void bothSelectorsAgreeOnWhenTheActiveStyleIsUsed() {
         // The two selectors take the same parameters; they must now also behave the same way, so
         // an application cannot get two different answers from one focus state.
-        var focused = new ScreenRenderer().screen(view(state("alpha", "beta"), true),
-                new Viewport(6, 40));
+        var focused = new ScreenRenderer().screen(view(state("alpha", "beta"), true), new Viewport(6, 40));
         assertThat(activeFlags(focused, 0, 0)).as("focused selector").isEqualTo("invert");
-        var blurred = new ScreenRenderer().screen(view(state("alpha", "beta"), false),
-                new Viewport(6, 40));
+        var blurred = new ScreenRenderer().screen(view(state("alpha", "beta"), false), new Viewport(6, 40));
         assertThat(activeFlags(blurred, 0, 0)).as("unfocused selector").isEqualTo("italic");
 
-        var tableFocused =
-                new ScreenRenderer()
-                        .screen(
-                                new TableSelector(
-                                                new TableSelector.Config(
-                                                        TableSelector.Model.of(
-                                                                java.util.List.of(),
-                                                                java.util.List.of()),
-                                                        ACTIVE,
-                                                        INACTIVE,
-                                                        INACTIVE))
-                                        .view(
-                                                (TableSelector.Model.of(
-                                                                List.of("id"),
-                                                                List.of(
-                                                                        List.of("alpha"),
-                                                                        List.of("beta"))))
-                                                        .withFocus(true),
-                                                new io.github.dhoard.braxton.mvu.ViewContext(
-                                                        io.github.dhoard.braxton.layout.Viewport
-                                                                .EMPTY))
-                                        .map(action -> action.getClass().getSimpleName()),
-                                new Viewport(3, 40));
+        var tableFocused = new ScreenRenderer()
+                .screen(
+                        new TableSelector(new TableSelector.Config(
+                                        TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
+                                        ACTIVE,
+                                        INACTIVE,
+                                        INACTIVE))
+                                .view(
+                                        (TableSelector.Model.of(
+                                                        List.of("id"), List.of(List.of("alpha"), List.of("beta"))))
+                                                .withFocus(true),
+                                        new io.github.dhoard.braxton.mvu.ViewContext(
+                                                io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                                .map(action -> action.getClass().getSimpleName()),
+                        new Viewport(3, 40));
         assertThat(tableFocused.cell(1, 0).style().invert()).as("focused table").isTrue();
-        var tableBlurred =
-                new ScreenRenderer()
-                        .screen(
-                                new TableSelector(
-                                                new TableSelector.Config(
-                                                        TableSelector.Model.of(
-                                                                java.util.List.of(),
-                                                                java.util.List.of()),
-                                                        ACTIVE,
-                                                        INACTIVE,
-                                                        INACTIVE))
-                                        .view(
-                                                (TableSelector.Model.of(
-                                                                List.of("id"),
-                                                                List.of(
-                                                                        List.of("alpha"),
-                                                                        List.of("beta"))))
-                                                        .withFocus(false),
-                                                new io.github.dhoard.braxton.mvu.ViewContext(
-                                                        io.github.dhoard.braxton.layout.Viewport
-                                                                .EMPTY))
-                                        .map(action -> action.getClass().getSimpleName()),
-                                new Viewport(3, 40));
-        assertThat(tableBlurred.cell(1, 0).style().invert()).as("unfocused table").isFalse();
+        var tableBlurred = new ScreenRenderer()
+                .screen(
+                        new TableSelector(new TableSelector.Config(
+                                        TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
+                                        ACTIVE,
+                                        INACTIVE,
+                                        INACTIVE))
+                                .view(
+                                        (TableSelector.Model.of(
+                                                        List.of("id"), List.of(List.of("alpha"), List.of("beta"))))
+                                                .withFocus(false),
+                                        new io.github.dhoard.braxton.mvu.ViewContext(
+                                                io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                                .map(action -> action.getClass().getSimpleName()),
+                        new Viewport(3, 40));
+        assertThat(tableBlurred.cell(1, 0).style().invert())
+                .as("unfocused table")
+                .isFalse();
     }
 
     @Test
     void theSelectionMovesAndClampsAndConfirmsTheCurrentValue() {
         Selector.Model start = state("alpha", "beta", "gamma");
-        assertThat(
-                        new Selector(Selector.Config.defaults())
-                                .update(start, new Selector.Msg.Up())
-                                .model()
-                                .selected())
+        assertThat(new Selector(Selector.Config.defaults())
+                        .update(start, new Selector.Msg.Up())
+                        .model()
+                        .selected())
                 .isZero();
         // Moving is not choosing: Down reports no intent, and the following Confirm names the cell.
-        Selector.Model second =
-                new Selector(Selector.Config.defaults())
+        Selector.Model second = new Selector(Selector.Config.defaults())
+                .update(start, new Selector.Msg.Down())
+                .model();
+        assertThat(new Selector(Selector.Config.defaults())
                         .update(start, new Selector.Msg.Down())
-                        .model();
-        assertThat(
-                        new Selector(Selector.Config.defaults())
-                                .update(start, new Selector.Msg.Down())
-                                .outputs())
+                        .outputs())
                 .isEmpty();
-        assertThat(
-                        new Selector(Selector.Config.defaults())
-                                .update(second, new Selector.Msg.Confirm())
-                                .outputs()
-                                .getFirst())
+        assertThat(new Selector(Selector.Config.defaults())
+                        .update(second, new Selector.Msg.Confirm())
+                        .outputs()
+                        .getFirst())
                 .isEqualTo(new Selector.Output.Chosen(1, "beta"));
-        Selector.Model third =
-                new Selector(Selector.Config.defaults())
-                        .update(second, new Selector.Msg.Down())
-                        .model();
+        Selector.Model third = new Selector(Selector.Config.defaults())
+                .update(second, new Selector.Msg.Down())
+                .model();
         assertThat(third.selected()).isEqualTo(2);
-        assertThat(
-                        new Selector(Selector.Config.defaults())
-                                .update(third, new Selector.Msg.Down())
-                                .model()
-                                .selected())
+        assertThat(new Selector(Selector.Config.defaults())
+                        .update(third, new Selector.Msg.Down())
+                        .model()
+                        .selected())
                 .isEqualTo(2);
-        assertThat(
-                        new Selector(Selector.Config.defaults())
-                                .update(start, new Selector.Msg.Cancel())
-                                .outputs()
-                                .getFirst())
+        assertThat(new Selector(Selector.Config.defaults())
+                        .update(start, new Selector.Msg.Cancel())
+                        .outputs()
+                        .getFirst())
                 .isEqualTo(new Selector.Output.Cancelled());
-        assertThat(
-                        new Selector(Selector.Config.defaults())
-                                .update(start, new Selector.Msg.Up())
-                                .outputs())
+        assertThat(new Selector(Selector.Config.defaults())
+                        .update(start, new Selector.Msg.Up())
+                        .outputs())
                 .isEmpty();
     }
 
@@ -221,7 +191,8 @@ class SelectorTest {
         // The list also measures one row per option, so a taller viewport cannot paint the breaks
         // as extra rows that the marker does not name.
         assertThat(new LayoutEngine().intrinsicHeight(view(three, true), 40))
-                .as("rows measured for three options").isEqualTo(3);
+                .as("rows measured for three options")
+                .isEqualTo(3);
     }
 
     @Test
@@ -229,12 +200,13 @@ class SelectorTest {
         Selector.Model empty = Selector.Model.of(List.of());
         assertThat(empty.selected()).isEqualTo(-1);
         assertThat(empty.current()).isEmpty();
-        assertThat(
-                        new Selector(Selector.Config.defaults())
-                                .update(empty, new Selector.Msg.Confirm())
-                                .outputs())
+        assertThat(new Selector(Selector.Config.defaults())
+                        .update(empty, new Selector.Msg.Confirm())
+                        .outputs())
                 .isEmpty();
-        assertThat(lines(empty, true)).isNotEmpty().allSatisfy(line -> assertThat(line).isEmpty());
+        assertThat(lines(empty, true))
+                .isNotEmpty()
+                .allSatisfy(line -> assertThat(line).isEmpty());
         assertThatNullPointerException().isThrownBy(() -> new Selector.Model(null, 0, true));
     }
 
@@ -249,8 +221,8 @@ class SelectorTest {
     @Test
     void anActionThatChangesNothingKeepsTheModelReference() {
         var selector = new Selector(new Selector.Config(List.of("a", "b"), ACTIVE, INACTIVE));
-        var model =
-                selector.init(new io.github.dhoard.braxton.mvu.InitContext(null, null)).model();
+        var model = selector.init(new io.github.dhoard.braxton.mvu.InitContext(null, null))
+                .model();
         // The first option is already selected, so this action changes nothing at all.
         assertThat(selector.update(model, new Selector.Msg.Up()).model()).isSameAs(model);
         assertThat(model.withFocus(model.focused())).isSameAs(model);
@@ -270,8 +242,7 @@ class SelectorTest {
     }
 
     /** The cell's style flags these tests set, so the assertion is about style, not identity. */
-    private static String activeFlags(io.github.dhoard.braxton.view.RenderedScreen screen, int row,
-            int col) {
+    private static String activeFlags(io.github.dhoard.braxton.view.RenderedScreen screen, int row, int col) {
         Style style = screen.cell(row, col).style();
         List<String> flags = new java.util.ArrayList<>();
         if (style.invert()) {

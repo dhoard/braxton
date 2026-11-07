@@ -22,9 +22,6 @@
 
 package io.github.dhoard.braxton.widget;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
@@ -32,6 +29,8 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A horizontal bar with an active/inactive fill, an optional percentage label, and separators.
@@ -52,8 +51,15 @@ public final class ProgressBar {
     private final StyledText prepend;
     private final StyledText append;
 
-    private ProgressBar(int width, int buffer, String activeIcon, String inactiveIcon,
-            Style activeStyle, Style inactiveStyle, boolean showPercentage, StyledText prepend,
+    private ProgressBar(
+            int width,
+            int buffer,
+            String activeIcon,
+            String inactiveIcon,
+            Style activeStyle,
+            Style inactiveStyle,
+            boolean showPercentage,
+            StyledText prepend,
             StyledText append) {
         this.width = width;
         this.buffer = buffer;
@@ -67,46 +73,91 @@ public final class ProgressBar {
     }
 
     public static ProgressBar of(int width) {
-        return new ProgressBar(width, 0, "\u2588", "\u2591", Style.NONE,
-                Style.NONE.withItalic(), false, StyledText.empty(), StyledText.empty());
+        return new ProgressBar(
+                width,
+                0,
+                "\u2588",
+                "\u2591",
+                Style.NONE,
+                Style.NONE.withItalic(),
+                false,
+                StyledText.empty(),
+                StyledText.empty());
     }
 
     public ProgressBar width(int value) {
-        return new ProgressBar(value, buffer, activeIcon, inactiveIcon, activeStyle, inactiveStyle,
-                showPercentage, prepend, append);
+        return new ProgressBar(
+                value, buffer, activeIcon, inactiveIcon, activeStyle, inactiveStyle, showPercentage, prepend, append);
     }
 
     public ProgressBar buffer(int value) {
-        return new ProgressBar(width, Math.max(0, value), activeIcon, inactiveIcon, activeStyle,
-                inactiveStyle, showPercentage, prepend, append);
+        return new ProgressBar(
+                width,
+                Math.max(0, value),
+                activeIcon,
+                inactiveIcon,
+                activeStyle,
+                inactiveStyle,
+                showPercentage,
+                prepend,
+                append);
     }
 
     public ProgressBar icons(String active, String inactive) {
-        return new ProgressBar(width, buffer, LineBreaks.singleRowAndTabs(active),
-                LineBreaks.singleRowAndTabs(inactive), activeStyle,
-                inactiveStyle, showPercentage, prepend, append);
+        return new ProgressBar(
+                width,
+                buffer,
+                LineBreaks.singleRowAndTabs(active),
+                LineBreaks.singleRowAndTabs(inactive),
+                activeStyle,
+                inactiveStyle,
+                showPercentage,
+                prepend,
+                append);
     }
 
     public ProgressBar colors(Color active, Color inactive) {
-        return new ProgressBar(width, buffer, activeIcon, inactiveIcon,
+        return new ProgressBar(
+                width,
+                buffer,
+                activeIcon,
+                inactiveIcon,
                 active == null ? activeStyle : Style.fg(active),
-                inactive == null ? inactiveStyle : Style.fg(inactive), showPercentage, prepend,
+                inactive == null ? inactiveStyle : Style.fg(inactive),
+                showPercentage,
+                prepend,
                 append);
     }
 
     public ProgressBar showPercentage(boolean value) {
-        return new ProgressBar(width, buffer, activeIcon, inactiveIcon, activeStyle, inactiveStyle,
-                value, prepend, append);
+        return new ProgressBar(
+                width, buffer, activeIcon, inactiveIcon, activeStyle, inactiveStyle, value, prepend, append);
     }
 
     public ProgressBar prepend(StyledText value) {
-        return new ProgressBar(width, buffer, activeIcon, inactiveIcon, activeStyle, inactiveStyle,
-                showPercentage, SingleRow.of(value), append);
+        return new ProgressBar(
+                width,
+                buffer,
+                activeIcon,
+                inactiveIcon,
+                activeStyle,
+                inactiveStyle,
+                showPercentage,
+                SingleRow.of(value),
+                append);
     }
 
     public ProgressBar append(StyledText value) {
-        return new ProgressBar(width, buffer, activeIcon, inactiveIcon, activeStyle, inactiveStyle,
-                showPercentage, prepend, SingleRow.of(value));
+        return new ProgressBar(
+                width,
+                buffer,
+                activeIcon,
+                inactiveIcon,
+                activeStyle,
+                inactiveStyle,
+                showPercentage,
+                prepend,
+                SingleRow.of(value));
     }
 
     /** Renders a fraction of {@code value / max}; invalid bounds render an empty bar. */
@@ -126,13 +177,11 @@ public final class ProgressBar {
                 parts.add(StyledText.plain(" ".repeat(buffer)));
             }
             boolean on = i < filled;
-            parts.add(StyledText.of(on ? activeIcon : inactiveIcon,
-                    on ? activeStyle : inactiveStyle));
+            parts.add(StyledText.of(on ? activeIcon : inactiveIcon, on ? activeStyle : inactiveStyle));
         }
         if (showPercentage) {
             parts.add(StyledText.of(
-                    String.format(java.util.Locale.ROOT, " %d%%", Math.round(clamped * 100)),
-                    Style.NONE));
+                    String.format(java.util.Locale.ROOT, " %d%%", Math.round(clamped * 100)), Style.NONE));
         }
         parts.add(append);
         return StyledText.concat(parts.toArray(StyledText[]::new));

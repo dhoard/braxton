@@ -24,8 +24,6 @@ package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.internal.text.Graphemes;
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Style;
@@ -34,6 +32,7 @@ import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
 import io.github.dhoard.braxton.testing.AllocationProbe;
 import io.github.dhoard.braxton.view.Views;
+import org.junit.jupiter.api.Test;
 
 /**
  * The cost of the wrap and paint path for ordinary text.
@@ -103,7 +102,10 @@ class TextPaintCostTest {
         StringBuilder cells = new StringBuilder();
         for (int row = 0; row < screen.rows(); row++) {
             for (int col = 0; col < screen.cols(); col++) {
-                cells.append(screen.isContinuation(row, col) ? ">" : screen.cell(row, col).text())
+                cells.append(
+                                screen.isContinuation(row, col)
+                                        ? ">"
+                                        : screen.cell(row, col).text())
                         .append('|');
             }
             cells.append('\n');
@@ -115,8 +117,7 @@ class TextPaintCostTest {
     void aRowOfOrdinaryTextDoesNotReassembleOrReSegmentItsCellsPerColumn() {
         String line = prose(COLUMNS);
         StyledText text = StyledText.plain(line);
-        long bytes = AllocationProbe.bytes(
-                () -> engine.layout(Views.text(text), new Rect(0, 0, 1, COLUMNS)));
+        long bytes = AllocationProbe.bytes(() -> engine.layout(Views.text(text), new Rect(0, 0, 1, COLUMNS)));
         assertThat(bytes)
                 .as("a row of ordinary text costs about the grid and its cells, not several objects "
                         + "per column: a cell nothing continues is the cluster it started from, and "
@@ -125,7 +126,8 @@ class TextPaintCostTest {
 
         // The cheaper path has to paint the same frame: one cell per column, the same text, and the
         // columns the plain text itself measures.
-        Screen screen = engine.layout(Views.text(text), new Rect(0, 0, 1, COLUMNS)).screen();
+        Screen screen =
+                engine.layout(Views.text(text), new Rect(0, 0, 1, COLUMNS)).screen();
         assertThat(screen.plainLine(0)).isEqualTo(line);
         assertThat(TextMeasure.columns(screen.plainLine(0))).isEqualTo(COLUMNS);
         int painted = 0;
@@ -158,23 +160,24 @@ class TextPaintCostTest {
         // is the printable-ASCII row of the same width; the allowance is the segmentation every
         // pass over the row pays whatever the answer to the continuation question is.
         long ascii = AllocationProbe.bytes(
-                () -> engine.layout(Views.text(StyledText.plain(prose(COLUMNS))),
-                        new Rect(0, 0, 1, COLUMNS)));
+                () -> engine.layout(Views.text(StyledText.plain(prose(COLUMNS))), new Rect(0, 0, 1, COLUMNS)));
         for (char glyph : new char[] {'\u2500', '\u4e2d', '\u00e9'}) {
             String line = rowOf(glyph, COLUMNS);
             StyledText text = StyledText.plain(line);
             int clusters = TextMeasure.graphemeCount(line);
             long segmentation = segmentationCost(line);
 
-            long bytes = AllocationProbe.bytes(
-                    () -> engine.layout(Views.text(text), new Rect(0, 0, 1, COLUMNS)));
+            long bytes = AllocationProbe.bytes(() -> engine.layout(Views.text(text), new Rect(0, 0, 1, COLUMNS)));
             assertThat(bytes)
-                    .as("a row of \"%s\" costs the printable-ASCII row plus the wrap and paint "
-                            + "segmentations of its clusters, not a copy of the cell and a "
-                            + "segmentation per column", glyph)
+                    .as(
+                            "a row of \"%s\" costs the printable-ASCII row plus the wrap and paint "
+                                    + "segmentations of its clusters, not a copy of the cell and a "
+                                    + "segmentation per column",
+                            glyph)
                     .isLessThan(ascii + 4 * segmentation);
 
-            Screen screen = engine.layout(Views.text(text), new Rect(0, 0, 1, COLUMNS)).screen();
+            Screen screen =
+                    engine.layout(Views.text(text), new Rect(0, 0, 1, COLUMNS)).screen();
             assertThat(screen.plainLine(0)).isEqualTo(line);
             assertThat(TextMeasure.columns(screen.plainLine(0))).isEqualTo(COLUMNS);
             int painted = 0;
@@ -189,8 +192,7 @@ class TextPaintCostTest {
 
     @Test
     void wrappingARowOfNonAsciiClustersDoesNotReSegmentItsCellPerColumn() {
-        long ascii = AllocationProbe.bytes(
-                () -> engine.wrapLines(StyledText.plain(prose(COLUMNS)), COLUMNS));
+        long ascii = AllocationProbe.bytes(() -> engine.wrapLines(StyledText.plain(prose(COLUMNS)), COLUMNS));
         for (char glyph : new char[] {'\u2500', '\u4e2d', '\u00e9'}) {
             String line = rowOf(glyph, COLUMNS);
             StyledText text = StyledText.plain(line);
@@ -198,8 +200,10 @@ class TextPaintCostTest {
 
             long bytes = AllocationProbe.bytes(() -> engine.wrapLines(text, COLUMNS));
             assertThat(bytes)
-                    .as("wrapping a row of \"%s\" charges the row's own segmentation, not a "
-                            + "segmentation of the cell it is building at every column", glyph)
+                    .as(
+                            "wrapping a row of \"%s\" charges the row's own segmentation, not a "
+                                    + "segmentation of the cell it is building at every column",
+                            glyph)
                     .isLessThan(ascii + 2 * segmentation);
 
             assertThat(engine.wrapLines(text, COLUMNS))
@@ -221,16 +225,18 @@ class TextPaintCostTest {
             for (char second = 0x20; second <= 0x7E; second += 7) {
                 String pair = "" + first + second;
                 assertThat(TextMeasure.graphemeCount(pair))
-                        .as("clusters of \"%s\"", pair).isEqualTo(2);
-                assertThat(TextMeasure.columns(pair)).as("columns of \"%s\"", pair).isEqualTo(2);
+                        .as("clusters of \"%s\"", pair)
+                        .isEqualTo(2);
+                assertThat(TextMeasure.columns(pair))
+                        .as("columns of \"%s\"", pair)
+                        .isEqualTo(2);
 
                 StyledText split = StyledText.concat(
-                        StyledText.of(String.valueOf(first), Style.NONE),
-                        StyledText.of(String.valueOf(second), bold));
-                Screen screen = engine.layout(Views.text(split), new Rect(0, 0, 1, 6)).screen();
-                Screen plain = engine.layout(
-                        Views.text(StyledText.plain(split.plainText())),
-                        new Rect(0, 0, 1, 6)).screen();
+                        StyledText.of(String.valueOf(first), Style.NONE), StyledText.of(String.valueOf(second), bold));
+                Screen screen =
+                        engine.layout(Views.text(split), new Rect(0, 0, 1, 6)).screen();
+                Screen plain = engine.layout(Views.text(StyledText.plain(split.plainText())), new Rect(0, 0, 1, 6))
+                        .screen();
                 assertThat(paintedCells(screen))
                         .as("a style boundary inside \"%s\"", pair)
                         .isEqualTo(paintedCells(plain));
@@ -259,7 +265,8 @@ class TextPaintCostTest {
                 StyledText.of("\u2500", bold));
         StyledText plain = StyledText.plain(split.plainText());
         Screen screen = engine.layout(Views.text(split), new Rect(0, 0, 1, 8)).screen();
-        Screen reference = engine.layout(Views.text(plain), new Rect(0, 0, 1, 8)).screen();
+        Screen reference =
+                engine.layout(Views.text(plain), new Rect(0, 0, 1, 8)).screen();
 
         assertThat(paintedCells(screen)).isEqualTo(paintedCells(reference));
         assertThat(screen.cell(0, 0).text()).isEqualTo("\u2500");
@@ -277,25 +284,28 @@ class TextPaintCostTest {
         // a base joins the cell (one cell, one column), and a base after a mark does not: the mark's
         // cell keeps the dotted circle the measurement charges it, and the base opens the next.
         Style bold = Style.NONE.withBold();
-        Screen joined = engine.layout(Views.text(StyledText.concat(
-                        StyledText.of("e", Style.NONE), StyledText.of("\u0301", bold))),
-                new Rect(0, 0, 1, 6)).screen();
+        Screen joined = engine.layout(
+                        Views.text(StyledText.concat(StyledText.of("e", Style.NONE), StyledText.of("\u0301", bold))),
+                        new Rect(0, 0, 1, 6))
+                .screen();
         assertThat(joined.cell(0, 0).text()).isEqualTo("e\u0301");
         assertThat(joined.isContinuation(0, 1)).isFalse();
         assertThat(joined.cell(0, 1).isEmpty()).isTrue();
         assertThat(TextMeasure.columns("e\u0301")).isEqualTo(1);
 
-        Screen separate = engine.layout(Views.text(StyledText.concat(
-                        StyledText.of("e\u0301", Style.NONE), StyledText.of("x", bold))),
-                new Rect(0, 0, 1, 6)).screen();
+        Screen separate = engine.layout(
+                        Views.text(StyledText.concat(StyledText.of("e\u0301", Style.NONE), StyledText.of("x", bold))),
+                        new Rect(0, 0, 1, 6))
+                .screen();
         assertThat(separate.cell(0, 0).text()).isEqualTo("e\u0301");
         assertThat(separate.cell(0, 1).text()).isEqualTo("x");
         assertThat(separate.cell(0, 1).style()).isEqualTo(bold);
         assertThat(TextMeasure.columns("e\u0301x")).isEqualTo(2);
 
-        Screen baseless = engine.layout(Views.text(StyledText.concat(
-                        StyledText.of("\u0301", Style.NONE), StyledText.of("x", bold))),
-                new Rect(0, 0, 1, 6)).screen();
+        Screen baseless = engine.layout(
+                        Views.text(StyledText.concat(StyledText.of("\u0301", Style.NONE), StyledText.of("x", bold))),
+                        new Rect(0, 0, 1, 6))
+                .screen();
         assertThat(baseless.cell(0, 0).text()).isEqualTo(TextMeasure.DOTTED_CIRCLE + "\u0301");
         assertThat(baseless.cell(0, 1).text()).isEqualTo("x");
         assertThat(TextMeasure.columns("\u0301x")).isEqualTo(2);

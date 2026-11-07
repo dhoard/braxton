@@ -28,7 +28,6 @@ import java.lang.management.ManagementFactory;
 import java.text.BreakIterator;
 import java.util.List;
 import java.util.Locale;
-
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
@@ -43,10 +42,27 @@ class TextMeasureBoundaryCostTest {
     private static final int LOOKUPS = 256;
 
     private static final List<String> CORPUS = List.of(
-            "", "a", "ab", "the quick brown fox", "\n", "\t", "\r\n",
-            "漢字", "🙂", "\uFE0E", "🙂\uFE0F", "é", "é",
-            "\u0301abc", "a\u200Db", "\uD83D\uDE00", "\uD83D\uDE00x", "x\uD83D\uDE00",
-            "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67", "\uD800", "a\uD800b",
+            "",
+            "a",
+            "ab",
+            "the quick brown fox",
+            "\n",
+            "\t",
+            "\r\n",
+            "漢字",
+            "🙂",
+            "\uFE0E",
+            "🙂\uFE0F",
+            "é",
+            "é",
+            "\u0301abc",
+            "a\u200Db",
+            "\uD83D\uDE00",
+            "\uD83D\uDE00x",
+            "x\uD83D\uDE00",
+            "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67",
+            "\uD800",
+            "a\uD800b",
             "a漢🙂b\u0301\tz 0123456789",
             // Box-drawing joins nothing, so every gap in it is a boundary.
             "─│┌┐",
@@ -55,7 +71,8 @@ class TextMeasureBoundaryCostTest {
             // A devanagari conjunct: a virama keeps KA and SSA in one cluster.
             "\u0915\u094D\u0937",
             // A hangul syllable followed by a jamo, and a bare L V T jamo run.
-            "\uAC00\u1100", "\u1100\u1161\u11A8",
+            "\uAC00\u1100",
+            "\u1100\u1161\u11A8",
             // A run of three combining marks on one base.
             "a\u0301\u0302\u0303");
 
@@ -95,7 +112,8 @@ class TextMeasureBoundaryCostTest {
                         && isPrintableAscii(text.charAt(i + 1)))
                 .limit(LOOKUPS)
                 .toArray();
-        assertThat(offsets).as("the draft must contain printable-ASCII runs to measure")
+        assertThat(offsets)
+                .as("the draft must contain printable-ASCII runs to measure")
                 .hasSize(LOOKUPS);
         long bytes = allocated(() -> lookups(text, offsets));
         assertThat(bytes)

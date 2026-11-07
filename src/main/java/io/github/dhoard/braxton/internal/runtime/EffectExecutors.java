@@ -37,8 +37,7 @@ final class EffectExecutors {
     private static final ExecutorService SHARED = Executors.newThreadPerTaskExecutor(
             Thread.ofVirtual().name("braxton-effect-", 0).factory());
 
-    private EffectExecutors() {
-    }
+    private EffectExecutors() {}
 
     static ExecutorService shared() {
         return SHARED;

@@ -24,19 +24,17 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.internal.render.LayoutEngine;
-import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.Style;
+import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.view.ScreenRenderer;
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /**
  * A frame reserves one cell per edge character, so every row a {@link Table} renders occupies the
@@ -58,20 +56,20 @@ class TableFrameWidthTest {
      * the cell, so it already occupied a cell of its own.
      */
     private static final List<String> BASELESS = List.of(
-            "\u0301",              // combining acute accent
-            "\u0301x",             // accent with nothing before it
-            "x\u0301",             // accent that has its own base
-            "\u200D",              // zero-width joiner
+            "\u0301", // combining acute accent
+            "\u0301x", // accent with nothing before it
+            "x\u0301", // accent that has its own base
+            "\u200D", // zero-width joiner
             "\u200D\u0301a\u200D",
-            "\uFE0F",              // variation selector 16 (wide presentation)
+            "\uFE0F", // variation selector 16 (wide presentation)
             "\uFE0Fx",
-            "\u0301\uFE0F",          // baseless cluster the selector widens: the dotted circle pays
-            "\uFE0F\u0301",          // the same cluster with the selector first
-            "\uFE0E",              // variation selector 15 (text presentation)
+            "\u0301\uFE0F", // baseless cluster the selector widens: the dotted circle pays
+            "\uFE0F\u0301", // the same cluster with the selector first
+            "\uFE0E", // variation selector 15 (text presentation)
             "\uFE0Ex",
-            "\u200B",              // zero-width space
-            "\uFEFFx",             // byte-order mark
-            "\u00ADx");            // soft hyphen
+            "\u200B", // zero-width space
+            "\uFEFFx", // byte-order mark
+            "\u00ADx"); // soft hyphen
 
     private static String show(String value) {
         if (value == null) {
@@ -80,8 +78,7 @@ class TableFrameWidthTest {
         StringBuilder text = new StringBuilder("\"");
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
-            text.append(c >= 0x20 && c < 0x7F
-                    ? String.valueOf(c) : String.format("\\u%04x", (int) c));
+            text.append(c >= 0x20 && c < 0x7F ? String.valueOf(c) : String.format("\\u%04x", (int) c));
         }
         return text.append('"').toString();
     }
@@ -103,8 +100,9 @@ class TableFrameWidthTest {
         List<String> framed = rows(table(border, buffer, cell).render().plainText());
         assertThat(framed).as("cell %s buffer %d", show(cell), buffer).hasSize(4);
         int width = TextMeasure.columns(framed.get(0));
-        assertThat(width).as("cell %s buffer %d top edge [%s]",
-                show(cell), buffer, show(framed.get(0))).isPositive();
+        assertThat(width)
+                .as("cell %s buffer %d top edge [%s]", show(cell), buffer, show(framed.get(0)))
+                .isPositive();
         for (String row : framed) {
             assertThat(TextMeasure.columns(row))
                     .as("cell %s buffer %d row [%s]", show(cell), buffer, show(row))
@@ -127,29 +125,35 @@ class TableFrameWidthTest {
         for (String cell : BASELESS) {
             for (int buffer = 0; buffer <= 3; buffer++) {
                 Table table = table(FRAME, buffer, cell);
-                List<String> lines = table.renderLines().stream()
-                        .map(StyledText::plainText).toList();
+                List<String> lines =
+                        table.renderLines().stream().map(StyledText::plainText).toList();
                 assertThat(lines).as("cell %s buffer %d", show(cell), buffer).hasSize(2);
                 assertThat(lines.stream().map(TextMeasure::columns).distinct())
-                        .as("cell %s buffer %d rows %s",
-                                show(cell), buffer, lines.stream().map(TableFrameWidthTest::show)
-                                .toList())
+                        .as(
+                                "cell %s buffer %d rows %s",
+                                show(cell),
+                                buffer,
+                                lines.stream().map(TableFrameWidthTest::show).toList())
                         .hasSize(1);
                 List<String> framed = rows(table.render().plainText());
                 String edge = Border.glyph(FRAME.vertical());
                 String row = framed.get(1);
-                assertThat(row).as("cell %s buffer %d framed row [%s]",
-                        show(cell), buffer, show(row)).startsWith(edge).endsWith(edge);
+                assertThat(row)
+                        .as("cell %s buffer %d framed row [%s]", show(cell), buffer, show(row))
+                        .startsWith(edge)
+                        .endsWith(edge);
                 String inside = row.substring(1, row.length() - 1);
-                assertThat(inside).as("cell %s buffer %d framed row [%s]",
-                        show(cell), buffer, show(row)).startsWith(lines.get(0));
+                assertThat(inside)
+                        .as("cell %s buffer %d framed row [%s]", show(cell), buffer, show(row))
+                        .startsWith(lines.get(0));
                 assertThat(inside.substring(lines.get(0).length()))
                         .as("the frame pads the row out instead of adding content to it")
                         .isEqualTo(" ".repeat(inside.length() - lines.get(0).length()));
                 // Two edge cells, and a row that opens with a selector widens the left one by the
                 // column the frame then has to pay for.
                 assertThat(TextMeasure.columns(row))
-                        .as("cell %s buffer %d framed row [%s] against unframed [%s]",
+                        .as(
+                                "cell %s buffer %d framed row [%s] against unframed [%s]",
                                 show(cell), buffer, show(row), show(lines.get(0)))
                         .isGreaterThanOrEqualTo(TextMeasure.columns(lines.get(0)) + 2);
             }
@@ -162,11 +166,14 @@ class TableFrameWidthTest {
         for (String cell : BASELESS) {
             for (int buffer = 0; buffer <= 3; buffer++) {
                 List<String> lines = table(Border.NONE, buffer, cell).renderLines().stream()
-                        .map(StyledText::plainText).toList();
+                        .map(StyledText::plainText)
+                        .toList();
                 assertThat(lines.stream().map(TextMeasure::columns).distinct())
-                        .as("cell %s buffer %d rows %s",
-                                show(cell), buffer, lines.stream().map(TableFrameWidthTest::show)
-                                .toList())
+                        .as(
+                                "cell %s buffer %d rows %s",
+                                show(cell),
+                                buffer,
+                                lines.stream().map(TableFrameWidthTest::show).toList())
                         .hasSize(1);
             }
         }
@@ -178,8 +185,10 @@ class TableFrameWidthTest {
     private static List<String> paintedCells(RenderedScreen screen, int row) {
         List<String> cells = new ArrayList<>();
         for (int col = 0; col < screen.cols(); col++) {
-            cells.add(screen.isContinuation(row, col)
-                    ? "<continuation>" : screen.cell(row, col).text());
+            cells.add(
+                    screen.isContinuation(row, col)
+                            ? "<continuation>"
+                            : screen.cell(row, col).text());
         }
         return cells;
     }
@@ -192,21 +201,22 @@ class TableFrameWidthTest {
      */
     private static void assertFrameIsPaintedColumnByColumn(Table table, List<String> rendered) {
         int width = TextMeasure.columns(rendered.get(0));
-        RenderedScreen screen = new ScreenRenderer().screen(table.view(),
-                new Viewport(rendered.size(), width));
+        RenderedScreen screen = new ScreenRenderer().screen(table.view(), new Viewport(rendered.size(), width));
         assertThat(screen.rows()).as("rows painted for %s", rendered).isEqualTo(rendered.size());
         Border border = FRAME;
         for (int row = 0; row < rendered.size(); row++) {
-            assertThat(paintedCells(screen, row)).as("row %d of %s", row, rendered)
-                    .hasSize(width).doesNotContain("");
+            assertThat(paintedCells(screen, row))
+                    .as("row %d of %s", row, rendered)
+                    .hasSize(width)
+                    .doesNotContain("");
             assertThat(screen.isContinuation(row, width - 1))
                     .as("row %d of %s ends in a wide cluster's first half", row, rendered)
                     .isFalse();
-            char edge = row == 0 ? border.topRight()
+            char edge = row == 0
+                    ? border.topRight()
                     : row == rendered.size() - 1 ? border.bottomRight() : border.vertical();
             assertThat(screen.cell(row, width - 1).text())
-                    .as("right edge of row %d of %s painted as %s", row, rendered,
-                            paintedCells(screen, row))
+                    .as("right edge of row %d of %s painted as %s", row, rendered, paintedCells(screen, row))
                     .isEqualTo(Border.glyph(edge));
         }
         assertThat(new LayoutEngine().intrinsicHeight(table.view(), width))
@@ -230,11 +240,12 @@ class TableFrameWidthTest {
         Table table = Table.of().border(Border.SINGLE);
         table.row(StyledText.plain("\u0301x"));
         assertThat(rows(table.render().plainText()))
-                .containsExactly("\u250C\u2500\u2500\u2500\u2510",
-                        "\u2502\u0301x  \u2502",
-                        "\u2514\u2500\u2500\u2500\u2518");
-        assertThat(rows(table.render().plainText())).allSatisfy(line ->
-                assertThat(TextMeasure.columns(line)).as("line [%s]", show(line)).isEqualTo(5));
+                .containsExactly(
+                        "\u250C\u2500\u2500\u2500\u2510", "\u2502\u0301x  \u2502", "\u2514\u2500\u2500\u2500\u2518");
+        assertThat(rows(table.render().plainText()))
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                        .as("line [%s]", show(line))
+                        .isEqualTo(5));
     }
 
     /** The second reported shape: a short row in the middle of a multi-row frame. */
@@ -245,16 +256,22 @@ class TableFrameWidthTest {
         table.row(StyledText.plain("\u200D"));
         List<String> framed = rows(table.render().plainText());
         assertThat(framed).hasSize(4);
-        assertThat(framed).allSatisfy(line ->
-                assertThat(TextMeasure.columns(line)).as("line [%s]", show(line)).isEqualTo(12));
-        assertThat(framed).isEqualTo(List.of(
-                "\u250C" + "\u2500".repeat(10) + "\u2510",
-                "\u2502\u0301  hello   \u2502",
-                "\u2502\u200D          \u2502",
-                "\u2514" + "\u2500".repeat(10) + "\u2518"));
-        assertFrameIsPaintedColumnByColumn(Table.of().buffer(1).border(FRAME)
-                .row(StyledText.plain("\u0301"), StyledText.plain("bb"))
-                .row(StyledText.plain("\u65E5"), StyledText.plain("c")),
+        assertThat(framed)
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                        .as("line [%s]", show(line))
+                        .isEqualTo(12));
+        assertThat(framed)
+                .isEqualTo(List.of(
+                        "\u250C" + "\u2500".repeat(10) + "\u2510",
+                        "\u2502\u0301  hello   \u2502",
+                        "\u2502\u200D          \u2502",
+                        "\u2514" + "\u2500".repeat(10) + "\u2518"));
+        assertFrameIsPaintedColumnByColumn(
+                Table.of()
+                        .buffer(1)
+                        .border(FRAME)
+                        .row(StyledText.plain("\u0301"), StyledText.plain("bb"))
+                        .row(StyledText.plain("\u65E5"), StyledText.plain("c")),
                 List.of("+------+", "|\u0301  bb  |", "|\u65E5 c  |", "+------+"));
     }
 
@@ -271,19 +288,20 @@ class TableFrameWidthTest {
                 .row(StyledText.plain("ab"), StyledText.plain("cd"))
                 .row(StyledText.plain("\u0301\uFE0F"), StyledText.plain("x"));
         assertThat(table.columnWidths()).containsExactly(4, 4);
-        List<String> lines = table.renderLines().stream().map(StyledText::plainText).toList();
-        assertThat(lines).as("rows of the table")
-                .containsExactly("ab  cd  ", "\u0301\uFE0F  x   ");
+        List<String> lines =
+                table.renderLines().stream().map(StyledText::plainText).toList();
+        assertThat(lines).as("rows of the table").containsExactly("ab  cd  ", "\u0301\uFE0F  x   ");
         assertThat(lines.stream().map(TextMeasure::columns).distinct())
                 .as("rows %s", lines.stream().map(TableFrameWidthTest::show).toList())
                 .hasSize(1);
         RenderedScreen screen = new ScreenRenderer().screen(table.view(), new Viewport(2, 8));
-        assertThat(paintedCells(screen, 0)).as("cells painted for the ASCII row")
+        assertThat(paintedCells(screen, 0))
+                .as("cells painted for the ASCII row")
                 .containsExactly("a", "b", " ", " ", "c", "d", " ", " ");
         assertThat(paintedCells(screen, 1))
                 .as("cells painted for the row that opens with the base-less cluster")
-                .containsExactly(TextMeasure.DOTTED_CIRCLE + "\u0301\uFE0F", "<continuation>",
-                        " ", " ", "x", " ", " ", " ");
+                .containsExactly(
+                        TextMeasure.DOTTED_CIRCLE + "\u0301\uFE0F", "<continuation>", " ", " ", "x", " ", " ", " ");
     }
 
     /**
@@ -293,23 +311,24 @@ class TableFrameWidthTest {
      */
     @Test
     void aFrameAroundABaselessClusterTheSelectorWidensKeepsEveryColumnInPlace() {
-        Table table = Table.of().border(FRAME)
+        Table table = Table.of()
+                .border(FRAME)
                 .row(StyledText.plain("ab"), StyledText.plain("cd"))
                 .row(StyledText.plain("\u0301\uFE0F"), StyledText.plain("x"));
         List<String> framed = rows(table.render().plainText());
-        assertThat(framed).as("framed rows").containsExactly("+--------+", "|ab  cd  |",
-                "|" + "\u0301\uFE0F" + "  x    |", "+--------+");
+        assertThat(framed)
+                .as("framed rows")
+                .containsExactly("+--------+", "|ab  cd  |", "|" + "\u0301\uFE0F" + "  x    |", "+--------+");
         int width = TextMeasure.columns(framed.get(0));
-        RenderedScreen screen = new ScreenRenderer().screen(table.view(),
-                new Viewport(framed.size(), width));
-        assertThat(paintedCells(screen, 1)).as("cells painted for the ASCII row")
+        RenderedScreen screen = new ScreenRenderer().screen(table.view(), new Viewport(framed.size(), width));
+        assertThat(paintedCells(screen, 1))
+                .as("cells painted for the ASCII row")
                 .containsExactly("|", "a", "b", " ", " ", "c", "d", " ", " ", "|");
         // The mark joins the frame's left edge and the selector widens that edge cell, so the row
         // is charged the columns it really paints rather than one more than the frame drew.
         assertThat(paintedCells(screen, 2))
                 .as("cells painted for the row that opens with the base-less cluster")
-                .containsExactly("|" + "\u0301\uFE0F", "<continuation>", " ", " ", "x", " ", " ",
-                        " ", " ", "|");
+                .containsExactly("|" + "\u0301\uFE0F", "<continuation>", " ", " ", "x", " ", " ", " ", " ", "|");
         assertFrameIsPaintedColumnByColumn(table, framed);
     }
 
@@ -319,12 +338,9 @@ class TableFrameWidthTest {
      */
     @Test
     void aFrameAroundAControlAndABaselessClusterTheSelectorWidensCloses() {
-        Table table = Table.of().border(FRAME)
-                .row(StyledText.plain("ab"))
-                .row(StyledText.plain("\u200B\u0301\uFE0F"));
+        Table table = Table.of().border(FRAME).row(StyledText.plain("ab")).row(StyledText.plain("\u200B\u0301\uFE0F"));
         List<String> framed = rows(table.render().plainText());
-        assertThat(framed).as("framed rows").containsExactly(
-                "+----+", "|ab  |", "|\u200B\u0301\uFE0F  |", "+----+");
+        assertThat(framed).as("framed rows").containsExactly("+----+", "|ab  |", "|\u200B\u0301\uFE0F  |", "+----+");
         assertFrameIsPaintedColumnByColumn(table, framed);
     }
 
@@ -339,14 +355,19 @@ class TableFrameWidthTest {
         Table table = Table.of().buffer(0);
         table.row(StyledText.plain("ab"), StyledText.plain("\uFE0Fx"));
         table.row(StyledText.plain("\uFE0Fx"), StyledText.plain("a"));
-        List<String> lines = table.renderLines().stream().map(StyledText::plainText).toList();
+        List<String> lines =
+                table.renderLines().stream().map(StyledText::plainText).toList();
         assertThat(lines).isEqualTo(List.of("ab\uFE0Fx", "\uFE0Fx a "));
-        assertThat(lines).allSatisfy(line ->
-                assertThat(TextMeasure.columns(line)).as("line [%s]", show(line)).isEqualTo(4));
+        assertThat(lines)
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                        .as("line [%s]", show(line))
+                        .isEqualTo(4));
         List<String> framed = rows(table.border(FRAME).render().plainText());
         assertThat(framed).isEqualTo(List.of("+-----+", "|ab\uFE0Fx |", "|\uFE0Fx a |", "+-----+"));
-        assertThat(framed).allSatisfy(line ->
-                assertThat(TextMeasure.columns(line)).as("line [%s]", show(line)).isEqualTo(7));
+        assertThat(framed)
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                        .as("line [%s]", show(line))
+                        .isEqualTo(7));
     }
 
     /** A cell with several lines keeps one width per row of the block it occupies. */
@@ -359,8 +380,10 @@ class TableFrameWidthTest {
             List<String> framed = rows(table.render().plainText());
             assertThat(framed).as("cell %s", show(cell)).hasSize(5);
             assertThat(framed.stream().map(TextMeasure::columns).distinct())
-                    .as("cell %s rows %s", show(cell), framed.stream().map(TableFrameWidthTest::show)
-                            .toList())
+                    .as(
+                            "cell %s rows %s",
+                            show(cell),
+                            framed.stream().map(TableFrameWidthTest::show).toList())
                     .hasSize(1);
         }
     }
@@ -376,22 +399,32 @@ class TableFrameWidthTest {
     void aStyleBoundaryInsideABaselessClusterKeepsTheColumnsTheRowMeasures() {
         Table table = Table.of()
                 .row(StyledText.plain("ab"), StyledText.plain("one"))
-                .row(StyledText.of("\uFE0F", Style.NONE.withBold())
-                        .append(StyledText.of("\u0301y", Style.NONE)),
+                .row(
+                        StyledText.of("\uFE0F", Style.NONE.withBold()).append(StyledText.of("\u0301y", Style.NONE)),
                         StyledText.plain("two"));
         assertThat(table.columnWidths()).as("measured columns").containsExactly(5, 5);
-        List<String> lines = table.renderLines().stream().map(StyledText::plainText).toList();
-        assertThat(lines).as("rows of the table")
-                .containsExactly("ab   one  ", "\uFE0F\u0301y  two  ");
+        List<String> lines =
+                table.renderLines().stream().map(StyledText::plainText).toList();
+        assertThat(lines).as("rows of the table").containsExactly("ab   one  ", "\uFE0F\u0301y  two  ");
         assertThat(lines.stream().map(TextMeasure::columns).distinct())
                 .as("rows %s", lines.stream().map(TableFrameWidthTest::show).toList())
                 .hasSize(1);
         RenderedScreen screen = new ScreenRenderer().screen(table.view(), new Viewport(2, 10));
-        assertThat(paintedCells(screen, 0)).as("cells painted for the ASCII row")
+        assertThat(paintedCells(screen, 0))
+                .as("cells painted for the ASCII row")
                 .containsExactly("a", "b", " ", " ", " ", "o", "n", "e", " ", " ");
         assertThat(paintedCells(screen, 1))
                 .as("cells painted for the row whose selector is split from its mark")
-                .containsExactly(TextMeasure.DOTTED_CIRCLE + "\uFE0F\u0301", "<continuation>",
-                        "y", " ", " ", "t", "w", "o", " ", " ");
+                .containsExactly(
+                        TextMeasure.DOTTED_CIRCLE + "\uFE0F\u0301",
+                        "<continuation>",
+                        "y",
+                        " ",
+                        " ",
+                        "t",
+                        "w",
+                        "o",
+                        " ",
+                        " ");
     }
 }

@@ -27,7 +27,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-
 import org.junit.jupiter.api.Test;
 
 /** Bracketed-paste reading: termination, limits, and the idle window. */
@@ -74,16 +73,21 @@ class PasteDecoderTest {
     void aHugeIdleWindowStillAcceptsAPasteThatArrivesLate() throws IOException {
         // Long.MAX_VALUE milliseconds used to wrap the nanosecond window negative, so the first
         // poll saw an expired deadline and the paste was dropped before its first byte.
-        PasteDecoder.Result result =
-                PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new DelayedStream(payload("slow"), 3)), 1024, Long.MAX_VALUE);
+        PasteDecoder.Result result = PasteDecoder.read(
+                io.github.dhoard.braxton.internal.input.TestReaders.utf8(new DelayedStream(payload("slow"), 3)),
+                1024,
+                Long.MAX_VALUE);
         assertThat(result.text()).isEqualTo("slow");
         assertThat(result.terminated()).isTrue();
     }
 
     @Test
     void anExpiredWindowReturnsWhatArrivedUntruncated() throws IOException {
-        PasteDecoder.Result result =
-                PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new DelayedStream("partial".getBytes(StandardCharsets.UTF_8), 2)), 1024, 50L);
+        PasteDecoder.Result result = PasteDecoder.read(
+                io.github.dhoard.braxton.internal.input.TestReaders.utf8(
+                        new DelayedStream("partial".getBytes(StandardCharsets.UTF_8), 2)),
+                1024,
+                50L);
         assertThat(result.text()).isEqualTo("partial");
         assertThat(result.terminated()).isFalse();
         assertThat(result.truncated()).isFalse();
@@ -91,7 +95,10 @@ class PasteDecoderTest {
 
     @Test
     void aPayloadOverTheLimitIsTruncatedAndTerminated() throws IOException {
-        PasteDecoder.Result result = PasteDecoder.read(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new DelayedStream(payload("abcdef"), 0)), 3, 1_000L);
+        PasteDecoder.Result result = PasteDecoder.read(
+                io.github.dhoard.braxton.internal.input.TestReaders.utf8(new DelayedStream(payload("abcdef"), 0)),
+                3,
+                1_000L);
         assertThat(result.text()).isEqualTo("abc");
         assertThat(result.truncated()).isTrue();
         assertThat(result.terminated()).isTrue();

@@ -37,15 +37,14 @@ public final class TranscriptLoader {
 
     public static final String RESOURCE = "/examples/ai-harness/test.json";
 
-    private TranscriptLoader() {
-    }
+    private TranscriptLoader() {}
 
     /** Loads the bundled fixture, degrading to a warning-and-fallback transcript on failure. */
     public static HarnessTranscript load() {
         try (InputStream stream = TranscriptLoader.class.getResourceAsStream(RESOURCE)) {
             if (stream == null) {
-                return HarnessTranscript.empty(List.of(
-                        "Bundled example transcript not found; fallback responses are active."));
+                return HarnessTranscript.empty(
+                        List.of("Bundled example transcript not found; fallback responses are active."));
             }
             return new TranscriptJsonlReader().read(stream);
         } catch (IOException failure) {

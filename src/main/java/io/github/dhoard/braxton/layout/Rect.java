@@ -36,8 +36,7 @@ public record Rect(int row, int col, int rows, int cols) {
     }
 
     public boolean contains(int targetRow, int targetCol) {
-        return targetRow >= row && targetRow < (long) row + rows
-                && targetCol >= col && targetCol < (long) col + cols;
+        return targetRow >= row && targetRow < (long) row + rows && targetCol >= col && targetCol < (long) col + cols;
     }
 
     /** Shrinks this rectangle by insets; never produces negative dimensions. */

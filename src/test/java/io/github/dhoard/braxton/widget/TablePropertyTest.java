@@ -24,14 +24,12 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.Random;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import java.util.Random;
+import org.junit.jupiter.api.Test;
 
 /** Every rendered table row shares one width, bordered or not. */
 class TablePropertyTest {
@@ -42,11 +40,10 @@ class TablePropertyTest {
         // The last four cells open with a cluster that has no base of its own. A row is painted as
         // one cluster sequence, so that cluster joins the cell before it and the row occupies fewer
         // or more columns than the cells measured one by one add up to.
-        String[] cells = {"a", "\u65E5", "ccc", "", "e\u0301",
-                "\u0301", "\u0301x", "\uFE0Fx", "\u200D"};
+        String[] cells = {"a", "\u65E5", "ccc", "", "e\u0301", "\u0301", "\u0301x", "\uFE0Fx", "\u200D"};
         for (int iteration = 0; iteration < 200; iteration++) {
-            Table table = Table.of().buffer(random.nextInt(4))
-                    .border(random.nextBoolean() ? Border.SINGLE : Border.NONE);
+            Table table =
+                    Table.of().buffer(random.nextInt(4)).border(random.nextBoolean() ? Border.SINGLE : Border.NONE);
             int columns = 1 + random.nextInt(3);
             int rows = 1 + random.nextInt(3);
             for (int row = 0; row < rows; row++) {
@@ -57,12 +54,17 @@ class TablePropertyTest {
                 table.row(values);
             }
             java.util.List<Integer> widths = table.renderLines().stream()
-                    .map(line -> TextMeasure.columns(line.plainText())).distinct().toList();
+                    .map(line -> TextMeasure.columns(line.plainText()))
+                    .distinct()
+                    .toList();
             assertThat(widths).as("iteration %d", iteration).hasSizeLessThanOrEqualTo(1);
-            java.util.List<Integer> renderedWidths = table.render().plainText().lines()
-                    .map(TextMeasure::columns).distinct().toList();
-            assertThat(renderedWidths).as("framed iteration %d", iteration)
-                    .hasSizeLessThanOrEqualTo(1);
+            java.util.List<Integer> renderedWidths = table.render()
+                    .plainText()
+                    .lines()
+                    .map(TextMeasure::columns)
+                    .distinct()
+                    .toList();
+            assertThat(renderedWidths).as("framed iteration %d", iteration).hasSizeLessThanOrEqualTo(1);
         }
     }
 
@@ -74,8 +76,9 @@ class TablePropertyTest {
     @Test
     void stylingACellNeverChangesTheRenderedTable() {
         Random random = new Random(41L);
-        String[] atoms = {"a", "bc", " ", "\t", "e\u0301", "\u0301", "\uFE0F", "\u65E5",
-                "\uD83D\uDE00", "\u200B", "\uFE0E"};
+        String[] atoms = {
+            "a", "bc", " ", "\t", "e\u0301", "\u0301", "\uFE0F", "\u65E5", "\uD83D\uDE00", "\u200B", "\uFE0E"
+        };
         Style bold = Style.NONE.withBold();
         for (int iteration = 0; iteration < 200; iteration++) {
             int buffer = random.nextInt(3);
@@ -99,30 +102,37 @@ class TablePropertyTest {
                         cut++;
                     }
                     plainCells.add(StyledText.plain(value));
-                    styledCells.add(cut == 0 || cut == value.length()
-                            ? StyledText.of(value, bold)
-                            : StyledText.concat(StyledText.of(value.substring(0, cut), Style.NONE),
-                                    StyledText.of(value.substring(cut), bold)));
+                    styledCells.add(
+                            cut == 0 || cut == value.length()
+                                    ? StyledText.of(value, bold)
+                                    : StyledText.concat(
+                                            StyledText.of(value.substring(0, cut), Style.NONE),
+                                            StyledText.of(value.substring(cut), bold)));
                 }
                 plain.row(plainCells);
                 styled.row(styledCells);
             }
-            assertThat(styled.columnWidths()).as("iteration %d", iteration)
-                    .isEqualTo(plain.columnWidths());
-            assertThat(styled.renderLines()).as("iteration %d", iteration)
+            assertThat(styled.columnWidths()).as("iteration %d", iteration).isEqualTo(plain.columnWidths());
+            assertThat(styled.renderLines())
+                    .as("iteration %d", iteration)
                     .extracting(StyledText::plainText)
-                    .isEqualTo(plain.renderLines().stream().map(StyledText::plainText).toList());
+                    .isEqualTo(plain.renderLines().stream()
+                            .map(StyledText::plainText)
+                            .toList());
         }
     }
 
     @Test
     void theBorderStyleAppliesToTheFrameOnly() {
-        Table table = Table.of().row(io.github.dhoard.braxton.style.StyledText.plain("cell"))
+        Table table = Table.of()
+                .row(io.github.dhoard.braxton.style.StyledText.plain("cell"))
                 .border(io.github.dhoard.braxton.layout.Border.SINGLE)
                 .borderStyle(io.github.dhoard.braxton.style.Style.NONE.withBold());
         java.util.List<io.github.dhoard.braxton.style.StyledText.Span> spans =
                 table.render().spans();
-        assertThat(spans.get(0).style().bold()).as("the top edge carries the border style").isTrue();
+        assertThat(spans.get(0).style().bold())
+                .as("the top edge carries the border style")
+                .isTrue();
         assertThat(spans).anySatisfy(span -> {
             assertThat(span.text()).contains("cell");
             assertThat(span.style().bold()).as("the cell keeps its own style").isFalse();

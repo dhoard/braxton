@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.internal.text;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Field;
-
 import org.junit.jupiter.api.Test;
 
 /** The generated wide-width table: sorted, disjoint ranges that the binary search can rely on. */
@@ -44,10 +43,10 @@ class Unicode16WidthTest {
         assertThat(start).as("one end per start").hasSameSizeAs(end);
         assertThat(start).isSorted();
         for (int i = 0; i < start.length; i++) {
-            assertThat(start[i]).as("range %d must not be inverted", i)
-                    .isLessThanOrEqualTo(end[i]);
+            assertThat(start[i]).as("range %d must not be inverted", i).isLessThanOrEqualTo(end[i]);
             if (i > 0) {
-                assertThat(start[i]).as("range %d must start after the previous end", i)
+                assertThat(start[i])
+                        .as("range %d must start after the previous end", i)
                         .isGreaterThan(end[i - 1]);
             }
         }
@@ -58,10 +57,16 @@ class Unicode16WidthTest {
         int[] start = ranges("START");
         int[] end = ranges("END");
         for (int i = 0; i < start.length; i++) {
-            assertThat(Unicode16Width.isWide(start[i])).as("start of range %d", i).isTrue();
+            assertThat(Unicode16Width.isWide(start[i]))
+                    .as("start of range %d", i)
+                    .isTrue();
             assertThat(Unicode16Width.isWide(end[i])).as("end of range %d", i).isTrue();
-            assertThat(Unicode16Width.isWide(start[i] - 1)).as("before range %d", i).isFalse();
-            assertThat(Unicode16Width.isWide(end[i] + 1)).as("after range %d", i).isFalse();
+            assertThat(Unicode16Width.isWide(start[i] - 1))
+                    .as("before range %d", i)
+                    .isFalse();
+            assertThat(Unicode16Width.isWide(end[i] + 1))
+                    .as("after range %d", i)
+                    .isFalse();
         }
         // A few anchors that must never drift: ASCII and combining marks are narrow, CJK, fullwidth
         // forms and emoji presentation are wide.

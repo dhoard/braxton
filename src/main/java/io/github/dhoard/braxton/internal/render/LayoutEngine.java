@@ -22,12 +22,6 @@
 
 package io.github.dhoard.braxton.internal.render;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Objects;
-
 import io.github.dhoard.braxton.internal.text.Graphemes;
 import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Border;
@@ -38,6 +32,11 @@ import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
 import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Turns a {@link View} tree into a painted {@link Screen}.
@@ -50,12 +49,10 @@ import io.github.dhoard.braxton.view.View;
 public final class LayoutEngine {
 
     /** One focusable element's painted rectangle, in paint order. */
-    public record Region(ElementId id, Rect bounds) {
-    }
+    public record Region(ElementId id, Rect bounds) {}
 
     /** The painted screen plus the focus regions declared while painting it. */
-    public record Layout(Screen screen, List<Region> regions) {
-    }
+    public record Layout(Screen screen, List<Region> regions) {}
 
     private final WidthPolicy policy;
 
@@ -102,15 +99,15 @@ public final class LayoutEngine {
             // width; measuring at the full width can wrap into fewer rows than it paints.
             case View.Padding<?> padding -> {
                 int vertical = padding.insets().vertical();
-                int inner = intrinsicHeight(padding.child(),
+                int inner = intrinsicHeight(
+                        padding.child(),
                         Math.max(0, cols - padding.insets().horizontal()),
                         Math.max(0, maxRows - vertical));
                 yield cappedSum(vertical, inner, maxRows);
             }
             case View.BorderBox<?> box -> {
                 int frame = box.border().isVisible() ? 2 : 0;
-                int inner = intrinsicHeight(box.child(), Math.max(0, cols - frame),
-                        Math.max(0, maxRows - frame));
+                int inner = intrinsicHeight(box.child(), Math.max(0, cols - frame), Math.max(0, maxRows - frame));
                 yield cappedSum(frame, inner, maxRows);
             }
             // The reservation is capped by the rows still available: a child cannot need more than
@@ -134,11 +131,20 @@ public final class LayoutEngine {
             case View.Fill<?> fill -> maxCols;
             case View.Column<?> column -> columnWidth(column, maxCols);
             case View.Row<?> row -> rowWidth(row, maxCols);
-            case View.Padding<?> padding -> Math.min(maxCols,
-                    padding.insets().horizontal() + intrinsicWidth(padding.child(),
-                            Math.max(0, maxCols - padding.insets().horizontal())));
-            case View.BorderBox<?> box -> Math.min(maxCols, (box.border().isVisible() ? 2 : 0)
-                    + intrinsicWidth(box.child(), Math.max(0, maxCols - (box.border().isVisible() ? 2 : 0))));
+            case View.Padding<?> padding ->
+                Math.min(
+                        maxCols,
+                        padding.insets().horizontal()
+                                + intrinsicWidth(
+                                        padding.child(),
+                                        Math.max(0, maxCols - padding.insets().horizontal())));
+            case View.BorderBox<?> box ->
+                Math.min(
+                        maxCols,
+                        (box.border().isVisible() ? 2 : 0)
+                                + intrinsicWidth(
+                                        box.child(),
+                                        Math.max(0, maxCols - (box.border().isVisible() ? 2 : 0))));
             case View.Fixed<?> fixed -> Math.min(maxCols, fixed.size());
             case View.Grow<?> grow -> 0;
             case View.Overlay<?> overlay -> overlayWidth(overlay, maxCols);
@@ -203,8 +209,7 @@ public final class LayoutEngine {
      * column's own {@code cols} columns.
      */
     private int[] columnHeights(List<? extends View<?>> items, int cols, int rows) {
-        return mainAxisSizes(items, rows, (child, remaining) ->
-                intrinsicHeight(child, cols, remaining));
+        return mainAxisSizes(items, rows, (child, remaining) -> intrinsicHeight(child, cols, remaining));
     }
 
     /** Measures one child against the main-axis space still unclaimed. */
@@ -223,8 +228,7 @@ public final class LayoutEngine {
      * the rounding and the order the remainder is handed out are the part that would otherwise drift
      * between them.</p>
      */
-    private static int[] mainAxisSizes(
-            List<? extends View<?>> items, int total, MainAxisMeasure intrinsic) {
+    private static int[] mainAxisSizes(List<? extends View<?>> items, int total, MainAxisMeasure intrinsic) {
         int[] sizes = new int[items.size()];
         int used = 0;
         // Weights are any non-negative int, so the sum and the per-child product are widened:
@@ -238,8 +242,7 @@ public final class LayoutEngine {
                 sizes[i] = Math.min(fixed.size(), Math.max(0, total - used));
                 used += sizes[i];
             } else {
-                sizes[i] = Math.min(intrinsic.measure(child, Math.max(0, total - used)),
-                        Math.max(0, total - used));
+                sizes[i] = Math.min(intrinsic.measure(child, Math.max(0, total - used)), Math.max(0, total - used));
                 used += sizes[i];
             }
         }
@@ -293,7 +296,8 @@ public final class LayoutEngine {
     private int overlayHeight(View.Overlay<?> overlay, int cols, int maxRows) {
         int tallest = 0;
         for (int i = 0; i < overlay.layers().size(); i++) {
-            tallest = Math.max(tallest, intrinsicHeight(crossAxis(overlay.layers().get(i)), cols, maxRows));
+            tallest =
+                    Math.max(tallest, intrinsicHeight(crossAxis(overlay.layers().get(i)), cols, maxRows));
             if (tallest >= maxRows) {
                 return maxRows;
             }
@@ -364,7 +368,7 @@ public final class LayoutEngine {
         }
         switch (view) {
             case View.Text<?> text -> paintText(text.text(), screen, clip);
-            case View.Blank<?> blank -> { }
+            case View.Blank<?> blank -> {}
             case View.Fill<?> fill -> screen.fill(clip, fill.style());
             case View.Column<?> column -> paintColumn(column, screen, clip, regions);
             case View.Row<?> row -> paintRow(row, screen, clip, regions);
@@ -400,8 +404,7 @@ public final class LayoutEngine {
             View<?> child = items.get(i);
             // Start alignment always gives the child the full width, so no cross-axis
             // measurement is needed (especially for text whose tail is offscreen).
-            int width = column.align() == Alignment.START
-                    ? bounds.cols() : childWidth(child, bounds.cols());
+            int width = column.align() == Alignment.START ? bounds.cols() : childWidth(child, bounds.cols());
             int col = bounds.col();
             int childCols = bounds.cols();
             if (width < bounds.cols()) {
@@ -417,7 +420,7 @@ public final class LayoutEngine {
                         col += bounds.cols() - width;
                         childCols = width;
                     }
-                    case START -> { }
+                    case START -> {}
                 }
             }
             Rect childBounds = new Rect(row, col, height, Math.max(0, childCols));
@@ -483,9 +486,13 @@ public final class LayoutEngine {
             case View.Fill<?> fill -> cols;
             case View.Column<?> column -> columnWidth(column, cols);
             case View.Row<?> row -> rowContentWidth(row, cols);
-            case View.Padding<?> padding -> Math.min(cols,
-                    padding.insets().horizontal() + contentWidth(padding.child(),
-                            Math.max(0, cols - padding.insets().horizontal())));
+            case View.Padding<?> padding ->
+                Math.min(
+                        cols,
+                        padding.insets().horizontal()
+                                + contentWidth(
+                                        padding.child(),
+                                        Math.max(0, cols - padding.insets().horizontal())));
             case View.BorderBox<?> box -> {
                 int frame = box.border().isVisible() ? 2 : 0;
                 yield Math.min(cols, frame + contentWidth(box.child(), Math.max(0, cols - frame)));
@@ -541,8 +548,7 @@ public final class LayoutEngine {
         screen.put(bounds.row(), bounds.col(), topLeft, style, null, 1);
         screen.put(bounds.row(), bounds.col() + bounds.cols() - 1, topRight, style, null, 1);
         screen.put(bounds.row() + bounds.rows() - 1, bounds.col(), bottomLeft, style, null, 1);
-        screen.put(bounds.row() + bounds.rows() - 1, bounds.col() + bounds.cols() - 1,
-                bottomRight, style, null, 1);
+        screen.put(bounds.row() + bounds.rows() - 1, bounds.col() + bounds.cols() - 1, bottomRight, style, null, 1);
         for (int col = bounds.col() + 1; col < bounds.col() + bounds.cols() - 1; col++) {
             putIfInside(screen, bounds.row(), col, horizontal, style, 1);
             putIfInside(screen, bounds.row() + bounds.rows() - 1, col, horizontal, style, 1);
@@ -555,12 +561,14 @@ public final class LayoutEngine {
             StyledText title = box.title();
             List<StyledText> lines = wrapLines(title, Math.max(0, bounds.cols() - 4), 1);
             if (!lines.isEmpty()) {
-                paintText(lines.get(0), screen,
+                paintText(
+                        lines.get(0),
+                        screen,
                         new Rect(bounds.row(), bounds.col() + 2, 1, Math.max(0, bounds.cols() - 4)));
             }
         }
-        Rect inner = new Rect(bounds.row() + 1, bounds.col() + 1,
-                Math.max(0, bounds.rows() - 2), Math.max(0, bounds.cols() - 2));
+        Rect inner = new Rect(
+                bounds.row() + 1, bounds.col() + 1, Math.max(0, bounds.rows() - 2), Math.max(0, bounds.cols() - 2));
         paint(box.child(), screen, inner, regions);
     }
 
@@ -622,7 +630,9 @@ public final class LayoutEngine {
                 // re-segment a cell it has already split. A cell that opened at the span's first
                 // cluster is the exception - that cluster can be the tail of a cluster the plain text
                 // reads as one, and the next cluster can continue it.
-                if ((width > 0 || hasNoBase(grapheme)) && cellBase != null && cellSpan != spanIndex
+                if ((width > 0 || hasNoBase(grapheme))
+                        && cellBase != null
+                        && cellSpan != spanIndex
                         && continuesCluster(cellText(cellBase, cellRun), grapheme)) {
                     // A span boundary can split one cluster the measurement read as one: the mark
                     // or selector in its own span continues the cell painted before it instead of
@@ -664,8 +674,13 @@ public final class LayoutEngine {
                     if (nextCol + cellWidth > limit) {
                         return;
                     }
-                    screen.put(row, cellCol, paintedText(cellText(cellBase, cellRun), leading),
-                            cellStyle, cellLink, cellWidth);
+                    screen.put(
+                            row,
+                            cellCol,
+                            paintedText(cellText(cellBase, cellRun), leading),
+                            cellStyle,
+                            cellLink,
+                            cellWidth);
                     nextCol = cellCol + cellWidth;
                     leading = null;
                 }
@@ -679,8 +694,7 @@ public final class LayoutEngine {
             }
         }
         if (cellBase != null && nextCol + cellWidth <= limit) {
-            screen.put(row, cellCol, paintedText(cellText(cellBase, cellRun), leading),
-                    cellStyle, cellLink, cellWidth);
+            screen.put(row, cellCol, paintedText(cellText(cellBase, cellRun), leading), cellStyle, cellLink, cellWidth);
         }
     }
 
@@ -734,11 +748,12 @@ public final class LayoutEngine {
      */
     private static boolean hasNoBase(String grapheme) {
         boolean mark = false;
-        for (int offset = 0; offset < grapheme.length();) {
+        for (int offset = 0; offset < grapheme.length(); ) {
             int codePoint = grapheme.codePointAt(offset);
             offset += Character.charCount(codePoint);
             int type = Character.getType(codePoint);
-            if (type == Character.NON_SPACING_MARK || type == Character.ENCLOSING_MARK
+            if (type == Character.NON_SPACING_MARK
+                    || type == Character.ENCLOSING_MARK
                     || type == Character.COMBINING_SPACING_MARK) {
                 mark = true;
             } else if (type != Character.FORMAT) {
@@ -912,9 +927,7 @@ public final class LayoutEngine {
             // cell that is just the cluster the cursor read is not copied out of it first.
             boolean baseless = prefix.isEmpty() ? hasNoBase(raw) : hasNoBase(prefix + raw);
             String circle = baseless ? TextMeasure.DOTTED_CIRCLE : "";
-            String cellStart = circle.isEmpty()
-                    ? (prefix.isEmpty() ? raw : prefix + raw)
-                    : circle + prefix + raw;
+            String cellStart = circle.isEmpty() ? (prefix.isEmpty() ? raw : prefix + raw) : circle + prefix + raw;
             String cellPlain = cellStart;
             int cellWidth = baseless ? TextMeasure.clusterColumns(cellPlain, policy) : width;
             List<Piece> pieces = null;
@@ -924,13 +937,11 @@ public final class LayoutEngine {
                 pieces = new ArrayList<>(attached.size() + 2);
                 for (int i = 0; i < attached.size(); i++) {
                     Piece piece = attached.get(i);
-                    pieces.add(new Piece(i == 0 ? circle + piece.text() : piece.text(),
-                            piece.style(), piece.link()));
+                    pieces.add(new Piece(i == 0 ? circle + piece.text() : piece.text(), piece.style(), piece.link()));
                 }
                 pieces.add(new Piece(raw, style, link));
             }
-            for (String following = cursor.peek(); following != null;
-                    following = cursor.peek()) {
+            for (String following = cursor.peek(); following != null; following = cursor.peek()) {
                 // The cursor took both clusters from one segmentation of the same span, so the cell
                 // that ends at the first of them is whole there and the second opens a cluster of its
                 // own: asking again would copy the cell out and segment it once per column. A cell
@@ -989,8 +1000,7 @@ public final class LayoutEngine {
     }
 
     /** One span-sized piece of a cell that a style boundary split into several pieces. */
-    private record Piece(String text, Style style, String link) {
-    }
+    private record Piece(String text, Style style, String link) {}
 
     /** Writes a run of invisible clusters to the line it was read on; it continues no cell. */
     private static void commitRun(LineBuilder line, List<Piece> run) {
@@ -1033,8 +1043,7 @@ public final class LayoutEngine {
         for (String cluster : following) {
             grown += cluster;
         }
-        return Math.max(0, TextMeasure.clusterColumns(grown, policy)
-                - TextMeasure.clusterColumns(cell, policy));
+        return Math.max(0, TextMeasure.clusterColumns(grown, policy) - TextMeasure.clusterColumns(cell, policy));
     }
 
     /**
@@ -1064,6 +1073,7 @@ public final class LayoutEngine {
         private boolean hasAhead;
         /** Clusters {@link #clustersContinuing} read ahead of the current one, in order. */
         private List<Piece> buffered;
+
         private int bufferedIndex;
         private String text;
         private Style style = Style.NONE;
@@ -1109,8 +1119,7 @@ public final class LayoutEngine {
             List<String> chain = null;
             String grown = cell;
             while (hasAhead || fetchFromSource()) {
-                if (TextMeasure.clusterColumns(ahead, policy) > 0
-                        || !continuesCluster(grown, ahead)) {
+                if (TextMeasure.clusterColumns(ahead, policy) > 0 || !continuesCluster(grown, ahead)) {
                     break;
                 }
                 String head = ahead;

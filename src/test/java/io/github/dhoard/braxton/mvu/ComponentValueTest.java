@@ -26,11 +26,9 @@ import static org.assertj.core.api.Assertions.*;
 
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.layout.Viewport;
-
-import org.junit.jupiter.api.Test;
-
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.Test;
 
 class ComponentValueTest {
     @Test
@@ -39,8 +37,7 @@ class ComponentValueTest {
         var result = new Update<>("model", Command.none(), outputs);
         outputs.clear();
         assertThat(result.outputs()).containsExactly("out");
-        assertThatThrownBy(() -> result.outputs().clear())
-                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> result.outputs().clear()).isInstanceOf(UnsupportedOperationException.class);
         assertThatThrownBy(() -> Update.next(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> Update.next("m", null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new Update<>("m", Command.none(), null))
@@ -58,7 +55,8 @@ class ComponentValueTest {
         assertThat(path.segments()).containsExactly(ComponentId.of("a"));
         assertThat(path.append(ComponentId.of("b")).startsWith(path)).isTrue();
         assertThat(path.startsWith(path.append(ComponentId.of("b")))).isFalse();
-        assertThat(path.startsWith(ComponentPath.ROOT.append(ComponentId.of("ab")))).isFalse();
+        assertThat(path.startsWith(ComponentPath.ROOT.append(ComponentId.of("ab"))))
+                .isFalse();
         assertThat(path.startsWith(ComponentPath.ROOT)).isTrue();
         assertThat(ComponentPath.ROOT.startsWith(path)).isFalse();
         var same = ComponentPath.ROOT.append(ComponentId.of("a"));
@@ -74,11 +72,9 @@ class ComponentValueTest {
                 .isEqualTo(path.append(ComponentId.of("x")));
         assertThat(path.toString()).isEqualTo("/a");
         assertThat(ComponentPath.ROOT.toString()).isEqualTo("/");
-        assertThatThrownBy(() -> path.segments().clear())
-                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> path.segments().clear()).isInstanceOf(UnsupportedOperationException.class);
         for (String invalid : List.of("", " ", ".", "..", "a/b", "\u001b", "x".repeat(129))) {
-            assertThatThrownBy(() -> ComponentId.of(invalid))
-                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> ComponentId.of(invalid)).isInstanceOf(IllegalArgumentException.class);
         }
         assertThatThrownBy(() -> ComponentId.of(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> path.prepend(null))
@@ -100,14 +96,10 @@ class ComponentValueTest {
         assertThat(new ViewContext(Viewport.EMPTY).viewport()).isSameAs(Viewport.EMPTY);
         assertThatThrownBy(() -> ModelLens.of(null, (String p, String c) -> p))
                 .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> OutputRoute.toMessage(null))
-                .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> OutputRoute.toOutput(null))
-                .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new OutputRoute.Message<>(null))
-                .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new OutputRoute.Output<>(null))
-                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> OutputRoute.toMessage(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> OutputRoute.toOutput(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new OutputRoute.Message<>(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new OutputRoute.Output<>(null)).isInstanceOf(NullPointerException.class);
         var nodes = new ArrayList<ComponentTree.Node>();
         var tree = new ComponentTree(nodes);
         nodes.add(new ComponentTree.Node(ComponentId.of("a"), ComponentTree.empty()));

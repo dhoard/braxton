@@ -24,7 +24,6 @@ package io.github.dhoard.braxton.view;
 
 import io.github.dhoard.braxton.mvu.ComponentId;
 import io.github.dhoard.braxton.mvu.ComponentPath;
-
 import java.util.Objects;
 
 /** A validated local identity. Mounting adds a structural path, never a string namespace. */

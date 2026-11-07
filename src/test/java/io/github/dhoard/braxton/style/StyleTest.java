@@ -31,8 +31,14 @@ class StyleTest {
 
     @Test
     void withersChangeOnlyTheirOwnComponent() {
-        Style style = Style.NONE.withBold().withItalic().withUnderline().withStrikethrough()
-                .withInvert().withHidden().withForeground(Colors.ERROR_400)
+        Style style = Style.NONE
+                .withBold()
+                .withItalic()
+                .withUnderline()
+                .withStrikethrough()
+                .withInvert()
+                .withHidden()
+                .withForeground(Colors.ERROR_400)
                 .withBackground(Colors.BLACK);
         assertThat(style.bold()).isTrue();
         assertThat(style.italic()).isTrue();

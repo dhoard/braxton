@@ -26,12 +26,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -40,6 +34,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** Timer registration can finish after removal or after its own callback schedules a successor. */
 @Timeout(10)
@@ -47,7 +45,9 @@ class SubscriptionTimerLifecycleTest {
     private static Object validPayload(Mailbox.Envelope envelope) {
         assertThat(envelope).isInstanceOf(Mailbox.AppMessage.class);
         var message = (Mailbox.AppMessage) envelope;
-        assertThat(message.valid().getAsBoolean()).as("the emitted message is still live").isTrue();
+        assertThat(message.valid().getAsBoolean())
+                .as("the emitted message is still live")
+                .isTrue();
         return message.payload();
     }
 
@@ -56,8 +56,7 @@ class SubscriptionTimerLifecycleTest {
     void closingAnIntervalCancelsAHandleStillBeingScheduled(String action) throws Exception {
         HeldTimers timers = new HeldTimers(2);
         Mailbox mailbox = new Mailbox(8);
-        SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox, timers, 4,
-                message -> { });
+        SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox, timers, 4, message -> {});
         SubscriptionId id = SubscriptionId.of("tick");
         AtomicInteger mappings = new AtomicInteger();
         manager.reconcile(Subscription.interval(id, Duration.ofHours(1), time -> {
@@ -70,8 +69,8 @@ class SubscriptionTimerLifecycleTest {
                 assertThat(timers.holding.await(3, TimeUnit.SECONDS)).isTrue();
                 switch (action) {
                     case "remove" -> manager.reconcile(Subscription.none());
-                    case "replace" -> manager.reconcile(Subscription.interval(id,
-                            Duration.ofHours(2), time -> "replacement"));
+                    case "replace" ->
+                        manager.reconcile(Subscription.interval(id, Duration.ofHours(2), time -> "replacement"));
                     case "close" -> manager.closeAll();
                     default -> throw new AssertionError(action);
                 }
@@ -110,8 +109,7 @@ class SubscriptionTimerLifecycleTest {
     void refreshingAMapperKeepsAHandleThatIsStillBeingScheduled() throws Exception {
         HeldTimers timers = new HeldTimers(2);
         Mailbox mailbox = new Mailbox(8);
-        SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox, timers, 4,
-                message -> { });
+        SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox, timers, 4, message -> {});
         SubscriptionId id = SubscriptionId.of("tick");
         manager.reconcile(Subscription.interval(id, Duration.ofHours(1), time -> null));
         try (var executor = Executors.newSingleThreadExecutor()) {
@@ -140,11 +138,10 @@ class SubscriptionTimerLifecycleTest {
     void anOlderRegistrationCannotOverwriteItsAlreadyScheduledSuccessor() throws Exception {
         HeldTimers timers = new HeldTimers(1);
         Mailbox mailbox = new Mailbox(8);
-        SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox, timers, 4,
-                message -> { });
+        SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox, timers, 4, message -> {});
         try (var executor = Executors.newSingleThreadExecutor()) {
-            var starting = executor.submit(() -> manager.reconcile(Subscription.interval(
-                    SubscriptionId.of("tick"), Duration.ofHours(1), time -> null)));
+            var starting = executor.submit(() -> manager.reconcile(
+                    Subscription.interval(SubscriptionId.of("tick"), Duration.ofHours(1), time -> null)));
             try {
                 assertThat(timers.holding.await(3, TimeUnit.SECONDS)).isTrue();
                 // The scheduler can run the callback before schedule() returns its handle.

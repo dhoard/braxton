@@ -25,17 +25,15 @@ package io.github.dhoard.braxton.internal.input;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.util.List;
-import java.util.Optional;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
 
 /** Routing precedence is structural, not registration order. */
 class InputRouterTest {
@@ -46,7 +44,10 @@ class InputRouterTest {
 
     @Test
     void focusedInputHandlerReceivesUnboundKeys() {
-        View<String> view = Views.focus(ElementId.of("f"), true, List.of(),
+        View<String> view = Views.focus(
+                ElementId.of("f"),
+                true,
+                List.of(),
                 event -> Optional.of("focused:" + ((InputEvent.KeyInput) event).key()),
                 Views.text("x"));
         assertThat(InputRouter.route(view, key("x"))).contains("focused:x");
@@ -56,8 +57,7 @@ class InputRouterTest {
     void captureBindingsWinOverTheFocusedHandler() {
         View<String> view = Views.keyed(
                 List.of(Binding.of("up", "captured")),
-                Views.focus(ElementId.of("f"), true, List.of(),
-                        event -> Optional.of("focused"), Views.text("x")),
+                Views.focus(ElementId.of("f"), true, List.of(), event -> Optional.of("focused"), Views.text("x")),
                 List.of());
         assertThat(InputRouter.route(view, key("up"))).contains("captured");
         assertThat(InputRouter.route(view, key("down"))).contains("focused");
@@ -65,27 +65,30 @@ class InputRouterTest {
 
     @Test
     void focusedBindingsRunBeforeTheFocusedHandler() {
-        View<String> view = Views.focus(ElementId.of("f"), true,
+        View<String> view = Views.focus(
+                ElementId.of("f"),
+                true,
                 List.of(Binding.of("enter", "submitted")),
-                event -> Optional.of("handler"), Views.text("x"));
+                event -> Optional.of("handler"),
+                Views.text("x"));
         assertThat(InputRouter.route(view, key("enter"))).contains("submitted");
     }
 
     @Test
     void bubbleBindingsRunAfterTheFocusedTarget() {
-        View<String> view = Views.keyed(List.of(),
-                Views.focus(ElementId.of("f"), true, List.of(),
-                        event -> Optional.empty(), Views.text("x")),
+        View<String> view = Views.keyed(
+                List.of(),
+                Views.focus(ElementId.of("f"), true, List.of(), event -> Optional.empty(), Views.text("x")),
                 List.of(Binding.of("escape", "bubbled")));
         assertThat(InputRouter.route(view, key("escape"))).contains("bubbled");
     }
 
     @Test
     void interceptorsSeeTheFullEventBeforeTheFocusedHandler() {
-        View<String> view = Views.keyed(List.of(),
+        View<String> view = Views.keyed(
+                List.of(),
                 event -> Optional.of("stamped:" + ((InputEvent.KeyInput) event).capturedAtNanos()),
-                Views.focus(ElementId.of("f"), true, List.of(),
-                        event -> Optional.of("focused"), Views.text("x")),
+                Views.focus(ElementId.of("f"), true, List.of(), event -> Optional.of("focused"), Views.text("x")),
                 List.of());
         assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.ESCAPE, "", 42L)))
                 .contains("stamped:42");
@@ -93,20 +96,36 @@ class InputRouterTest {
 
     @Test
     void modalOverlayBlocksEverythingUnderneath() {
-        View<String> base = Views.focus(ElementId.of("base"), true,
-                List.of(Binding.of("x", "base")), event -> Optional.empty(), Views.text("b"));
-        View<String> dialog = Views.focus(ElementId.of("dialog"), true,
-                List.of(Binding.of("x", "dialog")), event -> Optional.empty(), Views.text("d"));
+        View<String> base = Views.focus(
+                ElementId.of("base"),
+                true,
+                List.of(Binding.of("x", "base")),
+                event -> Optional.empty(),
+                Views.text("b"));
+        View<String> dialog = Views.focus(
+                ElementId.of("dialog"),
+                true,
+                List.of(Binding.of("x", "dialog")),
+                event -> Optional.empty(),
+                Views.text("d"));
         View<String> view = Views.modal(base, dialog);
         assertThat(InputRouter.route(view, key("x"))).contains("dialog");
     }
 
     @Test
     void nestedModalOverlayBlocksEverythingUnderneath() {
-        View<String> base = Views.focus(ElementId.of("base"), true,
-                List.of(Binding.of("x", "base")), event -> Optional.empty(), Views.text("b"));
-        View<String> dialog = Views.focus(ElementId.of("dialog"), true,
-                List.of(Binding.of("x", "dialog")), event -> Optional.empty(), Views.text("d"));
+        View<String> base = Views.focus(
+                ElementId.of("base"),
+                true,
+                List.of(Binding.of("x", "base")),
+                event -> Optional.empty(),
+                Views.text("b"));
+        View<String> dialog = Views.focus(
+                ElementId.of("dialog"),
+                true,
+                List.of(Binding.of("x", "dialog")),
+                event -> Optional.empty(),
+                Views.text("d"));
         View<String> view = Views.column(Views.text("header"), Views.modal(base, dialog));
         assertThat(InputRouter.route(view, key("x"))).contains("dialog");
     }
@@ -114,8 +133,12 @@ class InputRouterTest {
     @Test
     void aNonModalOverlayStillRoutesToTheFocusedLayer() {
         View<String> base = Views.text("b");
-        View<String> layer = Views.focus(ElementId.of("layer"), true,
-                List.of(Binding.of("x", "layer")), event -> Optional.empty(), Views.text("l"));
+        View<String> layer = Views.focus(
+                ElementId.of("layer"),
+                true,
+                List.of(Binding.of("x", "layer")),
+                event -> Optional.empty(),
+                Views.text("l"));
         assertThat(InputRouter.route(Views.overlay(base, layer), key("x"))).contains("layer");
     }
 
@@ -123,12 +146,20 @@ class InputRouterTest {
     void aModalOverlayRoutesOnlyToItsTopmostLayer() {
         // The last layer is the one painted on top, so it is also the only scope input may reach,
         // whatever the layers beneath it declare.
-        View<String> under = Views.focus(ElementId.of("under"), true,
-                List.of(Binding.of("x", "under")), event -> Optional.empty(), Views.text("u"));
-        View<String> middle = Views.focus(ElementId.of("middle"), true,
-                List.of(Binding.of("x", "middle")), event -> Optional.empty(), Views.text("m"));
-        View<String> top = Views.focus(ElementId.of("top"), true,
-                List.of(Binding.of("x", "top")), event -> Optional.empty(), Views.text("t"));
+        View<String> under = Views.focus(
+                ElementId.of("under"),
+                true,
+                List.of(Binding.of("x", "under")),
+                event -> Optional.empty(),
+                Views.text("u"));
+        View<String> middle = Views.focus(
+                ElementId.of("middle"),
+                true,
+                List.of(Binding.of("x", "middle")),
+                event -> Optional.empty(),
+                Views.text("m"));
+        View<String> top = Views.focus(
+                ElementId.of("top"), true, List.of(Binding.of("x", "top")), event -> Optional.empty(), Views.text("t"));
         View<String> modal = Views.overlay(List.of(under, middle, top), true);
         assertThat(InputRouter.route(modal, key("x"))).contains("top");
         assertThat(InputRouter.modalScope(modal)).isSameAs(top);
@@ -145,10 +176,18 @@ class InputRouterTest {
 
     @Test
     void aTopLayerThatItselfHoldsAModalOverlayIsThatOverlay() {
-        View<String> under = Views.focus(ElementId.of("under"), true,
-                List.of(Binding.of("x", "under")), event -> Optional.empty(), Views.text("u"));
-        View<String> dialog = Views.focus(ElementId.of("dialog"), true,
-                List.of(Binding.of("x", "dialog")), event -> Optional.empty(), Views.text("d"));
+        View<String> under = Views.focus(
+                ElementId.of("under"),
+                true,
+                List.of(Binding.of("x", "under")),
+                event -> Optional.empty(),
+                Views.text("u"));
+        View<String> dialog = Views.focus(
+                ElementId.of("dialog"),
+                true,
+                List.of(Binding.of("x", "dialog")),
+                event -> Optional.empty(),
+                Views.text("d"));
         View<String> sheet = Views.overlay(List.of(under, Views.modal(Views.text("s"), dialog)), true);
         assertThat(InputRouter.modalScope(sheet)).isSameAs(dialog);
         assertThat(InputRouter.route(sheet, key("x"))).contains("dialog");
@@ -171,43 +210,64 @@ class InputRouterTest {
      */
     @Test
     void anUnfocusedElementConsumesNothingEvenWhenItIsTheScope() {
-        View<String> blurred = Views.focus(ElementId.of("field"), false,
-                List.of(Binding.of("x", "local")), event -> Optional.of("handler"), Views.text("f"));
+        View<String> blurred = Views.focus(
+                ElementId.of("field"),
+                false,
+                List.of(Binding.of("x", "local")),
+                event -> Optional.of("handler"),
+                Views.text("f"));
         assertThat(InputRouter.route(blurred, key("x")))
-                .as("local binding of an unfocused root").isEmpty();
+                .as("local binding of an unfocused root")
+                .isEmpty();
         assertThat(InputRouter.route(blurred, key("z")))
-                .as("input handler of an unfocused root").isEmpty();
+                .as("input handler of an unfocused root")
+                .isEmpty();
         assertThat(InputRouter.route(blurred, new InputEvent.PasteInput("hi")))
-                .as("input handler of an unfocused root").isEmpty();
+                .as("input handler of an unfocused root")
+                .isEmpty();
 
         View<String> underBindings = Views.onKeys(List.of(Binding.of("q", "quit")), blurred);
         assertThat(InputRouter.route(underBindings, key("q")))
-                .as("the scope's own bubble binding still fires").contains("quit");
+                .as("the scope's own bubble binding still fires")
+                .contains("quit");
 
-        View<String> base = Views.focus(ElementId.of("base"), true,
-                List.of(Binding.of("x", "base")), event -> Optional.empty(), Views.text("b"));
+        View<String> base = Views.focus(
+                ElementId.of("base"),
+                true,
+                List.of(Binding.of("x", "base")),
+                event -> Optional.empty(),
+                Views.text("b"));
         assertThat(InputRouter.route(Views.modal(base, blurred), key("x")))
-                .as("a modal whose top layer is unfocused").isEmpty();
+                .as("a modal whose top layer is unfocused")
+                .isEmpty();
 
         // The same element does consume once it owns focus, so this is about focus and not about
         // which node happens to be the scope.
-        View<String> focused = Views.focus(ElementId.of("field"), true,
-                List.of(Binding.of("x", "local")), event -> Optional.of("handler"), Views.text("f"));
+        View<String> focused = Views.focus(
+                ElementId.of("field"),
+                true,
+                List.of(Binding.of("x", "local")),
+                event -> Optional.of("handler"),
+                Views.text("f"));
         assertThat(InputRouter.route(focused, key("x"))).contains("local");
         assertThat(InputRouter.route(focused, key("z"))).contains("handler");
 
         // An unfocused ancestor of the focused element was never a consumer either: the focused
         // target below it still receives the event.
-        View<String> nested = Views.focus(ElementId.of("outer"), false,
-                List.of(Binding.of("x", "outer")), event -> Optional.of("outer handler"),
-                Views.focus(ElementId.of("inner"), true, List.of(),
-                        event -> Optional.of("inner"), Views.text("i")));
+        View<String> nested = Views.focus(
+                ElementId.of("outer"),
+                false,
+                List.of(Binding.of("x", "outer")),
+                event -> Optional.of("outer handler"),
+                Views.focus(ElementId.of("inner"), true, List.of(), event -> Optional.of("inner"), Views.text("i")));
         assertThat(InputRouter.route(nested, key("x"))).contains("inner");
     }
 
     @Test
     void pasteGoesToTheFocusedHandlerAndNeverToBindings() {
-        View<String> view = Views.focus(ElementId.of("f"), true,
+        View<String> view = Views.focus(
+                ElementId.of("f"),
+                true,
                 List.of(Binding.of("enter", "no")),
                 event -> Optional.of("paste:" + ((InputEvent.PasteInput) event).text()),
                 Views.text("x"));
@@ -216,21 +276,30 @@ class InputRouterTest {
 
     @Test
     void onKeysRegistersBubbleBindingsAndAllMapsEveryChild() {
-        View<String> onKeys = Views.onKeys(List.of(Binding.of("escape", "bubbled")),
-                Views.text("leaf"));
+        View<String> onKeys = Views.onKeys(List.of(Binding.of("escape", "bubbled")), Views.text("leaf"));
         assertThat(InputRouter.route(onKeys, key("escape")))
                 .as("without focus the scope's own bubble binding still fires")
                 .contains("bubbled");
 
-        View<String> focusedWins = Views.onKeys(List.of(Binding.of("x", "bubbled")),
-                Views.focus(ElementId.of("f"), true, List.of(Binding.of("x", "local")),
-                        event -> Optional.empty(), Views.text("leaf")));
+        View<String> focusedWins = Views.onKeys(
+                List.of(Binding.of("x", "bubbled")),
+                Views.focus(
+                        ElementId.of("f"),
+                        true,
+                        List.of(Binding.of("x", "local")),
+                        event -> Optional.empty(),
+                        Views.text("leaf")));
         assertThat(InputRouter.route(focusedWins, key("x"))).contains("local");
 
         List<View<String>> mapped = Views.all(
-                List.of(Views.text("a"), Views.focus(ElementId.of("f"), true,
-                        List.of(Binding.of("enter", "child")), event -> Optional.empty(),
-                        Views.text("b"))),
+                List.of(
+                        Views.text("a"),
+                        Views.focus(
+                                ElementId.of("f"),
+                                true,
+                                List.of(Binding.of("enter", "child")),
+                                event -> Optional.empty(),
+                                Views.text("b"))),
                 (String message) -> "parent:" + message);
         assertThat(mapped).hasSize(2);
         assertThat(mapped.get(0)).isInstanceOf(View.Text.class);
@@ -239,8 +308,8 @@ class InputRouterTest {
 
     @Test
     void duplicateBindingsInOnePhaseAreRejected() {
-        assertThatThrownBy(() -> Views.keyed(
-                List.of(Binding.of("x", "a"), Binding.of("x", "b")), Views.text("t"), List.of()))
+        assertThatThrownBy(() ->
+                        Views.keyed(List.of(Binding.of("x", "a"), Binding.of("x", "b")), Views.text("t"), List.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("duplicate");
     }

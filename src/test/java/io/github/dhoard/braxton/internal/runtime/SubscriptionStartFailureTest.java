@@ -27,18 +27,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
-
-import org.junit.jupiter.api.Test;
-
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import org.junit.jupiter.api.Test;
 
 class SubscriptionStartFailureTest {
     private static Object validPayload(Mailbox.Envelope envelope) {
         assertThat(envelope).isInstanceOf(Mailbox.AppMessage.class);
         var message = (Mailbox.AppMessage) envelope;
-        assertThat(message.valid().getAsBoolean()).as("the emitted message is still live").isTrue();
+        assertThat(message.valid().getAsBoolean())
+                .as("the emitted message is still live")
+                .isTrue();
         return message.payload();
     }
 
@@ -54,18 +54,20 @@ class SubscriptionStartFailureTest {
 
     private static void assertFailedStartInvalidatesEmitter(Throwable failure) {
         Mailbox mailbox = new Mailbox(8);
-        SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox,
-                new ManualTimers(), 4, message -> { });
+        SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox, new ManualTimers(), 4, message -> {});
         AtomicReference<Consumer<Object>> callback = new AtomicReference<>();
         AtomicInteger mapped = new AtomicInteger();
-        Subscription<String> source = Subscription.source(SubscriptionId.of("failed"), "cfg",
+        Subscription<String> source = Subscription.source(
+                SubscriptionId.of("failed"),
+                "cfg",
                 emitter -> {
                     callback.set(emitter);
                     if (failure instanceof RuntimeException runtime) {
                         throw runtime;
                     }
                     throw (Error) failure;
-                }, value -> {
+                },
+                value -> {
                     mapped.incrementAndGet();
                     return "stale:" + value;
                 });
@@ -75,30 +77,42 @@ class SubscriptionStartFailureTest {
         manager.closeAll();
         callback.get().accept("after shutdown");
 
-        assertThat(mapped).as("a failed source must not retain an active mapper").hasValue(0);
-        assertThat(mailbox.size()).as("a source that never became live cannot emit").isZero();
+        assertThat(mapped)
+                .as("a failed source must not retain an active mapper")
+                .hasValue(0);
+        assertThat(mailbox.size())
+                .as("a source that never became live cannot emit")
+                .isZero();
     }
 
     @Test
     void aFailedReplacementKeepsOnlyTheOldSourceAndAllowsASuccessfulRetry() throws Exception {
         Mailbox mailbox = new Mailbox(8);
-        SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox,
-                new ManualTimers(), 4, message -> { });
+        SubscriptionManager<String> manager = new SubscriptionManager<>(mailbox, new ManualTimers(), 4, message -> {});
         SubscriptionId id = SubscriptionId.of("source");
         AtomicReference<Consumer<Object>> old = new AtomicReference<>();
         AtomicReference<Consumer<Object>> failed = new AtomicReference<>();
         AtomicReference<Consumer<Object>> replacement = new AtomicReference<>();
         AtomicInteger oldCloses = new AtomicInteger();
         AtomicInteger newCloses = new AtomicInteger();
-        manager.reconcile(Subscription.source(id, "old", emitter -> {
-            old.set(emitter);
-            return oldCloses::incrementAndGet;
-        }, value -> "old:" + value));
+        manager.reconcile(Subscription.source(
+                id,
+                "old",
+                emitter -> {
+                    old.set(emitter);
+                    return oldCloses::incrementAndGet;
+                },
+                value -> "old:" + value));
         IllegalStateException failure = new IllegalStateException("cannot replace");
-        assertThatThrownBy(() -> manager.reconcile(Subscription.source(id, "new", emitter -> {
-            failed.set(emitter);
-            throw failure;
-        }, value -> "failed:" + value))).isSameAs(failure);
+        assertThatThrownBy(() -> manager.reconcile(Subscription.source(
+                        id,
+                        "new",
+                        emitter -> {
+                            failed.set(emitter);
+                            throw failure;
+                        },
+                        value -> "failed:" + value)))
+                .isSameAs(failure);
 
         failed.get().accept("ignored");
         old.get().accept("kept");
@@ -106,10 +120,14 @@ class SubscriptionStartFailureTest {
         assertThat(validPayload(mailbox.poll(0))).isEqualTo("old:kept");
         assertThat(mailbox.size()).isZero();
 
-        manager.reconcile(Subscription.source(id, "new", emitter -> {
-            replacement.set(emitter);
-            return newCloses::incrementAndGet;
-        }, value -> "new:" + value));
+        manager.reconcile(Subscription.source(
+                id,
+                "new",
+                emitter -> {
+                    replacement.set(emitter);
+                    return newCloses::incrementAndGet;
+                },
+                value -> "new:" + value));
         old.get().accept("removed");
         failed.get().accept("still ignored");
         replacement.get().accept("current");

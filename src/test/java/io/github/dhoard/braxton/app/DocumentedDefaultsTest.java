@@ -28,10 +28,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.dhoard.braxton.clipboard.ClipboardConfig;
 import io.github.dhoard.braxton.internal.input.InputDecoder;
 import io.github.dhoard.braxton.internal.input.PasteDecoder;
-
-import org.junit.jupiter.api.Test;
-
 import java.time.Duration;
+import org.junit.jupiter.api.Test;
 
 /**
  * The defaults table in the README is a published contract ("Defaults are configuration, not hidden
@@ -42,12 +40,14 @@ class DocumentedDefaultsTest {
 
     @Test
     void theDocumentedRuntimeDefaultsAreTheShippedOnes() {
-        assertThat(RuntimeOptions.DEFAULT_MAILBOX_CAPACITY).as("mailbox capacity").isEqualTo(4_096);
+        assertThat(RuntimeOptions.DEFAULT_MAILBOX_CAPACITY)
+                .as("mailbox capacity")
+                .isEqualTo(4_096);
         assertThat(RuntimeOptions.DEFAULT_MAX_EFFECTS).as("one-shot effects").isEqualTo(64);
-        assertThat(RuntimeOptions.DEFAULT_MAX_SUBSCRIPTIONS).as("ongoing sources").isEqualTo(64);
-        assertThat(RuntimeOptions.DEFAULT_SHUTDOWN_GRACE)
-                .as("shutdown grace")
-                .isEqualTo(Duration.ofSeconds(2));
+        assertThat(RuntimeOptions.DEFAULT_MAX_SUBSCRIPTIONS)
+                .as("ongoing sources")
+                .isEqualTo(64);
+        assertThat(RuntimeOptions.DEFAULT_SHUTDOWN_GRACE).as("shutdown grace").isEqualTo(Duration.ofSeconds(2));
 
         RuntimeOptions defaults = RuntimeOptions.defaults();
         assertThat(defaults.mailboxCapacity()).isEqualTo(4_096);
@@ -71,16 +71,19 @@ class DocumentedDefaultsTest {
 
     @Test
     void theDocumentedInputAndClipboardLimitsAreTheShippedOnes() {
-        assertThat(InputDecoder.DEFAULT_ESCAPE_TIMEOUT_MILLIS).as("escape timeout ms")
+        assertThat(InputDecoder.DEFAULT_ESCAPE_TIMEOUT_MILLIS)
+                .as("escape timeout ms")
                 .isEqualTo(30);
         assertThat(InputDecoder.MAX_CSI_LENGTH).as("CSI length bytes").isEqualTo(64);
-        assertThat(PasteDecoder.DEFAULT_MAX_BYTES).as("paste payload bytes")
-                .isEqualTo(1_048_576);
-        assertThat(PasteDecoder.DEFAULT_IDLE_TIMEOUT_MILLIS).as("paste idle timeout ms")
+        assertThat(PasteDecoder.DEFAULT_MAX_BYTES).as("paste payload bytes").isEqualTo(1_048_576);
+        assertThat(PasteDecoder.DEFAULT_IDLE_TIMEOUT_MILLIS)
+                .as("paste idle timeout ms")
                 .isEqualTo(250L);
-        assertThat(ClipboardConfig.DEFAULT_MAX_PAYLOAD_BYTES).as("OSC 52 payload bytes")
+        assertThat(ClipboardConfig.DEFAULT_MAX_PAYLOAD_BYTES)
+                .as("OSC 52 payload bytes")
                 .isEqualTo(65_536);
-        assertThat(ClipboardConfig.DEFAULT_MAX_INTERNAL_CHARS).as("in-process buffer chars")
+        assertThat(ClipboardConfig.DEFAULT_MAX_INTERNAL_CHARS)
+                .as("in-process buffer chars")
                 .isEqualTo(1_048_576);
     }
 }

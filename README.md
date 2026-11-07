@@ -703,11 +703,24 @@ The coverage check keeps `AnsiEncoder` at 100% line and branch coverage and `Run
 88% line and 74% branch coverage. The runtime lines still uncovered by unit tests are the real-terminal
 FFM open path, which needs native access and an attached terminal; the PTY verifier below exercises it.
 
-MIT license headers are enforced by Spotless during `verify`. Dependency-update reports honor the
-pre-release filter in `.versions-rules.xml`:
+Spotless formats every Java source under `src/main/java` and `src/test/java` with Palantir Java
+Format (version pinned in the POM) and enforces the MIT license headers during `verify`:
+
+```bash
+./mvnw spotless:apply
+./mvnw spotless:check
+```
+
+Vendored sources under `vendor/` are excluded: they are third-party code kept as imported, so
+formatting them would turn every vendor refresh into a merge. The developer probes under `tools/`
+are also outside the formatter's include set, because they are compiled ad hoc by the terminal
+verifier rather than as part of the build.
+
+Dependency- and plugin-update reports honor the pre-release filter in `versions-rules.xml`:
 
 ```bash
 ./mvnw versions:display-dependency-updates
+./mvnw versions:display-plugin-updates
 ```
 
 ## Benchmarks

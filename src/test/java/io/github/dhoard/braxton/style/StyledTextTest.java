@@ -26,7 +26,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /** Styled text is a value: immutable, style-aware, and safe to render or copy. */
@@ -34,8 +33,7 @@ class StyledTextTest {
 
     @Test
     void plainTextIsTheConcatenatedContent() {
-        StyledText text = StyledText.of("a", Style.fg(Colors.ERROR_400))
-                .append(StyledText.of("b", Style.NONE));
+        StyledText text = StyledText.of("a", Style.fg(Colors.ERROR_400)).append(StyledText.of("b", Style.NONE));
         assertThat(text.plainText()).isEqualTo("ab");
         assertThat(text.spans()).hasSize(2);
     }
@@ -80,8 +78,8 @@ class StyledTextTest {
         StyledText unsplit = StyledText.plain(raw);
         assertThat(unsplit.plainText()).isEqualTo("a\nb");
         for (int split = 0; split <= raw.length(); split++) {
-            StyledText composed = StyledText.plain(raw.substring(0, split))
-                    .append(StyledText.plain(raw.substring(split)));
+            StyledText composed =
+                    StyledText.plain(raw.substring(0, split)).append(StyledText.plain(raw.substring(split)));
             assertThat(composed).as("split at %d", split).isEqualTo(unsplit);
             assertThat(composed.plainText()).as("split at %d", split).isEqualTo("a\nb");
         }
@@ -96,8 +94,7 @@ class StyledTextTest {
         // control character, and both halves of a real pair survive.
         assertThat(StyledText.of("a\uD800b", Style.NONE).plainText()).isEqualTo("ab");
         assertThat(StyledText.of("a\uDC00b", Style.NONE).plainText()).isEqualTo("ab");
-        assertThat(StyledText.of("a\uD83D\uDE00b", Style.NONE).plainText())
-                .isEqualTo("a\uD83D\uDE00b");
+        assertThat(StyledText.of("a\uD83D\uDE00b", Style.NONE).plainText()).isEqualTo("a\uD83D\uDE00b");
         // Two halves in the wrong order are two unpaired surrogates, not a pair.
         assertThat(StyledText.of("\uDE00\uD83D", Style.NONE).plainText()).isEmpty();
         // Dropping the surrogate lets a dangling combining mark join the character before it.
@@ -116,7 +113,7 @@ class StyledTextTest {
         StyledText link = StyledText.of("site", Style.NONE, "https://example.com");
         assertThat(link.spans().get(0).link()).isEqualTo("https://example.com");
         org.assertj.core.api.Assertions.assertThatThrownBy(
-                () -> StyledText.of("bad", Style.NONE, "https://example.com/\u001B"))
+                        () -> StyledText.of("bad", Style.NONE, "https://example.com/\u001B"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -124,19 +121,21 @@ class StyledTextTest {
     void hyperlinkTargetsRejectEveryC1Control() {
         for (char control = 0x80; control <= 0x9f; control++) {
             String target = "https://example.com/a" + control + "b";
-            org.assertj.core.api.Assertions.assertThatThrownBy(
-                    () -> StyledText.of("link", Style.NONE, target))
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> StyledText.of("link", Style.NONE, target))
                     .as("C1 control U+%04X in link", (int) control)
                     .isInstanceOf(IllegalArgumentException.class);
         }
-        assertThat(StyledText.of("link", Style.NONE, "https://example.com/漢字").spans().get(0).link())
+        assertThat(StyledText.of("link", Style.NONE, "https://example.com/漢字")
+                        .spans()
+                        .get(0)
+                        .link())
                 .isEqualTo("https://example.com/漢字");
     }
 
     @Test
     void restylingAndLinkingDoNotChangeContent() {
-        StyledText text = StyledText.plain("abc").withStyle(Style.NONE.withBold())
-                .withLink("https://example.com");
+        StyledText text =
+                StyledText.plain("abc").withStyle(Style.NONE.withBold()).withLink("https://example.com");
         assertThat(text.plainText()).isEqualTo("abc");
         assertThat(text.style().bold()).isTrue();
         assertThat(text.spans().get(0).link()).isEqualTo("https://example.com");
@@ -160,8 +159,10 @@ class StyledTextTest {
         StyledText content = StyledText.of("kept\n\n", Style.NONE, "https://example.com");
         assertThat(content.append(emptyTail).stripTrailingNewlines())
                 .isEqualTo(StyledText.of("kept", Style.NONE, "https://example.com"));
-        StyledText split = StyledText.plain("kept\n").append(emptyTail)
-                .append(StyledText.of("\n", bold)).append(emptyTail);
+        StyledText split = StyledText.plain("kept\n")
+                .append(emptyTail)
+                .append(StyledText.of("\n", bold))
+                .append(emptyTail);
         assertThat(split.stripTrailingNewlines().plainText()).isEqualTo("kept");
         assertThat(StyledText.plain("\n").append(emptyTail).stripTrailingNewlines())
                 .isEqualTo(StyledText.empty());

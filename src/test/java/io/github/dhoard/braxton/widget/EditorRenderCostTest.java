@@ -28,13 +28,11 @@ import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
-
-import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.Test;
-
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
 
 /**
  * The composer repaints on every keystroke, so the cost of one {@link Editor#render} is the cost of
@@ -81,22 +79,10 @@ class EditorRenderCostTest {
 
     @Test
     void renderingGrowsNearLinearlyWithTheDraft() {
-        long small =
-                allocated(
-                        () ->
-                                sink =
-                                        Editor.render(
-                                                Editor.Model.of(draft(ASCII_UNIT, 1024)),
-                                                Editor.Config.defaults(),
-                                                true));
-        long large =
-                allocated(
-                        () ->
-                                sink =
-                                        Editor.render(
-                                                Editor.Model.of(draft(ASCII_UNIT, 4096)),
-                                                Editor.Config.defaults(),
-                                                true));
+        long small = allocated(
+                () -> sink = Editor.render(Editor.Model.of(draft(ASCII_UNIT, 1024)), Editor.Config.defaults(), true));
+        long large = allocated(
+                () -> sink = Editor.render(Editor.Model.of(draft(ASCII_UNIT, 4096)), Editor.Config.defaults(), true));
         assertThat(large)
                 .as("four times the draft must not cost far more than four times the allocation")
                 .isLessThan(small * 8);
@@ -156,13 +142,10 @@ class EditorRenderCostTest {
             // from there, so the reference measures a tab the way the text view expands it.
             int used = promptWidth;
             for (String cluster : TextMeasure.graphemes(state.text().substring(start, end))) {
-                boolean selected = selectionStart >= 0
-                        && position >= selectionStart && position < selectionEnd;
-                String display =
-                        opts.masking() == Editor.Config.Masking.HIDDEN
-                                ? ""
-                                : masking ? "\u2022" : cluster;
-                int cells = masking ? 1
+                boolean selected = selectionStart >= 0 && position >= selectionStart && position < selectionEnd;
+                String display = opts.masking() == Editor.Config.Masking.HIDDEN ? "" : masking ? "\u2022" : cluster;
+                int cells = masking
+                        ? 1
                         : "\t".equals(cluster)
                                 ? TabStops.WIDTH - (used % TabStops.WIDTH)
                                 : TextMeasure.clusterColumns(cluster, WidthPolicy.PINNED);
@@ -205,21 +188,27 @@ class EditorRenderCostTest {
     @Test
     void theRenderedTextMatchesAClusterByClusterReference() {
         List<String> drafts = List.of(
-                "", "a", "hello", "two\nlines", "lead\n\ntrail",
-                "\ttabbed\tdraft", "漢字テスト hello 🙂", "é́x",
-                "🙂\uFE0F and \uFE0E", "a\u0301\u0301b", "selection across a wide glyph 漢字",
+                "",
+                "a",
+                "hello",
+                "two\nlines",
+                "lead\n\ntrail",
+                "\ttabbed\tdraft",
+                "漢字テスト hello 🙂",
+                "é́x",
+                "🙂\uFE0F and \uFE0E",
+                "a\u0301\u0301b",
+                "selection across a wide glyph 漢字",
                 "line one\nline two\nline three\nline four");
-        List<Editor.Config> optionSets =
-                List.of(
-                        Editor.Config.defaults(),
-                        Editor.Config.defaults().withPrompt("> ", Style.NONE),
-                        Editor.Config.defaults().withMasking(Editor.Config.Masking.PASSWORD),
-                        Editor.Config.defaults().withMasking(Editor.Config.Masking.HIDDEN));
+        List<Editor.Config> optionSets = List.of(
+                Editor.Config.defaults(),
+                Editor.Config.defaults().withPrompt("> ", Style.NONE),
+                Editor.Config.defaults().withMasking(Editor.Config.Masking.PASSWORD),
+                Editor.Config.defaults().withMasking(Editor.Config.Masking.HIDDEN));
         for (String draft : drafts) {
             for (Editor.Config options : optionSets) {
-                for (int caret : new int[]{0, Math.min(1, draft.length()),
-                        draft.length() / 2, draft.length()}) {
-                    for (boolean focused : new boolean[]{true, false}) {
+                for (int caret : new int[] {0, Math.min(1, draft.length()), draft.length() / 2, draft.length()}) {
+                    for (boolean focused : new boolean[] {true, false}) {
                         Editor.Model state = Editor.Model.of(draft).withCaret(caret);
                         StyledText actual = Editor.render(state, options, focused);
                         StyledText expected = reference(state, options, focused);
@@ -227,8 +216,9 @@ class EditorRenderCostTest {
                                 + " mask=" + options.masking() + " caret=" + caret
                                 + " focused=" + focused;
                         assertThat(actual.plainText()).as(label).isEqualTo(expected.plainText());
-                        assertThat(actual.spans().stream().map(StyledText.Span::text)
-                                .reduce("", String::concat))
+                        assertThat(actual.spans().stream()
+                                        .map(StyledText.Span::text)
+                                        .reduce("", String::concat))
                                 .as(label + " spans cover the same text")
                                 .isEqualTo(actual.plainText());
                     }

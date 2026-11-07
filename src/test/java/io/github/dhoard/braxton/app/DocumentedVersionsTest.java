@@ -31,7 +31,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 import org.junit.jupiter.api.Test;
 
 /**
@@ -50,8 +49,7 @@ import org.junit.jupiter.api.Test;
 class DocumentedVersionsTest {
 
     /** A version of the locally built JLine as the prose names it: {@code 0.1.0-jline-braxton}. */
-    private static final Pattern DOCUMENTED_JLINE_VERSION =
-            Pattern.compile("[0-9]+(?:\\.[0-9]+)+-jline-braxton");
+    private static final Pattern DOCUMENTED_JLINE_VERSION = Pattern.compile("[0-9]+(?:\\.[0-9]+)+-jline-braxton");
 
     /**
      * A release version in prose. Three components are required so the sentence "releases follow
@@ -62,8 +60,7 @@ class DocumentedVersionsTest {
             Pattern.compile("[0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z0-9.]+)?");
 
     private static final Pattern POM_REVISION = Pattern.compile("<revision>([^<]*)</revision>");
-    private static final Pattern POM_JLINE_VERSION =
-            Pattern.compile("<jline\\.version>([^<]*)</jline\\.version>");
+    private static final Pattern POM_JLINE_VERSION = Pattern.compile("<jline\\.version>([^<]*)</jline\\.version>");
 
     /** The heading of the section that states the release this repository ships. */
     private static final String VERSIONING_HEADING = "## Project status and versioning";
@@ -74,15 +71,15 @@ class DocumentedVersionsTest {
      * escapes {@link #DOCUMENTED_RELEASE_VERSION}, which needs three components, so it is matched
      * here instead.
      */
-    private static final Pattern MIGRATION_HEADING =
-            Pattern.compile("### Source migration to ([0-9]+(?:\\.[0-9]+)*)");
+    private static final Pattern MIGRATION_HEADING = Pattern.compile("### Source migration to ([0-9]+(?:\\.[0-9]+)*)");
 
     @Test
     void theDocumentedJLineVersionIsTheOneTheBuildDerives() throws IOException {
         String expected = derivedJLineVersion(pomValue(POM_REVISION));
-        List<String> documented =
-                matches(Files.readString(Path.of("README.md")), DOCUMENTED_JLINE_VERSION);
-        assertThat(documented).as("the README names the locally built JLine version").isNotEmpty();
+        List<String> documented = matches(Files.readString(Path.of("README.md")), DOCUMENTED_JLINE_VERSION);
+        assertThat(documented)
+                .as("the README names the locally built JLine version")
+                .isNotEmpty();
         assertThat(documented).as("every JLine version the README states").containsOnly(expected);
         assertThat(pomValue(POM_JLINE_VERSION))
                 .as("the JLine version pom.xml resolves")
@@ -93,10 +90,13 @@ class DocumentedVersionsTest {
     void theDocumentedReleaseVersionIsTheOneTheBuildProduces() throws IOException {
         String revision = pomValue(POM_REVISION);
         String section = versioningSection(Files.readString(Path.of("README.md")));
-        assertThat(section).as("%s states the shipped version", VERSIONING_HEADING)
+        assertThat(section)
+                .as("%s states the shipped version", VERSIONING_HEADING)
                 .contains(revision);
         List<String> documented = matches(section, DOCUMENTED_RELEASE_VERSION);
-        assertThat(documented).as("the versioning section names a release version").isNotEmpty();
+        assertThat(documented)
+                .as("the versioning section names a release version")
+                .isNotEmpty();
         assertThat(documented).as("every release version the README states").containsOnly(revision);
     }
 
@@ -117,8 +117,7 @@ class DocumentedVersionsTest {
         assertThat(heading.group(1))
                 .as("the release the README says the source break ships in")
                 .isEqualTo(revision);
-        List<String> documented =
-                matches(migrationSection(readme, heading), DOCUMENTED_RELEASE_VERSION);
+        List<String> documented = matches(migrationSection(readme, heading), DOCUMENTED_RELEASE_VERSION);
         assertThat(documented)
                 .as("every release version the migration section states")
                 .containsOnly(revision);
@@ -131,8 +130,7 @@ class DocumentedVersionsTest {
      */
     private static String derivedJLineVersion(String revision) {
         String core = revision.split("-")[0];
-        assertThat(core).as("pom.xml <revision> starts with a numeric version")
-                .matches("\\d+(\\.\\d+)*");
+        assertThat(core).as("pom.xml <revision> starts with a numeric version").matches("\\d+(\\.\\d+)*");
         return core + "-jline-braxton";
     }
 
@@ -152,7 +150,9 @@ class DocumentedVersionsTest {
     /** The README section that states the release, up to the next heading. */
     private static String versioningSection(String readme) {
         int start = readme.indexOf(VERSIONING_HEADING);
-        assertThat(start).as("the README keeps its %s section", VERSIONING_HEADING).isNotNegative();
+        assertThat(start)
+                .as("the README keeps its %s section", VERSIONING_HEADING)
+                .isNotNegative();
         int end = readme.indexOf("\n## ", start + VERSIONING_HEADING.length());
         return end < 0 ? readme.substring(start) : readme.substring(start, end);
     }

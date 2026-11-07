@@ -22,8 +22,8 @@
 
 package io.github.dhoard.braxton.benchmark;
 
+import io.github.dhoard.braxton.style.StyledText;
 import java.util.concurrent.TimeUnit;
-
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -35,8 +35,6 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
-
-import io.github.dhoard.braxton.style.StyledText;
 
 /**
  * Wiring check for the harness: proves the JMH generator ran inside the Maven build and that a

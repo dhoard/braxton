@@ -24,16 +24,14 @@ package io.github.dhoard.braxton.style;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.testing.AllocationProbe;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-
 import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.testing.AllocationProbe;
 
 class StyledTextAssemblyCostTest {
 
@@ -42,8 +40,7 @@ class StyledTextAssemblyCostTest {
         for (boolean alternating : List.of(false, true)) {
             StyledText[] pieces = new StyledText[4096];
             for (int i = 0; i < pieces.length; i++) {
-                pieces[i] = StyledText.of("x", alternating && i % 2 == 0
-                        ? Style.NONE.withBold() : Style.NONE);
+                pieces[i] = StyledText.of("x", alternating && i % 2 == 0 ? Style.NONE.withBold() : Style.NONE);
             }
             assertThat(AllocationProbe.bytes(() -> assemble(pieces))).isLessThan(2_000_000);
             assertThat(assemble(pieces)).isEqualTo(StyledText.concat(pieces));
@@ -61,17 +58,18 @@ class StyledTextAssemblyCostTest {
 
     @Test
     void allCompositionShapesPreserveTheEagerAppendSemantics() {
-        List<StyledText> values = List.of(StyledText.empty(), StyledText.plain("a"),
-                StyledText.of("b", Style.NONE.withBold()), StyledText.of("\u001b", Style.NONE.withBold()),
+        List<StyledText> values = List.of(
+                StyledText.empty(),
+                StyledText.plain("a"),
+                StyledText.of("b", Style.NONE.withBold()),
+                StyledText.of("\u001b", Style.NONE.withBold()),
                 StyledText.of("z", Style.NONE, "https://example.com"),
                 StyledText.of("a", Style.NONE.withBold()).append("b").withStyle(Style.NONE));
         for (StyledText a : values) {
             for (StyledText b : values) {
                 for (StyledText c : values) {
-                    assertThat(a.append(b).append(c).spans())
-                            .isEqualTo(eager(eager(a.spans(), b.spans()), c.spans()));
-                    assertThat(a.append(b.append(c)).spans())
-                            .isEqualTo(eager(a.spans(), eager(b.spans(), c.spans())));
+                    assertThat(a.append(b).append(c).spans()).isEqualTo(eager(eager(a.spans(), b.spans()), c.spans()));
+                    assertThat(a.append(b.append(c)).spans()).isEqualTo(eager(a.spans(), eager(b.spans(), c.spans())));
                 }
             }
         }
@@ -85,8 +83,8 @@ class StyledTextAssemblyCostTest {
         for (StyledText.Span span : right) {
             StyledText.Span last = result.get(result.size() - 1);
             if (last.style().equals(span.style()) && Objects.equals(last.link(), span.link())) {
-                result.set(result.size() - 1,
-                        new StyledText.Span(last.text() + span.text(), last.style(), last.link()));
+                result.set(
+                        result.size() - 1, new StyledText.Span(last.text() + span.text(), last.style(), last.link()));
             } else {
                 result.add(span);
             }
@@ -112,7 +110,8 @@ class StyledTextAssemblyCostTest {
             }
             start.countDown();
             for (Future<List<StyledText.Span>> result : results) {
-                assertThat(result.get()).isEqualTo(StyledText.plain("x".repeat(4096)).spans());
+                assertThat(result.get())
+                        .isEqualTo(StyledText.plain("x".repeat(4096)).spans());
             }
         }
     }

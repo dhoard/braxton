@@ -34,7 +34,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
-
 import org.junit.jupiter.api.Test;
 
 /**
@@ -58,8 +57,7 @@ class PackagingContractTest {
     private static final String CORE_ROOT = "io/github/dhoard/braxton/";
 
     /** Array descriptors of primitives, which name no package. */
-    private static final List<String> PRIMITIVE_DESCRIPTORS =
-            List.of("B", "C", "D", "F", "I", "J", "S", "Z", "V");
+    private static final List<String> PRIMITIVE_DESCRIPTORS = List.of("B", "C", "D", "F", "I", "J", "S", "Z", "V");
 
     @Test
     void everyCoreClassTargetsTheDocumentedBytecodeVersion() throws IOException, URISyntaxException {
@@ -87,8 +85,11 @@ class PackagingContractTest {
 
     /** Every {@code .class} of the core, as the packaged artifact would carry it. */
     private static List<Path> coreClasses() throws IOException, URISyntaxException {
-        Path root = Path.of(Application.class.getProtectionDomain().getCodeSource()
-                .getLocation().toURI());
+        Path root = Path.of(Application.class
+                .getProtectionDomain()
+                .getCodeSource()
+                .getLocation()
+                .toURI());
         assertThat(Files.isDirectory(root))
                 .as("the core classes are expected to be a directory for this run, found %s", root)
                 .isTrue();
@@ -104,10 +105,15 @@ class PackagingContractTest {
     }
 
     private static int majorVersion(byte[] code) {
-        assertThat(code.length > 10).as("a class file is longer than its header").isTrue();
-        assertThat((code[0] & 0xFF) == 0xCA && (code[1] & 0xFF) == 0xFE
-                && (code[2] & 0xFF) == 0xBA && (code[3] & 0xFF) == 0xBE)
-                .as("a class file starts with its magic number").isTrue();
+        assertThat(code.length > 10)
+                .as("a class file is longer than its header")
+                .isTrue();
+        assertThat((code[0] & 0xFF) == 0xCA
+                        && (code[1] & 0xFF) == 0xFE
+                        && (code[2] & 0xFF) == 0xBA
+                        && (code[3] & 0xFF) == 0xBE)
+                .as("a class file starts with its magic number")
+                .isTrue();
         return ((code[6] & 0xFF) << 8) | (code[7] & 0xFF);
     }
 
@@ -141,8 +147,7 @@ class PackagingContractTest {
                     at += 9;
                     index++;
                 }
-                default -> throw new IllegalStateException(
-                        "unknown constant pool tag " + tag + " at " + at);
+                default -> throw new IllegalStateException("unknown constant pool tag " + tag + " at " + at);
             }
         }
         List<String> types = new ArrayList<>();

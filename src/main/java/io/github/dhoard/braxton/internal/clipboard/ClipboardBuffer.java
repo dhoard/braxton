@@ -114,8 +114,7 @@ public final class ClipboardBuffer {
     private static int settledClusterBoundary(String text, int window, int maxChars) {
         int end = 0;
         int position = 0;
-        for (String cluster : Graphemes.iterate(window == text.length() ? text
-                : text.substring(0, window))) {
+        for (String cluster : Graphemes.iterate(window == text.length() ? text : text.substring(0, window))) {
             if (position > maxChars) {
                 return end;
             }

@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.mvu;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.view.View;
-
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.function.Function;
@@ -93,76 +92,63 @@ public final class Mount<P, Msg, Out, C, ChildMsg, ChildOut> {
     }
 
     public Initialization<C, Msg, Out> initialize(InitContext context) {
-        return lift(
-                call(
-                        ComponentFailure.Phase.INIT,
-                        () -> child.init(Objects.requireNonNull(context, "context"))));
+        return lift(call(ComponentFailure.Phase.INIT, () -> child.init(Objects.requireNonNull(context, "context"))));
     }
 
     public Update<P, Msg, Out> update(P parent, ChildMsg message) {
         Objects.requireNonNull(parent, "parent");
         Objects.requireNonNull(message, "message");
         C previous = call(ComponentFailure.Phase.UPDATE, () -> lens.get().apply(parent));
-        var result =
-                call(ComponentFailure.Phase.UPDATE, () -> child.update(previous, message));
+        var result = call(ComponentFailure.Phase.UPDATE, () -> child.update(previous, message));
         var lifted = lift(result);
-        P next =
-                result.model() == previous
-                        ? parent
-                        : call(
-                                ComponentFailure.Phase.UPDATE,
-                                () -> lens.replace().apply(parent, result.model()));
+        P next = result.model() == previous
+                ? parent
+                : call(ComponentFailure.Phase.UPDATE, () -> lens.replace().apply(parent, result.model()));
         return new Update<>(next, lifted.command(), lifted.outputs());
     }
 
     private Initialization<C, Msg, Out> lift(Update<C, ChildMsg, ChildOut> result) {
-        return call(
-                ComponentFailure.Phase.OUTPUT_ROUTE,
-                () -> {
-                    var commands = new ArrayList<Command<Msg>>();
-                    // The child's own work is scoped to the child path. Outputs routed to a parent
-                    // message are not: that message belongs to the parent, so it is dispatched in
-                    // the parent's scope and still arrives when this update unmounts the child.
-                    commands.add(result.command().<Msg>map(messages).scoped(path));
-                    var upward = new ArrayList<Out>();
-                    for (ChildOut output : result.outputs()) {
-                        switch (Objects.requireNonNull(outputs.route(output), "output route")) {
-                            case OutputRoute.Message<Msg, Out> message ->
-                                    commands.add(Command.dispatch(message.value()));
-                            case OutputRoute.Output<Msg, Out> value -> upward.add(value.value());
-                        }
-                    }
-                    return new Initialization<>(result.model(), Command.batch(commands), upward);
-                });
+        return call(ComponentFailure.Phase.OUTPUT_ROUTE, () -> {
+            var commands = new ArrayList<Command<Msg>>();
+            // The child's own work is scoped to the child path. Outputs routed to a parent
+            // message are not: that message belongs to the parent, so it is dispatched in
+            // the parent's scope and still arrives when this update unmounts the child.
+            commands.add(result.command().<Msg>map(messages).scoped(path));
+            var upward = new ArrayList<Out>();
+            for (ChildOut output : result.outputs()) {
+                switch (Objects.requireNonNull(outputs.route(output), "output route")) {
+                    case OutputRoute.Message<Msg, Out> message -> commands.add(Command.dispatch(message.value()));
+                    case OutputRoute.Output<Msg, Out> value -> upward.add(value.value());
+                }
+            }
+            return new Initialization<>(result.model(), Command.batch(commands), upward);
+        });
     }
 
     public View<Msg> view(P parent, ViewContext context) {
         Objects.requireNonNull(parent, "parent");
         return call(
                 ComponentFailure.Phase.VIEW,
-                () ->
-                        child.view(lens.get().apply(parent), context)
-                                .<Msg>map(messages)
-                                .scoped(path));
+                () -> child.view(lens.get().apply(parent), context)
+                        .<Msg>map(messages)
+                        .scoped(path));
     }
 
     public Subscription<Msg> subscriptions(P parent) {
         Objects.requireNonNull(parent, "parent");
         return call(
                 ComponentFailure.Phase.SUBSCRIPTIONS,
-                () ->
-                        child.subscriptions(lens.get().apply(parent))
-                                .<Msg>map(messages)
-                                .scoped(path));
+                () -> child.subscriptions(lens.get().apply(parent))
+                        .<Msg>map(messages)
+                        .scoped(path));
     }
 
     public ComponentTree.Node tree(P parent) {
         Objects.requireNonNull(parent, "parent");
         return ComponentTree.Node.deferred(
                 id,
-                () ->
-                        call(
-                                ComponentFailure.Phase.CHILDREN,
-                                () -> child.children(lens.get().apply(parent))));
+                () -> call(
+                        ComponentFailure.Phase.CHILDREN,
+                        () -> child.children(lens.get().apply(parent))));
     }
 }

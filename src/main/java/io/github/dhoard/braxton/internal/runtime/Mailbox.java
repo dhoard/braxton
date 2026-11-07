@@ -24,7 +24,6 @@ package io.github.dhoard.braxton.internal.runtime;
 
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.input.InputEvent;
-
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.TimeUnit;
@@ -45,8 +44,7 @@ public final class Mailbox {
     public sealed interface Envelope permits AppMessage, Input, Close {}
 
     /** An application message produced by routing, a command, or a source. */
-    public record AppMessage(
-            Object payload, ScopeManager.Origin origin, java.util.function.BooleanSupplier valid)
+    public record AppMessage(Object payload, ScopeManager.Origin origin, java.util.function.BooleanSupplier valid)
             implements Envelope {
         private static final java.util.function.BooleanSupplier ALWAYS = () -> true;
 
@@ -132,8 +130,7 @@ public final class Mailbox {
         lock.lock();
         try {
             if (closed || queue.size() >= capacity) {
-                throw new IllegalStateException(
-                        "runtime mailbox overflow (capacity " + capacity + ")");
+                throw new IllegalStateException("runtime mailbox overflow (capacity " + capacity + ")");
             }
             queue.addLast(envelope);
             notEmpty.signal();
@@ -196,7 +193,6 @@ public final class Mailbox {
 
     /** Nanoseconds to wait, clamped so a huge millisecond value cannot overflow the conversion. */
     private static long waitNanos(long timeoutMillis) {
-        return TimeUnit.MILLISECONDS.toNanos(
-                Math.max(0L, Math.min(timeoutMillis, MAX_WAIT_MILLIS)));
+        return TimeUnit.MILLISECONDS.toNanos(Math.max(0L, Math.min(timeoutMillis, MAX_WAIT_MILLIS)));
     }
 }

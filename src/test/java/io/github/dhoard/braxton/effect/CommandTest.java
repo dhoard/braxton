@@ -29,7 +29,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import org.junit.jupiter.api.Test;
 
 /** Command values reject input the runtime cannot honour. */
@@ -56,8 +55,8 @@ class CommandTest {
     void constructingAndMappingABatchNeverRunsItsTaskOrMessageMapper() throws Exception {
         AtomicInteger work = new AtomicInteger();
         AtomicInteger mappings = new AtomicInteger();
-        Command<String> task = Command.task(EffectId.of("task"), work::incrementAndGet,
-                value -> "v" + value, failure -> "failed");
+        Command<String> task =
+                Command.task(EffectId.of("task"), work::incrementAndGet, value -> "v" + value, failure -> "failed");
         Command.Batch<String> batch = new Command.Batch<>(List.of(task));
         Command.Batch<Integer> mapped = (Command.Batch<Integer>) batch.map(value -> {
             mappings.incrementAndGet();
@@ -65,7 +64,8 @@ class CommandTest {
         });
         assertThat(work.get()).isZero();
         assertThat(mappings.get()).isZero();
-        Command.Task<Integer> mappedTask = (Command.Task<Integer>) mapped.commands().get(0);
+        Command.Task<Integer> mappedTask =
+                (Command.Task<Integer>) mapped.commands().get(0);
         Object result = mappedTask.work().call();
         assertThat(work.get()).isEqualTo(1);
         assertThat(mappings.get()).isZero();
@@ -76,16 +76,14 @@ class CommandTest {
 
     @Test
     void aDelayLongerThanItsNanosecondScheduleIsRejectedAtConstruction() {
-        assertThatThrownBy(() -> Command.delay(EffectId.of("a"), Duration.ofDays(1_000_000),
-                "message", "rejected"))
+        assertThatThrownBy(() -> Command.delay(EffectId.of("a"), Duration.ofDays(1_000_000), "message", "rejected"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("nanoseconds");
     }
 
     @Test
     void aDelayThatFitsInNanosecondsIsAccepted() {
-        Command<String> command = Command.delay(EffectId.of("a"), Duration.ofDays(100_000),
-                "message", "rejected");
+        Command<String> command = Command.delay(EffectId.of("a"), Duration.ofDays(100_000), "message", "rejected");
         assertThat(command).isInstanceOf(Command.Delay.class);
         assertThat(((Command.Delay<String>) command).delay()).isEqualTo(Duration.ofDays(100_000));
     }

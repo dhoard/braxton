@@ -22,15 +22,13 @@
 
 package io.github.dhoard.braxton.testkit;
 
-import io.github.dhoard.braxton.internal.runtime.ManualTimers;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.internal.runtime.ManualTimers;
+import io.github.dhoard.braxton.internal.runtime.Timers;
 import java.util.ArrayList;
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.internal.runtime.Timers;
 
 class ManualTimersTest {
     @Test

@@ -33,7 +33,6 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -200,8 +199,7 @@ public final class ScrollView implements Component<ScrollView.Model, ScrollView.
      * @param visibleRows the height of the pane, in rows
      * @param content the application's current display rows
      */
-    public record Model(int topLine, boolean followEnd, boolean focused, int visibleRows,
-            Content content) {
+    public record Model(int topLine, boolean followEnd, boolean focused, int visibleRows, Content content) {
 
         public Model {
             content = content == null ? Content.empty() : content;
@@ -217,9 +215,7 @@ public final class ScrollView implements Component<ScrollView.Model, ScrollView.
          * @return this instance when the focus did not change, otherwise the new state
          */
         public Model withFocus(boolean value) {
-            return value == focused
-                    ? this
-                    : new Model(topLine, followEnd, value, visibleRows, content);
+            return value == focused ? this : new Model(topLine, followEnd, value, visibleRows, content);
         }
 
         /**
@@ -364,15 +360,16 @@ public final class ScrollView implements Component<ScrollView.Model, ScrollView.
 
     @Override
     public Update<Model, Msg, Never> init(InitContext context) {
-        return Update.next(
-                new Model(0, config.followEnd(), true, config.visibleRows(), Content.empty()));
+        return Update.next(new Model(0, config.followEnd(), true, config.visibleRows(), Content.empty()));
     }
 
     @Override
     public Update<Model, Msg, Never> update(Model model, Msg message) {
         // The shared widget rule applies: a message that changes nothing keeps the incoming
         // instance, and a reduction never moves the focus the application owns.
-        return WidgetUpdate.settled(model, message,
+        return WidgetUpdate.settled(
+                model,
+                message,
                 action -> new Result(reduce(model, config, action), null),
                 state -> state.withFocus(model.focused()));
     }
@@ -461,11 +458,9 @@ public final class ScrollView implements Component<ScrollView.Model, ScrollView.
             // model normalize the offset: a following window re-anchors to the end, and a window
             // the user scrolled back keeps its first row as far as the content allows.
             case Msg.ContentChanged changed ->
-                    new Model(state.topLine(), state.followEnd(), state.focused(),
-                            state.visibleRows(), changed.content());
+                new Model(state.topLine(), state.followEnd(), state.focused(), state.visibleRows(), changed.content());
             case Msg.ViewportChanged viewport ->
-                    new Model(state.topLine(), state.followEnd(), state.focused(),
-                            viewport.rows(), state.content());
+                new Model(state.topLine(), state.followEnd(), state.focused(), viewport.rows(), state.content());
         };
     }
 
@@ -479,8 +474,7 @@ public final class ScrollView implements Component<ScrollView.Model, ScrollView.
         int target = (int) Math.max(0L, (long) state.topLine() - Math.max(0, lines));
         return target == state.topLine()
                 ? state
-                : new Model(target, false, state.focused(), state.visibleRows(),
-                        state.content());
+                : new Model(target, false, state.focused(), state.visibleRows(), state.content());
     }
 
     /**
@@ -493,8 +487,7 @@ public final class ScrollView implements Component<ScrollView.Model, ScrollView.
         int target = (int) Math.min(last, (long) state.topLine() + Math.max(0, lines));
         return target == state.topLine()
                 ? state
-                : new Model(target, state.followEnd(), state.focused(), state.visibleRows(),
-                        state.content());
+                : new Model(target, state.followEnd(), state.focused(), state.visibleRows(), state.content());
     }
 
     /**
@@ -510,8 +503,12 @@ public final class ScrollView implements Component<ScrollView.Model, ScrollView.
 
     /** The last window, with follow-end armed as far as the configuration allows. */
     private static Model last(Model state, boolean followAllowed) {
-        return new Model(lastTopLine(state.content(), state.visibleRows()), followAllowed,
-                state.focused(), state.visibleRows(), state.content());
+        return new Model(
+                lastTopLine(state.content(), state.visibleRows()),
+                followAllowed,
+                state.focused(),
+                state.visibleRows(),
+                state.content());
     }
 
     /** The largest first row that still fills the window from the content it has. */
@@ -523,8 +520,7 @@ public final class ScrollView implements Component<ScrollView.Model, ScrollView.
         return (int) Math.max(0L, last);
     }
 
-    private static <Message> View<Message> paint(Model state, boolean focused,
-            Function<Msg, Message> map) {
+    private static <Message> View<Message> paint(Model state, boolean focused, Function<Msg, Message> map) {
         List<StyledText> window = visibleLines(state);
         List<View<Message>> rows = new ArrayList<>(window.size());
         for (StyledText line : window) {
@@ -534,7 +530,7 @@ public final class ScrollView implements Component<ScrollView.Model, ScrollView.
             // instead, and the window keeps showing exactly the rows it scrolls by.
             rows.add(Views.fixed(1, Views.text(line)));
         }
-        return Views.focus(ELEMENT, focused, List.of(),
-                event -> actionFor(event).map(map), Views.column(rows));
+        return Views.focus(
+                ELEMENT, focused, List.of(), event -> actionFor(event).map(map), Views.column(rows));
     }
 }

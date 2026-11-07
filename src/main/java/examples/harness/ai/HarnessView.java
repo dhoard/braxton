@@ -34,7 +34,6 @@ import io.github.dhoard.braxton.view.ScreenRenderer;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 import io.github.dhoard.braxton.widget.Editor;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -56,8 +55,7 @@ final class HarnessView {
         List<View<Harness.Msg>> parts = new ArrayList<>();
         if (layout.header() > 0) {
             parts.add(Views.fixed(
-                    layout.header(),
-                    rows(HarnessProjection.header(state, width).subList(0, layout.header()))));
+                    layout.header(), rows(HarnessProjection.header(state, width).subList(0, layout.header()))));
         }
         if (layout.body() > 0) {
             // The transcript component paints its own window at the height the frame gives it.
@@ -65,13 +63,10 @@ final class HarnessView {
             parts.add(Views.fixed(layout.body(), Harness.SESSION.view(state, context)));
         }
         if (layout.queued() > 0) {
-            parts.add(Views.fixed(
-                    layout.queued(),
-                    rows(HarnessProjection.queuedBand(state, width, layout.queued()))));
+            parts.add(Views.fixed(layout.queued(), rows(HarnessProjection.queuedBand(state, width, layout.queued()))));
         }
         if (layout.gap() > 0) {
-            parts.add(Views.fixed(
-                    layout.gap(), Views.text(HarnessProjection.backgroundRow(width))));
+            parts.add(Views.fixed(layout.gap(), Views.text(HarnessProjection.backgroundRow(width))));
         }
         if (layout.statusRule() > 0) {
             parts.add(Views.fixed(1, Views.text(HarnessProjection.statusRule(state))));
@@ -90,8 +85,7 @@ final class HarnessView {
             } else {
                 // A queued prompt owns the composer until its turn starts: no caret, no editing.
                 parts.add(Views.fixed(
-                        layout.editor(),
-                        rows(HarnessProjection.queuedComposerRows(state, width, layout.editor()))));
+                        layout.editor(), rows(HarnessProjection.queuedComposerRows(state, width, layout.editor()))));
             }
         }
         if (layout.bottomRule() > 0) {
@@ -99,16 +93,14 @@ final class HarnessView {
         }
         if (layout.footer() > 0) {
             parts.add(Views.fixed(
-                    layout.footer(),
-                    rows(HarnessProjection.footer(state, width).subList(0, layout.footer()))));
+                    layout.footer(), rows(HarnessProjection.footer(state, width).subList(0, layout.footer()))));
         }
         if (layout.stats() > 0) {
             parts.add(Views.fixed(1, Views.text(HarnessProjection.statsRow(state, width))));
         }
 
         View<Harness.Msg> body = Views.column(parts);
-        View<Harness.Msg> root =
-                Views.overlay(List.of(Views.fill(HarnessTheme.BACKGROUND), body), false);
+        View<Harness.Msg> root = Views.overlay(List.of(Views.fill(HarnessTheme.BACKGROUND), body), false);
         return Views.keyed(bindings(), HarnessView::intercept, root, List.of());
     }
 

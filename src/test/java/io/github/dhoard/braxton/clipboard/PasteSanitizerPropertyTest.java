@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.clipboard;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Random;
-
 import org.junit.jupiter.api.Test;
 
 /** Sanitizing is idempotent and never leaves a terminal control character behind. */
@@ -33,9 +32,24 @@ class PasteSanitizerPropertyTest {
 
     @Test
     void everyModeIsIdempotentAndControlFree() {
-        String[] atoms = {"a", "\n", "\r\n", "\t", "\u001B[31m", "\u001B]0;t\u0007", "\u009B",
-                "\u009D", "\u0007", "\u0000", "\u007F", "\u00A0", "\u200B", "\u200D",
-                "\uD83D\uDE00", "\u65E5"};
+        String[] atoms = {
+            "a",
+            "\n",
+            "\r\n",
+            "\t",
+            "\u001B[31m",
+            "\u001B]0;t\u0007",
+            "\u009B",
+            "\u009D",
+            "\u0007",
+            "\u0000",
+            "\u007F",
+            "\u00A0",
+            "\u200B",
+            "\u200D",
+            "\uD83D\uDE00",
+            "\u65E5"
+        };
         Random random = new Random(17L);
         for (int iteration = 0; iteration < 600; iteration++) {
             StringBuilder text = new StringBuilder();
@@ -44,13 +58,15 @@ class PasteSanitizerPropertyTest {
             }
             for (PasteMode mode : PasteMode.values()) {
                 String once = PasteSanitizer.sanitize(text.toString(), mode);
-                assertThat(PasteSanitizer.sanitize(once, mode)).as("idempotent for %s", mode)
+                assertThat(PasteSanitizer.sanitize(once, mode))
+                        .as("idempotent for %s", mode)
                         .isEqualTo(once);
                 for (int i = 0; i < once.length(); i++) {
                     char c = once.charAt(i);
                     if (c != '\n' && c != '\t') {
                         assertThat(c < 0x20 || c == 0x7F || (c >= 0x80 && c <= 0x9F))
-                                .as("control 0x%x survived in [%s]", (int) c, text).isFalse();
+                                .as("control 0x%x survived in [%s]", (int) c, text)
+                                .isFalse();
                     }
                 }
             }
@@ -58,7 +74,8 @@ class PasteSanitizerPropertyTest {
             for (int i = 0; i < plain.length(); i++) {
                 char c = plain.charAt(i);
                 if (c != '\n' && c != '\t') {
-                    assertThat(c < 0x20 || c == 0x7F || (c >= 0x80 && c <= 0x9F)).isFalse();
+                    assertThat(c < 0x20 || c == 0x7F || (c >= 0x80 && c <= 0x9F))
+                            .isFalse();
                 }
             }
         }

@@ -25,8 +25,7 @@ package io.github.dhoard.braxton.app;
 import java.util.List;
 
 /** How an application run ended. */
-public record ExitResult(
-        Kind kind, int status, Throwable failure, List<Throwable> cleanupFailures) {
+public record ExitResult(Kind kind, int status, Throwable failure, List<Throwable> cleanupFailures) {
 
     public enum Kind {
         /** The program asked to quit. */

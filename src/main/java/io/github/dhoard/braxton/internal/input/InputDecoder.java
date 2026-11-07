@@ -22,15 +22,13 @@
 
 package io.github.dhoard.braxton.internal.input;
 
-import java.io.IOException;
-import java.util.Optional;
-
-import org.jline.utils.NonBlockingReader;
-
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.InputOptions;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.Modifiers;
+import java.io.IOException;
+import java.util.Optional;
+import org.jline.utils.NonBlockingReader;
 
 /**
  * Decodes timed terminal characters into normalized {@link InputEvent} values.
@@ -62,12 +60,8 @@ public final class InputDecoder {
         this(in, options, () -> false);
     }
 
-    public InputDecoder(
-            NonBlockingReader in,
-            InputOptions options,
-            java.util.function.BooleanSupplier cancelled) {
-        this.in = new ScalarInput(
-                in, Math.max(1, options.cancellationInterval().toMillis()), cancelled);
+    public InputDecoder(NonBlockingReader in, InputOptions options, java.util.function.BooleanSupplier cancelled) {
+        this.in = new ScalarInput(in, Math.max(1, options.cancellationInterval().toMillis()), cancelled);
         this.escapeTimeoutNanos = options.escapeTimeout().toNanos();
         this.maxCsiCharacters = options.maxCsiCharacters();
         this.maxPasteBytes = options.maxPasteBytes();
@@ -218,14 +212,13 @@ public final class InputDecoder {
             return Optional.of(InputEvent.KeyInput.of(keyForText(text).with(Modifiers.ALT), text));
         }
         char c = (char) second;
-        return Optional.of(InputEvent.KeyInput.of(
-                keyForText(String.valueOf(c)).with(Modifiers.ALT), String.valueOf(c)));
+        return Optional.of(
+                InputEvent.KeyInput.of(keyForText(String.valueOf(c)).with(Modifiers.ALT), String.valueOf(c)));
     }
 
     /** Whether every code point of {@code text} is printable, so it can be a key name and text. */
     private static boolean isPrintable(String text) {
-        return text.codePoints()
-                .noneMatch(code -> code < 0x20 || code == 0x7F || (code >= 0x80 && code <= 0x9F));
+        return text.codePoints().noneMatch(code -> code < 0x20 || code == 0x7F || (code >= 0x80 && code <= 0x9F));
     }
 
     private String readCsiSequence() throws IOException {
@@ -269,8 +262,7 @@ public final class InputDecoder {
             return null;
         }
         if (PasteDecoder.START_BODY.equals(sequence)) {
-            PasteDecoder.Result paste =
-                    PasteDecoder.read(in, maxPasteBytes, pasteIdleTimeoutMillis);
+            PasteDecoder.Result paste = PasteDecoder.read(in, maxPasteBytes, pasteIdleTimeoutMillis);
             return new InputEvent.PasteInput(paste.text());
         }
         if (PasteDecoder.END_BODY.equals(sequence)) {

@@ -24,6 +24,7 @@ package io.github.dhoard.braxton.internal.clipboard;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.style.TextMeasure;
 import java.nio.charset.StandardCharsets;
 import java.text.BreakIterator;
 import java.util.ArrayList;
@@ -31,10 +32,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Random;
-
 import org.junit.jupiter.api.Test;
-
-import io.github.dhoard.braxton.style.TextMeasure;
 
 /** OSC 52 selection whitelisting, payload encoding, and cluster-safe truncation. */
 class Osc52Test {
@@ -46,8 +44,8 @@ class Osc52Test {
     private static String payloadOf(String sequence) {
         int selection = sequence.indexOf(';');
         int start = sequence.indexOf(';', selection + 1) + 1;
-        return new String(Base64.getDecoder().decode(
-                sequence.substring(start, sequence.length() - 1)), StandardCharsets.UTF_8);
+        return new String(
+                Base64.getDecoder().decode(sequence.substring(start, sequence.length() - 1)), StandardCharsets.UTF_8);
     }
 
     /**
@@ -77,9 +75,10 @@ class Osc52Test {
     void everyDocumentedSelectionIsWrittenVerbatim() {
         for (String selection : List.of("c", "p", "s", "0", "1", "2", "3", "4", "5", "6", "7")) {
             Osc52.Encoded encoded = Osc52.encode("hi", selection, Integer.MAX_VALUE);
-            assertThat(encoded.sequence()).as("selection %s", selection)
-                    .isEqualTo("\u001B]52;" + selection + ";" + Base64.getEncoder()
-                            .encodeToString("hi".getBytes(StandardCharsets.UTF_8)) + "\u0007");
+            assertThat(encoded.sequence())
+                    .as("selection %s", selection)
+                    .isEqualTo("\u001B]52;" + selection + ";"
+                            + Base64.getEncoder().encodeToString("hi".getBytes(StandardCharsets.UTF_8)) + "\u0007");
             assertThat(payloadOf(encoded.sequence())).isEqualTo("hi");
             assertThat(encoded.truncated()).isFalse();
             assertThat(encoded.byteLength()).isEqualTo(2);
@@ -88,10 +87,11 @@ class Osc52Test {
 
     @Test
     void anUnknownOrInjectedSelectionFallsBackToTheSystemClipboard() {
-        for (String selection : List.of("", "x", "8", "9", "C", "P", "cc", "cp", "c;c",
-                "c\u0007", "\u001B]52;", " c", "c ")) {
+        for (String selection :
+                List.of("", "x", "8", "9", "C", "P", "cc", "cp", "c;c", "c\u0007", "\u001B]52;", " c", "c ")) {
             Osc52.Encoded encoded = Osc52.encode("hi", selection, Integer.MAX_VALUE);
-            assertThat(encoded.sequence()).as("selection %s", selection)
+            assertThat(encoded.sequence())
+                    .as("selection %s", selection)
                     .isEqualTo(Osc52.encode("hi", "c", Integer.MAX_VALUE).sequence())
                     .startsWith("\u001B]52;c;");
         }
@@ -101,8 +101,15 @@ class Osc52Test {
 
     @Test
     void truncationCutsOnClusterBoundariesAndNeverExceedsTheLimit() {
-        String[] texts = {FAMILY, FLAG, COMBINING, "a" + COMBINING, "plain ascii text",
-            FAMILY + FLAG + COMBINING + "\u6F22\u672C", "\uD83D\uDE00"};
+        String[] texts = {
+            FAMILY,
+            FLAG,
+            COMBINING,
+            "a" + COMBINING,
+            "plain ascii text",
+            FAMILY + FLAG + COMBINING + "\u6F22\u672C",
+            "\uD83D\uDE00"
+        };
         for (String text : texts) {
             List<String> prefixes = new ArrayList<>();
             StringBuilder prefix = new StringBuilder();
@@ -116,8 +123,10 @@ class Osc52Test {
                 String limited = Osc52.limitUtf8(text, max);
                 assertThat(limited).as("%s at %d bytes", text, max).isIn(prefixes);
                 assertThat(limited.getBytes(StandardCharsets.UTF_8).length)
-                        .as("%s at %d bytes", text, max).isLessThanOrEqualTo(max);
-                assertThat(Osc52.limitUtf8(limited, max)).as("%s is stable", text)
+                        .as("%s at %d bytes", text, max)
+                        .isLessThanOrEqualTo(max);
+                assertThat(Osc52.limitUtf8(limited, max))
+                        .as("%s is stable", text)
                         .isEqualTo(limited);
             }
             assertThat(Osc52.limitUtf8(text, Integer.MAX_VALUE)).isEqualTo(text);
@@ -156,15 +165,17 @@ class Osc52Test {
     void theUnboundedEncoderWritesNothingForNothing() {
         assertThat(Osc52.encode(null)).isEmpty();
         assertThat(Osc52.encode("")).isEmpty();
-        assertThat(Osc52.encode("hi")).isEqualTo(Osc52.encode("hi", "c", Integer.MAX_VALUE).sequence());
+        assertThat(Osc52.encode("hi"))
+                .isEqualTo(Osc52.encode("hi", "c", Integer.MAX_VALUE).sequence());
     }
 
     @Test
     void aTextLongerThanTheSegmentedWindowKeepsTheWholeClusterPrefix() {
         // The limit is applied to a window of the source, so a copy past that window exercises the
         // path that never sees the whole text; the reference below sees all of it.
-        String[] pieces = {"a", "bc", " ", "\u65E5\u672C", FAMILY, FLAG, COMBINING, "\u200D",
-            "\uFE0F", "\n", "\uD800", "\uDC00"};
+        String[] pieces = {
+            "a", "bc", " ", "\u65E5\u672C", FAMILY, FLAG, COMBINING, "\u200D", "\uFE0F", "\n", "\uD800", "\uDC00"
+        };
         Random random = new Random(97L);
         for (int iteration = 0; iteration < 400; iteration++) {
             StringBuilder text = new StringBuilder();
@@ -175,10 +186,12 @@ class Osc52Test {
             String source = text.toString();
             int max = random.nextInt(random.nextBoolean() ? 128 : 2_000);
             String limited = Osc52.limitUtf8(source, max);
-            assertThat(limited).as("iteration %d at %d bytes", iteration, max)
+            assertThat(limited)
+                    .as("iteration %d at %d bytes", iteration, max)
                     .isEqualTo(wholeClusterPrefix(source, max));
             assertThat(limited.getBytes(StandardCharsets.UTF_8).length)
-                    .as("iteration %d at %d bytes", iteration, max).isLessThanOrEqualTo(max);
+                    .as("iteration %d at %d bytes", iteration, max)
+                    .isLessThanOrEqualTo(max);
         }
     }
 
@@ -191,8 +204,7 @@ class Osc52Test {
         String cluster = "e" + "\u0301".repeat(200);
         String source = "a".repeat(10) + cluster + "z".repeat(400);
         for (int max : new int[] {10, 11, 50, 210, 211, 212, 400, 411}) {
-            assertThat(Osc52.limitUtf8(source, max)).as("limit %d", max)
-                    .isEqualTo(wholeClusterPrefix(source, max));
+            assertThat(Osc52.limitUtf8(source, max)).as("limit %d", max).isEqualTo(wholeClusterPrefix(source, max));
         }
         assertThat(Osc52.limitUtf8(source, 100)).isEqualTo("a".repeat(10));
         // The cluster is 201 units and 401 bytes, so only a budget that reaches its end keeps it.
@@ -215,13 +227,14 @@ class Osc52Test {
             String limited = Osc52.limitUtf8(source, max);
             assertThat(source).as("iteration %d", iteration).startsWith(limited);
             assertThat(limited.getBytes(StandardCharsets.UTF_8).length)
-                    .as("iteration %d at %d bytes", iteration, max).isLessThanOrEqualTo(max);
-            assertThat(TextMeasure.graphemes(limited)).as("iteration %d", iteration)
+                    .as("iteration %d at %d bytes", iteration, max)
+                    .isLessThanOrEqualTo(max);
+            assertThat(TextMeasure.graphemes(limited))
+                    .as("iteration %d", iteration)
                     .isSubsetOf(TextMeasure.graphemes(source));
             // A larger budget never removes content.
             String wider = Osc52.limitUtf8(source, max + 1);
-            assertThat(wider).as("iteration %d grows monotonically", iteration)
-                    .startsWith(limited);
+            assertThat(wider).as("iteration %d grows monotonically", iteration).startsWith(limited);
         }
     }
 }

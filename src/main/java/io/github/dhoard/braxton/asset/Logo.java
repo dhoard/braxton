@@ -22,13 +22,12 @@
 
 package io.github.dhoard.braxton.asset;
 
-import java.util.List;
-
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import java.util.List;
 
 /** A FIGlet-style logo rendered as styled text. */
 public final class Logo {

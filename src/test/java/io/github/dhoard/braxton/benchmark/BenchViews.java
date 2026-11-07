@@ -29,7 +29,6 @@ import io.github.dhoard.braxton.view.Views;
 import io.github.dhoard.braxton.widget.Box;
 import io.github.dhoard.braxton.widget.Editor;
 import io.github.dhoard.braxton.widget.Table;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,8 +38,7 @@ import java.util.List;
  */
 final class BenchViews {
 
-    private BenchViews() {
-    }
+    private BenchViews() {}
 
     /**
      * A transcript-like tree with {@code rows} table rows.
@@ -51,20 +49,20 @@ final class BenchViews {
     static View<Object> transcript(int rows, String draft) {
         Table table = Table.of();
         for (int i = 0; i < rows; i++) {
-            table.row(StyledText.plain("turn " + i), StyledText.plain(BenchCorpus.build("ascii", 24)),
+            table.row(
+                    StyledText.plain("turn " + i),
+                    StyledText.plain(BenchCorpus.build("ascii", 24)),
                     StyledText.plain("ok"));
         }
         List<View<Object>> items = new ArrayList<>();
         items.add(Views.text("Braxton benchmark"));
         items.add(Box.of("status: idle").title("status").view(40));
         items.add(table.view());
-        items.add(
-                new Editor(Editor.Config.defaults())
-                        .view(
-                                (Editor.Model.of(draft)).withFocus(true),
-                                new io.github.dhoard.braxton.mvu.ViewContext(
-                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                        .map(action -> action));
+        items.add(new Editor(Editor.Config.defaults())
+                .view(
+                        (Editor.Model.of(draft)).withFocus(true),
+                        new io.github.dhoard.braxton.mvu.ViewContext(io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                .map(action -> action));
         items.add(Views.grow(Views.blank()));
         return Views.column(items);
     }
@@ -75,7 +73,6 @@ final class BenchViews {
         if (at <= 0) {
             throw new IllegalArgumentException("expected <rows>x<cols>, got: " + spec);
         }
-        return new Viewport(Integer.parseInt(spec.substring(0, at)),
-                Integer.parseInt(spec.substring(at + 1)));
+        return new Viewport(Integer.parseInt(spec.substring(0, at)), Integer.parseInt(spec.substring(at + 1)));
     }
 }

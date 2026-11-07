@@ -30,19 +30,16 @@ import io.github.dhoard.braxton.input.Modifiers;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.view.View;
-
 import org.junit.jupiter.api.Test;
 
 /** Editor behaviour is a pure reducer; side effects are intents. */
 class EditorTest {
 
-    private static final String FAMILY = new String(new int[] {
-            0x1F469, 0x200D, 0x1F469, 0x200D, 0x1F467}, 0, 5);
-    private static final Editor.Config OPTIONS =
-            Editor.Config.defaults()
-                    .withMaxLength(10)
-                    .withVisibleLines(3)
-                    .withPrompt("> ", io.github.dhoard.braxton.style.Style.NONE);
+    private static final String FAMILY = new String(new int[] {0x1F469, 0x200D, 0x1F469, 0x200D, 0x1F467}, 0, 5);
+    private static final Editor.Config OPTIONS = Editor.Config.defaults()
+            .withMaxLength(10)
+            .withVisibleLines(3)
+            .withPrompt("> ", io.github.dhoard.braxton.style.Style.NONE);
 
     private static Editor.Model update(Editor.Model state, Editor.Msg action) {
         return new Editor(OPTIONS).update(state, action).model();
@@ -54,8 +51,7 @@ class EditorTest {
     }
 
     /** Every row a viewport paints for {@code state}, through the real layout path. */
-    private static java.util.List<String> paintedLines(
-            Editor.Model state, Editor.Config options, boolean focused) {
+    private static java.util.List<String> paintedLines(Editor.Model state, Editor.Config options, boolean focused) {
         return new io.github.dhoard.braxton.view.ScreenRenderer()
                 .plainLines(
                         new Editor(options)
@@ -70,7 +66,8 @@ class EditorTest {
     @Test
     void aMessageThatChangesNothingReturnsTheSameModelReference() {
         var editor = new Editor(OPTIONS);
-        var model = editor.init(new io.github.dhoard.braxton.mvu.InitContext(null, null)).model();
+        var model = editor.init(new io.github.dhoard.braxton.mvu.InitContext(null, null))
+                .model();
         // The caret is already at the start, so this action changes nothing at all.
         var result = editor.update(model, new Editor.Msg.MoveLeft());
         assertThat(result.model()).isSameAs(model);
@@ -109,10 +106,9 @@ class EditorTest {
     void insertionBeforeAnEmojiMovesPastTheJoinedZwjGraphemeOnly() {
         Editor.Config options = Editor.Config.defaults();
         Editor.Model state = Editor.Model.of("\uD83D\uDCBBx").withCaret(0);
-        state =
-                new Editor(options)
-                        .update(state, new Editor.Msg.Insert("\uD83D\uDC69\u200D"))
-                        .model();
+        state = new Editor(options)
+                .update(state, new Editor.Msg.Insert("\uD83D\uDC69\u200D"))
+                .model();
         assertThat(state.text()).isEqualTo("\uD83D\uDC69\u200D\uD83D\uDCBBx");
         assertThat(state.caret()).isEqualTo(5);
         assertThat(state.anchor()).isEqualTo(5);
@@ -161,7 +157,9 @@ class EditorTest {
         assertThat(selected.anchor()).isEqualTo(5);
 
         Editor.Model backspaced = new Editor.Model("note\n\u0301x", 5, 4, 0);
-        backspaced = new Editor(options).update(backspaced, new Editor.Msg.Backspace()).model();
+        backspaced = new Editor(options)
+                .update(backspaced, new Editor.Msg.Backspace())
+                .model();
         assertThat(backspaced.text()).isEqualTo("note\u0301x");
         assertThat(backspaced.caret()).isEqualTo(5);
         assertThat(backspaced.anchor()).isEqualTo(5);
@@ -201,7 +199,8 @@ class EditorTest {
     void backspaceRemovesAWholeGrapheme() {
         Editor.Model state = Editor.Model.of("a" + FAMILY);
         assertThat(update(state, new Editor.Msg.Backspace()).text()).isEqualTo("a");
-        assertThat(update(Editor.Model.empty(), new Editor.Msg.Backspace()).text()).isEmpty();
+        assertThat(update(Editor.Model.empty(), new Editor.Msg.Backspace()).text())
+                .isEmpty();
     }
 
     @Test
@@ -225,19 +224,15 @@ class EditorTest {
         io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> all =
                 new Editor(OPTIONS).update(state, new Editor.Msg.SelectAll());
         assertThat(all.model().selection()).isEqualTo("hello");
-        Editor.Output.Copy copy =
-                (Editor.Output.Copy)
-                        new Editor(OPTIONS)
-                                .update(all.model(), new Editor.Msg.Copy())
-                                .outputs()
-                                .getFirst();
+        Editor.Output.Copy copy = (Editor.Output.Copy) new Editor(OPTIONS)
+                .update(all.model(), new Editor.Msg.Copy())
+                .outputs()
+                .getFirst();
         assertThat(copy.text()).isEqualTo("hello");
-        Editor.Output.Copy whole =
-                (Editor.Output.Copy)
-                        new Editor(OPTIONS)
-                                .update(state, new Editor.Msg.Copy())
-                                .outputs()
-                                .getFirst();
+        Editor.Output.Copy whole = (Editor.Output.Copy) new Editor(OPTIONS)
+                .update(state, new Editor.Msg.Copy())
+                .outputs()
+                .getFirst();
         assertThat(whole.text()).isEqualTo("hello");
     }
 
@@ -245,22 +240,20 @@ class EditorTest {
     void passwordEditorsDoNotCopyAndRenderMasks() {
         Editor.Config password = OPTIONS.withMasking(Editor.Config.Masking.PASSWORD);
         Editor.Model state = Editor.Model.of("secret");
-        Editor.Output.Copy copy =
-                (Editor.Output.Copy)
-                        new Editor(password)
-                                .update(state, new Editor.Msg.Copy())
-                                .outputs()
-                                .getFirst();
+        Editor.Output.Copy copy = (Editor.Output.Copy) new Editor(password)
+                .update(state, new Editor.Msg.Copy())
+                .outputs()
+                .getFirst();
         assertThat(copy.text()).isEmpty();
         assertThat(Editor.render(state, password, true).plainText())
-                .doesNotContain("secret").contains("\u2022");
+                .doesNotContain("secret")
+                .contains("\u2022");
     }
 
     @Test
     void maskedDisplayTextKeepsTheDraftLineStructure() {
-        Editor.Config password =
-                OPTIONS.withMasking(Editor.Config.Masking.PASSWORD)
-                        .withPrompt("", io.github.dhoard.braxton.style.Style.NONE);
+        Editor.Config password = OPTIONS.withMasking(Editor.Config.Masking.PASSWORD)
+                .withPrompt("", io.github.dhoard.braxton.style.Style.NONE);
         Editor.Model state = Editor.Model.of("ab\nc");
         assertThat(state.displayText(password))
                 .isEqualTo(Editor.render(state, password, false).plainText())
@@ -278,11 +271,13 @@ class EditorTest {
     void aMaskedCaretNeverRevealsTheCharacterUnderIt() {
         Editor.Config masked = OPTIONS.withMasking(Editor.Config.Masking.PASSWORD);
         for (int caret = 0; caret <= 3; caret++) {
-            String rendered =
-                    Editor.render(new Editor.Model("abc", caret, caret, 0), masked, true)
-                            .plainText();
-            assertThat(rendered).as("caret %d", caret)
-                    .doesNotContain("a").doesNotContain("b").doesNotContain("c");
+            String rendered = Editor.render(new Editor.Model("abc", caret, caret, 0), masked, true)
+                    .plainText();
+            assertThat(rendered)
+                    .as("caret %d", caret)
+                    .doesNotContain("a")
+                    .doesNotContain("b")
+                    .doesNotContain("c");
             assertThat(rendered.chars().filter(c -> c == 0x2022).count())
                     .as("masks at caret %d", caret)
                     .isEqualTo(caret < 3 ? 2 : 3);
@@ -292,24 +287,18 @@ class EditorTest {
     @Test
     void lengthLimitTruncatesAtAGraphemeBoundary() {
         Editor.Config limit = OPTIONS.withMaxLength(2);
-        Editor.Model state =
-                new Editor(limit)
-                        .update(
-                                Editor.Model.empty(),
-                                new Editor.Msg.Insert("\uD83D\uDE00\uD83D\uDE00"))
-                        .model();
+        Editor.Model state = new Editor(limit)
+                .update(Editor.Model.empty(), new Editor.Msg.Insert("\uD83D\uDE00\uD83D\uDE00"))
+                .model();
         assertThat(state.text()).isEqualTo("\uD83D\uDE00");
     }
 
     @Test
     void pasteRespectsTheLengthLimitAndKeepsGraphemesWhole() {
         Editor.Config limit = OPTIONS.withMaxLength(4);
-        Editor.Model state =
-                new Editor(limit)
-                        .update(
-                                Editor.Model.empty(),
-                                new Editor.Msg.Paste("\uD83D\uDC4D\uD83D\uDC4D\uD83D\uDC4D"))
-                        .model();
+        Editor.Model state = new Editor(limit)
+                .update(Editor.Model.empty(), new Editor.Msg.Paste("\uD83D\uDC4D\uD83D\uDC4D\uD83D\uDC4D"))
+                .model();
         assertThat(state.text()).isEqualTo("\uD83D\uDC4D\uD83D\uDC4D");
     }
 
@@ -317,7 +306,8 @@ class EditorTest {
     void theLimitGovernsInputAndNeverTruncatesExistingText() {
         Editor.Config limit = OPTIONS.withMaxLength(3);
         Editor.Model state = Editor.Model.of("abcdef");
-        Editor.Model after = new Editor(limit).update(state, new Editor.Msg.Insert("x")).model();
+        Editor.Model after =
+                new Editor(limit).update(state, new Editor.Msg.Insert("x")).model();
         assertThat(after.text()).isEqualTo("abcdef");
     }
 
@@ -325,11 +315,10 @@ class EditorTest {
     void unlimitedLengthAcceptsLongInput() {
         Editor.Config unlimited = Editor.Config.defaults().withUnlimitedLength();
         String longText = "x".repeat(5_000);
-        assertThat(
-                        new Editor(unlimited)
-                                .update(Editor.Model.empty(), new Editor.Msg.Insert(longText))
-                                .model()
-                                .text())
+        assertThat(new Editor(unlimited)
+                        .update(Editor.Model.empty(), new Editor.Msg.Insert(longText))
+                        .model()
+                        .text())
                 .hasSize(5_000);
     }
 
@@ -346,9 +335,8 @@ class EditorTest {
         Editor.Model state = Editor.Model.of("one\ntwo");
         assertThat(update(state, new Editor.Msg.MoveHome()).caret()).isEqualTo(4);
         Editor.Model start = Editor.Model.of("one\ntwo");
-        assertThat(
-                        update(new Editor.Model(start.text(), 5, 5, 0), new Editor.Msg.MoveEnd())
-                                .caret())
+        assertThat(update(new Editor.Model(start.text(), 5, 5, 0), new Editor.Msg.MoveEnd())
+                        .caret())
                 .isEqualTo(7);
     }
 
@@ -397,16 +385,18 @@ class EditorTest {
                 Editor.Config.defaults().withPrompt("> ", Style.NONE).withVisibleLines(2);
         String text = "ab\tc\n0123456789";
         Editor.Model state = new Editor.Model(text, 3, 3, 0);
-        assertThat(paintedLines(state, options, true))
-                .containsExactly("> ab    " + Editor.CURSOR, "  0123456789");
+        assertThat(paintedLines(state, options, true)).containsExactly("> ab    " + Editor.CURSOR, "  0123456789");
 
-        Editor.Model down = new Editor(options).update(state, new Editor.Msg.MoveDown()).model();
-        assertThat(paintedLines(down, options, true))
-                .containsExactly("> ab    c", "  012345" + Editor.CURSOR + "789");
+        Editor.Model down =
+                new Editor(options).update(state, new Editor.Msg.MoveDown()).model();
+        assertThat(paintedLines(down, options, true)).containsExactly("> ab    c", "  012345" + Editor.CURSOR + "789");
         // Six columns into the target line: the painted column 8 less the prompt's two columns.
         assertThat(down.caret()).isEqualTo(state.lineStart(1) + 6);
         assertThat(down.preferredColumn()).isEqualTo(8);
-        assertThat(new Editor(options).update(down, new Editor.Msg.MoveUp()).model().caret())
+        assertThat(new Editor(options)
+                        .update(down, new Editor.Msg.MoveUp())
+                        .model()
+                        .caret())
                 .isEqualTo(3);
     }
 
@@ -418,17 +408,19 @@ class EditorTest {
                 Editor.Config.defaults().withPrompt("> ", Style.NONE).withVisibleLines(2);
         String text = "abcdef\n0\tabc";
         Editor.Model state = new Editor.Model(text, 4, 4, 0);
-        assertThat(paintedLines(state, options, true))
-                .containsExactly("> abcd" + Editor.CURSOR + "f", "  0 abc");
+        assertThat(paintedLines(state, options, true)).containsExactly("> abcd" + Editor.CURSOR + "f", "  0 abc");
 
-        Editor.Model down = new Editor(options).update(state, new Editor.Msg.MoveDown()).model();
-        assertThat(paintedLines(down, options, true))
-                .containsExactly("> abcdef", "  0 ab" + Editor.CURSOR);
+        Editor.Model down =
+                new Editor(options).update(state, new Editor.Msg.MoveDown()).model();
+        assertThat(paintedLines(down, options, true)).containsExactly("> abcdef", "  0 ab" + Editor.CURSOR);
         // Four columns into the target line: the tab there occupies the single cell left before
         // the painted column 6, so the caret lands on "c" rather than on the tab after "0 ".
         assertThat(down.caret()).isEqualTo(state.lineStart(1) + 4);
         assertThat(down.preferredColumn()).isEqualTo(6);
-        assertThat(new Editor(options).update(down, new Editor.Msg.MoveUp()).model().caret())
+        assertThat(new Editor(options)
+                        .update(down, new Editor.Msg.MoveUp())
+                        .model()
+                        .caret())
                 .isEqualTo(4);
     }
 
@@ -442,24 +434,28 @@ class EditorTest {
         Editor.Config options =
                 Editor.Config.defaults().withPrompt("> ", Style.NONE).withVisibleLines(2);
         Editor.Model state = new Editor.Model("\u0301abcdef\nabcdefgh", 7, 7, 0);
-        assertThat(paintedLines(state, options, true))
-                .containsExactly("> \u0301abcdef" + Editor.CURSOR, "  abcdefgh");
+        assertThat(paintedLines(state, options, true)).containsExactly("> \u0301abcdef" + Editor.CURSOR, "  abcdefgh");
 
-        Editor.Model down = new Editor(options).update(state, new Editor.Msg.MoveDown()).model();
+        Editor.Model down =
+                new Editor(options).update(state, new Editor.Msg.MoveDown()).model();
         // The mark shares the prompt's second cell, so the row drew the block in column 8.
         assertThat(down.preferredColumn()).isEqualTo(8);
         assertThat(down.caret()).isEqualTo(state.lineStart(1) + 6);
         assertThat(paintedLines(down, options, true))
                 .containsExactly("> \u0301abcdef", "  abcdef" + Editor.CURSOR + "h");
         // The way back returns to the offset that cell was drawn for.
-        assertThat(new Editor(options).update(down, new Editor.Msg.MoveUp()).model().caret())
+        assertThat(new Editor(options)
+                        .update(down, new Editor.Msg.MoveUp())
+                        .model()
+                        .caret())
                 .isEqualTo(7);
 
         // Seeking into a line that opens with a mark charges the joined cell there too: the target
         // row paints its first draft cluster inside the stand-in's last cell.
         String target = "abcdef\n\u0301abcdefgh";
         Editor.Model source = new Editor.Model(target, 6, 6, 0);
-        Editor.Model moved = new Editor(options).update(source, new Editor.Msg.MoveDown()).model();
+        Editor.Model moved =
+                new Editor(options).update(source, new Editor.Msg.MoveDown()).model();
         assertThat(moved.preferredColumn()).isEqualTo(8);
         assertThat(moved.caret()).isEqualTo(source.lineStart(1) + 7);
         assertThat(paintedLines(moved, options, true))
@@ -489,32 +485,32 @@ class EditorTest {
         Editor.Config options = Editor.Config.defaults().withVisibleLines(2);
         String text = "\t\uFE0Fdone\nabcdefghij";
         Editor.Model state = new Editor.Model(text, 6, 6, 0);
-        assertThat(paintedLines(state, options, true))
-                .containsExactly("    \uFE0Fdone" + Editor.CURSOR, "abcdefghij");
+        assertThat(paintedLines(state, options, true)).containsExactly("    \uFE0Fdone" + Editor.CURSOR, "abcdefghij");
 
-        Editor.Model down = new Editor(options).update(state, new Editor.Msg.MoveDown()).model();
+        Editor.Model down =
+                new Editor(options).update(state, new Editor.Msg.MoveDown()).model();
         assertThat(down.preferredColumn()).isEqualTo(9);
         assertThat(down.caret()).isEqualTo(state.lineStart(1) + 9);
-        assertThat(paintedLines(down, options, true))
-                .containsExactly("    \uFE0Fdone", "abcdefghi" + Editor.CURSOR);
+        assertThat(paintedLines(down, options, true)).containsExactly("    \uFE0Fdone", "abcdefghi" + Editor.CURSOR);
         // The way back returns to the cell the stop ends with.
-        assertThat(new Editor(options).update(down, new Editor.Msg.MoveUp()).model().caret())
+        assertThat(new Editor(options)
+                        .update(down, new Editor.Msg.MoveUp())
+                        .model()
+                        .caret())
                 .isEqualTo(6);
 
         // A second move of the same run stays in that column instead of stepping one left.
         Editor.Model three = new Editor.Model("\t\uFE0Fdone\nabcdefghij\nklmnopqrst", 6, 6, 0);
-        Editor.Model second =
-                new Editor(options)
-                        .update(
-                                new Editor(options)
-                                        .update(three, new Editor.Msg.MoveDown())
-                                        .model(),
-                                new Editor.Msg.MoveDown())
-                        .model();
+        Editor.Model second = new Editor(options)
+                .update(
+                        new Editor(options)
+                                .update(three, new Editor.Msg.MoveDown())
+                                .model(),
+                        new Editor.Msg.MoveDown())
+                .model();
         assertThat(second.preferredColumn()).isEqualTo(9);
         assertThat(second.caret()).isEqualTo(three.lineStart(2) + 9);
-        assertThat(paintedLines(second, options, true))
-                .containsExactly("abcdefghij", "klmnopqrs" + Editor.CURSOR);
+        assertThat(paintedLines(second, options, true)).containsExactly("abcdefghij", "klmnopqrs" + Editor.CURSOR);
 
         // The same rule sizes the block that covers a later tab: the stop behind the widened cell
         // has the three columns the row was measured at, so the text after it keeps its columns
@@ -528,9 +524,9 @@ class EditorTest {
         Editor.Config prompt =
                 Editor.Config.defaults().withPrompt("> ", Style.NONE).withVisibleLines(2);
         Editor.Model seeded = new Editor.Model("a\t\uFE0Fbc\nabcdefghij", 5, 5, 0);
-        assertThat(paintedLines(seeded, prompt, true))
-                .containsExactly("> a \uFE0Fbc" + Editor.CURSOR, "  abcdefghij");
-        Editor.Model moved = new Editor(prompt).update(seeded, new Editor.Msg.MoveDown()).model();
+        assertThat(paintedLines(seeded, prompt, true)).containsExactly("> a \uFE0Fbc" + Editor.CURSOR, "  abcdefghij");
+        Editor.Model moved =
+                new Editor(prompt).update(seeded, new Editor.Msg.MoveDown()).model();
         assertThat(moved.preferredColumn()).isEqualTo(7);
         assertThat(moved.caret()).isEqualTo(seeded.lineStart(1) + 5);
         assertThat(paintedLines(moved, prompt, true))
@@ -548,12 +544,16 @@ class EditorTest {
         assertThat(paintedLines(state, options, true))
                 .containsExactly("abcdefgh" + Editor.CURSOR + "j", "x   \uFE0Fyz0123456789");
 
-        Editor.Model down = new Editor(options).update(state, new Editor.Msg.MoveDown()).model();
+        Editor.Model down =
+                new Editor(options).update(state, new Editor.Msg.MoveDown()).model();
         assertThat(down.preferredColumn()).isEqualTo(8);
         assertThat(down.caret()).isEqualTo(state.lineStart(1) + 6);
         assertThat(paintedLines(down, options, true))
                 .containsExactly("abcdefghij", "x   \uFE0Fyz0" + Editor.CURSOR + "23456789");
-        assertThat(new Editor(options).update(down, new Editor.Msg.MoveUp()).model().caret())
+        assertThat(new Editor(options)
+                        .update(down, new Editor.Msg.MoveUp())
+                        .model()
+                        .caret())
                 .isEqualTo(8);
     }
 
@@ -569,54 +569,47 @@ class EditorTest {
         Editor.Model mark = new Editor.Model("\t\u0301done\nabcdefghij", 6, 6, 0);
         assertThat(paintedLines(mark, options, true))
                 .containsExactly("    \u25CC\u0301done" + Editor.CURSOR, "abcdefghij");
-        assertThat(
-                        new Editor(options)
-                                .update(mark, new Editor.Msg.MoveDown())
-                                .model()
-                                .preferredColumn())
+        assertThat(new Editor(options)
+                        .update(mark, new Editor.Msg.MoveDown())
+                        .model()
+                        .preferredColumn())
                 .isEqualTo(9);
 
         Editor.Model base = new Editor.Model("\tX\uFE0Fdone\nabcdefghij", 7, 7, 0);
-        assertThat(paintedLines(base, options, true))
-                .containsExactly("    X\uFE0Fdone" + Editor.CURSOR, "abcdefghij");
-        assertThat(
-                        new Editor(options)
-                                .update(base, new Editor.Msg.MoveDown())
-                                .model()
-                                .preferredColumn())
+        assertThat(paintedLines(base, options, true)).containsExactly("    X\uFE0Fdone" + Editor.CURSOR, "abcdefghij");
+        assertThat(new Editor(options)
+                        .update(base, new Editor.Msg.MoveDown())
+                        .model()
+                        .preferredColumn())
                 .isEqualTo(10);
 
         Editor.Model control = new Editor.Model("\t\u200B\uFE0Fdone\nabcdefghij", 7, 7, 0);
         assertThat(paintedLines(control, options, true))
                 .containsExactly("    \u200B\uFE0Fdone" + Editor.CURSOR, "abcdefghij");
-        assertThat(
-                        new Editor(options)
-                                .update(control, new Editor.Msg.MoveDown())
-                                .model()
-                                .preferredColumn())
+        assertThat(new Editor(options)
+                        .update(control, new Editor.Msg.MoveDown())
+                        .model()
+                        .preferredColumn())
                 .isEqualTo(8);
 
         // A second tab is charged its own stop, measured from where the widened cell before it
         // ends; it does not continue that cell.
         Editor.Model stops = new Editor.Model("\t\t\uFE0Fx\nabcdefghij", 4, 4, 0);
-        assertThat(paintedLines(stops, options, true))
-                .containsExactly("        \uFE0Fx" + Editor.CURSOR, "abcdefghij");
-        assertThat(
-                        new Editor(options)
-                                .update(stops, new Editor.Msg.MoveDown())
-                                .model()
-                                .preferredColumn())
+        assertThat(paintedLines(stops, options, true)).containsExactly("        \uFE0Fx" + Editor.CURSOR, "abcdefghij");
+        assertThat(new Editor(options)
+                        .update(stops, new Editor.Msg.MoveDown())
+                        .model()
+                        .preferredColumn())
                 .isEqualTo(10);
 
         // A masked row draws one mask glyph for the tab instead of its spaces, and that glyph is a
         // base of its own, so the row stays one cell per cluster.
         Editor.Config password =
-                Editor.Config.defaults()
-                        .withVisibleLines(2)
-                        .withMasking(Editor.Config.Masking.PASSWORD);
+                Editor.Config.defaults().withVisibleLines(2).withMasking(Editor.Config.Masking.PASSWORD);
         Editor.Model masked = new Editor.Model("\t\uFE0Fdone\nabcdefghij", 6, 6, 0);
         assertThat(paintedLines(masked, password, true))
-                .containsExactly("\u2022\u2022\u2022\u2022\u2022\u2022" + Editor.CURSOR,
+                .containsExactly(
+                        "\u2022\u2022\u2022\u2022\u2022\u2022" + Editor.CURSOR,
                         "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022");
         Editor.Model maskedDown =
                 new Editor(password).update(masked, new Editor.Msg.MoveDown()).model();
@@ -630,19 +623,18 @@ class EditorTest {
         // With no prompt the row gives the mark its own cell - the dotted circle the text view
         // paints in place of the base it lacks - so the arithmetic and the paint already agree.
         Editor.Config plain = Editor.Config.defaults().withVisibleLines(2);
-        assertThat(paintedLines(mark, plain, true))
-                .containsExactly("\u25CC\u0301abcdef" + Editor.CURSOR, "abcdefgh");
-        Editor.Model plainDown = new Editor(plain).update(mark, new Editor.Msg.MoveDown()).model();
+        assertThat(paintedLines(mark, plain, true)).containsExactly("\u25CC\u0301abcdef" + Editor.CURSOR, "abcdefgh");
+        Editor.Model plainDown =
+                new Editor(plain).update(mark, new Editor.Msg.MoveDown()).model();
         assertThat(plainDown.preferredColumn()).isEqualTo(7);
         assertThat(plainDown.caret()).isEqualTo(mark.lineStart(1) + 7);
 
         // A masked row draws one mask glyph per cluster, and that glyph is a base of its own: no
         // join happens, so one cell per cluster is still the column the row paints.
-        Editor.Config password =
-                Editor.Config.defaults()
-                        .withPrompt("> ", Style.NONE)
-                        .withVisibleLines(2)
-                        .withMasking(Editor.Config.Masking.PASSWORD);
+        Editor.Config password = Editor.Config.defaults()
+                .withPrompt("> ", Style.NONE)
+                .withVisibleLines(2)
+                .withMasking(Editor.Config.Masking.PASSWORD);
         assertThat(paintedLines(mark, password, true).get(0))
                 .isEqualTo("> \u2022\u2022\u2022\u2022\u2022\u2022\u2022" + Editor.CURSOR);
         Editor.Model maskedDown =
@@ -658,7 +650,8 @@ class EditorTest {
         Editor.Model stop = new Editor.Model("\u0301abcdef\nabcdefgh", 7, 7, 0);
         assertThat(paintedLines(stop, tab, true))
                 .containsExactly(">   \u25CC\u0301abcdef" + Editor.CURSOR, "    abcdefgh");
-        Editor.Model stopDown = new Editor(tab).update(stop, new Editor.Msg.MoveDown()).model();
+        Editor.Model stopDown =
+                new Editor(tab).update(stop, new Editor.Msg.MoveDown()).model();
         assertThat(stopDown.preferredColumn()).isEqualTo(11);
         assertThat(stopDown.caret()).isEqualTo(stop.lineStart(1) + 7);
         assertThat(paintedLines(stopDown, tab, true))
@@ -668,11 +661,10 @@ class EditorTest {
         Editor.Model selectorStop = new Editor.Model("\uFE0Fabcdef\nabcdefgh", 7, 7, 0);
         assertThat(paintedLines(selectorStop, tab, true))
                 .containsExactly(">   \uFE0Fabcdef" + Editor.CURSOR, "    abcdefgh");
-        assertThat(
-                        new Editor(tab)
-                                .update(selectorStop, new Editor.Msg.MoveDown())
-                                .model()
-                                .preferredColumn())
+        assertThat(new Editor(tab)
+                        .update(selectorStop, new Editor.Msg.MoveDown())
+                        .model()
+                        .preferredColumn())
                 .isEqualTo(11);
     }
 
@@ -704,11 +696,10 @@ class EditorTest {
                 new Editor(OPTIONS).update(state, new Editor.Msg.Submit());
         assertThat(submit.outputs().getFirst()).isEqualTo(new Editor.Output.Submit("hi"));
         assertThat(submit.model()).isEqualTo(state);
-        assertThat(
-                        new Editor(OPTIONS)
-                                .update(state, new Editor.Msg.PasteRequest())
-                                .outputs()
-                                .getFirst())
+        assertThat(new Editor(OPTIONS)
+                        .update(state, new Editor.Msg.PasteRequest())
+                        .outputs()
+                        .getFirst())
                 .isEqualTo(new Editor.Output.PasteRequest());
     }
 
@@ -721,12 +712,10 @@ class EditorTest {
 
     @Test
     void aggressivePasteTrimsAndCollapsesBlankLines() {
-        Editor.Config aggressive =
-                OPTIONS.withPaste(io.github.dhoard.braxton.clipboard.PasteMode.AGGRESSIVE, true);
-        Editor.Model pasted =
-                new Editor(aggressive)
-                        .update(Editor.Model.empty(), new Editor.Msg.Paste("  a  \n\n\n  b  "))
-                        .model();
+        Editor.Config aggressive = OPTIONS.withPaste(io.github.dhoard.braxton.clipboard.PasteMode.AGGRESSIVE, true);
+        Editor.Model pasted = new Editor(aggressive)
+                .update(Editor.Model.empty(), new Editor.Msg.Paste("  a  \n\n\n  b  "))
+                .model();
         assertThat(pasted.text()).isEqualTo("a\n\nb");
     }
 
@@ -746,12 +735,10 @@ class EditorTest {
                 OPTIONS.withMasking(Editor.Config.Masking.PASSWORD).withCopyEnabled(true);
         assertThat(masked.canCopy()).isFalse();
         assertThat(Editor.copyableText(Editor.Model.of("secret"), masked)).isEmpty();
-        Editor.Output.Copy copy =
-                (Editor.Output.Copy)
-                        new Editor(masked)
-                                .update(Editor.Model.of("secret"), new Editor.Msg.Copy())
-                                .outputs()
-                                .getFirst();
+        Editor.Output.Copy copy = (Editor.Output.Copy) new Editor(masked)
+                .update(Editor.Model.of("secret"), new Editor.Msg.Copy())
+                .outputs()
+                .getFirst();
         assertThat(copy.text()).isEmpty();
 
         assertThat(OPTIONS.canCopy()).isTrue();
@@ -763,11 +750,11 @@ class EditorTest {
         // copyEnabled=false opts a visible field out of copying entirely, so the Copy intent
         // carries no text even though the draft is not masked.
         io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> result =
-                new Editor(OPTIONS.withCopyEnabled(false))
-                        .update(Editor.Model.of("secret"), new Editor.Msg.Copy());
+                new Editor(OPTIONS.withCopyEnabled(false)).update(Editor.Model.of("secret"), new Editor.Msg.Copy());
         assertThat(result.outputs().getFirst())
                 .isInstanceOfSatisfying(
-                        Editor.Output.Copy.class, copy -> assertThat(copy.text()).isEmpty());
+                        Editor.Output.Copy.class,
+                        copy -> assertThat(copy.text()).isEmpty());
         assertThat(Editor.copyableText(Editor.Model.of("secret"), OPTIONS.withCopyEnabled(false)))
                 .isEmpty();
     }
@@ -778,8 +765,8 @@ class EditorTest {
         StyledText rendered = Editor.render(state, OPTIONS, true);
         assertThat(rendered.plainText()).contains("> ");
         assertThat(rendered.plainText()).contains(Editor.CURSOR);
-        assertThat(rendered.spans()).anySatisfy(span ->
-                assertThat(span.style().invert()).isTrue());
+        assertThat(rendered.spans())
+                .anySatisfy(span -> assertThat(span.style().invert()).isTrue());
     }
 
     @Test
@@ -788,8 +775,7 @@ class EditorTest {
         // puts a second prompt (and a second caret-like marker next to the block cursor) on an
         // added line, which is the reported double caret in the AI Harness composer.
         Editor.Model state = new Editor.Model("one\ntwo\nthree", 13, 13, 0);
-        assertThat(Editor.render(state, OPTIONS, true).plainText())
-                .isEqualTo("> one\n  two\n  three" + Editor.CURSOR);
+        assertThat(Editor.render(state, OPTIONS, true).plainText()).isEqualTo("> one\n  two\n  three" + Editor.CURSOR);
     }
 
     @Test
@@ -816,8 +802,7 @@ class EditorTest {
         // caret left, the same way a one-cell block over a wide grapheme would.
         Editor.Model onTab = Editor.Model.of("a\tb").withCaret(1);
         assertThat(painted(onTab, Editor.Config.defaults(), false)).isEqualTo("a   b");
-        assertThat(painted(onTab, Editor.Config.defaults(), true))
-                .isEqualTo("a" + Editor.CURSOR.repeat(3) + "b");
+        assertThat(painted(onTab, Editor.Config.defaults(), true)).isEqualTo("a" + Editor.CURSOR.repeat(3) + "b");
         // The prompt is painted on the same line, so a tab after it reaches the next stop from
         // there: the block covers the one cell that is left, not the three it covers at column 0.
         Editor.Config prompted = Editor.Config.defaults().withPrompt("> ", Style.NONE);
@@ -837,39 +822,29 @@ class EditorTest {
                 .contains(new Editor.Msg.Insert("x"));
         assertThat(Editor.actionFor(InputEvent.KeyInput.of(Key.SPACE, " "), OPTIONS))
                 .contains(new Editor.Msg.Insert(" "));
-        assertThat(Editor.actionFor(InputEvent.KeyInput.of(Key.ENTER), OPTIONS))
-                .contains(new Editor.Msg.Submit());
+        assertThat(Editor.actionFor(InputEvent.KeyInput.of(Key.ENTER), OPTIONS)).contains(new Editor.Msg.Submit());
         assertThat(Editor.actionFor(InputEvent.KeyInput.of(Key.of("j", Modifiers.CTRL)), OPTIONS))
                 .contains(new Editor.Msg.Newline());
         assertThat(Editor.actionFor(InputEvent.KeyInput.of(Key.of("c", Modifiers.ALT)), OPTIONS))
                 .contains(new Editor.Msg.Copy());
         assertThat(Editor.actionFor(InputEvent.KeyInput.of(Key.of("v", Modifiers.CTRL)), OPTIONS))
                 .contains(new Editor.Msg.PasteRequest());
-        assertThat(Editor.actionFor(InputEvent.KeyInput.of(Key.of("c", Modifiers.CTRL), "c"),
-                OPTIONS)).isEmpty();
+        assertThat(Editor.actionFor(InputEvent.KeyInput.of(Key.of("c", Modifiers.CTRL), "c"), OPTIONS))
+                .isEmpty();
     }
 
     @Test
     void aConfiguredPrintableCopyOrPasteKeyWinsOverInsertingItsText() {
         // shift+c and shift+v carry text, but a binding the caller configured must still fire.
         Editor.Config options =
-                Editor.Config.defaults()
-                        .withKeys(Key.of("c", Modifiers.SHIFT), Key.of("v", Modifiers.SHIFT));
-        assertThat(
-                        Editor.actionFor(
-                                new InputEvent.KeyInput(Key.of("c", Modifiers.SHIFT), "C", 0L),
-                                options))
+                Editor.Config.defaults().withKeys(Key.of("c", Modifiers.SHIFT), Key.of("v", Modifiers.SHIFT));
+        assertThat(Editor.actionFor(new InputEvent.KeyInput(Key.of("c", Modifiers.SHIFT), "C", 0L), options))
                 .contains(new Editor.Msg.Copy());
-        assertThat(
-                        Editor.actionFor(
-                                new InputEvent.KeyInput(Key.of("v", Modifiers.SHIFT), "V", 0L),
-                                options))
+        assertThat(Editor.actionFor(new InputEvent.KeyInput(Key.of("v", Modifiers.SHIFT), "V", 0L), options))
                 .contains(new Editor.Msg.PasteRequest());
         // With the default bindings the same gesture stays printable text.
-        assertThat(
-                        Editor.actionFor(
-                                new InputEvent.KeyInput(Key.of("c", Modifiers.SHIFT), "C", 0L),
-                                Editor.Config.defaults()))
+        assertThat(Editor.actionFor(
+                        new InputEvent.KeyInput(Key.of("c", Modifiers.SHIFT), "C", 0L), Editor.Config.defaults()))
                 .contains(new Editor.Msg.Insert("C"));
     }
 
@@ -878,10 +853,9 @@ class EditorTest {
         // The editor's line model is LF (lineAt/lineEnd, the decoder's newline and the paste
         // sanitizer all agree), so a raw CR must not sit in the draft as an invisible character
         // that shifts offsets without breaking a line.
-        Editor.Model state =
-                new Editor(OPTIONS)
-                        .update(Editor.Model.empty(), new Editor.Msg.Insert("a\r\nb\rc"))
-                        .model();
+        Editor.Model state = new Editor(OPTIONS)
+                .update(Editor.Model.empty(), new Editor.Msg.Insert("a\r\nb\rc"))
+                .model();
         assertThat(state.text()).isEqualTo("a\nb\nc");
         assertThat(state.lineCount()).isEqualTo(3);
         assertThat(state.caret()).isEqualTo(state.text().length());
@@ -902,9 +876,11 @@ class EditorTest {
             assertThat(seeded.text()).as("no carriage return in %s", label).doesNotContain("\r");
             assertThat(seeded.lineCount()).as("lines of %s", label).isEqualTo(2);
             // The offsets the caller passed are its own coordinates: the end of the text it gave.
-            assertThat(seeded.caret()).as("caret of %s", label)
+            assertThat(seeded.caret())
+                    .as("caret of %s", label)
                     .isEqualTo(seeded.text().length());
-            assertThat(seeded.anchor()).as("anchor of %s", label)
+            assertThat(seeded.anchor())
+                    .as("anchor of %s", label)
                     .isEqualTo(seeded.text().length());
             assertThat(Editor.Model.empty().withText(raw).text())
                     .as("withText of %s", label)
@@ -935,12 +911,15 @@ class EditorTest {
         assertThat(Editor.lines(seeded)).containsExactly("a", "b", "xyz");
         // Stepping over the break moves the block: no offset hides in a column the row never
         // paints.
-        assertThat(paintedLines(new Editor.Model("a\rb\nxyz", 1, 1, 0), OPTIONS, true).get(0))
+        assertThat(paintedLines(new Editor.Model("a\rb\nxyz", 1, 1, 0), OPTIONS, true)
+                        .get(0))
                 .isEqualTo("> a" + Editor.CURSOR);
-        assertThat(paintedLines(new Editor.Model("a\rb\nxyz", 2, 2, 0), OPTIONS, true).get(1))
+        assertThat(paintedLines(new Editor.Model("a\rb\nxyz", 2, 2, 0), OPTIONS, true)
+                        .get(1))
                 .isEqualTo("  " + Editor.CURSOR);
         // The column a vertical move returns to is the column the row paints the block in.
-        Editor.Model up = new Editor(OPTIONS).update(seeded, new Editor.Msg.MoveUp()).model();
+        Editor.Model up =
+                new Editor(OPTIONS).update(seeded, new Editor.Msg.MoveUp()).model();
         assertThat(up.preferredColumn()).isEqualTo(2);
         assertThat(paintedLines(up, OPTIONS, true).get(0)).isEqualTo("> " + Editor.CURSOR);
     }
@@ -952,11 +931,13 @@ class EditorTest {
         // that falls inside the break sequence is where the order is observable.
         Editor.Config limited = Editor.Config.defaults().withMaxLength(4);
         Editor.Model base = new Editor.Model("ab", 1, 1, 0);
-        Editor.Model lf = new Editor(limited).update(base, new Editor.Msg.Insert("x\nyz")).model();
+        Editor.Model lf =
+                new Editor(limited).update(base, new Editor.Msg.Insert("x\nyz")).model();
         for (String raw : java.util.List.of("x\r\nyz", "x\ryz")) {
             Editor.Model inserted =
                     new Editor(limited).update(base, new Editor.Msg.Insert(raw)).model();
-            assertThat(inserted.text()).as("text for %s", raw.replace("\r", "\\r"))
+            assertThat(inserted.text())
+                    .as("text for %s", raw.replace("\r", "\\r"))
                     .isEqualTo(lf.text());
             assertThat(inserted.caret()).isEqualTo(lf.caret());
             assertThat(inserted.anchor()).isEqualTo(lf.anchor());
@@ -970,21 +951,17 @@ class EditorTest {
     void aPromptWithATabKeepsContinuationLinesAligned() {
         // The prompt is painted by the text view, which expands its tab to the next four-column
         // stop, so the blank stand-in on later lines must be the painted width.
-        Editor.Config options =
-                Editor.Config.defaults()
-                        .withPrompt(">\t", io.github.dhoard.braxton.style.Style.NONE);
+        Editor.Config options = Editor.Config.defaults().withPrompt(">\t", io.github.dhoard.braxton.style.Style.NONE);
         Editor.Model state = new Editor.Model("a\nb", 0, 0, 0);
-        java.util.List<String> lines =
-                new io.github.dhoard.braxton.view.ScreenRenderer()
-                        .plainLines(
-                                new Editor(options)
-                                        .view(
-                                                (state).withFocus(false),
-                                                new io.github.dhoard.braxton.mvu.ViewContext(
-                                                        io.github.dhoard.braxton.layout.Viewport
-                                                                .EMPTY))
-                                        .map((Editor.Msg action) -> action),
-                                new io.github.dhoard.braxton.layout.Viewport(6, 12));
+        java.util.List<String> lines = new io.github.dhoard.braxton.view.ScreenRenderer()
+                .plainLines(
+                        new Editor(options)
+                                .view(
+                                        (state).withFocus(false),
+                                        new io.github.dhoard.braxton.mvu.ViewContext(
+                                                io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                                .map((Editor.Msg action) -> action),
+                        new io.github.dhoard.braxton.layout.Viewport(6, 12));
         assertThat(lines.get(0)).isEqualTo(">   a");
         assertThat(lines.get(1)).isEqualTo("    b");
     }
@@ -1002,36 +979,29 @@ class EditorTest {
         assertThat(Editor.Config.defaults().withPrompt("a\rb", Style.NONE).prompt())
                 .isEqualTo("a b");
         Editor.Model state = new Editor.Model("x\ny", 0, 0, 0);
-        assertThat(Editor.render(state, options, true).lines())
-                .hasSize(Editor.visibleLineCount(state, options));
-        java.util.List<String> lines =
-                new io.github.dhoard.braxton.view.ScreenRenderer()
-                        .plainLines(
-                                new Editor(options)
-                                        .view(
-                                                (state).withFocus(false),
-                                                new io.github.dhoard.braxton.mvu.ViewContext(
-                                                        io.github.dhoard.braxton.layout.Viewport
-                                                                .EMPTY))
-                                        .map((Editor.Msg action) -> action),
-                                new io.github.dhoard.braxton.layout.Viewport(2, 20));
+        assertThat(Editor.render(state, options, true).lines()).hasSize(Editor.visibleLineCount(state, options));
+        java.util.List<String> lines = new io.github.dhoard.braxton.view.ScreenRenderer()
+                .plainLines(
+                        new Editor(options)
+                                .view(
+                                        (state).withFocus(false),
+                                        new io.github.dhoard.braxton.mvu.ViewContext(
+                                                io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                                .map((Editor.Msg action) -> action),
+                        new io.github.dhoard.braxton.layout.Viewport(2, 20));
         assertThat(lines).containsExactly("a bx", "   y");
     }
 
     @Test
     void editorViewDeclaresFocusAndHandlesPaste() {
-        View<String> view =
-                new Editor(OPTIONS)
-                        .view(
-                                (Editor.Model.empty()).withFocus(true),
-                                new io.github.dhoard.braxton.mvu.ViewContext(
-                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                        .map(action -> action.getClass().getSimpleName());
+        View<String> view = new Editor(OPTIONS)
+                .view(
+                        (Editor.Model.empty()).withFocus(true),
+                        new io.github.dhoard.braxton.mvu.ViewContext(io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                .map(action -> action.getClass().getSimpleName());
         assertThat(view).isInstanceOf(View.Focused.class);
-        assertThat(((View.Focused<String>) view).id())
-                .isEqualTo(io.github.dhoard.braxton.view.ElementId.of("input"));
-        assertThat(((View.Focused<String>) view).input()
-                .handle(new InputEvent.PasteInput("hello")))
+        assertThat(((View.Focused<String>) view).id()).isEqualTo(io.github.dhoard.braxton.view.ElementId.of("input"));
+        assertThat(((View.Focused<String>) view).input().handle(new InputEvent.PasteInput("hello")))
                 .contains("Paste");
     }
 

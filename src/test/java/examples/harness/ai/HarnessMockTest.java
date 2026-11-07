@@ -25,10 +25,8 @@ package examples.harness.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.layout.Size;
-
-import org.junit.jupiter.api.Test;
-
 import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /** Deterministic replay selection and the offline fallback. */
 class HarnessMockTest {
@@ -58,8 +56,10 @@ class HarnessMockTest {
 
     @Test
     void aRecordedTurnIsReplayedUntilTheTurnsRunOut() {
-        HarnessTranscript.HarnessTurn turn = new HarnessTranscript.HarnessTurn("",
-                List.of(new HarnessEntry.Assistant("recorded")), HarnessTranscript.Usage.EMPTY,
+        HarnessTranscript.HarnessTurn turn = new HarnessTranscript.HarnessTurn(
+                "",
+                List.of(new HarnessEntry.Assistant("recorded")),
+                HarnessTranscript.Usage.EMPTY,
                 HarnessTranscript.Profile.DEFAULT);
         List<HarnessTranscript.HarnessTurn> turns = List.of(turn);
         assertThat(HarnessMock.hasRecordedTurn(state(0, turns))).isTrue();
@@ -71,16 +71,15 @@ class HarnessMockTest {
 
     @Test
     void theFallbackIsStableForAGivenPrompt() {
-        HarnessTranscript.HarnessTurn first = HarnessMock.fallback("summarize the loop",
-                HarnessTranscript.Profile.DEFAULT);
-        HarnessTranscript.HarnessTurn again = HarnessMock.fallback("summarize the loop",
-                HarnessTranscript.Profile.DEFAULT);
+        HarnessTranscript.HarnessTurn first =
+                HarnessMock.fallback("summarize the loop", HarnessTranscript.Profile.DEFAULT);
+        HarnessTranscript.HarnessTurn again =
+                HarnessMock.fallback("summarize the loop", HarnessTranscript.Profile.DEFAULT);
         assertThat(first).isEqualTo(again);
         assertThat(first.responses()).hasSize(3);
         assertThat(first.responses().get(1)).isInstanceOf(HarnessEntry.Tool.class);
         assertThat(first.responses().get(2)).isInstanceOf(HarnessEntry.Assistant.class);
-        assertThat(((HarnessEntry.Assistant) first.responses().get(2)).text())
-                .contains("summarize the loop");
+        assertThat(((HarnessEntry.Assistant) first.responses().get(2)).text()).contains("summarize the loop");
         assertThat(first.profile()).isEqualTo(HarnessTranscript.Profile.DEFAULT);
         assertThat(first.usage().inputTokens()).isPositive();
         assertThat(first.usage().contextTokens())

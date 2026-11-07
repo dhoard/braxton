@@ -24,7 +24,6 @@ package io.github.dhoard.braxton.effect;
 
 import io.github.dhoard.braxton.clipboard.ClipboardResult;
 import io.github.dhoard.braxton.mvu.ComponentPath;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -81,8 +80,8 @@ public sealed interface Command<Msg> {
      * Its success or failure becomes exactly one message. The body must not touch the active
      * terminal, mutate application state, or call {@code update}.</p>
      */
-    record Task<Msg>(EffectId id, Callable<?> work, Function<Object, Msg> onSuccess,
-            Function<Throwable, Msg> onFailure) implements Command<Msg> {
+    record Task<Msg>(EffectId id, Callable<?> work, Function<Object, Msg> onSuccess, Function<Throwable, Msg> onFailure)
+            implements Command<Msg> {
 
         public Task {
             Objects.requireNonNull(id, "id");
@@ -115,8 +114,7 @@ public sealed interface Command<Msg> {
             try {
                 delay.toNanos();
             } catch (ArithmeticException overflow) {
-                throw new IllegalArgumentException(
-                        "delay must fit in nanoseconds: " + delay, overflow);
+                throw new IllegalArgumentException("delay must fit in nanoseconds: " + delay, overflow);
             }
         }
 
@@ -257,7 +255,9 @@ public sealed interface Command<Msg> {
      * Typed one-shot application effect. The unchecked casts are confined to this factory: Java
      * erases {@code T}, and the interpreter invokes the success mapper with the task's own result.
      */
-    static <Msg, T> Command<Msg> task(EffectId id, Callable<T> work,
+    static <Msg, T> Command<Msg> task(
+            EffectId id,
+            Callable<T> work,
             Function<? super T, ? extends Msg> onSuccess,
             Function<Throwable, ? extends Msg> onFailure) {
         Objects.requireNonNull(onSuccess, "onSuccess");

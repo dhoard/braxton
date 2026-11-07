@@ -44,7 +44,6 @@ class FigletRenderCostTest {
         return bean.getThreadAllocatedBytes(Thread.currentThread().threadId()) - before;
     }
 
-
     @Test
     void aLongIdentityFontRowDoesNotRebuildEveryPrefix() throws Exception {
         FigletFont font = FontLoader.load(FontLoader.Family.TERM);
@@ -61,7 +60,8 @@ class FigletRenderCostTest {
         String large = "a".repeat(1024);
         long smallBytes = allocated(() -> sink = font.render(small));
         long largeBytes = allocated(() -> sink = font.render(large));
-        assertThat(largeBytes).as("four times the glyphs should scale near linearly")
+        assertThat(largeBytes)
+                .as("four times the glyphs should scale near linearly")
                 .isLessThan(smallBytes * 8);
         assertThat(font.render(large)).hasSize(font.height());
     }

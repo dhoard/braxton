@@ -31,9 +31,7 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.testing.ComponentDriver;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.widget.ScrollView.Msg;
-
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /**
@@ -101,15 +99,14 @@ class ScrollViewCostTest {
         ScrollView view = new ScrollView(new ScrollView.Config(WINDOW, false));
 
         for (int top : new int[] {0, 1, 25_000, DOCUMENT - WINDOW}) {
-            ScrollView.Model state =
-                    new ScrollView.Model(top, false, true, WINDOW, new Document(counter, DOCUMENT));
+            ScrollView.Model state = new ScrollView.Model(top, false, true, WINDOW, new Document(counter, DOCUMENT));
             counter.reset();
 
             view.view(state, CONTEXT);
 
-            assertThat(counter.fetches).as("rows read for a window at %d", top)
-                    .isEqualTo(WINDOW);
-            assertThat(counter.countCalls).as("row count asked for a window at %d", top)
+            assertThat(counter.fetches).as("rows read for a window at %d", top).isEqualTo(WINDOW);
+            assertThat(counter.countCalls)
+                    .as("row count asked for a window at %d", top)
                     .isEqualTo(1);
             assertThat(counter.lowest).isEqualTo(top);
             assertThat(counter.highest).isEqualTo(top + WINDOW - 1);
@@ -120,8 +117,7 @@ class ScrollViewCostTest {
     void aFollowingWindowReadsTheEndOfTheDocumentAndNothingBeforeIt() {
         Counter counter = new Counter();
         ScrollView view = new ScrollView(new ScrollView.Config(WINDOW, true));
-        ScrollView.Model state =
-                new ScrollView.Model(0, true, true, WINDOW, new Document(counter, DOCUMENT));
+        ScrollView.Model state = new ScrollView.Model(0, true, true, WINDOW, new Document(counter, DOCUMENT));
 
         assertThat(state.topLine()).isEqualTo(DOCUMENT - WINDOW);
         counter.reset();
@@ -135,23 +131,24 @@ class ScrollViewCostTest {
     @Test
     void aGestureReadsNoRowAndNoDocumentIsCopied() {
         Counter counter = new Counter();
-        var driver =
-                ComponentDriver.initialize(
-                        new ScrollView(new ScrollView.Config(WINDOW, false)),
-                        new InitContext(null, null));
+        var driver = ComponentDriver.initialize(
+                new ScrollView(new ScrollView.Config(WINDOW, false)), new InitContext(null, null));
         ScrollView.Content content = new Document(counter, DOCUMENT);
         driver.send(new Msg.ContentChanged(content));
 
-        for (Msg message : List.of(new Msg.Down(1), new Msg.PageDown(), new Msg.PageUp(),
-                new Msg.Home(), new Msg.End(), new Msg.ViewportChanged(WINDOW),
+        for (Msg message : List.of(
+                new Msg.Down(1),
+                new Msg.PageDown(),
+                new Msg.PageUp(),
+                new Msg.Home(),
+                new Msg.End(),
+                new Msg.ViewportChanged(WINDOW),
                 new Msg.ContentChanged(content))) {
             counter.reset();
             driver.send(message);
 
             assertThat(counter.fetches).as("rows read by %s", message).isZero();
-            assertThat(counter.countCalls)
-                    .as("row count read by %s", message)
-                    .isLessThanOrEqualTo(4);
+            assertThat(counter.countCalls).as("row count read by %s", message).isLessThanOrEqualTo(4);
         }
         assertThat(driver.model().topLine()).isEqualTo(DOCUMENT - WINDOW);
     }
@@ -198,14 +195,13 @@ class ScrollViewCostTest {
     @Test
     void theViewTreeHoldsOnlyTheVisibleRows() {
         ScrollView view = new ScrollView(new ScrollView.Config(WINDOW, false));
-        ScrollView.Model state =
-                new ScrollView.Model(0, false, true, WINDOW,
-                        new Document(new Counter(), DOCUMENT));
+        ScrollView.Model state = new ScrollView.Model(0, false, true, WINDOW, new Document(new Counter(), DOCUMENT));
 
         View<Msg> painted = view.view(state, CONTEXT);
         List<View<Msg>> rows = painted.children().get(0).children();
 
-        assertThat(rows).as("one row view per visible row, and nothing per hidden row")
+        assertThat(rows)
+                .as("one row view per visible row, and nothing per hidden row")
                 .hasSize(WINDOW);
         assertThat(painted.children().get(0).children().get(0).children())
                 .as("each row is one fixed screen row wrapping one text row")

@@ -23,11 +23,10 @@
 package io.github.dhoard.braxton.app;
 
 /** Facts about the attached terminal, captured once when the session opens. */
-public record TerminalCapabilities(boolean color, boolean alternateScreen, boolean bracketedPaste,
-        boolean mouse, String term) {
+public record TerminalCapabilities(
+        boolean color, boolean alternateScreen, boolean bracketedPaste, boolean mouse, String term) {
 
-    public static final TerminalCapabilities PLAIN =
-            new TerminalCapabilities(false, false, false, false, "dumb");
+    public static final TerminalCapabilities PLAIN = new TerminalCapabilities(false, false, false, false, "dumb");
 
     public TerminalCapabilities {
         term = term == null ? "" : term;

@@ -25,7 +25,6 @@ package examples.harness.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /** Transcript text wrapping: widths, words, and indentation. */
@@ -50,8 +49,9 @@ class HarnessRenderTest {
         List<String> lines = HarnessRender.wrap("  indented", 6);
         assertThat(lines).containsExactly("  inde", "nted");
         assertThat(lines).noneMatch(String::isEmpty);
-        assertThat(lines).allSatisfy(line ->
-                assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(6));
+        assertThat(lines)
+                .allSatisfy(
+                        line -> assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(6));
     }
 
     @Test
@@ -69,7 +69,9 @@ class HarnessRenderTest {
         assertThat(HarnessRender.formatElapsed(0)).isEqualTo("0s");
         assertThat(HarnessRender.formatElapsed(65)).isEqualTo("1m 5s");
         assertThat(HarnessRender.formatElapsed(3_605)).isEqualTo("1h 0m 5s");
-        assertThat(HarnessRender.formatElapsed(-5)).as("a negative elapsed reads as zero").isEqualTo("0s");
+        assertThat(HarnessRender.formatElapsed(-5))
+                .as("a negative elapsed reads as zero")
+                .isEqualTo("0s");
 
         assertThat(HarnessRender.formatRate(null)).isEqualTo("- t/s");
         assertThat(HarnessRender.formatRate(Double.NaN)).isEqualTo("- t/s");
@@ -84,7 +86,9 @@ class HarnessRenderTest {
         assertThat(HarnessRender.spinner(79)).isEqualTo("\u280b");
         assertThat(HarnessRender.spinner(80)).isEqualTo("\u2819");
         assertThat(HarnessRender.spinner(800)).as("the rotation wraps").isEqualTo("\u280b");
-        assertThat(HarnessRender.spinner(-5)).as("a negative elapsed reads as zero").isEqualTo("\u280b");
+        assertThat(HarnessRender.spinner(-5))
+                .as("a negative elapsed reads as zero")
+                .isEqualTo("\u280b");
         List<String> frames = new java.util.ArrayList<>();
         for (int frame = 0; frame < 10; frame++) {
             frames.add(HarnessRender.spinner(frame * HarnessRender.SPINNER_FRAME_MILLIS));
@@ -98,8 +102,9 @@ class HarnessRenderTest {
                 "AB", io.github.dhoard.braxton.style.Style.fg(HarnessTheme.TEXT_COLOR));
         var row = HarnessRender.fill(text, 5, HarnessTheme.HEADER_BACKGROUND);
         assertThat(row.plainText()).isEqualTo("AB   ");
-        assertThat(row.spans()).allSatisfy(span -> assertThat(span.style().background())
-                .isEqualTo(HarnessTheme.TRANSCRIPT_HEADER_BG_COLOR));
+        assertThat(row.spans())
+                .allSatisfy(span ->
+                        assertThat(span.style().background()).isEqualTo(HarnessTheme.TRANSCRIPT_HEADER_BG_COLOR));
         assertThat(row.spans().getFirst().style().foreground())
                 .as("the text keeps its own foreground")
                 .isEqualTo(HarnessTheme.TEXT_COLOR);
@@ -115,8 +120,9 @@ class HarnessRenderTest {
             int limit = width;
             List<String> lines = HarnessRender.wrap(" ".repeat(12), width);
             assertThat(lines).as("width %d", width).noneMatch(line -> line.contains("\u2026"));
-            assertThat(lines).allSatisfy(line ->
-                    assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(limit));
+            assertThat(lines)
+                    .allSatisfy(line ->
+                            assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(limit));
         }
     }
 
@@ -128,8 +134,9 @@ class HarnessRenderTest {
             int limit = width;
             List<String> lines = HarnessRender.wrap("       x", width);
             assertThat(lines).as("width %d", width).noneMatch(String::isEmpty);
-            assertThat(lines).allSatisfy(line ->
-                    assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(limit));
+            assertThat(lines)
+                    .allSatisfy(line ->
+                            assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(limit));
         }
     }
 
@@ -146,9 +153,12 @@ class HarnessRenderTest {
             // The widest cell of this text is the space the selector widens: two columns.
             int bound = Math.max(width, 2);
             List<String> lines = HarnessRender.wrap("a \uFE0FCD", width);
-            assertThat(lines).as("width %d", width).allSatisfy(line ->
-                    assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(bound));
-            assertThat(String.join("", lines).replace(" ", "")).as("width %d", width)
+            assertThat(lines)
+                    .as("width %d", width)
+                    .allSatisfy(line ->
+                            assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(bound));
+            assertThat(String.join("", lines).replace(" ", ""))
+                    .as("width %d", width)
                     .isEqualTo("a\uFE0FCD");
             assertThat(lines).as("width %d", width).noneMatch(line -> line.contains("\u2026"));
         }
@@ -158,14 +168,18 @@ class HarnessRenderTest {
     void aSelectorAfterIndentationKeepsTheCellsItsRowMeasures() {
         // The same under-count after an indent or an expanded tab: the indent is not content, but the
         // cell it ends with is still the one the selector widens.
-        assertThat(HarnessRender.wrap("  \uFE0F", 2)).allSatisfy(line ->
-                assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(2));
+        assertThat(HarnessRender.wrap("  \uFE0F", 2))
+                .allSatisfy(
+                        line -> assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(2));
         for (int width = 1; width <= 8; width++) {
             int bound = Math.max(width, 2);
             List<String> lines = HarnessRender.wrap("    \uFE0Fx", width);
-            assertThat(lines).as("width %d", width).allSatisfy(line ->
-                    assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(bound));
-            assertThat(String.join("", lines).replace(" ", "")).as("width %d", width)
+            assertThat(lines)
+                    .as("width %d", width)
+                    .allSatisfy(line ->
+                            assertThat(HarnessRender.visibleLength(line)).isLessThanOrEqualTo(bound));
+            assertThat(String.join("", lines).replace(" ", ""))
+                    .as("width %d", width)
                     .isEqualTo("\uFE0Fx");
             assertThat(lines).as("width %d", width).noneMatch(line -> line.contains("\u2026"));
         }

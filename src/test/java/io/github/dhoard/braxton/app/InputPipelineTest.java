@@ -23,7 +23,6 @@
 package io.github.dhoard.braxton.app;
 
 import static io.github.dhoard.braxton.internal.runtime.JLineTestTerminal.run;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.input.Binding;
@@ -39,7 +38,6 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
 import io.github.dhoard.braxton.widget.Editor;
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -64,12 +62,9 @@ class InputPipelineTest {
         public Update<Model, Editor.Msg, Never> update(Model model, Editor.Msg action) {
             io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> result =
                     new Editor(OPTIONS).update(model.draft(), action);
-            boolean submit =
-                    result.outputs().stream().anyMatch(Editor.Output.Submit.class::isInstance);
+            boolean submit = result.outputs().stream().anyMatch(Editor.Output.Submit.class::isInstance);
             return Update.next(
-                    new Model(
-                            submit ? Editor.Model.empty() : result.model(),
-                            model.submitted() + (submit ? 1 : 0)));
+                    new Model(submit ? Editor.Model.empty() : result.model(), model.submitted() + (submit ? 1 : 0)));
         }
 
         @Override
@@ -77,11 +72,7 @@ class InputPipelineTest {
             return Views.keyed(
                     java.util.List.of(Binding.of("q", new Editor.Msg.Submit())),
                     Views.column(
-                            Views.text(
-                                    "draft=["
-                                            + model.draft().text()
-                                            + "] submitted="
-                                            + model.submitted()),
+                            Views.text("draft=[" + model.draft().text() + "] submitted=" + model.submitted()),
                             new Editor(OPTIONS)
                                     .view(
                                             (model.draft()).withFocus(true),
@@ -107,13 +98,13 @@ class InputPipelineTest {
     @Timeout(20)
     void keystrokesEditTheDraftAndSubmitThroughTheRuntime() throws Exception {
         JLineTestTerminal terminal = new JLineTestTerminal(new Size(4, 40));
-        RuntimeOptions options = RuntimeOptions.defaults().withLimits(64, 4, 4)
-                ;
+        RuntimeOptions options = RuntimeOptions.defaults().withLimits(64, 4, 4);
         RuntimeServices services = RuntimeServices.system()
-                        .withTimers(new ManualTimers())
-                        .withEffectExecutor(Runnable::run)
-                        .withNanoTime(() -> 1_000L);
-        Thread run = Thread.ofVirtual().name("input-pipeline")
+                .withTimers(new ManualTimers())
+                .withEffectExecutor(Runnable::run)
+                .withNanoTime(() -> 1_000L);
+        Thread run = Thread.ofVirtual()
+                .name("input-pipeline")
                 .start(() -> run(new DraftProgram(), options, terminal, services));
         await(() -> terminal.outputText().contains("draft=[] submitted=0"));
         terminal.feed("hi");

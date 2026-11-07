@@ -26,7 +26,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.Random;
-
 import org.junit.jupiter.api.Test;
 
 /** One complete-string policy converts LF, CRLF, and lone CR without doubling a CRLF pair. */
@@ -110,10 +109,15 @@ class LineBreaksTest {
             String singleRow = LineBreaks.singleRow(text);
             String flattest = LineBreaks.singleRowAndTabs(text);
             assertThat(normalized).as("no CR in normalize of [%s]", text).doesNotContain("\r");
-            assertThat(singleRow).as("no break in singleRow of [%s]", text)
-                    .doesNotContain("\r").doesNotContain("\n");
-            assertThat(flattest).as("no break or tab in singleRowAndTabs of [%s]", text)
-                    .doesNotContain("\r").doesNotContain("\n").doesNotContain("\t");
+            assertThat(singleRow)
+                    .as("no break in singleRow of [%s]", text)
+                    .doesNotContain("\r")
+                    .doesNotContain("\n");
+            assertThat(flattest)
+                    .as("no break or tab in singleRowAndTabs of [%s]", text)
+                    .doesNotContain("\r")
+                    .doesNotContain("\n")
+                    .doesNotContain("\t");
             assertThat(LineBreaks.normalize(normalized)).isEqualTo(normalized);
             assertThat(LineBreaks.singleRow(singleRow)).isEqualTo(singleRow);
             assertThat(LineBreaks.singleRowAndTabs(flattest)).isEqualTo(flattest);

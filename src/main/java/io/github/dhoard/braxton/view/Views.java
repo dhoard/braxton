@@ -22,22 +22,20 @@
 
 package io.github.dhoard.braxton.view;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Function;
-
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Insets;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Function;
 
 /** Terse factories for {@link View} values. */
 public final class Views {
 
-    private Views() {
-    }
+    private Views() {}
 
     public static <Msg> View<Msg> text(String text) {
         return text(StyledText.plain(text));
@@ -148,13 +146,12 @@ public final class Views {
         return new View.Overlay<>(List.of(base, layer), true);
     }
 
-    public static <Msg> View<Msg> keyed(List<Binding<Msg>> capture, View<Msg> child,
-            List<Binding<Msg>> bubble) {
+    public static <Msg> View<Msg> keyed(List<Binding<Msg>> capture, View<Msg> child, List<Binding<Msg>> bubble) {
         return new View.Keyed<>(capture, View.InputHandler.none(), child, bubble);
     }
 
-    public static <Msg> View<Msg> keyed(List<Binding<Msg>> capture, View.InputHandler<Msg> intercept,
-            View<Msg> child, List<Binding<Msg>> bubble) {
+    public static <Msg> View<Msg> keyed(
+            List<Binding<Msg>> capture, View.InputHandler<Msg> intercept, View<Msg> child, List<Binding<Msg>> bubble) {
         return new View.Keyed<>(capture, intercept, child, bubble);
     }
 
@@ -166,14 +163,14 @@ public final class Views {
         return new View.Focused<>(id, focused, List.of(), View.InputHandler.none(), child);
     }
 
-    public static <Msg> View<Msg> focus(ElementId id, boolean focused, List<Binding<Msg>> bindings,
-            View.InputHandler<Msg> input, View<Msg> child) {
+    public static <Msg> View<Msg> focus(
+            ElementId id, boolean focused, List<Binding<Msg>> bindings, View.InputHandler<Msg> input, View<Msg> child) {
         return new View.Focused<>(id, focused, bindings, input, child);
     }
 
     /** Maps a list of child views into a parent message type. */
-    public static <Child, Parent> List<View<Parent>> all(List<View<Child>> views,
-            Function<? super Child, ? extends Parent> mapper) {
+    public static <Child, Parent> List<View<Parent>> all(
+            List<View<Child>> views, Function<? super Child, ? extends Parent> mapper) {
         List<View<Parent>> mapped = new ArrayList<>(views.size());
         for (View<Child> view : views) {
             mapped.add(view.map(mapper));

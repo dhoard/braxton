@@ -30,7 +30,6 @@ import io.github.dhoard.braxton.layout.Insets;
 import io.github.dhoard.braxton.mvu.ComponentPath;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -64,37 +63,29 @@ public sealed interface View<Msg> {
             case Blank<Msg> blank -> blank;
             case Fill<Msg> fill -> fill;
             case Column<Msg> column ->
-                    new Column<>(
-                            column.items().stream().map(item -> item.scoped(path)).toList(),
-                            column.align());
+                new Column<>(
+                        column.items().stream().map(item -> item.scoped(path)).toList(), column.align());
             case Row<Msg> row ->
-                    new Row<>(
-                            row.items().stream().map(item -> item.scoped(path)).toList(),
-                            row.align());
+                new Row<>(row.items().stream().map(item -> item.scoped(path)).toList(), row.align());
             case Padding<Msg> padding ->
-                    new Padding<>(padding.insets(), padding.child().scoped(path));
+                new Padding<>(padding.insets(), padding.child().scoped(path));
             case BorderBox<Msg> box ->
-                    new BorderBox<>(
-                            box.border(), box.title(), box.style(), box.child().scoped(path));
+                new BorderBox<>(
+                        box.border(), box.title(), box.style(), box.child().scoped(path));
             case Fixed<Msg> fixed -> new Fixed<>(fixed.size(), fixed.child().scoped(path));
             case Grow<Msg> grow -> new Grow<>(grow.weight(), grow.child().scoped(path));
             case Overlay<Msg> overlay ->
-                    new Overlay<>(
-                            overlay.layers().stream().map(item -> item.scoped(path)).toList(),
-                            overlay.modal());
+                new Overlay<>(
+                        overlay.layers().stream().map(item -> item.scoped(path)).toList(), overlay.modal());
             case Keyed<Msg> keyed ->
-                    new Keyed<>(
-                            keyed.capture(),
-                            keyed.intercept(),
-                            keyed.child().scoped(path),
-                            keyed.bubble());
+                new Keyed<>(keyed.capture(), keyed.intercept(), keyed.child().scoped(path), keyed.bubble());
             case Focused<Msg> focused ->
-                    new Focused<>(
-                            focused.id().scoped(path),
-                            focused.focused(),
-                            focused.bindings(),
-                            focused.input(),
-                            focused.child().scoped(path));
+                new Focused<>(
+                        focused.id().scoped(path),
+                        focused.focused(),
+                        focused.bindings(),
+                        focused.input(),
+                        focused.child().scoped(path));
         };
     }
 
@@ -249,8 +240,7 @@ public sealed interface View<Msg> {
     }
 
     /** Frames one child; an optional title is drawn into the top edge. */
-    record BorderBox<Msg>(Border border, StyledText title, Style style, View<Msg> child)
-            implements View<Msg> {
+    record BorderBox<Msg>(Border border, StyledText title, Style style, View<Msg> child) implements View<Msg> {
 
         public BorderBox {
             border = border == null ? Border.SINGLE : border;
@@ -346,8 +336,9 @@ public sealed interface View<Msg> {
      * bindings run after it, innermost-first. Duplicate keys within the same list are rejected at
      * build time rather than resolved by insertion order.</p>
      */
-    record Keyed<Msg>(List<Binding<Msg>> capture, InputHandler<Msg> intercept, View<Msg> child,
-            List<Binding<Msg>> bubble) implements View<Msg> {
+    record Keyed<Msg>(
+            List<Binding<Msg>> capture, InputHandler<Msg> intercept, View<Msg> child, List<Binding<Msg>> bubble)
+            implements View<Msg> {
 
         public Keyed {
             capture = List.copyOf(capture);
@@ -366,8 +357,11 @@ public sealed interface View<Msg> {
         @Override
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
             Objects.requireNonNull(mapper, "mapper");
-            return new Keyed<>(mapBindings(capture, mapper), intercept.map(mapper),
-                    child.map(mapper), mapBindings(bubble, mapper));
+            return new Keyed<>(
+                    mapBindings(capture, mapper),
+                    intercept.map(mapper),
+                    child.map(mapper),
+                    mapBindings(bubble, mapper));
         }
     }
 
@@ -375,8 +369,9 @@ public sealed interface View<Msg> {
      * Declares a focus target: its stable identity, whether it currently owns focus, its local key
      * bindings, and the handler for events its bindings do not consume.
      */
-    record Focused<Msg>(ElementId id, boolean focused, List<Binding<Msg>> bindings,
-            InputHandler<Msg> input, View<Msg> child) implements View<Msg> {
+    record Focused<Msg>(
+            ElementId id, boolean focused, List<Binding<Msg>> bindings, InputHandler<Msg> input, View<Msg> child)
+            implements View<Msg> {
 
         public Focused {
             Objects.requireNonNull(id, "id");
@@ -398,13 +393,12 @@ public sealed interface View<Msg> {
         @Override
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
             Objects.requireNonNull(mapper, "mapper");
-            return new Focused<>(id, focused, mapBindings(bindings, mapper), input.map(mapper),
-                    child.map(mapper));
+            return new Focused<>(id, focused, mapBindings(bindings, mapper), input.map(mapper), child.map(mapper));
         }
     }
 
-    private static <Msg, Msg2> List<View<Msg2>> mapAll(List<View<Msg>> views,
-            Function<? super Msg, ? extends Msg2> mapper) {
+    private static <Msg, Msg2> List<View<Msg2>> mapAll(
+            List<View<Msg>> views, Function<? super Msg, ? extends Msg2> mapper) {
         List<View<Msg2>> mapped = new ArrayList<>(views.size());
         for (View<Msg> view : views) {
             mapped.add(view.map(mapper));
@@ -412,8 +406,8 @@ public sealed interface View<Msg> {
         return List.copyOf(mapped);
     }
 
-    private static <Msg, Msg2> List<Binding<Msg2>> mapBindings(List<Binding<Msg>> bindings,
-            Function<? super Msg, ? extends Msg2> mapper) {
+    private static <Msg, Msg2> List<Binding<Msg2>> mapBindings(
+            List<Binding<Msg>> bindings, Function<? super Msg, ? extends Msg2> mapper) {
         List<Binding<Msg2>> mapped = new ArrayList<>(bindings.size());
         for (Binding<Msg> binding : bindings) {
             mapped.add(new Binding<>(binding.key(), mapper.apply(binding.message())));
@@ -425,8 +419,7 @@ public sealed interface View<Msg> {
         List<io.github.dhoard.braxton.input.Key> seen = new ArrayList<>();
         for (Binding<Msg> binding : bindings) {
             if (seen.contains(binding.key())) {
-                throw new IllegalArgumentException(
-                        "duplicate " + phase + " binding for " + binding.key());
+                throw new IllegalArgumentException("duplicate " + phase + " binding for " + binding.key());
             }
             seen.add(binding.key());
         }

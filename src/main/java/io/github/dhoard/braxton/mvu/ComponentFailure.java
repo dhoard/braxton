@@ -105,8 +105,7 @@ public final class ComponentFailure extends RuntimeException {
         try {
             return Objects.requireNonNull(action.get(), "component result");
         } catch (ComponentFailure failure) {
-            throw new ComponentFailure(
-                    failure.path.prepend(path), failure.phase, failure.detail, failure.getCause());
+            throw new ComponentFailure(failure.path.prepend(path), failure.phase, failure.detail, failure.getCause());
         } catch (Error fatal) {
             throw fatal;
         } catch (Throwable failure) {

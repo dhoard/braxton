@@ -22,15 +22,14 @@
 
 package examples.harness.ai;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-
 import io.github.dhoard.braxton.clipboard.PasteSanitizer;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * Text and metric helpers for the showcase.
@@ -52,8 +51,7 @@ final class HarnessRender {
     /** How long one spinner frame lasts; the label advances one frame per interval. */
     static final long SPINNER_FRAME_MILLIS = 80L;
 
-    private HarnessRender() {
-    }
+    private HarnessRender() {}
 
     /**
      * Makes untrusted transcript text inert: strips escapes and control characters, normalizes line
@@ -149,8 +147,7 @@ final class HarnessRender {
                     currentWidth = 0;
                 }
                 for (String cluster : TextMeasure.graphemes(line.substring(start, index))) {
-                    int joinedWidth = appendedColumns(current, currentWidth, cluster, 0,
-                            cluster.length());
+                    int joinedWidth = appendedColumns(current, currentWidth, cluster, 0, cluster.length());
                     if (currentWidth > 0 && joinedWidth > limit) {
                         if (hasContent) {
                             flush(current, out);
@@ -207,8 +204,7 @@ final class HarnessRender {
         }
         int cellEnd = TextMeasure.boundaryAfter(line, start);
         int cellStart = TextMeasure.previousBoundary(current.toString(), current.length());
-        if (TextMeasure.graphemeCount(
-                current.substring(cellStart) + line.substring(start, cellEnd)) != 1) {
+        if (TextMeasure.graphemeCount(current.substring(cellStart) + line.substring(start, cellEnd)) != 1) {
             return start;
         }
         return cellEnd;
@@ -222,8 +218,7 @@ final class HarnessRender {
      * width they were wrapped to, and {@link #pad} cut the real text they overflowed with an
      * ellipsis.
      */
-    private static int appendedColumns(StringBuilder current, int currentWidth, String text,
-            int start, int end) {
+    private static int appendedColumns(StringBuilder current, int currentWidth, String text, int start, int end) {
         char first = text.charAt(start);
         if (TextMeasure.isPrintableAscii(first)) {
             // A printable ASCII character is never an extend, format, or spacing mark, so it always

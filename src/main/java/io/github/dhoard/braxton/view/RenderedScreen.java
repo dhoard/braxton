@@ -22,10 +22,9 @@
 
 package io.github.dhoard.braxton.view;
 
-import java.util.List;
-
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Style;
+import java.util.List;
 
 /** Immutable inspection result of Braxton's actual layout, including wide-cell continuations. */
 public record RenderedScreen(int rows, int cols, List<List<Cell>> cells, List<Region> regions) {
@@ -53,10 +52,7 @@ public record RenderedScreen(int rows, int cols, List<List<Cell>> cells, List<Re
     public RenderedScreen {
         cells = cells.stream().map(List::copyOf).toList();
         regions = List.copyOf(regions);
-        if (rows < 0
-                || cols < 0
-                || cells.size() != rows
-                || cells.stream().anyMatch(r -> r.size() != cols)) {
+        if (rows < 0 || cols < 0 || cells.size() != rows || cells.stream().anyMatch(r -> r.size() != cols)) {
             throw new IllegalArgumentException("snapshot dimensions do not match cells");
         }
     }

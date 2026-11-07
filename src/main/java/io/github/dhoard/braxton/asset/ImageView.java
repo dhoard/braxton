@@ -22,9 +22,6 @@
 
 package io.github.dhoard.braxton.asset;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
@@ -32,6 +29,8 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Pixel art rendered from an {@link ImageAsset}: one symbol per pixel, coloured per pixel, with
@@ -121,8 +120,8 @@ public final class ImageView {
                     continue;
                 }
                 int rgb = argb & 0xFFFFFF;
-                Color color = replacements.getOrDefault(rgb,
-                        new Color((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF));
+                Color color =
+                        replacements.getOrDefault(rgb, new Color((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF));
                 out = out.append(StyledText.of(symbol.repeat(scale), Style.fg(color)));
             }
         }

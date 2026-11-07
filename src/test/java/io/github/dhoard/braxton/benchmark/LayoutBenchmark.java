@@ -22,8 +22,11 @@
 
 package io.github.dhoard.braxton.benchmark;
 
+import io.github.dhoard.braxton.internal.render.LayoutEngine;
+import io.github.dhoard.braxton.layout.Rect;
+import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.view.View;
 import java.util.concurrent.TimeUnit;
-
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -36,11 +39,6 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
-
-import io.github.dhoard.braxton.internal.render.LayoutEngine;
-import io.github.dhoard.braxton.layout.Rect;
-import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.view.View;
 
 /**
  * Whole-tree layout: allocation plus painting for a realistic view, and the intrinsic-height query a

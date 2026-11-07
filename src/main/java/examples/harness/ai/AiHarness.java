@@ -26,7 +26,6 @@ import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.app.RuntimeOptions;
 import io.github.dhoard.braxton.app.TerminalOptions;
-
 import java.io.File;
 import java.nio.file.Path;
 import java.util.List;
@@ -40,8 +39,7 @@ import java.util.List;
  */
 public final class AiHarness {
 
-    private AiHarness() {
-    }
+    private AiHarness() {}
 
     public static void main(String[] args) {
         ExitResult result = run();
@@ -58,8 +56,7 @@ public final class AiHarness {
 
     /** Runs one harness session; exposed so tests and embedding code can drive it explicitly. */
     public static ExitResult run() {
-        RuntimeOptions options = RuntimeOptions.defaults()
-                .withTerminal(TerminalOptions.DEFAULT.withMouse(true));
+        RuntimeOptions options = RuntimeOptions.defaults().withTerminal(TerminalOptions.DEFAULT.withMouse(true));
         return Application.run(createProgram(), options);
     }
 

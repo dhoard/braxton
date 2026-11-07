@@ -24,11 +24,6 @@ package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Colors;
@@ -37,6 +32,9 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.testing.AllocationProbe;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /**
  * A style with no background inherits the background already painted in its cell, which is how text
@@ -65,8 +63,12 @@ class BackgroundInheritanceCostTest {
             for (int col = 0; col < screen.cols(); col++) {
                 Cell cell = screen.cell(row, col);
                 cells.append(screen.isContinuation(row, col) ? ">" : " ")
-                        .append('[').append(cell.text()).append(']')
-                        .append(cell.style()).append(cell.link()).append('|');
+                        .append('[')
+                        .append(cell.text())
+                        .append(']')
+                        .append(cell.style())
+                        .append(cell.link())
+                        .append('|');
             }
             cells.append('\n');
         }
@@ -114,10 +116,9 @@ class BackgroundInheritanceCostTest {
     void aFramePaintedOverABackgroundFillCostsWhatTheSameFrameCostsWithoutOne() {
         Style background = Style.bg(FILL);
         View<Object> rows = textRows(ROWS, FRAME_COLUMNS);
-        long withoutFill = AllocationProbe.bytes(() -> engine.layout(rows,
-                new Rect(0, 0, ROWS, FRAME_COLUMNS)));
-        long overFill = AllocationProbe.bytes(() -> engine.layout(overFill(rows, background),
-                new Rect(0, 0, ROWS, FRAME_COLUMNS)));
+        long withoutFill = AllocationProbe.bytes(() -> engine.layout(rows, new Rect(0, 0, ROWS, FRAME_COLUMNS)));
+        long overFill = AllocationProbe.bytes(
+                () -> engine.layout(overFill(rows, background), new Rect(0, 0, ROWS, FRAME_COLUMNS)));
         assertThat(overFill)
                 .as("painting a frame over a background fill must not add a style per column of the "
                         + "text it paints over that fill")
@@ -129,14 +130,15 @@ class BackgroundInheritanceCostTest {
         String line = "status: idle, running, stopped";
         Style foreground = Style.fg(Colors.WHITE).withBold();
         Screen inherited = engine.layout(
-                overFill(Views.text(StyledText.of(line, foreground)), Style.bg(FILL)),
-                new Rect(0, 0, 1, line.length())).screen();
+                        overFill(Views.text(StyledText.of(line, foreground)), Style.bg(FILL)),
+                        new Rect(0, 0, 1, line.length()))
+                .screen();
         Screen explicit = engine.layout(
-                Views.text(StyledText.of(line, foreground.withBackground(FILL))),
-                new Rect(0, 0, 1, line.length())).screen();
+                        Views.text(StyledText.of(line, foreground.withBackground(FILL))),
+                        new Rect(0, 0, 1, line.length()))
+                .screen();
         assertThat(paintedCells(inherited)).isEqualTo(paintedCells(explicit));
-        assertThat(AnsiEncoder.frame(inherited, true))
-                .isEqualTo(AnsiEncoder.frame(explicit, true));
+        assertThat(AnsiEncoder.frame(inherited, true)).isEqualTo(AnsiEncoder.frame(explicit, true));
     }
 
     @Test
@@ -146,12 +148,12 @@ class BackgroundInheritanceCostTest {
         for (int row = 0; row < 9; row++) {
             // More distinct styles than the screen remembers pairs, so a painted column cannot be
             // answered from the pair the column before it happened to leave behind.
-            Style style = new Style(new Color(10 + row, 200, 230), null, false, false,
-                    row % 2 == 0, false, false, false);
+            Style style =
+                    new Style(new Color(10 + row, 200, 230), null, false, false, row % 2 == 0, false, false, false);
             lines.add(Views.text(StyledText.of("row " + row + " text", style)));
         }
-        Screen screen = engine.layout(overFill(Views.column(lines), background),
-                new Rect(0, 0, 9, 20)).screen();
+        Screen screen = engine.layout(overFill(Views.column(lines), background), new Rect(0, 0, 9, 20))
+                .screen();
         List<Style> painted = new ArrayList<>();
         for (int row = 0; row < screen.rows(); row++) {
             for (int col = 0; col < screen.cols(); col++) {
@@ -161,8 +163,7 @@ class BackgroundInheritanceCostTest {
             }
         }
         assertThat(painted).isNotEmpty();
-        assertThat(painted).allSatisfy(style ->
-                assertThat(style.background()).isEqualTo(FILL));
+        assertThat(painted).allSatisfy(style -> assertThat(style.background()).isEqualTo(FILL));
         assertThat(painted.stream().map(Style::foreground).distinct()).hasSize(9);
     }
 

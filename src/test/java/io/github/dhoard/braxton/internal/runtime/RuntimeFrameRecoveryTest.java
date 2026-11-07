@@ -33,15 +33,13 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
-import org.jline.terminal.Terminal;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
+import org.jline.terminal.Terminal;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 /** Regressions for frame behavior recovered from the installed Braxton artifact. */
 @Timeout(10)
@@ -110,8 +108,7 @@ class RuntimeFrameRecoveryTest {
                 if (text.contains("\u001b[?25h")) events.add("restore");
             });
             Terminal terminal = (Terminal) Proxy.newProxyInstance(
-                    Terminal.class.getClassLoader(), new Class<?>[] {Terminal.class},
-                    (proxy, method, args) -> {
+                    Terminal.class.getClassLoader(), new Class<?>[] {Terminal.class}, (proxy, method, args) -> {
                         if (method.getName().equals("beginSynchronizedUpdate")) {
                             events.add("begin");
                             if (beginFailure != null) throw beginFailure;
@@ -128,23 +125,20 @@ class RuntimeFrameRecoveryTest {
                             throw failure.getCause();
                         }
                     });
-            Component<Integer, String, Never> program =
-                    new Component<>() {
-                        public Update<Integer, String, Never> init(InitContext context) {
-                            return Update.next(0, Command.quit());
-                        }
+            Component<Integer, String, Never> program = new Component<>() {
+                public Update<Integer, String, Never> init(InitContext context) {
+                    return Update.next(0, Command.quit());
+                }
 
-                        public Update<Integer, String, Never> update(
-                                Integer model, String message) {
-                            return Update.next(model);
-                        }
+                public Update<Integer, String, Never> update(Integer model, String message) {
+                    return Update.next(model);
+                }
 
-                        public View<String> view(Integer model, ViewContext context) {
-                            return Views.text("ready");
-                        }
-                    };
-            return new RuntimeLoop<>(program, RuntimeOptions.defaults(), terminal,
-                    RuntimeServices.system()).run();
+                public View<String> view(Integer model, ViewContext context) {
+                    return Views.text("ready");
+                }
+            };
+            return new RuntimeLoop<>(program, RuntimeOptions.defaults(), terminal, RuntimeServices.system()).run();
         }
 
         public void close() {

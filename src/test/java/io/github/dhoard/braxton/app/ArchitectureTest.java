@@ -24,8 +24,6 @@ package io.github.dhoard.braxton.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
-
 import java.io.IOException;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
@@ -34,6 +32,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import org.junit.jupiter.api.Test;
 
 /**
  * Architecture guard: one API, one engine, no legacy callback/session code, and no third-party
@@ -42,8 +41,8 @@ import java.util.Properties;
 class ArchitectureTest {
 
     private static final Path MAIN = Path.of("src/main/java");
-    private static final List<String> LEGACY_ROOTS = List.of(
-            "utils/", "inputForm/", "Keyhandle/", "Text/", "automation/", "clipboard/");
+    private static final List<String> LEGACY_ROOTS =
+            List.of("utils/", "inputForm/", "Keyhandle/", "Text/", "automation/", "clipboard/");
 
     /**
      * The nine implementation owners of the one-row policy in the cross-platform line-ending
@@ -52,17 +51,16 @@ class ArchitectureTest {
      * SingleRow} is the widget layer's one-row entry point, so a widget that flattens only through
      * it ({@code Badge}) is covered by that owner rather than listed here.
      */
-    private static final List<String> LINE_BREAK_OWNERS =
-            List.of(
-                    "io/github/dhoard/braxton/asset/ImageView.java",
-                    "io/github/dhoard/braxton/widget/ProgressBar.java",
-                    "io/github/dhoard/braxton/widget/Quote.java",
-                    "io/github/dhoard/braxton/widget/Markup.java",
-                    "io/github/dhoard/braxton/widget/TableSelector.java",
-                    "io/github/dhoard/braxton/widget/Editor.java",
-                    "io/github/dhoard/braxton/widget/Selector.java",
-                    "io/github/dhoard/braxton/widget/SingleRow.java",
-                    "io/github/dhoard/braxton/widget/Box.java");
+    private static final List<String> LINE_BREAK_OWNERS = List.of(
+            "io/github/dhoard/braxton/asset/ImageView.java",
+            "io/github/dhoard/braxton/widget/ProgressBar.java",
+            "io/github/dhoard/braxton/widget/Quote.java",
+            "io/github/dhoard/braxton/widget/Markup.java",
+            "io/github/dhoard/braxton/widget/TableSelector.java",
+            "io/github/dhoard/braxton/widget/Editor.java",
+            "io/github/dhoard/braxton/widget/Selector.java",
+            "io/github/dhoard/braxton/widget/SingleRow.java",
+            "io/github/dhoard/braxton/widget/Box.java");
 
     private static List<Path> sources() throws IOException {
         try (var paths = Files.walk(MAIN)) {
@@ -109,7 +107,8 @@ class ArchitectureTest {
         for (String owner : LINE_BREAK_OWNERS) {
             Path source = MAIN.resolve(owner);
             assertThat(source).as("inventory owner %s", owner).exists();
-            assertThat(Files.readString(source)).as("LineBreaks delegation in %s", owner)
+            assertThat(Files.readString(source))
+                    .as("LineBreaks delegation in %s", owner)
                     .contains("LineBreaks.");
         }
     }
@@ -146,7 +145,8 @@ class ArchitectureTest {
     void noSourceReferencesAnExternalSessionOrProvider() throws IOException {
         for (Path source : sources()) {
             String content = Files.readString(source);
-            assertThat(content).as("external reference in %s", source)
+            assertThat(content)
+                    .as("external reference in %s", source)
                     .doesNotContain("org.amanda")
                     .doesNotContain("tui4j")
                     .doesNotContain(".amanda")
@@ -163,7 +163,8 @@ class ArchitectureTest {
                 continue;
             }
             String content = Files.readString(source);
-            if (content.contains("public interface ") || content.contains("public final class ")
+            if (content.contains("public interface ")
+                    || content.contains("public final class ")
                     || content.contains("public record ")) {
                 publicTypes.add(relative);
             }
@@ -217,15 +218,13 @@ class ArchitectureTest {
                     if (!Modifier.isPublic(method.getModifiers())) {
                         continue;
                     }
-                    assertThat(method.toGenericString())
-                            .doesNotContain("org.jline.", "braxton.internal.");
+                    assertThat(method.toGenericString()).doesNotContain("org.jline.", "braxton.internal.");
                 }
                 for (var constructor : current.getDeclaredConstructors()) {
                     if (!Modifier.isPublic(constructor.getModifiers())) {
                         continue;
                     }
-                    assertThat(constructor.toGenericString())
-                            .doesNotContain("org.jline.", "braxton.internal.");
+                    assertThat(constructor.toGenericString()).doesNotContain("org.jline.", "braxton.internal.");
                 }
             }
         }

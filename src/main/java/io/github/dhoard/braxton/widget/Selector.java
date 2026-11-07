@@ -35,7 +35,6 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -126,8 +125,8 @@ public final class Selector implements Component<Selector.Model, Selector.Msg, S
 
     @Override
     public Update<Model, Msg, Output> update(Model model, Msg message) {
-        return WidgetUpdate.settled(model, message, action -> reduce(model, action),
-                state -> state.withFocus(model.focused()));
+        return WidgetUpdate.settled(
+                model, message, action -> reduce(model, action), state -> state.withFocus(model.focused()));
     }
 
     @Override
@@ -144,27 +143,19 @@ public final class Selector implements Component<Selector.Model, Selector.Msg, S
     private static Result reduce(Model state, Msg action) {
         return switch (action) {
             case Msg.Up up ->
-                    new Result(
-                            new Model(
-                                    state.options(),
-                                    Math.max(0, state.selected() - 1),
-                                    state.focused()),
-                            null);
+                new Result(new Model(state.options(), Math.max(0, state.selected() - 1), state.focused()), null);
             case Msg.Down down ->
-                    new Result(
-                            new Model(
-                                    state.options(),
-                                    Math.min(
-                                            Math.max(0, state.options().size() - 1),
-                                            state.selected() + 1),
-                                    state.focused()),
-                            null);
+                new Result(
+                        new Model(
+                                state.options(),
+                                Math.min(Math.max(0, state.options().size() - 1), state.selected() + 1),
+                                state.focused()),
+                        null);
             // With no options there is nothing to confirm; Chosen(-1, "") would not be a choice.
             case Msg.Confirm confirm ->
-                    state.selected() < 0
-                            ? new Result(state, null)
-                            : new Result(
-                                    state, new Output.Chosen(state.selected(), state.current()));
+                state.selected() < 0
+                        ? new Result(state, null)
+                        : new Result(state, new Output.Chosen(state.selected(), state.current()));
             case Msg.Cancel cancel -> new Result(state, new Output.Cancelled());
         };
     }
@@ -193,25 +184,24 @@ public final class Selector implements Component<Selector.Model, Selector.Msg, S
             // caret do.
             String marker = selected ? "\u276F " : "  ";
             Style style = selected && focused ? activeStyle : inactiveStyle;
-            rows.add(Views.text(StyledText.of(marker + singleLine(state.options().get(i)), style)));
+            rows.add(
+                    Views.text(StyledText.of(marker + singleLine(state.options().get(i)), style)));
         }
         View<Message> list = Views.column(Alignment.START, rows);
-        View.InputHandler<Message> handler =
-                event -> {
-                    if (!(event instanceof InputEvent.KeyInput key)) {
-                        return Optional.empty();
-                    }
-                    Key gesture = key.key();
-                    Optional<Msg> action =
-                            switch (gesture.name()) {
-                                case "up" -> Optional.of(new Msg.Up());
-                                case "down" -> Optional.of(new Msg.Down());
-                                case "enter" -> Optional.of(new Msg.Confirm());
-                                case "escape" -> Optional.of(new Msg.Cancel());
-                                default -> Optional.empty();
-                            };
-                    return action.map(map);
-                };
+        View.InputHandler<Message> handler = event -> {
+            if (!(event instanceof InputEvent.KeyInput key)) {
+                return Optional.empty();
+            }
+            Key gesture = key.key();
+            Optional<Msg> action = switch (gesture.name()) {
+                case "up" -> Optional.of(new Msg.Up());
+                case "down" -> Optional.of(new Msg.Down());
+                case "enter" -> Optional.of(new Msg.Confirm());
+                case "escape" -> Optional.of(new Msg.Cancel());
+                default -> Optional.empty();
+            };
+            return action.map(map);
+        };
         return Views.focus(id, focused, List.of(), handler, list);
     }
 }

@@ -26,7 +26,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
-
 import org.junit.jupiter.api.Test;
 
 /** Subscription descriptors reject input the runtime cannot schedule. */
@@ -34,45 +33,45 @@ class SubscriptionTest {
 
     @Test
     void anIntervalLongerThanItsNanosecondScheduleIsRejectedAtConstruction() {
-        assertThatThrownBy(() -> Subscription.interval(SubscriptionId.of("tick"),
-                Duration.ofDays(1_000_000), time -> "tick"))
+        assertThatThrownBy(() ->
+                        Subscription.interval(SubscriptionId.of("tick"), Duration.ofDays(1_000_000), time -> "tick"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("nanoseconds");
     }
 
     @Test
     void anIntervalThatFitsInNanosecondsIsAccepted() {
-        Subscription<String> subscription = Subscription.interval(SubscriptionId.of("tick"),
-                Duration.ofDays(100_000), time -> "tick");
+        Subscription<String> subscription =
+                Subscription.interval(SubscriptionId.of("tick"), Duration.ofDays(100_000), time -> "tick");
         assertThat(subscription).isInstanceOf(Subscription.Interval.class);
-        assertThat(((Subscription.Interval<String>) subscription).period())
-                .isEqualTo(Duration.ofDays(100_000));
+        assertThat(((Subscription.Interval<String>) subscription).period()).isEqualTo(Duration.ofDays(100_000));
     }
 
     @Test
     void mappedSubscriptionsPreserveDeclinedEmissionsAtEveryBoundary() {
         var calls = new java.util.concurrent.atomic.AtomicInteger();
         var subscription = Subscription.batch(
-                Subscription.<Integer>interval(SubscriptionId.of("tick"), Duration.ofSeconds(1),
-                        time -> time == 0 ? null : time.intValue()),
-                Subscription.<Integer>resize(SubscriptionId.of("size"),
-                        size -> size.rows() == 0 ? null : size.rows()),
-                Subscription.<Integer>source(SubscriptionId.of("source"), "config",
-                        emit -> () -> {}, value -> (Integer) value));
-        var mapped = subscription.<String>map(value -> {
-            calls.incrementAndGet();
-            return value == 2 ? null : "parent:" + value;
-        }).map(value -> {
-            calls.incrementAndGet();
-            return "root:" + value;
-        });
+                Subscription.<Integer>interval(
+                        SubscriptionId.of("tick"), Duration.ofSeconds(1), time -> time == 0 ? null : time.intValue()),
+                Subscription.<Integer>resize(SubscriptionId.of("size"), size -> size.rows() == 0 ? null : size.rows()),
+                Subscription.<Integer>source(
+                        SubscriptionId.of("source"), "config", emit -> () -> {}, value -> (Integer) value));
+        var mapped = subscription
+                .<String>map(value -> {
+                    calls.incrementAndGet();
+                    return value == 2 ? null : "parent:" + value;
+                })
+                .map(value -> {
+                    calls.incrementAndGet();
+                    return "root:" + value;
+                });
         for (var leaf : Subscription.leaves(mapped)) {
             java.util.function.Function<Integer, String> emit = switch (leaf) {
-                case Subscription.Interval<String> interval -> value ->
-                        interval.onTick().apply(value == null ? 0L : value.longValue());
-                case Subscription.Resize<String> resize -> value ->
-                        resize.onResize().apply(new io.github.dhoard.braxton.layout.Size(
-                                value == null ? 0 : value, 1));
+                case Subscription.Interval<String> interval ->
+                    value -> interval.onTick().apply(value == null ? 0L : value.longValue());
+                case Subscription.Resize<String> resize ->
+                    value -> resize.onResize()
+                            .apply(new io.github.dhoard.braxton.layout.Size(value == null ? 0 : value, 1));
                 case Subscription.Source<String> source -> source.mapper()::apply;
                 default -> throw new AssertionError("expected a leaf");
             };

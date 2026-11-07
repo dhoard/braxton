@@ -35,24 +35,20 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.Views;
-
-import org.junit.jupiter.api.Test;
-
 import java.time.Duration;
 import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /** Application entry values: transitions, exit results, init context, runtime options. */
 class AppValueTest {
 
     @Test
     void aTransitionRequiresACommandAndOffersStayAndNext() {
-        assertThatThrownBy(() -> new Update<>("m", null, java.util.List.of()))
-                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new Update<>("m", null, java.util.List.of())).isInstanceOf(NullPointerException.class);
         Update<String, String, Never> stay = Update.next("m");
         assertThat(stay.command()).isInstanceOf(Command.None.class);
         assertThat(Update.next("m", Command.quit(2)).command()).isInstanceOf(Command.Quit.class);
-        assertThat(Update.<String, String, Never>next("m").command())
-                .isInstanceOf(Command.None.class);
+        assertThat(Update.<String, String, Never>next("m").command()).isInstanceOf(Command.None.class);
     }
 
     @Test
@@ -67,7 +63,9 @@ class AppValueTest {
         assertThat(failure.failure()).isSameAs(cause);
         assertThat(failure.cleanupFailures()).hasSize(1);
         assertThat(ExitResult.failure(cause, null).cleanupFailures()).isEmpty();
-        assertThat(failure.toString()).contains("FAILURE").contains("IllegalStateException")
+        assertThat(failure.toString())
+                .contains("FAILURE")
+                .contains("IllegalStateException")
                 .doesNotContain("\u001B");
     }
 
@@ -76,7 +74,8 @@ class AppValueTest {
         InitContext context = new InitContext(null, null);
         assertThat(context.viewport()).isEqualTo(Viewport.EMPTY);
         assertThat(context.capabilities()).isEqualTo(TerminalCapabilities.PLAIN);
-        assertThat(new InitContext(Viewport.of(new Size(2, 3)), null).viewport()).isEqualTo(new Viewport(2,3));
+        assertThat(new InitContext(Viewport.of(new Size(2, 3)), null).viewport())
+                .isEqualTo(new Viewport(2, 3));
     }
 
     @Test
@@ -84,62 +83,54 @@ class AppValueTest {
         RuntimeOptions defaults = RuntimeOptions.defaults();
         assertThat(defaults.mailboxCapacity()).isEqualTo(RuntimeOptions.DEFAULT_MAILBOX_CAPACITY);
         assertThat(defaults.maxConcurrentEffects()).isEqualTo(RuntimeOptions.DEFAULT_MAX_EFFECTS);
-        assertThatThrownBy(
-                        () ->
-                                new RuntimeOptions(
-                                        null,
-                                        0,
-                                        1,
-                                        1,
-                                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
-                                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
-                                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
-                                        null,
-                                        null,
-                                        null))
+        assertThatThrownBy(() -> new RuntimeOptions(
+                        null,
+                        0,
+                        1,
+                        1,
+                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
+                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
+                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
+                        null,
+                        null,
+                        null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("capacity");
-        assertThatThrownBy(
-                        () ->
-                                new RuntimeOptions(
-                                        null,
-                                        1,
-                                        -1,
-                                        1,
-                                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
-                                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
-                                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
-                                        null,
-                                        null,
-                                        null))
+        assertThatThrownBy(() -> new RuntimeOptions(
+                        null,
+                        1,
+                        -1,
+                        1,
+                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
+                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
+                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
+                        null,
+                        null,
+                        null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(
-                        () ->
-                                new RuntimeOptions(
-                                        Duration.ofSeconds(-1),
-                                        1,
-                                        0,
-                                        0,
-                                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
-                                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
-                                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
-                                        null,
-                                        null,
-                                        null))
+        assertThatThrownBy(() -> new RuntimeOptions(
+                        Duration.ofSeconds(-1),
+                        1,
+                        0,
+                        0,
+                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
+                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
+                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
+                        null,
+                        null,
+                        null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(
-                        () ->
-                                new RuntimeOptions(
-                                        Duration.ofSeconds(Long.MAX_VALUE),
-                                        1,
-                                        0,
-                                        0,
-                                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
-                                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
-                                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
-                                        null,
-                                        null,
-                                        null))
+        assertThatThrownBy(() -> new RuntimeOptions(
+                        Duration.ofSeconds(Long.MAX_VALUE),
+                        1,
+                        0,
+                        0,
+                        RuntimeOptions.DEFAULT_MAX_COMPONENTS,
+                        RuntimeOptions.DEFAULT_MAX_COMPONENT_DEPTH,
+                        RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
+                        null,
+                        null,
+                        null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("nanoseconds");
         RuntimeOptions limited = defaults.withLimits(8, 2, 3);

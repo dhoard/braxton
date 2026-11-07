@@ -44,10 +44,8 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.view.ScreenRenderer;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
 import java.util.ArrayList;
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /**
@@ -60,8 +58,7 @@ class MountedScrollViewTest {
     private static final int PANE_ROWS = 3;
     private static final int PANE_COLS = 6;
 
-    record Model(ScrollView.Model log, ScrollView.Model trace, Editor.Model draft,
-            boolean showTrace) {}
+    record Model(ScrollView.Model log, ScrollView.Model trace, Editor.Model draft, boolean showTrace) {}
 
     sealed interface Msg {
         record Log(ScrollView.Msg value) implements Msg {}
@@ -76,46 +73,46 @@ class MountedScrollViewTest {
     /** The parent: two transcript panes side by side over a composer. */
     private static final class PanesAndEditor implements Component<Model, Msg, Never> {
 
-        private final Mount<Model, Msg, Never, ScrollView.Model, ScrollView.Msg, Never> log =
-                Mount.of(
-                        ComponentId.of("log"),
-                        new ScrollView(new ScrollView.Config(PANE_ROWS, false)),
-                        ModelLens.of(Model::log,
-                                (model, child) -> new Model(child, model.trace(), model.draft(),
-                                        model.showTrace())),
-                        Msg.Log::new,
-                        OutputRoute.toOutput(value -> value));
+        private final Mount<Model, Msg, Never, ScrollView.Model, ScrollView.Msg, Never> log = Mount.of(
+                ComponentId.of("log"),
+                new ScrollView(new ScrollView.Config(PANE_ROWS, false)),
+                ModelLens.of(
+                        Model::log,
+                        (model, child) -> new Model(child, model.trace(), model.draft(), model.showTrace())),
+                Msg.Log::new,
+                OutputRoute.toOutput(value -> value));
 
-        private final Mount<Model, Msg, Never, ScrollView.Model, ScrollView.Msg, Never> trace =
-                Mount.of(
-                        ComponentId.of("trace"),
-                        new ScrollView(new ScrollView.Config(PANE_ROWS, false)),
-                        ModelLens.of(Model::trace,
-                                (model, child) -> new Model(model.log(), child, model.draft(),
-                                        model.showTrace())),
-                        Msg.Trace::new,
-                        OutputRoute.toOutput(value -> value));
+        private final Mount<Model, Msg, Never, ScrollView.Model, ScrollView.Msg, Never> trace = Mount.of(
+                ComponentId.of("trace"),
+                new ScrollView(new ScrollView.Config(PANE_ROWS, false)),
+                ModelLens.of(
+                        Model::trace,
+                        (model, child) -> new Model(model.log(), child, model.draft(), model.showTrace())),
+                Msg.Trace::new,
+                OutputRoute.toOutput(value -> value));
 
-        private final Mount<Model, Msg, Never, Editor.Model, Editor.Msg, Editor.Output> draft =
-                Mount.of(
-                        ComponentId.of("draft"),
-                        new Editor(Editor.Config.defaults().withPrompt("> ", Style.NONE)),
-                        ModelLens.of(Model::draft,
-                                (model, child) -> new Model(model.log(), model.trace(), child,
-                                        model.showTrace())),
-                        Msg.Draft::new,
-                        OutputRoute.toMessage(Msg.DraftOutput::new));
+        private final Mount<Model, Msg, Never, Editor.Model, Editor.Msg, Editor.Output> draft = Mount.of(
+                ComponentId.of("draft"),
+                new Editor(Editor.Config.defaults().withPrompt("> ", Style.NONE)),
+                ModelLens.of(
+                        Model::draft,
+                        (model, child) -> new Model(model.log(), model.trace(), child, model.showTrace())),
+                Msg.Draft::new,
+                OutputRoute.toMessage(Msg.DraftOutput::new));
 
         @Override
         public Update<Model, Msg, Never> init(InitContext context) {
-            Model model =
-                    new Model(log.initialize(context).model(), trace.initialize(context).model(),
-                            Editor.Model.empty().withFocus(false), true);
+            Model model = new Model(
+                    log.initialize(context).model(),
+                    trace.initialize(context).model(),
+                    Editor.Model.empty().withFocus(false),
+                    true);
             // Content is published through the mounts, exactly as an application's own update
             // would after reading a log file or appending a turn.
-            model = log.update(model, new ScrollView.Msg.ContentChanged(rows("log", 8))).model();
-            model = trace.update(model,
-                    new ScrollView.Msg.ContentChanged(rows("trace", 8))).model();
+            model = log.update(model, new ScrollView.Msg.ContentChanged(rows("log", 8)))
+                    .model();
+            model = trace.update(model, new ScrollView.Msg.ContentChanged(rows("trace", 8)))
+                    .model();
             return Update.next(model);
         }
 
@@ -132,12 +129,9 @@ class MountedScrollViewTest {
         @Override
         public View<Msg> view(Model model, ViewContext context) {
             List<View<Msg>> parts = new ArrayList<>();
-            parts.add(
-                    Views.row(
-                            Views.fixed(PANE_COLS, log.view(model, context)),
-                            model.showTrace()
-                                    ? Views.fixed(PANE_COLS, trace.view(model, context))
-                                    : Views.blank()));
+            parts.add(Views.row(
+                    Views.fixed(PANE_COLS, log.view(model, context)),
+                    model.showTrace() ? Views.fixed(PANE_COLS, trace.view(model, context)) : Views.blank()));
             parts.add(Views.fixed(1, draft.view(model, context)));
             return Views.column(parts);
         }
@@ -158,16 +152,15 @@ class MountedScrollViewTest {
         return ScrollView.Content.of(lines);
     }
 
-    private static final ViewContext CONTEXT =
-            new ViewContext(new Viewport(PANE_ROWS + 1, PANE_COLS * 2));
+    private static final ViewContext CONTEXT = new ViewContext(new Viewport(PANE_ROWS + 1, PANE_COLS * 2));
 
     private static InputEvent.KeyInput key(String name) {
         return InputEvent.KeyInput.of(Key.of(name), "");
     }
 
-    private static Model focused(Model model, boolean logFocused, boolean traceFocused,
-            boolean draftFocused) {
-        return new Model(model.log().withFocus(logFocused),
+    private static Model focused(Model model, boolean logFocused, boolean traceFocused, boolean draftFocused) {
+        return new Model(
+                model.log().withFocus(logFocused),
                 model.trace().withFocus(traceFocused),
                 model.draft().withFocus(draftFocused),
                 model.showTrace());
@@ -189,7 +182,9 @@ class MountedScrollViewTest {
         assertThat(model.log().topLine()).isEqualTo(2);
         assertThat(model.trace().topLine()).isZero();
 
-        model = component.update(model, new Msg.Trace(new ScrollView.Msg.PageDown())).model();
+        model = component
+                .update(model, new Msg.Trace(new ScrollView.Msg.PageDown()))
+                .model();
         assertThat(model.trace().topLine()).isEqualTo(PANE_ROWS);
         assertThat(model.log().topLine()).isEqualTo(2);
 
@@ -205,19 +200,16 @@ class MountedScrollViewTest {
 
         var logView = component.view(model, CONTEXT);
         assertThat(InputRouter.route(logView, key("down")).orElseThrow())
-                .isInstanceOfSatisfying(Msg.Log.class,
-                        message -> assertThat(message.value())
-                                .isEqualTo(new ScrollView.Msg.Down(1)));
+                .isInstanceOfSatisfying(
+                        Msg.Log.class, message -> assertThat(message.value()).isEqualTo(new ScrollView.Msg.Down(1)));
         assertThat(InputRouter.route(logView, key("pagedown")).orElseThrow())
-                .isInstanceOfSatisfying(Msg.Log.class,
-                        message -> assertThat(message.value())
-                                .isEqualTo(new ScrollView.Msg.PageDown()));
+                .isInstanceOfSatisfying(
+                        Msg.Log.class, message -> assertThat(message.value()).isEqualTo(new ScrollView.Msg.PageDown()));
 
         var traceView = component.view(focused(model, false, true, false), CONTEXT);
         assertThat(InputRouter.route(traceView, key("down")).orElseThrow())
-                .isInstanceOfSatisfying(Msg.Trace.class,
-                        message -> assertThat(message.value())
-                                .isEqualTo(new ScrollView.Msg.Down(1)));
+                .isInstanceOfSatisfying(
+                        Msg.Trace.class, message -> assertThat(message.value()).isEqualTo(new ScrollView.Msg.Down(1)));
 
         var unfocused = component.view(focused(model, false, false, false), CONTEXT);
         assertThat(InputRouter.route(unfocused, key("down")))
@@ -233,8 +225,7 @@ class MountedScrollViewTest {
         assertThat(InputRouter.route(paneFocused, InputEvent.KeyInput.of(Key.of("x"), "x")))
                 .as("a scroll pane never consumes printable text")
                 .isEmpty();
-        assertThat(InputRouter.route(paneFocused, key("end")).orElseThrow())
-                .isInstanceOf(Msg.Log.class);
+        assertThat(InputRouter.route(paneFocused, key("end")).orElseThrow()).isInstanceOf(Msg.Log.class);
     }
 
     @Test
@@ -243,18 +234,15 @@ class MountedScrollViewTest {
         var draftFocused = component.view(focused(start(), false, false, true), CONTEXT);
 
         assertThat(InputRouter.route(draftFocused, key("down")).orElseThrow())
-                .isInstanceOfSatisfying(Msg.Draft.class,
-                        message -> assertThat(message.value())
-                                .isEqualTo(new Editor.Msg.MoveDown()));
+                .isInstanceOfSatisfying(
+                        Msg.Draft.class, message -> assertThat(message.value()).isEqualTo(new Editor.Msg.MoveDown()));
         assertThat(InputRouter.route(draftFocused, key("end")).orElseThrow())
-                .isInstanceOfSatisfying(Msg.Draft.class,
-                        message -> assertThat(message.value())
-                                .isEqualTo(new Editor.Msg.MoveEnd()));
+                .isInstanceOfSatisfying(
+                        Msg.Draft.class, message -> assertThat(message.value()).isEqualTo(new Editor.Msg.MoveEnd()));
         assertThat(InputRouter.route(draftFocused, InputEvent.KeyInput.of(Key.of("x"), "x"))
-                .orElseThrow())
-                .isInstanceOfSatisfying(Msg.Draft.class,
-                        message -> assertThat(message.value())
-                                .isEqualTo(new Editor.Msg.Insert("x")));
+                        .orElseThrow())
+                .isInstanceOfSatisfying(
+                        Msg.Draft.class, message -> assertThat(message.value()).isEqualTo(new Editor.Msg.Insert("x")));
         assertThat(InputRouter.route(draftFocused, key("pagedown")))
                 .as("the editor does not handle paging, and no pane is focused")
                 .isEmpty();
@@ -267,9 +255,7 @@ class MountedScrollViewTest {
         Model model = focused(start(), true, false, false);
 
         var regions = renderer.regions(component.view(model, CONTEXT), CONTEXT.viewport());
-        assertThat(regions)
-                .extracting(region -> region.id().value())
-                .containsExactly("scroll", "scroll", "input");
+        assertThat(regions).extracting(region -> region.id().value()).containsExactly("scroll", "scroll", "input");
         assertThat(regions)
                 .extracting(region -> region.id().path())
                 .containsExactly(
@@ -282,7 +268,9 @@ class MountedScrollViewTest {
     void anUnmountedPaneReceivesNoInputAndKeepsItsOffsetWhenReinserted() {
         var component = new PanesAndEditor();
         Model model = focused(start(), false, true, false);
-        model = component.update(model, new Msg.Trace(new ScrollView.Msg.Down(3))).model();
+        model = component
+                .update(model, new Msg.Trace(new ScrollView.Msg.Down(3)))
+                .model();
         assertThat(model.trace().topLine()).isEqualTo(3);
 
         Model hidden = new Model(model.log(), model.trace(), model.draft(), false);
@@ -298,8 +286,7 @@ class MountedScrollViewTest {
                 .containsExactly(ComponentId.of("log"), ComponentId.of("draft"));
 
         Model shown = new Model(model.log(), model.trace(), model.draft(), true);
-        assertThat(new ScreenRenderer().regions(component.view(shown, CONTEXT),
-                CONTEXT.viewport()))
+        assertThat(new ScreenRenderer().regions(component.view(shown, CONTEXT), CONTEXT.viewport()))
                 .extracting(region -> region.id().path())
                 .contains(ComponentPath.ROOT.append(ComponentId.of("trace")));
         assertThat(shown.trace().topLine())
@@ -315,9 +302,9 @@ class MountedScrollViewTest {
 
         // The parent may still hold a routed message value from before the unmount. Applying it is
         // an ordinary state change of that slot; it renders nothing and cannot reach sibling state.
-        Model updated =
-                component.update(hidden,
-                        new Msg.Trace(new ScrollView.Msg.PageDown())).model();
+        Model updated = component
+                .update(hidden, new Msg.Trace(new ScrollView.Msg.PageDown()))
+                .model();
 
         assertThat(updated.showTrace()).isFalse();
         assertThat(updated.trace().topLine()).isEqualTo(PANE_ROWS);
@@ -328,7 +315,9 @@ class MountedScrollViewTest {
     void thePanesPaintTheirOwnWindowsSideBySide() {
         var component = new PanesAndEditor();
         Model model = focused(start(), true, false, false);
-        model = component.update(model, new Msg.Trace(new ScrollView.Msg.Down(2))).model();
+        model = component
+                .update(model, new Msg.Trace(new ScrollView.Msg.Down(2)))
+                .model();
         model = component.update(model, new Msg.Log(new ScrollView.Msg.Down(1))).model();
 
         View<Msg> view = component.view(model, CONTEXT);

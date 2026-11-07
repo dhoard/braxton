@@ -22,11 +22,10 @@
 
 package io.github.dhoard.braxton.view;
 
-import java.util.List;
-
 import io.github.dhoard.braxton.internal.render.LayoutEngine;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.WidthPolicy;
+import java.util.List;
 
 /**
  * Headless rendering: lay a view out for a fixed viewport and read the result back as cells or plain
@@ -59,11 +58,8 @@ public final class ScreenRenderer {
             for (int col = 0; col < screen.cols(); col++) {
                 var cell = screen.cell(row, col);
                 boolean continuation = screen.isContinuation(row, col);
-                int columns = continuation
-                        ? 0
-                        : col + 1 < screen.cols() && screen.isContinuation(row, col + 1) ? 2 : 1;
-                cells.add(new RenderedScreen.Cell(
-                        cell.text(), cell.style(), cell.link(), columns, continuation));
+                int columns = continuation ? 0 : col + 1 < screen.cols() && screen.isContinuation(row, col + 1) ? 2 : 1;
+                cells.add(new RenderedScreen.Cell(cell.text(), cell.style(), cell.link(), columns, continuation));
             }
             rows.add(cells);
         }
@@ -92,7 +88,8 @@ public final class ScreenRenderer {
     /** Focus regions in paint order, for pointer and focus tests. */
     public List<RenderedScreen.Region> regions(View<?> view, Viewport viewport) {
         return engine.layout(view, viewport.bounds()).regions().stream()
-                .map(region -> new RenderedScreen.Region(region.id(), region.bounds())).toList();
+                .map(region -> new RenderedScreen.Region(region.id(), region.bounds()))
+                .toList();
     }
 
     /** Visible column width under the renderer's policy. */

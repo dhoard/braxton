@@ -29,18 +29,16 @@ import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
 import javax.tools.ToolProvider;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class DocumentedHierarchyTest {
-    @TempDir Path temporary;
+    @TempDir
+    Path temporary;
 
     @Test
     void readmeQuickStartCompilesWarningFreeAndRendersThroughThePublicDriver() throws Exception {
@@ -51,37 +49,32 @@ class DocumentedHierarchyTest {
         Path java = temporary.resolve("demo/Counters.java");
         Files.createDirectories(java.getParent());
         Files.writeString(java, source);
-        int result =
-                ToolProvider.getSystemJavaCompiler()
-                        .run(
-                                null,
-                                null,
-                                null,
-                                "--release",
-                                "25",
-                                "-Xlint:all",
-                                "-Werror",
-                                "-proc:none",
-                                "-cp",
-                                "target/classes",
-                                "-d",
-                                temporary.toString(),
-                                java.toString());
+        int result = ToolProvider.getSystemJavaCompiler()
+                .run(
+                        null,
+                        null,
+                        null,
+                        "--release",
+                        "25",
+                        "-Xlint:all",
+                        "-Werror",
+                        "-proc:none",
+                        "-cp",
+                        "target/classes",
+                        "-d",
+                        temporary.toString(),
+                        java.toString());
         assertThat(result).isZero();
-        try (var loader =
-                new URLClassLoader(
-                        new java.net.URL[] {temporary.toUri().toURL()},
-                        getClass().getClassLoader())) {
-            var component =
-                    (Component<?, ?, ?>)
-                            loader.loadClass("demo.Counters").getConstructor().newInstance();
+        try (var loader = new URLClassLoader(
+                new java.net.URL[] {temporary.toUri().toURL()}, getClass().getClassLoader())) {
+            var component = (Component<?, ?, ?>)
+                    loader.loadClass("demo.Counters").getConstructor().newInstance();
             verify(component);
         }
     }
 
     private static <M, Msg, Out> void verify(Component<M, Msg, Out> component) {
-        var driver =
-                ComponentDriver.initialize(component, new InitContext(new Viewport(3, 30), null));
+        var driver = ComponentDriver.initialize(component, new InitContext(new Viewport(3, 30), null));
         assertThat(driver.children().nodes()).hasSize(2);
         assertThat(driver.screen(new ViewContext(new Viewport(3, 30))).plainLine(0))
                 .isEqualTo("count: 0");
@@ -89,26 +82,23 @@ class DocumentedHierarchyTest {
 
     @Test
     void theBreakingApiDoesNotPublishFlatTypesOrNamespaceMembers() {
-        for (String removed :
-                new String[] {
-                    "app.Program",
-                    "app.Transition",
-                    "app.InitContext",
-                    "widget.EditorState",
-                    "widget.EditorAction",
-                    "widget.EditorIntent",
-                    "widget.EditorResult",
-                    "widget.EditorOptions"
-                }) {
+        for (String removed : new String[] {
+            "app.Program",
+            "app.Transition",
+            "app.InitContext",
+            "widget.EditorState",
+            "widget.EditorAction",
+            "widget.EditorIntent",
+            "widget.EditorResult",
+            "widget.EditorOptions"
+        }) {
             assertThatThrownBy(() -> Class.forName("io.github.dhoard.braxton." + removed))
                     .isInstanceOf(ClassNotFoundException.class);
         }
         assertThat(io.github.dhoard.braxton.effect.Command.class.getMethods())
                 .noneMatch(method -> method.getName().equals("cancelNamespace"));
         assertThat(io.github.dhoard.braxton.effect.EffectId.class.getMethods())
-                .noneMatch(
-                        method ->
-                                method.getName().equals("child")
-                                        || method.getName().equals("namespace"));
+                .noneMatch(method ->
+                        method.getName().equals("child") || method.getName().equals("namespace"));
     }
 }

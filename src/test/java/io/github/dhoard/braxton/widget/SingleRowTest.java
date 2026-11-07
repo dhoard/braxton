@@ -24,13 +24,11 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /** The one-row preparation shared by the widgets whose painted height is fixed. */
 class SingleRowTest {

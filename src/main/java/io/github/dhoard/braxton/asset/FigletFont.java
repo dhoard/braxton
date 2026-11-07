@@ -58,8 +58,7 @@ public final class FigletFont {
             throw new IOException("font not found: " + name);
         }
         List<String> lines = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 lines.add(line);
@@ -115,8 +114,7 @@ public final class FigletFont {
 
     private static String stripEndMark(String raw, char endMark) {
         int end = raw.length();
-        while (end > 0 && (raw.charAt(end - 1) == endMark
-                || (endMark == '@' && raw.charAt(end - 1) == '@'))) {
+        while (end > 0 && (raw.charAt(end - 1) == endMark || (endMark == '@' && raw.charAt(end - 1) == '@'))) {
             end--;
         }
         if (end == raw.length() && end > 0) {

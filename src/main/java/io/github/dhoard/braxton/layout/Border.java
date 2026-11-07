@@ -42,8 +42,7 @@ import io.github.dhoard.braxton.style.WidthPolicy;
  * overruns the frame's own width. Every edge character is measured under the pinned {@link
  * WidthPolicy} and kept only when it occupies exactly one column.</p>
  */
-public record Border(char topLeft, char topRight, char bottomLeft, char bottomRight,
-        char horizontal, char vertical) {
+public record Border(char topLeft, char topRight, char bottomLeft, char bottomRight, char horizontal, char vertical) {
 
     public static final Border NONE = new Border(' ', ' ', ' ', ' ', ' ', ' ');
     public static final Border SINGLE = new Border('\u250C', '\u2510', '\u2514', '\u2518', '\u2500', '\u2502');
@@ -66,7 +65,8 @@ public record Border(char topLeft, char topRight, char bottomLeft, char bottomRi
      * with, so the ambiguous-width characters of the built-in borders are kept.</p>
      */
     public static String glyph(char character) {
-        if (Character.isISOControl(character) || Character.isSurrogate(character)
+        if (Character.isISOControl(character)
+                || Character.isSurrogate(character)
                 || Character.getType(character) == Character.FORMAT) {
             return " ";
         }
@@ -74,7 +74,8 @@ public record Border(char topLeft, char topRight, char bottomLeft, char bottomRi
         // the terminal, so the checks above come first; this one keeps the cell's columns equal to
         // the columns the frame budgeted for it.
         return TextMeasure.clusterColumns(String.valueOf(character), WidthPolicy.PINNED) == 1
-                ? String.valueOf(character) : " ";
+                ? String.valueOf(character)
+                : " ";
     }
 
     public boolean isVisible() {

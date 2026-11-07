@@ -25,7 +25,6 @@ package examples.harness.ai;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -73,8 +72,7 @@ final class HarnessMessage {
         }
     }
 
-    private HarnessMessage() {
-    }
+    private HarnessMessage() {}
 
     /** The kind one entry renders as. */
     static Kind kind(HarnessEntry entry) {
@@ -84,9 +82,7 @@ final class HarnessMessage {
             case HarnessEntry.Reasoning reasoning -> Kind.THINKING;
             case HarnessEntry.Notice notice -> Kind.SYSTEM;
             case HarnessEntry.Failure failure -> Kind.ERROR;
-            case HarnessEntry.Tool tool -> tool.status() == HarnessEntry.ToolStatus.ERROR
-                    ? Kind.TOOL_ERROR
-                    : Kind.TOOL;
+            case HarnessEntry.Tool tool -> tool.status() == HarnessEntry.ToolStatus.ERROR ? Kind.TOOL_ERROR : Kind.TOOL;
         };
     }
 
@@ -132,8 +128,7 @@ final class HarnessMessage {
         return switch (entry) {
             case HarnessEntry.User user -> text(width, user.text(), HarnessTheme.TEXT);
             case HarnessEntry.Assistant assistant -> text(width, assistant.text(), HarnessTheme.TEXT);
-            case HarnessEntry.Reasoning reasoning ->
-                    text(width, reasoning.text(), HarnessTheme.THINKING);
+            case HarnessEntry.Reasoning reasoning -> text(width, reasoning.text(), HarnessTheme.THINKING);
             case HarnessEntry.Notice notice -> text(width, notice.text(), HarnessTheme.TEXT);
             case HarnessEntry.Failure failure -> text(width, failure.text(), HarnessTheme.TEXT);
             case HarnessEntry.Tool tool -> tool(width, tool);
@@ -155,12 +150,9 @@ final class HarnessMessage {
      */
     private static List<StyledText> tool(int width, HarnessEntry.Tool tool) {
         List<StyledText> rows = new ArrayList<>();
-        Style content = tool.status() == HarnessEntry.ToolStatus.ERROR
-                ? HarnessTheme.ERROR
-                : HarnessTheme.TEXT;
+        Style content = tool.status() == HarnessEntry.ToolStatus.ERROR ? HarnessTheme.ERROR : HarnessTheme.TEXT;
         rows.addAll(text(width, tool.call(), content));
-        HarnessRender.Preview preview =
-                HarnessRender.toolPreview(tool.result(), HarnessProjection.TOOL_PREVIEW_LINES);
+        HarnessRender.Preview preview = HarnessRender.toolPreview(tool.result(), HarnessProjection.TOOL_PREVIEW_LINES);
         if (preview.lines().isEmpty()) {
             return rows;
         }
@@ -171,8 +163,7 @@ final class HarnessMessage {
         if (preview.truncated()) {
             rows.addAll(text(
                     width,
-                    "(" + preview.hidden() + " more "
-                            + (preview.hidden() == 1 ? "line)" : "lines)"),
+                    "(" + preview.hidden() + " more " + (preview.hidden() == 1 ? "line)" : "lines)"),
                     HarnessTheme.DIM));
         }
         if (tool.truncated()) {

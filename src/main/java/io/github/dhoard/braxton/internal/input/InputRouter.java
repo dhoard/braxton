@@ -22,14 +22,13 @@
 
 package io.github.dhoard.braxton.internal.input;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.view.View;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * Deterministic input routing.
@@ -51,8 +50,7 @@ import io.github.dhoard.braxton.view.View;
  */
 public final class InputRouter {
 
-    private InputRouter() {
-    }
+    private InputRouter() {}
 
     /** Routes one event, returning the message produced by the first consumer. */
     public static <Msg> Optional<Msg> route(View<Msg> root, InputEvent event) {
@@ -106,7 +104,8 @@ public final class InputRouter {
 
     /** The last-painted modal layer, if the tree declares one. */
     private static <Msg> View<Msg> topmostModalLayer(View<Msg> view) {
-        if (view instanceof View.Overlay<Msg> overlay && overlay.modal()
+        if (view instanceof View.Overlay<Msg> overlay
+                && overlay.modal()
                 && !overlay.layers().isEmpty()) {
             View<Msg> top = overlay.layers().get(overlay.layers().size() - 1);
             View<Msg> nested = topmostModalLayer(top);
@@ -153,9 +152,7 @@ public final class InputRouter {
     @SuppressWarnings("unchecked")
     private static <Msg> View.Focused<Msg> focusedNode(List<View<Msg>> path) {
         View<Msg> last = path.get(path.size() - 1);
-        return last instanceof View.Focused<?> focused && focused.focused()
-                ? (View.Focused<Msg>) focused
-                : null;
+        return last instanceof View.Focused<?> focused && focused.focused() ? (View.Focused<Msg>) focused : null;
     }
 
     private static <Msg> Optional<Msg> matchCapture(List<View<Msg>> path, Key key) {

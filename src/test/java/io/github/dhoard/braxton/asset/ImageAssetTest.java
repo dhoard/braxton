@@ -29,9 +29,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
 import javax.imageio.ImageIO;
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -47,7 +45,8 @@ class ImageAssetTest {
         image.setRGB(0, 0, 0xFF0000FF);
         assertThat(asset.width()).isEqualTo(2);
         assertThat(asset.height()).isEqualTo(2);
-        assertThat(asset.argb(0, 0)).as("mutating the source must not change the asset")
+        assertThat(asset.argb(0, 0))
+                .as("mutating the source must not change the asset")
                 .isEqualTo(0xFFFF0000);
         assertThat(asset.argb(1, 1)).isEqualTo(0x8000FF00);
         assertThat(asset.argb(-1, 0)).isZero();
@@ -89,10 +88,12 @@ class ImageAssetTest {
     void loadingRejectsMissingAndUnsupportedFiles(@TempDir Path directory) throws IOException {
         assertThatThrownBy(() -> ImageAsset.load(null)).isInstanceOf(IOException.class);
         assertThatThrownBy(() -> ImageAsset.load(directory.resolve("absent.png")))
-                .isInstanceOf(IOException.class).hasMessageContaining("not found");
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("not found");
         Path text = directory.resolve("notes.txt");
         Files.writeString(text, "not an image");
-        assertThatThrownBy(() -> ImageAsset.load(text)).isInstanceOf(IOException.class)
+        assertThatThrownBy(() -> ImageAsset.load(text))
+                .isInstanceOf(IOException.class)
                 .hasMessageContaining("unsupported");
         Path png = directory.resolve("pixel.png");
         ImageIO.write(new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB), "png", png.toFile());

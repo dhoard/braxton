@@ -24,20 +24,18 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Stream;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.internal.render.LayoutEngine;
-import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.view.RenderedScreen;
 import io.github.dhoard.braxton.view.ScreenRenderer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 
 /**
  * A frame reserves one cell per edge character, so every row a {@link Box} renders occupies exactly
@@ -58,18 +56,18 @@ class BoxFrameWidthTest {
      * occupied its own cell.
      */
     private static final List<String> BASELESS = List.of(
-            "\u0301",              // combining acute accent
-            "\u0301x",             // accent with nothing before it
-            "x\u0301",             // accent that has its own base
-            "\u200D",              // zero-width joiner
+            "\u0301", // combining acute accent
+            "\u0301x", // accent with nothing before it
+            "x\u0301", // accent that has its own base
+            "\u200D", // zero-width joiner
             "\u200D\u0301a\u200D",
-            "\uFE0F",              // variation selector 16 (wide presentation)
+            "\uFE0F", // variation selector 16 (wide presentation)
             "\uFE0Fx",
-            "\uFE0E",              // variation selector 15 (text presentation)
+            "\uFE0E", // variation selector 15 (text presentation)
             "\uFE0Ex",
-            "\u200B",              // zero-width space
-            "\uFEFFx",             // byte-order mark
-            "\u00ADx");            // soft hyphen
+            "\u200B", // zero-width space
+            "\uFEFFx", // byte-order mark
+            "\u00ADx"); // soft hyphen
 
     /**
      * A base, then a zero-width control, then a cluster with no base of its own. The control ends the
@@ -77,17 +75,17 @@ class BoxFrameWidthTest {
      * these are the values a join that only asks "was a cell painted" gets wrong.
      */
     private static final List<String> CONTROL_THEN_BASELESS = List.of(
-            "\u200B\u0301",                              // control, then a mark
-            "\u65E5\u200B\u0301",                       // base, control, then a mark
-            "\uD83D\uDE00\u00AD\u0301",                // wide base, soft hyphen, then a mark
-            "\uD83D\uDE00\u00AD\u00AD\u0308",         // wide base, two soft hyphens, then a mark
-            "\uD83D\uDE00\u00AD\uFEFF\u20DD\u00AD",  // soft hyphen, BOM, enclosing circle
-            "ab\uFEFF\u0301",                            // text, BOM, then a mark
-            "ab\u00AD\u20DD");                           // text, soft hyphen, then a circle
+            "\u200B\u0301", // control, then a mark
+            "\u65E5\u200B\u0301", // base, control, then a mark
+            "\uD83D\uDE00\u00AD\u0301", // wide base, soft hyphen, then a mark
+            "\uD83D\uDE00\u00AD\u00AD\u0308", // wide base, two soft hyphens, then a mark
+            "\uD83D\uDE00\u00AD\uFEFF\u20DD\u00AD", // soft hyphen, BOM, enclosing circle
+            "ab\uFEFF\u0301", // text, BOM, then a mark
+            "ab\u00AD\u20DD"); // text, soft hyphen, then a circle
 
     /** Every cluster shape the frame tests below paint, controls included. */
-    private static final List<String> BASELESS_SHAPES = Stream.concat(
-            BASELESS.stream(), CONTROL_THEN_BASELESS.stream()).toList();
+    private static final List<String> BASELESS_SHAPES =
+            Stream.concat(BASELESS.stream(), CONTROL_THEN_BASELESS.stream()).toList();
 
     /**
      * Contents built from concatenated runs - how coloured text is assembled - whose run boundary
@@ -120,8 +118,7 @@ class BoxFrameWidthTest {
         StringBuilder text = new StringBuilder("\"");
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
-            text.append(c >= 0x20 && c < 0x7F
-                    ? String.valueOf(c) : String.format("\\u%04x", (int) c));
+            text.append(c >= 0x20 && c < 0x7F ? String.valueOf(c) : String.format("\\u%04x", (int) c));
         }
         return text.append('"').toString();
     }
@@ -138,12 +135,12 @@ class BoxFrameWidthTest {
     private static void assertFrameKeepsWidth(String title, String content) {
         for (int width = 4; width <= 14; width++) {
             List<String> rows = rows(width, title, content);
-            assertThat(rows).as("title %s content %s width %d", show(title), show(content), width)
+            assertThat(rows)
+                    .as("title %s content %s width %d", show(title), show(content), width)
                     .hasSize(3);
             for (String row : rows) {
                 assertThat(TextMeasure.columns(row))
-                        .as("title %s content %s width %d row [%s]",
-                                show(title), show(content), width, show(row))
+                        .as("title %s content %s width %d row [%s]", show(title), show(content), width, show(row))
                         .isEqualTo(width);
             }
         }
@@ -172,11 +169,13 @@ class BoxFrameWidthTest {
     @Test
     void aTitledFrameDrawsItsRightEdgeInOneColumn() {
         for (String title : List.of("\u0301", "\uFE0Fx")) {
-            List<String> painted = new ScreenRenderer().plainLines(
-                    Box.of("ab").border(FRAME).title(title).width(8).view(8), new Viewport(3, 8));
-            assertThat(painted).as("title %s", show(title))
+            List<String> painted = new ScreenRenderer()
+                    .plainLines(Box.of("ab").border(FRAME).title(title).width(8).view(8), new Viewport(3, 8));
+            assertThat(painted)
+                    .as("title %s", show(title))
                     .allSatisfy(row -> assertThat(TextMeasure.columns(row))
-                            .as("painted row [%s]", show(row)).isEqualTo(8));
+                            .as("painted row [%s]", show(row))
+                            .isEqualTo(8));
             assertThat(painted.get(0)).as("title %s", show(title)).endsWith("+");
             assertThat(painted.get(1)).as("title %s", show(title)).endsWith("|");
             assertThat(painted.get(2)).as("title %s", show(title)).isEqualTo("+------+");
@@ -192,8 +191,10 @@ class BoxFrameWidthTest {
                 assertThat(TextMeasure.columns(rows.get(0)))
                         .as("title %s width %d row [%s]", show(title), width, show(rows.get(0)))
                         .isEqualTo(width);
-                assertThat(rows.get(0)).as("title %s width %d", show(title), width)
-                        .startsWith("+").endsWith("+");
+                assertThat(rows.get(0))
+                        .as("title %s width %d", show(title), width)
+                        .startsWith("+")
+                        .endsWith("+");
             }
         }
     }
@@ -201,11 +202,11 @@ class BoxFrameWidthTest {
     /** A frame with several content lines pads each one on its own terms. */
     @Test
     void everyLineOfATallFrameKeepsTheFrameWidth() {
-        for (String content : List.of("\u0301\nab\n\uFE0Fx\n\u200D\nplain",
-                "ab\n\u0301x\n\uFE0E\ncd")) {
+        for (String content : List.of("\u0301\nab\n\uFE0Fx\n\u200D\nplain", "ab\n\u0301x\n\uFE0E\ncd")) {
             for (int width = 5; width <= 12; width++) {
                 List<String> rows = rows(width, "\u0301", content);
-                assertThat(rows).as("content %s width %d", show(content), width)
+                assertThat(rows)
+                        .as("content %s width %d", show(content), width)
                         .hasSize(2 + content.split("\n", -1).length);
                 for (String row : rows) {
                     assertThat(TextMeasure.columns(row))
@@ -221,9 +222,12 @@ class BoxFrameWidthTest {
     void aResponsiveFrameKeepsItsWidthWithABaselessCluster() {
         for (String content : BASELESS) {
             for (int width = 4; width <= 14; width++) {
-                List<String> rows = List.of(
-                        Box.of(content).border(FRAME).title("\u0301").render(width).plainText()
-                                .split("\n", -1));
+                List<String> rows = List.of(Box.of(content)
+                        .border(FRAME)
+                        .title("\u0301")
+                        .render(width)
+                        .plainText()
+                        .split("\n", -1));
                 for (String row : rows) {
                     assertThat(TextMeasure.columns(row))
                             .as("content %s width %d row [%s]", show(content), width, show(row))
@@ -237,8 +241,10 @@ class BoxFrameWidthTest {
     private static List<String> paintedCells(RenderedScreen screen, int row) {
         List<String> cells = new ArrayList<>();
         for (int col = 0; col < screen.cols(); col++) {
-            cells.add(screen.isContinuation(row, col)
-                    ? "<continuation>" : screen.cell(row, col).text());
+            cells.add(
+                    screen.isContinuation(row, col)
+                            ? "<continuation>"
+                            : screen.cell(row, col).text());
         }
         return cells;
     }
@@ -251,20 +257,20 @@ class BoxFrameWidthTest {
      */
     private static void assertFrameIsPaintedColumnByColumn(Box box, int width) {
         List<String> rendered = List.of(box.render(width).plainText().split("\n", -1));
-        RenderedScreen screen = new ScreenRenderer().screen(box.view(width),
-                new Viewport(rendered.size(), width));
+        RenderedScreen screen = new ScreenRenderer().screen(box.view(width), new Viewport(rendered.size(), width));
         assertThat(screen.rows()).as("rows painted for %s", rendered).isEqualTo(rendered.size());
         for (int row = 0; row < rendered.size(); row++) {
-            assertThat(paintedCells(screen, row)).as("row %d of %s", row, rendered)
-                    .hasSize(width).doesNotContain("");
+            assertThat(paintedCells(screen, row))
+                    .as("row %d of %s", row, rendered)
+                    .hasSize(width)
+                    .doesNotContain("");
             assertThat(screen.isContinuation(row, width - 1))
                     .as("row %d of %s ends in a wide cluster's first half", row, rendered)
                     .isFalse();
-            char edge = row == 0 ? FRAME.topRight()
-                    : row == rendered.size() - 1 ? FRAME.bottomRight() : FRAME.vertical();
+            char edge =
+                    row == 0 ? FRAME.topRight() : row == rendered.size() - 1 ? FRAME.bottomRight() : FRAME.vertical();
             assertThat(screen.cell(row, width - 1).text())
-                    .as("right edge of row %d of %s painted as %s", row, rendered,
-                            paintedCells(screen, row))
+                    .as("right edge of row %d of %s painted as %s", row, rendered, paintedCells(screen, row))
                     .isEqualTo(Border.glyph(edge));
         }
         assertThat(new LayoutEngine().intrinsicHeight(box.view(width), width))
@@ -282,8 +288,12 @@ class BoxFrameWidthTest {
     void aStyledTitleWithABaselessClusterKeepsTheFrameWidthThroughPaint() {
         for (String title : BASELESS_SHAPES) {
             for (int width = 6; width <= 10; width++) {
-                assertFrameIsPaintedColumnByColumn(Box.of("ab").border(FRAME)
-                        .title(StyledText.of(title, Style.NONE.withBold())).width(width), width);
+                assertFrameIsPaintedColumnByColumn(
+                        Box.of("ab")
+                                .border(FRAME)
+                                .title(StyledText.of(title, Style.NONE.withBold()))
+                                .width(width),
+                        width);
             }
         }
     }
@@ -302,14 +312,11 @@ class BoxFrameWidthTest {
                 StyledText.of("\u0301", bold),
                 StyledText.of("\u0301x", bold),
                 StyledText.of("ab\ncd", Style.NONE).append(StyledText.of("\u0301", bold)),
-                StyledText.concat(StyledText.of("\t", Style.NONE),
-                        StyledText.of("\u0301", bold)),
-                StyledText.concat(StyledText.of("\u65E5", Style.NONE),
-                        StyledText.of("\u200B\u0301", bold)));
+                StyledText.concat(StyledText.of("\t", Style.NONE), StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("\u65E5", Style.NONE), StyledText.of("\u200B\u0301", bold)));
         for (StyledText content : contents) {
             for (int width = 6; width <= 10; width++) {
-                assertFrameIsPaintedColumnByColumn(
-                        Box.of(content).border(FRAME).width(width), width);
+                assertFrameIsPaintedColumnByColumn(Box.of(content).border(FRAME).width(width), width);
             }
         }
     }
@@ -323,14 +330,16 @@ class BoxFrameWidthTest {
     void aTabAfterAClusterASpanBoundarySplitKeepsTheFramesContentWhole() {
         Style bold = Style.NONE.withBold();
         for (String value : List.of("a\u0301\tb", "a\uFE0F\tb")) {
-            StyledText split = StyledText.concat(StyledText.of(value.substring(0, 1), Style.NONE),
-                    StyledText.of(value.substring(1), bold));
+            StyledText split = StyledText.concat(
+                    StyledText.of(value.substring(0, 1), Style.NONE), StyledText.of(value.substring(1), bold));
             // The frame keeps one cell per edge, so the interior holds the five columns of the
             // expanded content from a width of seven up.
             for (int width = 7; width <= 10; width++) {
                 assertThat(Box.of(split).border(FRAME).render(width).plainText())
                         .as("content %s at width %d", show(value), width)
-                        .isEqualTo(Box.of(StyledText.plain(value)).border(FRAME).render(width)
+                        .isEqualTo(Box.of(StyledText.plain(value))
+                                .border(FRAME)
+                                .render(width)
                                 .plainText())
                         .contains("b");
             }
@@ -346,21 +355,24 @@ class BoxFrameWidthTest {
     void contentWhosePresentationSelectorIsSplitFromItsBaseKeepsEveryFrameRowAtTheFrameWidth() {
         for (StyledText content : SPLIT_PRESENTATION_SELECTOR) {
             for (int width = 4; width <= 14; width++) {
-                List<String> framed = List.of(Box.of(content).border(FRAME).width(width)
-                        .render(width).plainText().split("\n", -1));
-                assertThat(framed).as("content %s width %d", show(content.plainText()), width)
+                List<String> framed = List.of(Box.of(content)
+                        .border(FRAME)
+                        .width(width)
+                        .render(width)
+                        .plainText()
+                        .split("\n", -1));
+                assertThat(framed)
+                        .as("content %s width %d", show(content.plainText()), width)
                         .hasSize(3);
                 for (String row : framed) {
                     assertThat(TextMeasure.columns(row))
-                            .as("content %s width %d row [%s]",
-                                    show(content.plainText()), width, show(row))
+                            .as("content %s width %d row [%s]", show(content.plainText()), width, show(row))
                             .isEqualTo(width);
                 }
-                for (String row : List.of(Box.of(content).border(FRAME).render(width).plainText()
-                        .split("\n", -1))) {
+                for (String row : List.of(
+                        Box.of(content).border(FRAME).render(width).plainText().split("\n", -1))) {
                     assertThat(TextMeasure.columns(row))
-                            .as("responsive content %s width %d row [%s]",
-                                    show(content.plainText()), width, show(row))
+                            .as("responsive content %s width %d row [%s]", show(content.plainText()), width, show(row))
                             .isEqualTo(Math.max(2, width));
                 }
             }
@@ -376,8 +388,7 @@ class BoxFrameWidthTest {
     void contentWhosePresentationSelectorIsSplitFromItsBaseKeepsTheFrameWidthThroughPaint() {
         for (StyledText content : SPLIT_PRESENTATION_SELECTOR) {
             for (int width = 6; width <= 14; width++) {
-                assertFrameIsPaintedColumnByColumn(
-                        Box.of(content).border(FRAME).width(width), width);
+                assertFrameIsPaintedColumnByColumn(Box.of(content).border(FRAME).width(width), width);
             }
         }
     }
@@ -387,10 +398,13 @@ class BoxFrameWidthTest {
     void aFrameWideEnoughForASplitPresentationSelectorKeepsAllItsContent() {
         // Nine columns of content, so an eleven-column frame keeps a column for each edge and pads
         // nothing: fitting the row is not a licence to clip the content.
-        assertThat(List.of(Box.of(SPLIT_PRESENTATION_SELECTOR.getFirst()).border(FRAME).width(11)
-                .render(11).plainText().split("\n", -1)))
-                .containsExactly("+---------+",
-                        "|\u2764\uFE0F a \u2764\uFE0F b|", "+---------+");
+        assertThat(List.of(Box.of(SPLIT_PRESENTATION_SELECTOR.getFirst())
+                        .border(FRAME)
+                        .width(11)
+                        .render(11)
+                        .plainText()
+                        .split("\n", -1)))
+                .containsExactly("+---------+", "|\u2764\uFE0F a \u2764\uFE0F b|", "+---------+");
     }
 
     /**
@@ -402,23 +416,31 @@ class BoxFrameWidthTest {
     void anUnframedFixedWidthBoundsContentWhosePresentationSelectorIsSplitFromItsBase() {
         for (StyledText content : SPLIT_PRESENTATION_SELECTOR) {
             for (int width = 3; width <= 14; width++) {
-                List<String> rows = List.of(Box.of(content).border(Border.NONE).width(width)
-                        .render(width).plainText().split("\n", -1));
-                assertThat(rows).as("content %s width %d", show(content.plainText()), width)
+                List<String> rows = List.of(Box.of(content)
+                        .border(Border.NONE)
+                        .width(width)
+                        .render(width)
+                        .plainText()
+                        .split("\n", -1));
+                assertThat(rows)
+                        .as("content %s width %d", show(content.plainText()), width)
                         .hasSize(content.lines().size());
                 for (String row : rows) {
                     assertThat(TextMeasure.columns(row))
-                            .as("content %s width %d row [%s]",
-                                    show(content.plainText()), width, show(row))
+                            .as("content %s width %d row [%s]", show(content.plainText()), width, show(row))
                             .isLessThanOrEqualTo(width);
                 }
             }
         }
         // The reported second symptom: six columns of content in a five-column box keeps the five
         // columns that fit instead of every column it was given.
-        assertThat(List.of(Box.of(StyledText.of("\u2764", Style.NONE.withBold())
-                .append("\uFE0F a b")).border(Border.NONE).width(5).render(5).plainText()
-                .split("\n", -1))).containsExactly("\u2764\uFE0F a ");
+        assertThat(List.of(Box.of(StyledText.of("\u2764", Style.NONE.withBold()).append("\uFE0F a b"))
+                        .border(Border.NONE)
+                        .width(5)
+                        .render(5)
+                        .plainText()
+                        .split("\n", -1)))
+                .containsExactly("\u2764\uFE0F a ");
     }
 
     /**
@@ -431,8 +453,7 @@ class BoxFrameWidthTest {
     void aControlBetweenABaseAndABaselessClusterKeepsTheFramesColumns() {
         for (String content : CONTROL_THEN_BASELESS) {
             for (int width = 4; width <= 10; width++) {
-                assertFrameIsPaintedColumnByColumn(
-                        Box.of(content).border(FRAME).width(width), width);
+                assertFrameIsPaintedColumnByColumn(Box.of(content).border(FRAME).width(width), width);
             }
         }
     }
@@ -442,7 +463,6 @@ class BoxFrameWidthTest {
     void anOrdinaryFrameIsUnchanged() {
         assertThat(rows(8, "t", "ab")).containsExactly("+- t --+", "|ab    |", "+------+");
         assertThat(rows(8, null, "ab")).containsExactly("+------+", "|ab    |", "+------+");
-        assertThat(rows(7, "\u65E5\u672C", "x"))
-                .containsExactly("+- \u65E5 +", "|x    |", "+-----+");
+        assertThat(rows(7, "\u65E5\u672C", "x")).containsExactly("+- \u65E5 +", "|x    |", "+-----+");
     }
 }

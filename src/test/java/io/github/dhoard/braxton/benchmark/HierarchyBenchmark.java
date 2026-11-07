@@ -36,13 +36,11 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
-import org.openjdk.jmh.annotations.*;
-import org.openjdk.jmh.infra.Blackhole;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.infra.Blackhole;
 
 /** Opt-in hierarchy overhead: isolated child replacement, view composition and retained scopes. */
 @State(Scope.Benchmark)
@@ -57,39 +55,37 @@ public class HierarchyBenchmark {
 
     public record Parent(Integer child, Object sibling) {}
 
-    private final List<Mount<Parent, Integer, Never, Integer, Integer, Never>> mounts =
-            new ArrayList<>();
+    private final List<Mount<Parent, Integer, Never, Integer, Integer, Never>> mounts = new ArrayList<>();
     private final Parent parent = new Parent(1, new Object());
     private final ScopeManager scopes = new ScopeManager();
     private ComponentTree tree;
     private final ViewContext context = new ViewContext(new Viewport(24, 80));
-    private static final Component<Integer, Integer, Never> CHILD =
-            new Component<>() {
-                public Update<Integer, Integer, Never> init(InitContext c) {
-                    return Update.next(0);
-                }
+    private static final Component<Integer, Integer, Never> CHILD = new Component<>() {
+        public Update<Integer, Integer, Never> init(InitContext c) {
+            return Update.next(0);
+        }
 
-                public Update<Integer, Integer, Never> update(Integer m, Integer message) {
-                    return Update.next(m + message);
-                }
+        public Update<Integer, Integer, Never> update(Integer m, Integer message) {
+            return Update.next(m + message);
+        }
 
-                public View<Integer> view(Integer m, ViewContext c) {
-                    return Views.text("count: " + m);
-                }
-            };
+        public View<Integer> view(Integer m, ViewContext c) {
+            return Views.text("count: " + m);
+        }
+    };
 
     @Setup
     public void setup() {
         mounts.clear();
         for (int i = 0; i < count; i++)
-            mounts.add(
-                    Mount.of(
-                            ComponentId.of("k" + i),
-                            CHILD,
-                            ModelLens.of(Parent::child, (p, c) -> new Parent(c, p.sibling())),
-                            value -> value,
-                            OutputRoute.toOutput(value -> value)));
-        tree = new ComponentTree(mounts.stream().map(mount -> mount.tree(parent)).toList());
+            mounts.add(Mount.of(
+                    ComponentId.of("k" + i),
+                    CHILD,
+                    ModelLens.of(Parent::child, (p, c) -> new Parent(c, p.sibling())),
+                    value -> value,
+                    OutputRoute.toOutput(value -> value)));
+        tree = new ComponentTree(
+                mounts.stream().map(mount -> mount.tree(parent)).toList());
         scopes.commit(scopes.prepare(tree, count + 1, 1));
     }
 
@@ -100,8 +96,8 @@ public class HierarchyBenchmark {
 
     @Benchmark
     public void composeView(Blackhole sink) {
-        sink.consume(
-                Views.column(mounts.stream().map(mount -> mount.view(parent, context)).toList()));
+        sink.consume(Views.column(
+                mounts.stream().map(mount -> mount.view(parent, context)).toList()));
     }
 
     @Benchmark

@@ -72,8 +72,7 @@ public record ComponentPath(List<ComponentId> segments) implements Serializable 
     @Override
     public boolean equals(Object other) {
         if (this == other) return true;
-        if (!(other instanceof ComponentPath path) || segments.size() != path.segments.size())
-            return false;
+        if (!(other instanceof ComponentPath path) || segments.size() != path.segments.size()) return false;
         for (int i = 0; i < segments.size(); i++) {
             if (!segments.get(i).equals(path.segments.get(i))) return false;
         }

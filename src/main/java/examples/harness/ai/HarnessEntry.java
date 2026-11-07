@@ -87,8 +87,7 @@ public sealed interface HarnessEntry {
     }
 
     /** A completed or pending tool call with a bounded preview of its result. */
-    public record Tool(
-            String call, String result, boolean truncated, ToolStatus status, long epochMillis)
+    public record Tool(String call, String result, boolean truncated, ToolStatus status, long epochMillis)
             implements HarnessEntry {
 
         public Tool(String call, String result, boolean truncated, ToolStatus status) {

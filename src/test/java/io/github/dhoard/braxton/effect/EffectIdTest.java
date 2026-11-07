@@ -26,7 +26,6 @@ import static org.assertj.core.api.Assertions.*;
 
 import io.github.dhoard.braxton.mvu.ComponentId;
 import io.github.dhoard.braxton.mvu.ComponentPath;
-
 import org.junit.jupiter.api.Test;
 
 class EffectIdTest {
@@ -40,13 +39,12 @@ class EffectIdTest {
         assertThat(local.scoped(a)).isEqualTo(EffectId.of("tick").scoped(a));
         assertThat(local.scoped(a)).isNotEqualTo(local.scoped(b));
         assertThat(local.scoped(b).scoped(a).path()).isEqualTo(a.append(ComponentId.of("b")));
-        assertThat(local.scoped(a).hashCode()).isEqualTo(EffectId.of("tick").scoped(a).hashCode());
+        assertThat(local.scoped(a).hashCode())
+                .isEqualTo(EffectId.of("tick").scoped(a).hashCode());
         assertThat(local.toString()).isEqualTo("tick");
         assertThat(local.scoped(a).toString()).isEqualTo("/a:tick");
-        for (String invalid :
-                new String[] {"", " ", ".", "..", "a/b", "/b", "b/", "a\u001bb", "x".repeat(129)}) {
-            assertThatThrownBy(() -> EffectId.of(invalid))
-                    .isInstanceOf(IllegalArgumentException.class);
+        for (String invalid : new String[] {"", " ", ".", "..", "a/b", "/b", "b/", "a\u001bb", "x".repeat(129)}) {
+            assertThatThrownBy(() -> EffectId.of(invalid)).isInstanceOf(IllegalArgumentException.class);
         }
         assertThatThrownBy(() -> EffectId.of(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> local.scoped(null)).isInstanceOf(NullPointerException.class);
@@ -66,10 +64,8 @@ class EffectIdTest {
                 .isEqualTo(SubscriptionId.of("tick").scoped(a).hashCode());
         assertThat(local.toString()).isEqualTo("tick");
         assertThat(local.scoped(a).toString()).isEqualTo("/a:tick");
-        for (String invalid :
-                new String[] {"", " ", ".", "..", "a/b", "/b", "b/", "a\u001bb", "x".repeat(129)}) {
-            assertThatThrownBy(() -> SubscriptionId.of(invalid))
-                    .isInstanceOf(IllegalArgumentException.class);
+        for (String invalid : new String[] {"", " ", ".", "..", "a/b", "/b", "b/", "a\u001bb", "x".repeat(129)}) {
+            assertThatThrownBy(() -> SubscriptionId.of(invalid)).isInstanceOf(IllegalArgumentException.class);
         }
         assertThatThrownBy(() -> SubscriptionId.of(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> local.scoped(null)).isInstanceOf(NullPointerException.class);

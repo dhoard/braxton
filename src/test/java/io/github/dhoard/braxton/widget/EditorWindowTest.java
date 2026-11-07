@@ -27,11 +27,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-
-import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.Random;
+import org.junit.jupiter.api.Test;
 
 /** The editor's render window follows the caret and never paints more lines than it may. */
 class EditorWindowTest {
@@ -77,9 +75,9 @@ class EditorWindowTest {
         for (int i = first; i < first + visible; i++) {
             String body = "L" + i;
             String line = i == caretLine
-                    ? (caretColumn >= body.length() ? body + Editor.CURSOR
-                            : body.substring(0, caretColumn) + Editor.CURSOR
-                                    + body.substring(caretColumn + 1))
+                    ? (caretColumn >= body.length()
+                            ? body + Editor.CURSOR
+                            : body.substring(0, caretColumn) + Editor.CURSOR + body.substring(caretColumn + 1))
                     : body;
             rows.add((i == first ? "> " : "  ") + line);
         }
@@ -97,10 +95,11 @@ class EditorWindowTest {
                     int visible = Math.min(visibleLines, lines);
                     int first = Math.max(0, Math.min(caretLine - visible + 1, lines - visible));
                     List<String> painted = rendered(state, options);
-                    assertThat(painted).as("visible %d lines %d caret %d", visibleLines, lines,
-                            caret).isEqualTo(expected(first, visible, caretLine,
-                                    state.caret() - 3 * caretLine));
-                    assertThat(String.join("", painted)).as("the prompt appears once")
+                    assertThat(painted)
+                            .as("visible %d lines %d caret %d", visibleLines, lines, caret)
+                            .isEqualTo(expected(first, visible, caretLine, state.caret() - 3 * caretLine));
+                    assertThat(String.join("", painted))
+                            .as("the prompt appears once")
                             .containsOnlyOnce("> ");
                 }
             }
@@ -114,10 +113,10 @@ class EditorWindowTest {
         for (int caretLine = 0; caretLine < 6; caretLine++) {
             List<String> painted = rendered(draft(6, caretLine * 3), options);
             int firstVisible = Math.max(0, Math.min(caretLine - 1, 6 - 2));
-            assertThat(painted).as("caret line %d scrolls the window to it", caretLine)
+            assertThat(painted)
+                    .as("caret line %d scrolls the window to it", caretLine)
                     .isEqualTo(expected(firstVisible, 2, caretLine, 0));
-            assertThat(firstVisible).as("the window never moves back")
-                    .isGreaterThanOrEqualTo(previousFirst);
+            assertThat(firstVisible).as("the window never moves back").isGreaterThanOrEqualTo(previousFirst);
             previousFirst = firstVisible;
         }
         assertThat(rendered(draft(6, 0), options)).isEqualTo(expected(0, 2, 0, 0));
@@ -142,7 +141,9 @@ class EditorWindowTest {
         Editor.Model filled = Editor.Model.of("abcd");
         io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> exact =
                 new Editor(options).update(filled, new Editor.Msg.Paste("wxyz"));
-        assertThat(exact.model().text()).isEqualTo("abcd").isEqualTo(exact.model().text());
+        assertThat(exact.model().text())
+                .isEqualTo("abcd")
+                .isEqualTo(exact.model().text());
 
         io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> fitting =
                 new Editor(options).update(Editor.Model.of("ab"), new Editor.Msg.Paste("cd"));
@@ -151,12 +152,10 @@ class EditorWindowTest {
 
         // One grapheme over the limit is dropped whole, never cut in half.
         io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> over =
-                new Editor(options)
-                        .update(Editor.Model.of("ab"), new Editor.Msg.Paste("c" + FAMILY));
+                new Editor(options).update(Editor.Model.of("ab"), new Editor.Msg.Paste("c" + FAMILY));
         assertThat(over.model().text()).isEqualTo("abc");
-        assertThat(
-                        Character.isHighSurrogate(
-                                over.model().text().charAt(over.model().text().length() - 1)))
+        assertThat(Character.isHighSurrogate(
+                        over.model().text().charAt(over.model().text().length() - 1)))
                 .isFalse();
     }
 
@@ -167,17 +166,11 @@ class EditorWindowTest {
         io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> result =
                 new Editor(options).update(selected, new Editor.Msg.Paste("X"));
         assertThat(result.model().text()).isEqualTo("aXef");
-        io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> grown =
-                new Editor(options)
-                        .update(
-                                Editor.Model.of("abcdef").withSelection(0, 6),
-                                new Editor.Msg.Paste("123456"));
+        io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> grown = new Editor(options)
+                .update(Editor.Model.of("abcdef").withSelection(0, 6), new Editor.Msg.Paste("123456"));
         assertThat(grown.model().text()).isEqualTo("123456");
-        io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> shrunk =
-                new Editor(options)
-                        .update(
-                                Editor.Model.of("abcdef").withSelection(0, 6),
-                                new Editor.Msg.Paste("1234567890"));
+        io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> shrunk = new Editor(options)
+                .update(Editor.Model.of("abcdef").withSelection(0, 6), new Editor.Msg.Paste("1234567890"));
         assertThat(shrunk.model().text()).isEqualTo("123456");
     }
 
@@ -192,17 +185,13 @@ class EditorWindowTest {
                 text.append(pieces[random.nextInt(pieces.length)]);
             }
             String source = text.toString();
-            Editor.Model state =
-                    new Editor.Model(
-                            source,
-                            random.nextInt(source.length() + 1),
-                            random.nextInt(source.length() + 1),
-                            0);
+            Editor.Model state = new Editor.Model(
+                    source, random.nextInt(source.length() + 1), random.nextInt(source.length() + 1), 0);
             int visibleLines = 1 + random.nextInt(5);
             List<String> painted = rendered(state, options(visibleLines, 1_000));
-            assertThat(painted).as("iteration %d", iteration)
-                    .hasSize(Math.min(visibleLines, state.lineCount()));
-            assertThat(String.join("", painted)).as("iteration %d keeps the prompt once", iteration)
+            assertThat(painted).as("iteration %d", iteration).hasSize(Math.min(visibleLines, state.lineCount()));
+            assertThat(String.join("", painted))
+                    .as("iteration %d keeps the prompt once", iteration)
                     .containsOnlyOnce("> ");
         }
     }
@@ -213,13 +202,12 @@ class EditorWindowTest {
         // must paint without exceeding the viewport and must keep the caret reachable - including a
         // width narrower than the prompt itself.
         Editor.Model state = Editor.Model.of("hello\nworld").withCaret(3).withSelection(1, 6);
-        io.github.dhoard.braxton.view.View<String> view =
-                new Editor(Editor.Config.defaults().withPrompt(">  ", Style.NONE))
-                        .view(
-                                (state).withFocus(true),
-                                new io.github.dhoard.braxton.mvu.ViewContext(
-                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                        .map(action -> "msg");
+        io.github.dhoard.braxton.view.View<String> view = new Editor(
+                        Editor.Config.defaults().withPrompt(">  ", Style.NONE))
+                .view(
+                        (state).withFocus(true),
+                        new io.github.dhoard.braxton.mvu.ViewContext(io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                .map(action -> "msg");
         for (int width = 1; width <= 8; width++) {
             for (int rows = 1; rows <= 3; rows++) {
                 List<String> lines = new io.github.dhoard.braxton.view.ScreenRenderer()
@@ -232,21 +220,19 @@ class EditorWindowTest {
                 }
             }
         }
-        assertThat(
-                        Editor.render(
-                                        state,
-                                        Editor.Config.defaults().withPrompt(">  ", Style.NONE),
-                                        true)
-                                .plainText())
+        assertThat(Editor.render(state, Editor.Config.defaults().withPrompt(">  ", Style.NONE), true)
+                        .plainText())
                 .as("the prompt is painted once, at the first visible line")
                 .startsWith(">  ")
                 .contains("\n");
-        String focused =
-                Editor.render(Editor.Model.of("x"), Editor.Config.defaults(), true).plainText();
-        String idle =
-                Editor.render(Editor.Model.of("x"), Editor.Config.defaults(), false).plainText();
+        String focused = Editor.render(Editor.Model.of("x"), Editor.Config.defaults(), true)
+                .plainText();
+        String idle = Editor.render(Editor.Model.of("x"), Editor.Config.defaults(), false)
+                .plainText();
         assertThat(idle).as("an unfocused editor paints only its text").isEqualTo("x");
-        assertThat(focused).as("a focused editor adds one cursor cell").hasSize(2)
+        assertThat(focused)
+                .as("a focused editor adds one cursor cell")
+                .hasSize(2)
                 .startsWith("x");
     }
 }

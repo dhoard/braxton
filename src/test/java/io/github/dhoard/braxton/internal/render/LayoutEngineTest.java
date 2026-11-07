@@ -24,21 +24,19 @@ package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Insets;
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.StyledText;
+import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /** Deterministic layout: sizing, clipping, overlays, and wide-cell bookkeeping. */
 class LayoutEngineTest {
@@ -51,7 +49,8 @@ class LayoutEngineTest {
 
     /** Rows whose cells carry a background, i.e. rows a fill actually painted. */
     private static int filledRows(View<?> view, int rows, int cols) {
-        Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, rows, cols)).screen();
+        Screen screen =
+                new LayoutEngine().layout(view, new Rect(0, 0, rows, cols)).screen();
         int filled = 0;
         for (int row = 0; row < rows; row++) {
             if (screen.cell(row, 0).style().background() != null) {
@@ -66,7 +65,10 @@ class LayoutEngineTest {
         StringBuilder cells = new StringBuilder();
         for (int row = 0; row < screen.rows(); row++) {
             for (int col = 0; col < screen.cols(); col++) {
-                cells.append(screen.isContinuation(row, col) ? ">" : screen.cell(row, col).text())
+                cells.append(
+                                screen.isContinuation(row, col)
+                                        ? ">"
+                                        : screen.cell(row, col).text())
                         .append('|');
             }
             cells.append('\n');
@@ -113,26 +115,24 @@ class LayoutEngineTest {
         // divided by weight, so neither the weight sum nor the per-child product may overflow.
         // Two Integer.MAX_VALUE weights summed negative (no child got a cell) and one large weight
         // multiplied by the remaining columns wrapped (children overlapped or vanished).
-        View<?> lopsidedRow = Views.row(Views.grow(Integer.MAX_VALUE, Views.text("a")),
-                Views.grow(1, Views.text("b")));
+        View<?> lopsidedRow = Views.row(Views.grow(Integer.MAX_VALUE, Views.text("a")), Views.grow(1, Views.text("b")));
         assertThat(paint(lopsidedRow, 1, 10).plainLine(0)).isEqualTo("a");
 
-        View<?> evenRow = Views.row(Views.grow(Integer.MAX_VALUE, Views.text("a")),
-                Views.grow(Integer.MAX_VALUE, Views.text("b")));
+        View<?> evenRow = Views.row(
+                Views.grow(Integer.MAX_VALUE, Views.text("a")), Views.grow(Integer.MAX_VALUE, Views.text("b")));
         assertThat(paint(evenRow, 1, 10).plainLine(0)).isEqualTo("a    b");
 
-        View<?> wrappedRow = Views.row(Views.grow(1_000_000_000, Views.text("a")),
-                Views.grow(1, Views.text("b")));
+        View<?> wrappedRow = Views.row(Views.grow(1_000_000_000, Views.text("a")), Views.grow(1, Views.text("b")));
         assertThat(paint(wrappedRow, 1, 10).plainLine(0)).isEqualTo("a");
 
-        View<?> evenColumn = Views.column(Views.grow(Integer.MAX_VALUE, Views.text("a")),
-                Views.grow(Integer.MAX_VALUE, Views.text("b")));
+        View<?> evenColumn = Views.column(
+                Views.grow(Integer.MAX_VALUE, Views.text("a")), Views.grow(Integer.MAX_VALUE, Views.text("b")));
         Screen even = paint(evenColumn, 10, 3);
         assertThat(even.plainLine(0)).isEqualTo("a");
         assertThat(even.plainLine(5)).isEqualTo("b");
 
-        View<?> wrappedColumn = Views.column(Views.grow(1_000_000_000, Views.text("a")),
-                Views.grow(1, Views.text("b")));
+        View<?> wrappedColumn =
+                Views.column(Views.grow(1_000_000_000, Views.text("a")), Views.grow(1, Views.text("b")));
         Screen lopsided = paint(wrappedColumn, 10, 3);
         assertThat(lopsided.plainLine(0)).isEqualTo("a");
         assertThat(lopsided.plainLines()).doesNotContain("b");
@@ -167,8 +167,7 @@ class LayoutEngineTest {
         // The measurement and the paint rectangle have to agree on the width: at 12 columns the
         // row reserves five rows for the wrapped value, then painted at seven it needed one, so
         // four reserved rows were left blank and the words after "Score: " disappeared.
-        View<?> status = Views.row(Views.text("Score: "),
-                Views.grow(Views.text("aaaa bbbb cccc dddd eeee")));
+        View<?> status = Views.row(Views.text("Score: "), Views.grow(Views.text("aaaa bbbb cccc dddd eeee")));
         assertThat(engine.intrinsicHeight(status, 12)).isEqualTo(5);
         Screen screen = paint(Views.column(Alignment.CENTER, List.of(status)), 5, 12);
         String painted = String.join("", screen.plainLines());
@@ -182,7 +181,8 @@ class LayoutEngineTest {
         // A row of nothing but flex measures zero intrinsic width, which left an aligned column
         // with an empty rectangle: the rows were reserved and paint() drew nothing at all.
         View<?> growOnly = Views.row(Views.grow(Views.text("mid")));
-        assertThat(paint(Views.column(Alignment.CENTER, List.of(growOnly)), 1, 10).plainLine(0))
+        assertThat(paint(Views.column(Alignment.CENTER, List.of(growOnly)), 1, 10)
+                        .plainLine(0))
                 .isEqualTo("   mid");
         assertThat(paint(Views.column(Alignment.END, List.of(growOnly)), 1, 10).plainLine(0))
                 .isEqualTo("       mid");
@@ -192,8 +192,7 @@ class LayoutEngineTest {
     void aCentredFrameAroundAGrowChildKeepsItsContentWidth() {
         // The frame paints the rectangle it is given, so a flex-blind cross-axis width collapsed
         // it to its two corners with the value it frames lost between them.
-        View<?> framed = Views.border(Border.SINGLE,
-                Views.row(Views.grow(Views.text("content"))));
+        View<?> framed = Views.border(Border.SINGLE, Views.row(Views.grow(Views.text("content"))));
         Screen screen = paint(Views.column(Alignment.CENTER, List.of(framed)), 3, 14);
         assertThat(screen.plainLine(0)).isEqualTo("  \u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510");
         assertThat(screen.plainLine(1)).isEqualTo("  \u2502content\u2502");
@@ -204,10 +203,10 @@ class LayoutEngineTest {
     void aCentredOverlayKeepsAFlexLayerContentWidth() {
         // An overlay layer is measured on the cross axis like a column child, so a flex row layer
         // contributes the text it holds and not the zero its wrapper measures.
-        View<?> overlay = Views.overlay(
-                List.of(Views.text("base"), Views.row(Views.grow(Views.text("layer")))), false);
+        View<?> overlay = Views.overlay(List.of(Views.text("base"), Views.row(Views.grow(Views.text("layer")))), false);
         assertThat(engine.intrinsicWidth(overlay, 12)).isEqualTo(5);
-        assertThat(paint(Views.column(Alignment.CENTER, List.of(overlay)), 1, 12).plainLine(0))
+        assertThat(paint(Views.column(Alignment.CENTER, List.of(overlay)), 1, 12)
+                        .plainLine(0))
                 .isEqualTo("   layer");
     }
 
@@ -215,8 +214,7 @@ class LayoutEngineTest {
     void aColumnChildOfARowKeepsAGrowChildsContentWidth() {
         // The same cross-axis rule decides the columns a row hands a nested column: measured as
         // zero, the column was given no rectangle and its flex content was never painted.
-        View<?> nested = Views.column(Alignment.CENTER,
-                List.of(Views.row(Views.grow(Views.text("inner")))));
+        View<?> nested = Views.column(Alignment.CENTER, List.of(Views.row(Views.grow(Views.text("inner")))));
         assertThat(engine.intrinsicWidth(nested, 12)).isEqualTo(5);
         assertThat(paint(nested, 1, 12).plainLine(0)).isEqualTo("   inner");
         assertThat(paint(Views.row(nested, Views.text("|end")), 1, 12).plainLine(0))
@@ -225,8 +223,7 @@ class LayoutEngineTest {
 
     @Test
     void aColumnMeasuresTheHeightOfARowHoldingAGrowChild() {
-        View<?> view = Views.column(Views.row(Views.grow(Views.text("mid"))),
-                Views.text("last"));
+        View<?> view = Views.column(Views.row(Views.grow(Views.text("mid"))), Views.text("last"));
         Screen screen = paint(view, 2, 10);
         assertThat(screen.plainLine(0)).isEqualTo("mid");
         assertThat(screen.plainLine(1)).isEqualTo("last");
@@ -245,8 +242,8 @@ class LayoutEngineTest {
         // text, where the mark and the letter before it are one cluster. Painting each span on its
         // own gave the bare mark a dotted circle, so the painted row was a column wider than the
         // width every measurement - and therefore every frame - computed from the same value.
-        StyledText split = StyledText.concat(StyledText.of("e", Style.NONE),
-                StyledText.of("\u0301", Style.NONE.withBold()));
+        StyledText split =
+                StyledText.concat(StyledText.of("e", Style.NONE), StyledText.of("\u0301", Style.NONE.withBold()));
         assertThat(split.plainText()).isEqualTo("e\u0301");
         assertThat(split.columns()).isEqualTo(1);
         assertThat(engine.intrinsicWidth(Views.text(split), 4)).isEqualTo(1);
@@ -260,8 +257,8 @@ class LayoutEngineTest {
     void aClusterContinuingTheLastCellDoesNotWrapAtTheLineEdge() {
         // The mark continues the "b" cell, so it costs no column and stays on the row the
         // measurement counted: moving it to a second line reserved a row that was never measured.
-        StyledText split = StyledText.concat(StyledText.of("ab", Style.NONE),
-                StyledText.of("\u0301", Style.NONE.withBold()));
+        StyledText split =
+                StyledText.concat(StyledText.of("ab", Style.NONE), StyledText.of("\u0301", Style.NONE.withBold()));
         assertThat(engine.wrapLines(split, 2)).hasSize(1);
         assertThat(engine.intrinsicHeight(Views.text(split), 2)).isEqualTo(1);
         Screen screen = paint(Views.text(split), 1, 2);
@@ -272,8 +269,7 @@ class LayoutEngineTest {
     void aVariationSelectorInItsOwnSpanStillTakesTheColumnsItMeasures() {
         // A selector selects the wide form of the character before it, so the joined cluster is two
         // columns even though the selector's own span starts without a base.
-        StyledText wide = StyledText.of("e", Style.NONE)
-                .append(StyledText.of("\uFE0F", Style.NONE.withBold()));
+        StyledText wide = StyledText.of("e", Style.NONE).append(StyledText.of("\uFE0F", Style.NONE.withBold()));
         assertThat(wide.columns()).isEqualTo(2);
         Screen screen = paint(Views.text(wide), 1, 2);
         assertThat(screen.cell(0, 0).text()).isEqualTo("e\uFE0F");
@@ -286,8 +282,8 @@ class LayoutEngineTest {
         // The selector widens the base it follows to two columns, so the pair cannot share the last
         // column of the row. It has to start the next row as one cluster: dropping the selector when
         // the widened cell no longer fitted painted different content for the same plain text.
-        StyledText split = StyledText.concat(StyledText.of("ab", Style.NONE),
-                StyledText.of("\uFE0F", Style.NONE.withBold()));
+        StyledText split =
+                StyledText.concat(StyledText.of("ab", Style.NONE), StyledText.of("\uFE0F", Style.NONE.withBold()));
         StyledText plain = StyledText.plain(split.plainText());
         assertThat(split.columns()).isEqualTo(3);
         assertThat(engine.wrapLines(split, 2)).hasSize(2);
@@ -307,7 +303,8 @@ class LayoutEngineTest {
         // the width of the base inside its own span and gave up on the rest of the row: the row
         // measured to hold the glyph was painted without it, and a frame one column wider showed
         // it. The cell's columns are only final once every cluster that continues it has joined.
-        StyledText split = StyledText.concat(StyledText.of("abc", Style.NONE),
+        StyledText split = StyledText.concat(
+                StyledText.of("abc", Style.NONE),
                 StyledText.of("\u4E2D", Style.NONE.withBold()),
                 StyledText.of("\uFE0E", Style.NONE));
         StyledText plain = StyledText.plain(split.plainText());
@@ -318,8 +315,7 @@ class LayoutEngineTest {
         Screen screen = paint(Views.text(split), 1, 4);
         assertThat(screen.cell(0, 3).text()).isEqualTo("\u4E2D\uFE0E");
         assertThat(screen.plainLine(0)).isEqualTo("abc\u4E2D\uFE0E");
-        assertThat(paintedCells(screen))
-                .isEqualTo(paintedCells(paint(Views.text(plain), 1, 4)));
+        assertThat(paintedCells(screen)).isEqualTo(paintedCells(paint(Views.text(plain), 1, 4)));
     }
 
     @Test
@@ -328,7 +324,8 @@ class LayoutEngineTest {
         // this value and the row after it holds the tail. Every width from one to the value's own
         // columns has to paint the cells wrapLines charged for it, so the same plain text paints
         // the same cells whatever spans it arrived in.
-        StyledText split = StyledText.concat(StyledText.of("abc", Style.NONE),
+        StyledText split = StyledText.concat(
+                StyledText.of("abc", Style.NONE),
                 StyledText.of("\u4E2D", Style.NONE.withBold()),
                 StyledText.of("\uFE0E", Style.NONE),
                 StyledText.of("xy", Style.NONE.withBold()));
@@ -350,7 +347,8 @@ class LayoutEngineTest {
         // The canonical use of U+FE0E: an emoji that terminals draw two columns wide is asked for
         // its text form, which is one. The selector arrives in the run after the emoji, so the
         // cell that fits the last column of this row is only known once the selector joins it.
-        StyledText split = StyledText.concat(StyledText.of("ab", Style.NONE),
+        StyledText split = StyledText.concat(
+                StyledText.of("ab", Style.NONE),
                 StyledText.of("\uD83D\uDE42", Style.NONE.withBold()),
                 StyledText.of("\uFE0E", Style.NONE));
         StyledText plain = StyledText.plain(split.plainText());
@@ -359,8 +357,7 @@ class LayoutEngineTest {
         Screen screen = paint(Views.text(split), 1, 3);
         assertThat(screen.cell(0, 2).text()).isEqualTo("\uD83D\uDE42\uFE0E");
         assertThat(screen.plainLine(0)).isEqualTo("ab\uD83D\uDE42\uFE0E");
-        assertThat(paintedCells(screen))
-                .isEqualTo(paintedCells(paint(Views.text(plain), 1, 3)));
+        assertThat(paintedCells(screen)).isEqualTo(paintedCells(paint(Views.text(plain), 1, 3)));
     }
 
     @Test
@@ -369,8 +366,8 @@ class LayoutEngineTest {
         // so the mark that follows is a cluster of its own and its column is counted. Joining it
         // into the cell before the control folded that column into the base and moved every cell
         // after it - the right edge of a row included - one column to the left.
-        StyledText split = StyledText.concat(StyledText.of("\u65E5", Style.NONE),
-                StyledText.of("\u200B\u0301", Style.NONE.withBold()));
+        StyledText split = StyledText.concat(
+                StyledText.of("\u65E5", Style.NONE), StyledText.of("\u200B\u0301", Style.NONE.withBold()));
         StyledText plain = StyledText.plain(split.plainText());
         assertThat(TextMeasure.columns(split.plainText())).isEqualTo(3);
         assertThat(engine.intrinsicWidth(Views.text(split), 8)).isEqualTo(3);
@@ -387,16 +384,16 @@ class LayoutEngineTest {
         // The tab expands to the next four-column stop and ends the cluster there, so the mark
         // after it is a cluster of its own: five columns, whether it arrives in the tab's span or in
         // a span of its own.
-        StyledText split = StyledText.concat(StyledText.of("\t", Style.NONE),
-                StyledText.of("\u0301", Style.NONE.withBold()));
+        StyledText split =
+                StyledText.concat(StyledText.of("\t", Style.NONE), StyledText.of("\u0301", Style.NONE.withBold()));
         assertThat(engine.intrinsicWidth(Views.text(split), 8)).isEqualTo(5);
         assertThat(engine.intrinsicHeight(Views.text(split), 8)).isEqualTo(1);
         Screen screen = paint(Views.text(split), 1, 8);
         assertThat(screen.cell(0, 3).text()).isEqualTo(" ");
         assertThat(screen.cell(0, 4).text()).isEqualTo(TextMeasure.DOTTED_CIRCLE + "\u0301");
         assertThat(screen.cell(0, 5).text()).isEmpty();
-        assertThat(paintedCells(screen)).isEqualTo(paintedCells(
-                paint(Views.text(StyledText.plain(split.plainText())), 1, 8)));
+        assertThat(paintedCells(screen))
+                .isEqualTo(paintedCells(paint(Views.text(StyledText.plain(split.plainText())), 1, 8)));
     }
 
     @Test
@@ -424,8 +421,8 @@ class LayoutEngineTest {
         assertThat(screen.cell(1, 0).text()).isEqualTo("x");
         // A value that spells the same stop with spaces is the reference: the tab has to keep the
         // same cells, including the character that follows the widened one.
-        assertThat(paintedCells(screen)).isEqualTo(paintedCells(
-                paint(Views.text(StyledText.plain("a   \uFE0Fx")), rows, 5)));
+        assertThat(paintedCells(screen))
+                .isEqualTo(paintedCells(paint(Views.text(StyledText.plain("a   \uFE0Fx")), rows, 5)));
     }
 
     @Test
@@ -436,7 +433,8 @@ class LayoutEngineTest {
         // measured a column wider than the width it wrapped to, the value measured a row fewer than
         // it painted, and paint dropped the row's tail - the "D" here - although a wider frame
         // showed it. The whole run that continues the cell is reserved with the stop now.
-        StyledText split = StyledText.concat(StyledText.of("ab\t", Style.NONE),
+        StyledText split = StyledText.concat(
+                StyledText.of("ab\t", Style.NONE),
                 StyledText.of("\u200D", Style.NONE.withBold()),
                 StyledText.of("\uFE0FCD", Style.NONE));
         StyledText plain = StyledText.plain(split.plainText());
@@ -455,19 +453,19 @@ class LayoutEngineTest {
         int rows = engine.intrinsicHeight(Views.text(split), 6);
         assertThat(rows).isEqualTo(2);
         Screen screen = paint(Views.text(split), rows, 6);
-        assertThat(paintedCells(screen))
-                .isEqualTo(paintedCells(paint(Views.text(plain), rows, 6)));
+        assertThat(paintedCells(screen)).isEqualTo(paintedCells(paint(Views.text(plain), rows, 6)));
         assertThat(screen.cell(1, 0).text()).isEqualTo("D");
         // A frame is measured from the rows its content wraps to, so the row it paints keeps every
         // character the frame is tall enough for.
         View<?> framed = Views.border(Border.SINGLE, Views.text(split));
         int framedRows = engine.intrinsicHeight(framed, 8);
         assertThat(framedRows).isEqualTo(4);
-        assertThat(paint(framed, framedRows, 8).plainLines()).containsExactly(
-                "\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
-                "\u2502ab  \u200D\uFE0FC\u2502",
-                "\u2502D     \u2502",
-                "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2518");
+        assertThat(paint(framed, framedRows, 8).plainLines())
+                .containsExactly(
+                        "\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
+                        "\u2502ab  \u200D\uFE0FC\u2502",
+                        "\u2502D     \u2502",
+                        "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2518");
     }
 
     @Test
@@ -499,8 +497,7 @@ class LayoutEngineTest {
         // boundary between them committed the selector outside the cell and measured the cell without
         // it, so the same plain text painted one column where every measurement of it says two, the
         // dotted circle moved behind the selector, and every cell after it landed one column left.
-        StyledText split = StyledText.of("\uFE0F", Style.NONE.withBold())
-                .append(StyledText.of("\u0301a", Style.NONE));
+        StyledText split = StyledText.of("\uFE0F", Style.NONE.withBold()).append(StyledText.of("\u0301a", Style.NONE));
         StyledText plain = StyledText.plain(split.plainText());
         assertThat(TextMeasure.columns(split.plainText())).isEqualTo(3);
         assertThat(split.columns()).isEqualTo(3);
@@ -529,16 +526,14 @@ class LayoutEngineTest {
         // A joiner is invisible and adds no column, but the plain text keeps it inside the cluster
         // just the same, so the dotted circle stays in front of the cluster rather than sliding
         // between its two halves.
-        StyledText joined = StyledText.of("\u200D", Style.NONE.withBold())
-                .append(StyledText.of("\u0301", Style.NONE));
+        StyledText joined = StyledText.of("\u200D", Style.NONE.withBold()).append(StyledText.of("\u0301", Style.NONE));
         assertThat(paint(Views.text(joined), 1, 3).cell(0, 0).text())
                 .isEqualTo(TextMeasure.DOTTED_CIRCLE + "\u200D\u0301");
         // The cell is one cluster, so it carries the link of the span the cluster - and therefore
         // the dotted circle written in front of it - starts in.
-        StyledText linked = StyledText.of("\uFE0F", Style.NONE, "https://example.com")
-                .append(StyledText.of("\u0301", Style.NONE));
-        assertThat(paint(Views.text(linked), 1, 3).cell(0, 0).link())
-                .isEqualTo("https://example.com");
+        StyledText linked =
+                StyledText.of("\uFE0F", Style.NONE, "https://example.com").append(StyledText.of("\u0301", Style.NONE));
+        assertThat(paint(Views.text(linked), 1, 3).cell(0, 0).link()).isEqualTo("https://example.com");
     }
 
     @Test
@@ -549,8 +544,7 @@ class LayoutEngineTest {
         View<?> framed = Views.border(Border.SINGLE, Views.text("name\t\uFE0Fvalue"));
         assertThat(engine.intrinsicWidth(framed, 16)).isEqualTo(16);
         assertThat(engine.intrinsicHeight(framed, 16)).isEqualTo(3);
-        assertThat(paint(framed, 3, 16).plainLine(1))
-                .isEqualTo("\u2502name    \uFE0Fvalue\u2502");
+        assertThat(paint(framed, 3, 16).plainLine(1)).isEqualTo("\u2502name    \uFE0Fvalue\u2502");
     }
 
     @Test
@@ -588,12 +582,13 @@ class LayoutEngineTest {
         View<?> framed = Views.border(Border.SINGLE, Views.text("settings: \t /etc/app.conf"));
         int rows = engine.intrinsicHeight(framed, 11);
         assertThat(rows).isEqualTo(5);
-        assertThat(paint(framed, rows, 11).plainLines()).containsExactly(
-                "\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
-                "\u2502settings:\u2502",
-                "\u2502     /etc\u2502",
-                "\u2502/app.conf\u2502",
-                "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518");
+        assertThat(paint(framed, rows, 11).plainLines())
+                .containsExactly(
+                        "\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
+                        "\u2502settings:\u2502",
+                        "\u2502     /etc\u2502",
+                        "\u2502/app.conf\u2502",
+                        "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518");
     }
 
     @Test
@@ -601,13 +596,12 @@ class LayoutEngineTest {
         // The plain text keeps a zero-width space in front of the mark it precedes, so the row it
         // is painted on has to keep it too: a span boundary that separated them dropped it, and the
         // same value painted different content depending on how it was styled.
-        StyledText split = StyledText.concat(StyledText.of("ab\n", Style.NONE),
-                StyledText.of("\u200B\u0301", Style.NONE.withBold()));
+        StyledText split = StyledText.concat(
+                StyledText.of("ab\n", Style.NONE), StyledText.of("\u200B\u0301", Style.NONE.withBold()));
         Screen screen = paint(Views.text(split), 2, 3);
-        assertThat(screen.plainLine(1))
-                .isEqualTo("\u200B" + TextMeasure.DOTTED_CIRCLE + "\u0301");
-        assertThat(paintedCells(screen)).isEqualTo(paintedCells(
-                paint(Views.text(StyledText.plain(split.plainText())), 2, 3)));
+        assertThat(screen.plainLine(1)).isEqualTo("\u200B" + TextMeasure.DOTTED_CIRCLE + "\u0301");
+        assertThat(paintedCells(screen))
+                .isEqualTo(paintedCells(paint(Views.text(StyledText.plain(split.plainText())), 2, 3)));
     }
 
     @Test
@@ -621,37 +615,38 @@ class LayoutEngineTest {
                 StyledText.of("ab", Style.NONE).append(StyledText.of("\u0301", bold)),
                 StyledText.concat(StyledText.of("ab", Style.NONE), StyledText.of("\uFE0F", bold)),
                 StyledText.concat(StyledText.of("a ", Style.NONE), StyledText.of("\u0301", bold)),
-                StyledText.concat(StyledText.of("a", Style.NONE),
-                        StyledText.of("\u200B\u0301", bold)),
-                StyledText.concat(StyledText.of("\u65E5", Style.NONE),
-                        StyledText.of("\u200B\u0301", bold)),
-                StyledText.concat(StyledText.of("\uD83D\uDE00", Style.NONE),
-                        StyledText.of("\u00AD\u0301", bold)),
-                StyledText.concat(StyledText.of("abc", Style.NONE),
-                        StyledText.of("\u4E2D", bold), StyledText.of("\uFE0E", Style.NONE)),
-                StyledText.concat(StyledText.of("ab", Style.NONE),
+                StyledText.concat(StyledText.of("a", Style.NONE), StyledText.of("\u200B\u0301", bold)),
+                StyledText.concat(StyledText.of("\u65E5", Style.NONE), StyledText.of("\u200B\u0301", bold)),
+                StyledText.concat(StyledText.of("\uD83D\uDE00", Style.NONE), StyledText.of("\u00AD\u0301", bold)),
+                StyledText.concat(
+                        StyledText.of("abc", Style.NONE),
+                        StyledText.of("\u4E2D", bold),
+                        StyledText.of("\uFE0E", Style.NONE)),
+                StyledText.concat(
+                        StyledText.of("ab", Style.NONE),
                         StyledText.of("\uD83D\uDE42", bold),
                         StyledText.of("\uFE0E", Style.NONE)),
                 StyledText.concat(StyledText.of("\t", Style.NONE), StyledText.of("\u0301", bold)),
-                StyledText.concat(StyledText.of("a\t", Style.NONE),
-                        StyledText.of("\uFE0Fx", bold)),
-                StyledText.concat(StyledText.of("ab\t", Style.NONE),
-                        StyledText.of("\u200D", bold), StyledText.of("\uFE0FCD", Style.NONE)),
+                StyledText.concat(StyledText.of("a\t", Style.NONE), StyledText.of("\uFE0Fx", bold)),
+                StyledText.concat(
+                        StyledText.of("ab\t", Style.NONE),
+                        StyledText.of("\u200D", bold),
+                        StyledText.of("\uFE0FCD", Style.NONE)),
                 StyledText.concat(StyledText.of("\u0301", Style.NONE), StyledText.of("x", bold)),
-                StyledText.concat(StyledText.of("ab\n", Style.NONE),
-                        StyledText.of("\u0301x", bold)),
-                StyledText.concat(StyledText.of("\u200B", Style.NONE),
-                        StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("ab\n", Style.NONE), StyledText.of("\u0301x", bold)),
+                StyledText.concat(StyledText.of("\u200B", Style.NONE), StyledText.of("\u0301", bold)),
                 // A boundary between a format character and the base-less cluster the plain text
                 // keeps it in front of: the cluster is measured with the character, not without it.
-                StyledText.concat(StyledText.of("\uFE0F", bold),
-                        StyledText.of("\u0301", Style.NONE)),
-                StyledText.concat(StyledText.of("\u200D", Style.NONE),
-                        StyledText.of("\u0301", bold)),
-                StyledText.concat(StyledText.of("ab\n", Style.NONE),
-                        StyledText.of("\uFE0F", bold), StyledText.of("\u0301x", Style.NONE)),
-                StyledText.concat(StyledText.of("a\u200B", Style.NONE),
-                        StyledText.of("\uFE0F", bold), StyledText.of("\u0301y", Style.NONE)));
+                StyledText.concat(StyledText.of("\uFE0F", bold), StyledText.of("\u0301", Style.NONE)),
+                StyledText.concat(StyledText.of("\u200D", Style.NONE), StyledText.of("\u0301", bold)),
+                StyledText.concat(
+                        StyledText.of("ab\n", Style.NONE),
+                        StyledText.of("\uFE0F", bold),
+                        StyledText.of("\u0301x", Style.NONE)),
+                StyledText.concat(
+                        StyledText.of("a\u200B", Style.NONE),
+                        StyledText.of("\uFE0F", bold),
+                        StyledText.of("\u0301y", Style.NONE)));
         for (StyledText value : values) {
             StyledText plain = StyledText.plain(value.plainText());
             for (int cols = 1; cols <= 8; cols++) {
@@ -683,18 +678,14 @@ class LayoutEngineTest {
                 // "a  \u0301" is the clusters "a", " ", " \u0301": the break drops the first space,
                 // and the second one is the base of the cluster the accent continues.
                 StyledText.concat(StyledText.of("a  ", Style.NONE), StyledText.of("\u0301", bold)),
-                StyledText.concat(StyledText.of("a\u65E5 ", Style.NONE),
-                        StyledText.of("\u0301", bold)),
-                StyledText.concat(StyledText.of("\u65E5  ", Style.NONE),
-                        StyledText.of("\uFE0F", bold)),
+                StyledText.concat(StyledText.of("a\u65E5 ", Style.NONE), StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("\u65E5  ", Style.NONE), StyledText.of("\uFE0F", bold)),
                 StyledText.concat(StyledText.of("a  ", Style.NONE), StyledText.of("\u200D", bold)),
                 // A tab stop's last space is the one cell not placed by the loop that reads the
                 // clusters continuing it, so a zero-width head split from the tail that gives the
                 // cluster its columns was absorbed into the stop instead of travelling with it.
-                StyledText.concat(StyledText.of("\t\uFE0F", Style.NONE),
-                        StyledText.of("\u0301", bold)),
-                StyledText.concat(StyledText.of("ab\t\u200D", Style.NONE),
-                        StyledText.of("\u0301", bold)));
+                StyledText.concat(StyledText.of("\t\uFE0F", Style.NONE), StyledText.of("\u0301", bold)),
+                StyledText.concat(StyledText.of("ab\t\u200D", Style.NONE), StyledText.of("\u0301", bold)));
         for (StyledText value : values) {
             StyledText plain = StyledText.plain(value.plainText());
             for (int cols = 1; cols <= 8; cols++) {
@@ -721,8 +712,8 @@ class LayoutEngineTest {
     void aBaselessClusterAtTheStartOfARowStillGetsItsDottedCircle() {
         // With no cell before it there is nothing for a bare mark to join, so the dotted circle
         // stands in for its missing base exactly once, as the measurement of a mark counts it.
-        StyledText leading = StyledText.concat(StyledText.of("ab\n", Style.NONE),
-                StyledText.of("\u0301x", Style.NONE.withBold()));
+        StyledText leading =
+                StyledText.concat(StyledText.of("ab\n", Style.NONE), StyledText.of("\u0301x", Style.NONE.withBold()));
         assertThat(engine.intrinsicHeight(Views.text(leading), 3)).isEqualTo(2);
         Screen screen = paint(Views.text(leading), 2, 3);
         assertThat(screen.plainLine(0)).isEqualTo("ab");
@@ -751,9 +742,7 @@ class LayoutEngineTest {
 
     @Test
     void overlaysPaintBackToFront() {
-        View<?> view = Views.overlay(
-                Views.text("under"),
-                Views.text("OVER"));
+        View<?> view = Views.overlay(Views.text("under"), Views.text("OVER"));
         Screen screen = paint(view, 1, 6);
         assertThat(screen.plainLine(0)).isEqualTo("OVERr");
     }
@@ -797,8 +786,7 @@ class LayoutEngineTest {
 
     @Test
     void paddingAndBordersInsetTheChild() {
-        View<?> view = Views.border(io.github.dhoard.braxton.layout.Border.SINGLE,
-                Views.padding(1, Views.text("x")));
+        View<?> view = Views.border(io.github.dhoard.braxton.layout.Border.SINGLE, Views.padding(1, Views.text("x")));
         Screen screen = paint(view, 5, 7);
         assertThat(screen.plainLine(0)).startsWith("\u250C");
         assertThat(screen.plainLine(2)).contains("x");
@@ -831,24 +819,17 @@ class LayoutEngineTest {
         // Content taller than an int can describe still has a height, and the only representable
         // answer is the saturating ceiling; a negative measurement would place content above the
         // viewport and contradict the documented "never by negative arithmetic" degradation.
-        View<?> overflowingInsets = Views.padding(new Insets(Integer.MAX_VALUE, 0, 0, 0),
-                Views.text("a"));
+        View<?> overflowingInsets = Views.padding(new Insets(Integer.MAX_VALUE, 0, 0, 0), Views.text("a"));
         List<View<?>> views = List.of(
                 // Two reservations that fit apart but not together.
-                Views.column(
-                        Views.fixed(2_000_000_000, Views.text("a")),
-                        Views.fixed(2_000_000_000, Views.text("b"))),
+                Views.column(Views.fixed(2_000_000_000, Views.text("a")), Views.fixed(2_000_000_000, Views.text("b"))),
                 // Insets and border edges added on top of a reservation.
-                Views.padding(new Insets(500_000_000, 0, 500_000_000, 0),
-                        Views.fixed(2_000_000_000, Views.text("a"))),
+                Views.padding(new Insets(500_000_000, 0, 500_000_000, 0), Views.fixed(2_000_000_000, Views.text("a"))),
                 Views.border(Border.SINGLE, Views.fixed(Integer.MAX_VALUE, Views.text("a"))),
                 // Insets that cannot even fit in the rows the previous sibling left.
-                Views.column(
-                        Views.fixed(2_000_000_000, Views.text("a")),
-                        overflowingInsets),
-                Views.border(Border.SINGLE, Views.column(
-                        Views.fixed(2_000_000_000, Views.text("a")),
-                        overflowingInsets)));
+                Views.column(Views.fixed(2_000_000_000, Views.text("a")), overflowingInsets),
+                Views.border(
+                        Border.SINGLE, Views.column(Views.fixed(2_000_000_000, Views.text("a")), overflowingInsets)));
         for (View<?> view : views) {
             assertThat(engine.intrinsicHeight(view, 10)).isEqualTo(Integer.MAX_VALUE);
         }
@@ -879,19 +860,19 @@ class LayoutEngineTest {
 
     @Test
     void aNarrowOverlayOnABackgroundWideGlyphKeepsTheClearedColumn() {
-        View<?> view = Views.overlay(List.of(
-                Views.fill(Style.bg(Colors.BLACK)),
-                Views.text("\u65E5"),
-                Views.padding(new Insets(0, 0, 0, 1), Views.text("x"))), false);
+        View<?> view = Views.overlay(
+                List.of(
+                        Views.fill(Style.bg(Colors.BLACK)),
+                        Views.text("\u65E5"),
+                        Views.padding(new Insets(0, 0, 0, 1), Views.text("x"))),
+                false);
         Screen screen = paint(view, 1, 4);
         assertThat(screen.plainLine(0)).isEqualTo(" x");
     }
 
     @Test
     void anOverlayLayerThatGrowsKeepsItsContentSize() {
-        View<?> view = Views.column(
-                Views.overlay(List.of(Views.grow(Views.text("mid"))), false),
-                Views.text("last"));
+        View<?> view = Views.column(Views.overlay(List.of(Views.grow(Views.text("mid"))), false), Views.text("last"));
         Screen screen = paint(view, 2, 10);
         assertThat(screen.plainLine(0)).isEqualTo("mid");
         assertThat(screen.plainLine(1)).isEqualTo("last");
@@ -899,12 +880,16 @@ class LayoutEngineTest {
 
     @Test
     void nestedFlexOverlaysStayDeterministicAndInsideTheViewport() {
-        View<?> view = Views.column(Views.grow(Views.row(Views.padding(
-                Insets.symmetric(0, 1),
-                Views.text("a\tb\n\u4f60\u597d")),
-                Views.fill(Style.bg(Colors.BLUE_400)))), Views.fixed(1, Views.border(
-                        Border.ROUNDED, StyledText.plain("t"), Views.overlay(List.of(
-                                Views.text("base"), Views.text("\uD83D\uDC4D")), false))));
+        View<?> view = Views.column(
+                Views.grow(Views.row(
+                        Views.padding(Insets.symmetric(0, 1), Views.text("a\tb\n\u4f60\u597d")),
+                        Views.fill(Style.bg(Colors.BLUE_400)))),
+                Views.fixed(
+                        1,
+                        Views.border(
+                                Border.ROUNDED,
+                                StyledText.plain("t"),
+                                Views.overlay(List.of(Views.text("base"), Views.text("\uD83D\uDC4D")), false))));
         for (int rows : new int[] {0, 1, 5, 12}) {
             for (int cols : new int[] {0, 1, 7, 20}) {
                 Rect bounds = new Rect(0, 0, rows, cols);
@@ -922,8 +907,7 @@ class LayoutEngineTest {
 
     @Test
     void anEndAlignedColumnItemKeepsItsContentWidth() {
-        View<?> view = Views.column(Alignment.END,
-                List.of(Views.fixed(3, Views.text("tall")), Views.text("s")));
+        View<?> view = Views.column(Alignment.END, List.of(Views.fixed(3, Views.text("tall")), Views.text("s")));
         Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, 4, 6)).screen();
         assertThat(screen.plainLine(0)).isEqualTo("  tall");
         assertThat(screen.plainLine(1)).isEmpty();
@@ -948,8 +932,8 @@ class LayoutEngineTest {
             assertThat(screen.plainLine(2)).as("row 2 of %s", child).isEmpty();
         }
         // The focus region is the rectangle the child painted, not the cell Fixed reserves.
-        LayoutEngine.Layout layout = engine.layout(
-                Views.column(Alignment.END, List.of(focused, Views.text("s"))), new Rect(0, 0, 4, 6));
+        LayoutEngine.Layout layout =
+                engine.layout(Views.column(Alignment.END, List.of(focused, Views.text("s"))), new Rect(0, 0, 4, 6));
         assertThat(layout.regions()).hasSize(1);
         assertThat(layout.regions().get(0).bounds()).isEqualTo(new Rect(0, 2, 1, 4));
     }
@@ -960,15 +944,14 @@ class LayoutEngineTest {
         // children paint, so a routing wrapper over a Fixed child cannot add a blank row beneath it.
         View<Object> direct = Views.row(Views.fixed(3, Views.text("tall")), Views.text("X"));
         View<Object> focused = Views.row(
-                Views.focus(ElementId.of("field"), true, Views.fixed(3, Views.text("tall"))),
-                Views.text("X"));
-        View<Object> keyed = Views.row(
-                Views.keyed(List.of(), Views.fixed(3, Views.text("tall")), List.of()),
-                Views.text("X"));
+                Views.focus(ElementId.of("field"), true, Views.fixed(3, Views.text("tall"))), Views.text("X"));
+        View<Object> keyed =
+                Views.row(Views.keyed(List.of(), Views.fixed(3, Views.text("tall")), List.of()), Views.text("X"));
         for (View<Object> row : List.of(direct, focused, keyed)) {
             assertThat(engine.intrinsicHeight(row, 12)).as("height of %s", row).isEqualTo(2);
             View<Object> view = Views.column(row, Views.text("z"));
-            assertThat(engine.intrinsicHeight(view, 12)).as("height of %s in a column", row)
+            assertThat(engine.intrinsicHeight(view, 12))
+                    .as("height of %s in a column", row)
                     .isEqualTo(3);
             Screen screen = paint(view, 4, 12);
             assertThat(screen.plainLine(0)).as("row 0 of %s", row).isEqualTo("talX");
@@ -979,8 +962,7 @@ class LayoutEngineTest {
 
     @Test
     void rightAlignedTextEndingInAZeroWidthCharacterSitsFlush() {
-        View<?> view = Views.column(Alignment.END,
-                List.of(Views.text("ab\u200B"), Views.text("cd")));
+        View<?> view = Views.column(Alignment.END, List.of(Views.text("ab\u200B"), Views.text("cd")));
         Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, 2, 4)).screen();
         assertThat(screen.plainLine(0).replace("\u200B", "")).isEqualTo("  ab");
         assertThat(screen.plainLine(1)).isEqualTo("  cd");
@@ -998,14 +980,12 @@ class LayoutEngineTest {
     void aCentredChildIsPaintedAtItsMeasuredWidth() {
         // A child that fills its rectangle (a frame, say) must be placed at the measured centroid
         // with its own width; giving it the rest of the row makes "centred" run to the right edge.
-        View<?> centred = Views.column(Alignment.CENTER,
-                List.of(Views.border(Border.SINGLE, Views.text("x"))));
+        View<?> centred = Views.column(Alignment.CENTER, List.of(Views.border(Border.SINGLE, Views.text("x"))));
         Screen screen = paint(centred, 3, 10);
         assertThat(screen.plainLine(0)).isEqualTo("   \u250C\u2500\u2510");
         assertThat(screen.plainLine(1)).isEqualTo("   \u2502x\u2502");
         assertThat(screen.plainLine(2)).isEqualTo("   \u2514\u2500\u2518");
-        View<?> ended = Views.column(Alignment.END,
-                List.of(Views.border(Border.SINGLE, Views.text("x"))));
+        View<?> ended = Views.column(Alignment.END, List.of(Views.border(Border.SINGLE, Views.text("x"))));
         Screen endScreen = paint(ended, 3, 10);
         assertThat(endScreen.plainLine(0)).isEqualTo("       \u250C\u2500\u2510");
         assertThat(endScreen.plainLine(1)).isEqualTo("       \u2502x\u2502");
@@ -1013,8 +993,7 @@ class LayoutEngineTest {
 
     @Test
     void aBorderedViewNeverReportsMoreColumnsThanTheAvailableWidth() {
-        View<?> bordered = Views.border(io.github.dhoard.braxton.layout.Border.SINGLE,
-                Views.fill(Style.NONE));
+        View<?> bordered = Views.border(io.github.dhoard.braxton.layout.Border.SINGLE, Views.fill(Style.NONE));
         assertThat(engine.intrinsicWidth(bordered, 1)).isLessThanOrEqualTo(1);
     }
 
@@ -1022,8 +1001,8 @@ class LayoutEngineTest {
     void intrinsicWidthIsCappedAtTheAvailableColumns() {
         View<?> padded = Views.padding(2, Views.fill(Style.NONE));
         assertThat(engine.intrinsicWidth(padded, 10)).isEqualTo(10);
-        View<?> bordered = Views.border(io.github.dhoard.braxton.layout.Border.SINGLE,
-                Views.padding(1, Views.fill(Style.NONE)));
+        View<?> bordered =
+                Views.border(io.github.dhoard.braxton.layout.Border.SINGLE, Views.padding(1, Views.fill(Style.NONE)));
         assertThat(engine.intrinsicWidth(bordered, 10)).isEqualTo(10);
     }
 
@@ -1087,10 +1066,8 @@ class LayoutEngineTest {
             case 1 -> Views.blank();
             case 2 -> Views.column(Alignment.START, randomItems(random, depth));
             case 3 -> Views.row(Alignment.START, randomItems(random, depth));
-            case 4 -> Views.padding(Insets.uniform(random.nextInt(2)),
-                    Views.column(randomItems(random, depth)));
-            case 5 -> Views.padding(Insets.uniform(1), Views.row(Alignment.START,
-                    randomItems(random, depth)));
+            case 4 -> Views.padding(Insets.uniform(random.nextInt(2)), Views.column(randomItems(random, depth)));
+            case 5 -> Views.padding(Insets.uniform(1), Views.row(Alignment.START, randomItems(random, depth)));
             case 6 -> Views.overlay(randomItems(random, depth), false);
             default -> Views.column(Alignment.CENTER, randomItems(random, depth));
         };
@@ -1105,8 +1082,7 @@ class LayoutEngineTest {
     }
 
     private static StyledText randomText(java.util.Random random) {
-        String[] atoms = {"a", "bb", " ", "\t", "\n", "\u65E5", "\uD83D\uDE00", "e\u0301",
-                "-", "cc dd"};
+        String[] atoms = {"a", "bb", " ", "\t", "\n", "\u65E5", "\uD83D\uDE00", "e\u0301", "-", "cc dd"};
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < 1 + random.nextInt(4); i++) {
             text.append(atoms[random.nextInt(atoms.length)]);

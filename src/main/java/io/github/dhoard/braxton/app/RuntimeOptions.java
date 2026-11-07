@@ -24,7 +24,6 @@ package io.github.dhoard.braxton.app;
 
 import io.github.dhoard.braxton.clipboard.ClipboardConfig;
 import io.github.dhoard.braxton.input.InputOptions;
-
 import java.time.Duration;
 
 /**
@@ -67,8 +66,7 @@ public record RuntimeOptions(
         try {
             shutdownGrace.toNanos();
         } catch (ArithmeticException overflow) {
-            throw new IllegalArgumentException(
-                    "shutdown grace must fit in nanoseconds: " + shutdownGrace, overflow);
+            throw new IllegalArgumentException("shutdown grace must fit in nanoseconds: " + shutdownGrace, overflow);
         }
         if (mailboxCapacity < 1) {
             throw new IllegalArgumentException("mailbox capacity must be positive");

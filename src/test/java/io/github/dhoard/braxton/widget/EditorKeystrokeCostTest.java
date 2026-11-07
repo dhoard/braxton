@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.widget;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.testing.AllocationProbe;
-
 import org.junit.jupiter.api.Test;
 
 /**
@@ -38,9 +37,7 @@ class EditorKeystrokeCostTest {
     private static final int DRAFT_LENGTH = 4_096;
 
     private static final String DRAFT =
-            "the quick brown fox jumps over the lazy dog 0123456789 "
-                    .repeat(75)
-                    .substring(0, DRAFT_LENGTH);
+            "the quick brown fox jumps over the lazy dog 0123456789 ".repeat(75).substring(0, DRAFT_LENGTH);
 
     @Test
     void oneInsertAtTheEndOfALargeDraftDoesNotScanTheDraft() {

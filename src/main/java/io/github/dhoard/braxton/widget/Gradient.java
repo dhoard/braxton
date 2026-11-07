@@ -22,13 +22,12 @@
 
 package io.github.dhoard.braxton.widget;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Vertical colour gradient over styled text.
@@ -45,11 +44,10 @@ public final class Gradient {
         DIAGONAL
     }
 
-    private Gradient() {
-    }
+    private Gradient() {}
 
-    public static StyledText apply(StyledText text, List<io.github.dhoard.braxton.style.Color> colors,
-            Direction direction) {
+    public static StyledText apply(
+            StyledText text, List<io.github.dhoard.braxton.style.Color> colors, Direction direction) {
         String plain = text.plainText();
         List<String> clusters = TextMeasure.graphemes(plain);
         if (clusters.isEmpty() || colors == null || colors.isEmpty()) {
@@ -92,16 +90,15 @@ public final class Gradient {
                     }
                 };
                 io.github.dhoard.braxton.style.Color color = interpolate(palette, fraction);
-                out = out.append(StyledText.of(cluster, span.style().withForeground(color),
-                        span.link()));
-                column += TextMeasure.clusterColumns(cluster,
-                        io.github.dhoard.braxton.style.WidthPolicy.PINNED);
+                out = out.append(StyledText.of(cluster, span.style().withForeground(color), span.link()));
+                column += TextMeasure.clusterColumns(cluster, io.github.dhoard.braxton.style.WidthPolicy.PINNED);
             }
         }
         return out;
     }
 
-    static io.github.dhoard.braxton.style.Color interpolate(List<io.github.dhoard.braxton.style.Color> palette, double fraction) {
+    static io.github.dhoard.braxton.style.Color interpolate(
+            List<io.github.dhoard.braxton.style.Color> palette, double fraction) {
         double clamped = Math.max(0, Math.min(1, fraction));
         if (palette.size() == 1) {
             return palette.get(0);
@@ -118,8 +115,8 @@ public final class Gradient {
                 (int) Math.round(a.blue() + (b.blue() - a.blue()) * t));
     }
 
-    public static View<Object> view(StyledText text, List<io.github.dhoard.braxton.style.Color> colors,
-            Direction direction) {
+    public static View<Object> view(
+            StyledText text, List<io.github.dhoard.braxton.style.Color> colors, Direction direction) {
         return Views.text(apply(text, colors, direction));
     }
 }

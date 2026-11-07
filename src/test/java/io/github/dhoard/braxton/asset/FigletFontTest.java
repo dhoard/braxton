@@ -29,7 +29,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 /** FIGlet fonts are parsed and rendered by the format's endmark and hardblank rules. */
@@ -82,11 +81,12 @@ class FigletFontTest {
         // Each header sets both candidate comment-count fields to the same absurd value, and keeps the
         // fifth field the parser reads today, so the case does not depend on which field the
         // parser treats as the comment count. What matters is that an absurd count is reported.
-        for (String header : List.of("flf2a$ 2147483647 1 2147483647 2147483647",
+        for (String header : List.of(
+                "flf2a$ 2147483647 1 2147483647 2147483647",
                 "flf2a$ 2 1 3 2147483647 2147483647",
-                "flf2a$ 1 1 3 2147483648 2147483648", "flf2a$ -2147483648 1 3 3")) {
-            assertThatThrownBy(() -> FigletFont.parse(stream(header + "\n" + glyphs),
-                    "abnormal.flf"))
+                "flf2a$ 1 1 3 2147483648 2147483648",
+                "flf2a$ -2147483648 1 3 3")) {
+            assertThatThrownBy(() -> FigletFont.parse(stream(header + "\n" + glyphs), "abnormal.flf"))
                     .as("header %s", header)
                     .isInstanceOf(IOException.class)
                     .hasMessageContaining("abnormal.flf");
@@ -118,8 +118,10 @@ class FigletFontTest {
             if (expected != null) {
                 assertThat(rows.get(0)).as("%s first row", family).isEqualTo(expected);
             }
-            assertThat(font.render("A 1")).as("%s mixed text", family)
-                    .hasSize(font.height()).allSatisfy(row -> assertThat(row).doesNotContain("@"));
+            assertThat(font.render("A 1"))
+                    .as("%s mixed text", family)
+                    .hasSize(font.height())
+                    .allSatisfy(row -> assertThat(row).doesNotContain("@"));
         }
     }
 
@@ -162,8 +164,7 @@ class FigletFontTest {
             printable.append(code);
         }
         assertThat(term.render("@")).containsExactly("@");
-        assertThat(term.render(printable.toString()))
-                .containsExactly(printable.toString());
+        assertThat(term.render(printable.toString())).containsExactly(printable.toString());
     }
 
     @Test

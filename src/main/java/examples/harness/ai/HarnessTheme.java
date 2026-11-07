@@ -63,8 +63,7 @@ final class HarnessTheme {
     static final Style THINKING = Style.fg(THINKING_TEXT_COLOR).withItalic();
     static final Style HEADER_BACKGROUND = Style.bg(TRANSCRIPT_HEADER_BG_COLOR);
 
-    private HarnessTheme() {
-    }
+    private HarnessTheme() {}
 
     private static Color color(String hex) {
         return Color.parse(hex).orElseThrow(() -> new IllegalArgumentException("bad theme colour " + hex));

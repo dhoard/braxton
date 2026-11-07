@@ -25,9 +25,8 @@ package io.github.dhoard.braxton.app;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import org.junit.jupiter.api.Test;
-
 import java.time.Duration;
+import org.junit.jupiter.api.Test;
 
 /** Runtime limits are validated where they are accepted, not when shutdown uses them. */
 class RuntimeOptionsTest {
@@ -71,7 +70,9 @@ class RuntimeOptionsTest {
     void theClipboardAndTerminalWithersKeepEveryOtherField() {
         RuntimeOptions base = options(Duration.ofMillis(750));
         io.github.dhoard.braxton.clipboard.ClipboardConfig clipboard =
-                io.github.dhoard.braxton.clipboard.ClipboardConfig.builder().maxPayloadBytes(64).build();
+                io.github.dhoard.braxton.clipboard.ClipboardConfig.builder()
+                        .maxPayloadBytes(64)
+                        .build();
         RuntimeOptions withClipboard = base.withClipboard(clipboard);
         assertThat(withClipboard.clipboard()).isSameAs(clipboard);
         assertThat(withClipboard.terminal()).isEqualTo(base.terminal());
@@ -81,8 +82,7 @@ class RuntimeOptionsTest {
         assertThat(withClipboard.maxConcurrentEffects()).isEqualTo(base.maxConcurrentEffects());
         assertThat(withClipboard.maxSubscriptions()).isEqualTo(base.maxSubscriptions());
 
-        io.github.dhoard.braxton.app.TerminalOptions terminal =
-                io.github.dhoard.braxton.app.TerminalOptions.DEFAULT;
+        io.github.dhoard.braxton.app.TerminalOptions terminal = io.github.dhoard.braxton.app.TerminalOptions.DEFAULT;
         RuntimeOptions withTerminal = base.withTerminal(terminal);
         assertThat(withTerminal.terminal()).isSameAs(terminal);
         assertThat(withTerminal.clipboard()).isSameAs(base.clipboard());

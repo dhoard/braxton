@@ -25,10 +25,8 @@ package io.github.dhoard.braxton.widget;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.style.TextMeasure;
-
-import org.junit.jupiter.api.Test;
-
 import java.util.Random;
+import org.junit.jupiter.api.Test;
 
 /** Inserting then backspacing the same cluster restores the draft, at every position. */
 class EditorPropertyTest {
@@ -46,15 +44,18 @@ class EditorPropertyTest {
             Editor.Model start = Editor.Model.of(text.toString());
             int caret = random.nextInt(start.text().length() + 1);
             Editor.Model placed = start.withCaret(caret);
-            int boundary = caret == 0 ? 0 : io.github.dhoard.braxton.style.TextMeasure
-                    .previousBoundary(start.text(), caret);
+            int boundary =
+                    caret == 0 ? 0 : io.github.dhoard.braxton.style.TextMeasure.previousBoundary(start.text(), caret);
             Editor.Model atBoundary = start.withCaret(boundary);
             String cluster = clusters[random.nextInt(clusters.length)];
-            Editor.Model inserted =
-                    new Editor(options).update(atBoundary, new Editor.Msg.Insert(cluster)).model();
-            Editor.Model removed =
-                    new Editor(options).update(inserted, new Editor.Msg.Backspace()).model();
-            assertThat(removed.text()).as("insert then backspace at %d", boundary)
+            Editor.Model inserted = new Editor(options)
+                    .update(atBoundary, new Editor.Msg.Insert(cluster))
+                    .model();
+            Editor.Model removed = new Editor(options)
+                    .update(inserted, new Editor.Msg.Backspace())
+                    .model();
+            assertThat(removed.text())
+                    .as("insert then backspace at %d", boundary)
                     .isEqualTo(start.text());
             assertThat(removed.caret()).isEqualTo(boundary);
             assertThat(placed.text()).isEqualTo(start.text());
@@ -70,8 +71,7 @@ class EditorPropertyTest {
         Random random = new Random(11L);
         // A seeded draft is the application's own text, so the atoms include every break form it may
         // carry: the state's entry points prepare them, the reducer prepares what it inserts.
-        String[] atoms = {"a", "b", " ", "\n", "\r\n", "\r", "\u65E5", "\uD83D\uDE00", "e\u0301",
-                "1"};
+        String[] atoms = {"a", "b", " ", "\n", "\r\n", "\r", "\u65E5", "\uD83D\uDE00", "e\u0301", "1"};
         for (int iteration = 0; iteration < 400; iteration++) {
             Editor.Model state = Editor.Model.of(randomText(random, atoms));
             assertThat(state.text()).as("seeded draft").doesNotContain("\r");
@@ -81,21 +81,21 @@ class EditorPropertyTest {
                 options = options.withVisibleLines(1 + random.nextInt(3));
             }
             if (random.nextBoolean()) {
-                options =
-                        options.withMasking(
-                                random.nextBoolean()
-                                        ? Editor.Config.Masking.PASSWORD
-                                        : Editor.Config.Masking.HIDDEN);
+                options = options.withMasking(
+                        random.nextBoolean() ? Editor.Config.Masking.PASSWORD : Editor.Config.Masking.HIDDEN);
             }
             for (int step = 0; step < 25; step++) {
                 Editor.Model before = state;
                 state = new Editor(options).update(state, randomAction(random)).model();
-                assertThat(state.text()).as("no carriage return survives step %d", step)
+                assertThat(state.text())
+                        .as("no carriage return survives step %d", step)
                         .doesNotContain("\r");
                 assertThat(TextMeasure.isBoundary(state.text(), state.caret()))
-                        .as("caret %d of [%s]", state.caret(), state.text()).isTrue();
+                        .as("caret %d of [%s]", state.caret(), state.text())
+                        .isTrue();
                 assertThat(TextMeasure.isBoundary(state.text(), state.anchor()))
-                        .as("anchor %d of [%s]", state.anchor(), state.text()).isTrue();
+                        .as("anchor %d of [%s]", state.anchor(), state.text())
+                        .isTrue();
                 assertThat(state.text().length())
                         .as("draft length against the limit after step %d", step)
                         .isLessThanOrEqualTo(Math.max(before.text().length(), limit));
@@ -104,15 +104,17 @@ class EditorPropertyTest {
                         .as("visible rows for [%s]", state.text())
                         .hasSize(Editor.visibleLineCount(state, options));
                 if (options.masking() == Editor.Config.Masking.NONE) {
-                    for (String row : Editor.render(state, options, false).plainText()
-                            .split("\n", -1)) {
+                    for (String row :
+                            Editor.render(state, options, false).plainText().split("\n", -1)) {
                         assertThat(Editor.lines(state))
                                 .as("row [%s] of the visible window for [%s]", row, state.text())
                                 .contains(row);
                     }
                 } else {
-                    assertThat(rendered).as("masked draft [%s]", state.text())
-                            .doesNotContain("1").doesNotContain("b");
+                    assertThat(rendered)
+                            .as("masked draft [%s]", state.text())
+                            .doesNotContain("1")
+                            .doesNotContain("b");
                 }
             }
         }

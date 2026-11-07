@@ -24,13 +24,12 @@ package io.github.dhoard.braxton.internal.input;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
-
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.testing.AllocationProbe;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-import io.github.dhoard.braxton.testing.AllocationProbe;
+import org.junit.jupiter.api.Test;
 
 class InputRoutingCostTest {
 

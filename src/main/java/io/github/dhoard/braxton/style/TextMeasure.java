@@ -22,12 +22,11 @@
 
 package io.github.dhoard.braxton.style;
 
+import io.github.dhoard.braxton.internal.text.Graphemes;
+import io.github.dhoard.braxton.internal.text.Unicode16Width;
 import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.List;
-
-import io.github.dhoard.braxton.internal.text.Graphemes;
-import io.github.dhoard.braxton.internal.text.Unicode16Width;
 
 /**
  * Text measurement in grapheme clusters and terminal columns.
@@ -41,8 +40,7 @@ public final class TextMeasure {
     /** Rendered in front of a cluster that has no base character to occupy a cell. */
     public static final String DOTTED_CIRCLE = "\u25CC";
 
-    private TextMeasure() {
-    }
+    private TextMeasure() {}
 
     /** Grapheme clusters of {@code text}, in order. */
     public static List<String> graphemes(String text) {
@@ -95,14 +93,13 @@ public final class TextMeasure {
         if (cluster.isEmpty()) {
             return 0;
         }
-        if (policy != null && cluster.length() == 1
-                && isPrintableAscii(cluster.charAt(0))) {
+        if (policy != null && cluster.length() == 1 && isPrintableAscii(cluster.charAt(0))) {
             return 1;
         }
         boolean base = false;
         boolean mark = false;
         boolean wide = false;
-        for (int offset = 0; offset < cluster.length();) {
+        for (int offset = 0; offset < cluster.length(); ) {
             int codePoint = cluster.codePointAt(offset);
             offset += Character.charCount(codePoint);
             if (codePoint == 0xFE0E) {
@@ -113,7 +110,8 @@ public final class TextMeasure {
                 continue;
             }
             int type = Character.getType(codePoint);
-            if (type == Character.NON_SPACING_MARK || type == Character.ENCLOSING_MARK
+            if (type == Character.NON_SPACING_MARK
+                    || type == Character.ENCLOSING_MARK
                     || type == Character.COMBINING_SPACING_MARK) {
                 mark = true;
                 continue;
@@ -269,7 +267,8 @@ public final class TextMeasure {
      * text end a boundary whatever precedes it.</p>
      */
     private static boolean asciiGap(String text, int index) {
-        return index > 0 && index < text.length()
+        return index > 0
+                && index < text.length()
                 && isPrintableAscii(text.charAt(index - 1))
                 && isPrintableAscii(text.charAt(index));
     }

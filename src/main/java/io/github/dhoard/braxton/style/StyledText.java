@@ -68,8 +68,7 @@ public final class StyledText {
                     break;
                 }
                 if (Character.isLowSurrogate(c)
-                        || !(c == '\n' || c == '\t'
-                        || (c >= 0x20 && c != 0x7F && !(c >= 0x80 && c <= 0x9F)))) {
+                        || !(c == '\n' || c == '\t' || (c >= 0x20 && c != 0x7F && !(c >= 0x80 && c <= 0x9F)))) {
                     clean = false;
                     break;
                 }
@@ -107,8 +106,8 @@ public final class StyledText {
 
     // Append nodes retain immutable operands; their normalized spans are published on first read.
     private volatile List<Span> spans;
-    private record Operands(StyledText left, StyledText right) {
-    }
+
+    private record Operands(StyledText left, StyledText right) {}
 
     private volatile Operands operands;
     private final boolean hasSpans;
@@ -157,8 +156,7 @@ public final class StyledText {
         for (StyledText part : parts) {
             Objects.requireNonNull(part, "part");
             for (Span span : part.spans()) {
-                if (last != null && last.style().equals(span.style())
-                        && Objects.equals(last.link(), span.link())) {
+                if (last != null && last.style().equals(span.style()) && Objects.equals(last.link(), span.link())) {
                     if (run == null) {
                         run = new StringBuilder(last.text());
                     }

@@ -33,12 +33,10 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 @Timeout(10)
 class JLineRuntimeTest {
@@ -61,17 +59,11 @@ class JLineRuntimeTest {
     @Test
     void aRealStreamTerminalUsesRawInputAndRestoresApplicationModes() {
         try (var fixture = new JLineTestTerminal()) {
-            var result = JLineTestTerminal.run(
-                    program(Command.quit(7)), RuntimeOptions.defaults(), fixture);
+            var result = JLineTestTerminal.run(program(Command.quit(7)), RuntimeOptions.defaults(), fixture);
             assertThat(result.status()).isEqualTo(7);
             assertThat(result.kind()).isEqualTo(ExitResult.Kind.QUIT);
             assertThat(fixture.outputText())
-                    .contains(
-                            "ready",
-                            "\u001b[?1049h",
-                            "\u001b[?1049l",
-                            "\u001b[?2004l",
-                            "\u001b[?25h");
+                    .contains("ready", "\u001b[?1049h", "\u001b[?1049l", "\u001b[?2004l", "\u001b[?25h");
             assertThat(fixture.isOpen()).isFalse();
         }
     }
@@ -92,9 +84,7 @@ class JLineRuntimeTest {
                     v -> v,
                     f -> "failed"));
             Thread owner = Thread.ofVirtual().start(() -> {
-                result.set(new RuntimeLoop<>(
-                                p, RuntimeOptions.defaults(), fixture.terminal(), services)
-                        .run());
+                result.set(new RuntimeLoop<>(p, RuntimeOptions.defaults(), fixture.terminal(), services).run());
                 flag.set(Thread.currentThread().isInterrupted());
             });
             assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
@@ -130,8 +120,7 @@ class JLineRuntimeTest {
     void printWriterErrorsFailStartupAndStillReleaseTheTerminal() {
         try (var fixture = new JLineTestTerminal()) {
             fixture.failOutput();
-            var result = JLineTestTerminal.run(
-                    program(Command.quit()), RuntimeOptions.defaults(), fixture);
+            var result = JLineTestTerminal.run(program(Command.quit()), RuntimeOptions.defaults(), fixture);
             assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
             assertThat(result.failure()).hasMessage("terminal output failed");
             assertThat(fixture.isOpen()).isFalse();
@@ -147,10 +136,7 @@ class JLineRuntimeTest {
                 if (text.contains("ready")) painted.countDown();
             });
             var loop = new RuntimeLoop<>(
-                    program(Command.none()),
-                    RuntimeOptions.defaults(),
-                    fixture.terminal(),
-                    RuntimeServices.system());
+                    program(Command.none()), RuntimeOptions.defaults(), fixture.terminal(), RuntimeServices.system());
             var result = new AtomicReference<ExitResult>();
             Thread owner = Thread.ofVirtual().start(() -> result.set(loop.run()));
             try {
@@ -161,8 +147,7 @@ class JLineRuntimeTest {
                 assertThat(result.get().kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
                 String output = fixture.outputText();
                 assertThat(output.indexOf("ready")).isLessThan(output.indexOf("\u001b[?1049l"));
-                assertThat(output.substring(output.indexOf("\u001b[?1049l")))
-                        .doesNotContain("ready");
+                assertThat(output.substring(output.indexOf("\u001b[?1049l"))).doesNotContain("ready");
             } finally {
                 fixture.endInput();
                 owner.join(5000);
