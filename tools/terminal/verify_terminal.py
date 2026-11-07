@@ -26,6 +26,7 @@ import pyte
 
 ROOT = Path(__file__).resolve().parents[2]
 PROBE = "io.github.dhoard.braxton.internal.runtime.TerminalProbe"
+SCROLL_PROBE = "io.github.dhoard.braxton.tools.ScrollViewProbe"
 JLINE_IDENTITY = "ffm " + ET.parse(ROOT / "pom.xml").findtext(
     "m:properties/m:jline.version", namespaces={"m": "http://maven.apache.org/POM/4.0.0"})
 
@@ -438,6 +439,69 @@ def check_harness():
     print("PASS packaged hierarchical AI Harness editor/output/paste/submit/timer/scroll/resize/cancel/quit/restoration")
 
 
+def wait_panes(child, log_top, trace_top, pane, focus, description):
+    """Wait until both panes and the focus row show the expected window, then return every row."""
+    expected = [f"L{log_top + index:02d}   T{trace_top + index:02d}" for index in range(pane)]
+    expected.append(focus)
+
+    def rows():
+        return [row.rstrip() for row in child.screen.display]
+
+    deadline = time.monotonic() + 15
+    while rows()[:len(expected)] != expected:
+        require(time.monotonic() < deadline,
+                f"screen never showed {description}: {rows()[:len(expected)]!r}")
+        require(child.process.poll() is None, f"probe exited before {description}")
+        child.pump(0.1)
+    return rows()
+
+
+def check_scrollview(java_command):
+    """Two independent ScrollView panes painted through the real terminal and read back."""
+    # A 24-row PTY gives each pane (24 - 1) // 2 = 11 rows; the focus row follows the panes.
+    pane = 11
+    focus_log = f"focus log 24x80 rows {pane}"
+    # No control socket: this probe is driven only by the keys a terminal sends.
+    with PtyChild(java_command, control=False) as child:
+        child.terminal_contains("L00")
+        rows = wait_panes(child, 0, 0, pane, focus_log, "both panes at their first window")
+        require(rows[pane + 1] == "", "a pane painted below its allocated rows")
+
+        # Down moves the focused pane by one row and leaves its sibling alone.
+        os.write(child.master, b"\x1b[B")
+        wait_panes(child, 1, 0, pane, focus_log, "one row of scroll in the focused pane")
+
+        # PageDown moves by the pane's visible height, not by the terminal's height.
+        os.write(child.master, b"\x1b[6~")
+        wait_panes(child, 12, 0, pane, focus_log, "a page of the pane's own height")
+
+        # End shows the last window.
+        os.write(child.master, b"\x1b[F")
+        wait_panes(child, 29, 0, pane, focus_log, "the last window of the focused pane")
+
+        # Tab is a parent capture binding: the other pane takes the keys from now on.
+        focus_trace = f"focus trace 24x80 rows {pane}"
+        os.write(child.master, b"\t")
+        wait_panes(child, 29, 0, pane, focus_trace, "focus moved to the second pane")
+        os.write(child.master, b"\x1b[B")
+        wait_panes(child, 29, 1, pane, focus_trace, "one row of scroll in the second pane")
+        os.write(child.master, b"\x1b[F")
+        wait_panes(child, 29, 29, pane, focus_trace, "the second pane's last window")
+
+        # A real resize re-allocates both panes: 20 rows make each pane 9 rows tall, the offsets
+        # they were left at are kept, and nothing paints past the panes.
+        child.screen.resize(20, 64)
+        child.resize(20, 64)
+        rows = wait_panes(child, 29, 29, 9, "focus trace 20x64 rows 9",
+                          "both panes re-allocated by the resize")
+        require(len(rows) == 20, f"emulated screen kept {len(rows)} rows")
+        require(all(row == "" for row in rows[10:]), "content painted below the resized panes")
+
+        os.write(child.master, b"\x03")
+        child.finish()
+    print("PASS two independent ScrollView panes: keys/focus/page/end/resize/restoration")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--harness", action="store_true", help="also smoke-test the packaged AI Harness")
@@ -460,9 +524,12 @@ def main():
         require(len(jars) == 1, "expected exactly one packaged Braxton jar")
         classpath = os.pathsep.join((str(jars[0]), (ROOT / "target/terminal-cp.txt").read_text().strip()))
         subprocess.run([javac, "-Xlint:all", "-cp", classpath, "-d", str(work),
-                        str(ROOT / "tools/terminal/TerminalProbe.java")], check=True)
+                        str(ROOT / "tools/terminal/TerminalProbe.java"),
+                        str(ROOT / "tools/terminal/ScrollViewProbe.java")], check=True)
         java_command = [java, "--enable-native-access=ALL-UNNAMED", "-cp",
                         os.pathsep.join((str(work), classpath)), PROBE]
+        scroll_command = [java, "--enable-native-access=ALL-UNNAMED", "-cp",
+                          os.pathsep.join((str(work), classpath)), SCROLL_PROBE]
         for extra, expected in (([], "--enable-native-access"), (["--enable-native-access=ALL-UNNAMED"], "attached process terminal")):
             result = subprocess.run([java, *extra, "-cp", os.pathsep.join((str(work),classpath)), PROBE, "--bootstrap"],
                                     input=b"", capture_output=True, timeout=30, cwd=ROOT)
@@ -480,6 +547,7 @@ def main():
             cases.append((f"refresh-wide plain={plain}", lambda plain=plain: check_refresh_wide(java_command, plain)))
         for command, code in (("EXCEPTION", 1), ("SHUTDOWN", 0), ("SIGTERM", 143)):
             cases.append((command, lambda command=command, code=code: check_cleanup(java_command, command, code)))
+        cases.append(("scroll view panes", lambda: check_scrollview(scroll_command)))
         if args.harness:
             cases.append(("packaged harness", check_harness))
         failures = []

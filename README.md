@@ -31,6 +31,7 @@ key handlers.
 - [Input, focus, and routing](#input-focus-and-routing)
 - [Commands and subscriptions](#commands-and-subscriptions)
 - [The editor](#the-editor)
+- [The scroll view](#the-scroll-view)
 - [Widgets, assets, and clipboard](#widgets-assets-and-clipboard)
 - [Runtime and terminal](#runtime-and-terminal)
 - [AI Harness](#ai-harness)
@@ -380,6 +381,106 @@ Guarantees:
   draft returns to the column that masked row paints, one cell per cluster;
 - visual scroll-to-caret is derived, so drawing never mutates state.
 
+## The scroll view
+
+`ScrollView` is a reusable vertical pane over text the application owns - a transcript, a trace or
+log pane, a long read-only list. It is a component with nested immutable `Model`, sealed `Msg`,
+immutable `Config` and a `Never` output type, because every interaction it offers is a state change
+the parent can already observe. The model holds only the offset, the follow-end flag, the visible
+height and focus; the content is the application's snapshot, held by reference.
+
+```java
+// Definition: a 12-row pane that follows appended content.
+var log = new ScrollView(new ScrollView.Config(12, true));
+
+Mount<Model, Msg, Never, ScrollView.Model, ScrollView.Msg, Never> logPane =
+        Mount.of(ComponentId.of("log"), log,
+                 ModelLens.of(Model::log, (model, child) -> model.withLog(child)),
+                 Msg.Log::new,
+                 OutputRoute.toOutput(value -> value));
+
+// An update that changes the content publishes one snapshot through the mount.
+return logPane.update(model, new ScrollView.Msg.ContentChanged(rows));
+
+// The view reserves exactly the height the pane reports, then nests it like any other view.
+View<Msg> pane = logPane.view(model, context);
+View<Msg> body = Views.column(
+        Views.fixed(model.log().visibleRows(), pane),
+        Views.fixed(1, composer.view(model, context)));
+```
+
+`visibleLines(model)` returns exactly the rows the pane shows, which is how an application copies
+or inspects the visible window; it reads the same rows a frame does.
+
+**Content contract.** A `Content` is an immutable, line-indexed snapshot: `lineCount()` and
+`line(index)`, both constant time. `Content.of(List<StyledText>)` copies the list of references
+once, so a caller's list cannot change under a model; an application with its own immutable,
+indexed structure implements `Content` directly and publishes without copying. A *line* is one
+display row that the application has already wrapped to the pane's width. The pane slices and pages
+by those rows exactly, keeps `StyledText` spans, links and empty rows, and never reads a row it is
+not painting: one frame is one `lineCount()` call and one `line(index)` call per visible row, so a
+frame over 100 000 rows costs what a frame over 20 rows costs. `update` reads no row at all.
+
+A row wider than the pane is clipped at the pane's columns instead of wrapping onto a second row,
+because a wrap would change how many rows the window covers and push the last rows out of the pane.
+A break that a row still contains is clipped the same way. Wrapping and line-ending normalization
+are therefore the application's preparation step: `LineBreaks.normalize` and `LineBreaks.singleRow`
+are the existing helpers, and `StyledText` has already removed an unrepresentable bare CR before a
+row reaches the pane. Text that ends in a newline contributes a final empty row, the same logical
+line the editor counts - `Editor.lines(Editor.Model.of("a\n"))` is `["a", ""]` - and the pane keeps
+that empty row rather than dropping it. Snapshots compare by reference, one instance being one
+content version, so model comparison stays constant time and a republished snapshot repaints even
+when its lines are equal.
+
+**Geometry.** The visible height is explicit, in `Model.visibleRows()`: it is the height the parent
+reserved and the height paging uses. It is deliberately *not* `ViewContext.viewport()`, because a
+mounted component receives its parent's context and the root height is not this pane's height when
+the pane sits inside a `BorderBox`, `Padding`, `Row` or a shared column. The parent keeps one number
+and uses it twice - `Views.fixed(model.log().visibleRows(), pane)` for the reservation, and
+`ScrollView.Msg.ViewportChanged(rows)` when the allocation changes. While following, a resize keeps
+the last rows visible; a pane the user scrolled back keeps its first visible row and is clamped only
+when the offset no longer fits.
+
+```java
+// Resize: rebuild the allocation, then tell each pane its new height. The runtime delivers
+// resize as a subscription message; the parent's own update forwards it.
+case Msg.Resized resized -> {
+    Model next = model.withViewport(resized.size());
+    int rows = allocation(next).transcript();
+    yield logPane.update(next, new ScrollView.Msg.ViewportChanged(rows));
+}
+```
+
+**Navigation.** Up/Down move by visual rows, PageUp/PageDown by the pane's visible height (never by
+the terminal's height), Home to the first row, End to the last window. Non-positive counts and
+moves the content bounds already forbid are no-ops that return the incoming model instance.
+Follow-end means appended content stays visible while the window is at the end; a deliberate upward
+move that actually changes the offset releases it, `End` arms it again when `Config.followEnd`
+allows it, and reaching the bottom with `Down` does not - so a pane the user stepped down by hand
+never starts following silently. Content replacement, truncation and a zero-sized pane clamp the
+offset instead of throwing.
+
+**Focus and input.** Focus is model data, as in `Editor` and `Selector`: the application sets it
+with `Model.withFocus` and a reduction never changes it. The pane declares one focus element, so an
+unfocused pane receives no keys, and it consumes only its six navigation gestures - `up`, `down`,
+`pageup`, `pagedown`, `home`, `end` - so it never takes printable text and leaves Ctrl-/Alt-prefixed
+gestures to the application (capture bindings see every event first, whichever pane is focused). It
+paints no focus decoration; a border or title that shows which pane is active is the application's
+choice. Mouse wheels are not mapped, because the step is application policy:
+
+```java
+// Two independent panes and a composer: the wheel and Tab stay parent bindings.
+View<Msg> root = Views.keyed(
+        List.of(Binding.of("tab", new Msg.FocusNext()),
+                Binding.of("wheelup", new Msg.Log(new ScrollView.Msg.Up(3))),
+                Binding.of("wheeldown", new Msg.Log(new ScrollView.Msg.Down(3)))),
+        body, List.of());
+```
+
+Out of scope by design: horizontal scrolling, scrollbars, selection and copy highlighting, mouse
+hit-testing, reflow on resize, and nested scroll orchestration. `border`, `padding` and `grow` still
+work around a pane; they only change which rectangle the parent allocates.
+
 ## Widgets, assets, and clipboard
 
 Stateful widgets are components; stateless widgets are pure factories producing immutable
@@ -399,6 +500,7 @@ state you own - `Selector.Model`, `Editor.Model` - is a value in your model:
 | `Quote` | Colored bar and background |
 | `Gradient` | Vertical, horizontal, or diagonal per-grapheme color |
 | `Selector` / `TableSelector` | Immutable selection state and focusable views; the marker shows the selection, the active style follows focus |
+| `ScrollView` | Focusable vertical pane over application-owned display rows; the window and follow-end are model data, the content stays with the application |
 | `Animation` | Spinner and shimmer frames driven by model time |
 | `FontLoader`, `FigletFont`, `Logo` | Bundled FIGlet fonts and styled logos |
 | `ImageAsset`, `ImageView` | Explicit image loading and pixel-art rendering |
@@ -707,6 +809,9 @@ module name, coordinates, Unicode policy and offline fixture remain unchanged.
   it is cooperative: a task that ignores interruption is not forcibly stopped; its result is
   suppressed and shutdown waits only for the configured grace period. User task code is not
   sandboxed.
+- `ScrollView` is vertical and line-oriented. Content is published as pre-wrapped display rows; the
+  pane clips a row that is too wide and does not reflow on resize, and there is no horizontal
+  scrolling, scrollbar, selection, or mouse hit-testing.
 - The API is pre-1.0 and may change between minor releases.
 
 ## Contributing
