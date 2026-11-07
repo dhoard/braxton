@@ -50,56 +50,74 @@ final class HarnessView {
     private HarnessView() {}
 
     static View<Harness.Msg> view(Harness.Model state) {
-        int width = state.viewport().cols();
-        int height = state.viewport().rows();
-        HarnessProjection.Allocation allocation =
-                HarnessProjection.allocate(height, state.editorRows());
+        int width = Math.max(1, state.viewport().cols());
+        HarnessProjection.Layout layout = HarnessProjection.layout(state);
 
         List<View<Harness.Msg>> parts = new ArrayList<>();
-        if (allocation.transcript() > 0) {
-            var context = new ViewContext(new Viewport(allocation.transcript(), width));
-            parts.add(
-                    Views.fixed(
-                            allocation.transcript(), Harness.SESSION.view(state, context)));
+        if (layout.header() > 0) {
+            parts.add(Views.fixed(
+                    layout.header(),
+                    rows(HarnessProjection.header(state, width).subList(0, layout.header()))));
         }
-        if (allocation.gap() > 0) {
-            parts.add(Views.fixed(allocation.gap(), Views.text(
-                    HarnessProjection.row(width, HarnessTheme.BACKGROUND_COLOR))));
+        if (layout.body() > 0) {
+            // The transcript component paints its own window at the height the frame gives it.
+            var context = new ViewContext(new Viewport(layout.body(), width));
+            parts.add(Views.fixed(layout.body(), Harness.SESSION.view(state, context)));
         }
-        if (allocation.topRule() > 0) {
-            parts.add(Views.fixed(allocation.topRule(),
-                    Views.text(HarnessProjection.topRule(state))));
+        if (layout.queued() > 0) {
+            parts.add(Views.fixed(
+                    layout.queued(),
+                    rows(HarnessProjection.queuedBand(state, width, layout.queued()))));
         }
-        if (allocation.composer() > 0) {
-            // The editor keeps the caret inside the lines it draws, so it must draw no more rows
-            // than this allocation gives it; otherwise the caret's line is clipped away.
-            var context = new ViewContext(new Viewport(allocation.composer(), width));
-            parts.add(
-                    Views.fixed(
-                            allocation.composer(),
-                            Harness.composer(Math.max(1, allocation.composer()))
-                                    .view(state, context)));
+        if (layout.gap() > 0) {
+            parts.add(Views.fixed(
+                    layout.gap(), Views.text(HarnessProjection.backgroundRow(width))));
         }
-        if (allocation.bottomRule() > 0) {
-            parts.add(Views.fixed(allocation.bottomRule(),
-                    Views.text(HarnessProjection.bottomRule(state))));
+        if (layout.statusRule() > 0) {
+            parts.add(Views.fixed(1, Views.text(HarnessProjection.statusRule(state))));
         }
-        if (allocation.footer() > 0) {
-            List<StyledText> footer = HarnessProjection.footer(state);
-            List<View<Harness.Msg>> rows = new ArrayList<>();
-            for (int i = 0; i < allocation.footer() && i < footer.size(); i++) {
-                rows.add(Views.text(footer.get(i)));
+        if (layout.editorPad() > 0) {
+            // The compact frame keeps the draft against the metrics row, as the full frame does.
+            parts.add(Views.gap(layout.editorPad()));
+        }
+        if (layout.editor() > 0) {
+            if (HarnessProjection.mirroredPrompt(state).isEmpty()) {
+                // The editor keeps the caret inside the lines it draws, so it must draw no more
+                // rows than this allocation gives it; otherwise the caret's line is clipped away.
+                var context = new ViewContext(new Viewport(layout.editor(), width));
+                parts.add(Views.fixed(
+                        layout.editor(), Harness.composer(layout.editor()).view(state, context)));
+            } else {
+                // A queued prompt owns the composer until its turn starts: no caret, no editing.
+                parts.add(Views.fixed(
+                        layout.editor(),
+                        rows(HarnessProjection.queuedComposerRows(state, width, layout.editor()))));
             }
-            while (rows.size() < allocation.footer()) {
-                rows.add(Views.text(HarnessProjection.row(width, HarnessTheme.BACKGROUND_COLOR)));
-            }
-            parts.add(Views.fixed(allocation.footer(), Views.column(rows)));
+        }
+        if (layout.bottomRule() > 0) {
+            parts.add(Views.fixed(1, Views.text(HarnessProjection.rule(width))));
+        }
+        if (layout.footer() > 0) {
+            parts.add(Views.fixed(
+                    layout.footer(),
+                    rows(HarnessProjection.footer(state, width).subList(0, layout.footer()))));
+        }
+        if (layout.stats() > 0) {
+            parts.add(Views.fixed(1, Views.text(HarnessProjection.statsRow(state, width))));
         }
 
         View<Harness.Msg> body = Views.column(parts);
         View<Harness.Msg> root =
                 Views.overlay(List.of(Views.fill(HarnessTheme.BACKGROUND), body), false);
         return Views.keyed(bindings(), HarnessView::intercept, root, List.of());
+    }
+
+    private static View<Harness.Msg> rows(List<StyledText> rows) {
+        List<View<Harness.Msg>> views = new ArrayList<>(rows.size());
+        for (StyledText row : rows) {
+            views.add(Views.text(row));
+        }
+        return Views.column(views);
     }
 
     /** Root capture bindings. These intentionally override the focused editor. */

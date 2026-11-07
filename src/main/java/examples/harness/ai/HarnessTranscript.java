@@ -60,15 +60,28 @@ public record HarnessTranscript(
         }
     }
 
+    /**
+     * The session the bundled example transcript was recorded from, shown at the right edge of the
+     * frame's identity line. The fixture is a slice of that session, so the identifier is data about
+     * the example, not a live session this process opened.
+     */
+    public static final String EXAMPLE_SESSION_ID = "01a14c5c-c2b7-756e-9291-62d0bed736a4";
+
+    /**
+     * The example's own version, shown beside its name in the frame's identity line. It versions
+     * the showcase, not the library the showcase is built on.
+     */
+    public static final String EXAMPLE_VERSION = "1.2.3";
+
     /** Provider/model identity shown in the footer and used by mock fallbacks. */
     public record Profile(String provider, String model, String reasoning) {
 
         public static final int DEFAULT_CONTEXT_WINDOW = 1_048_576;
         public static final Profile DEFAULT =
-                new Profile("amanda", "qwen3.8-flash-next", "high");
+                new Profile("local", "qwen3.8-flash-next", "high");
 
         public Profile {
-            provider = blankToDefault(provider, "amanda");
+            provider = blankToDefault(provider, "local");
             model = blankToDefault(model, "mock-harness");
             reasoning = reasoning == null ? "" : reasoning;
         }

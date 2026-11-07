@@ -43,9 +43,9 @@ import java.util.Map;
 import io.github.dhoard.braxton.style.TextMeasure;
 
 /**
- * Reads the newline-delimited transcript format used by the bundled example and by Amanda session
- * logs: each line is a JSON object with a {@code kind} and a {@code payload}. This is a data-format
- * reader only; it does not import or adapt any Amanda type.
+ * Reads the newline-delimited transcript format used by the bundled example and by recorded agent
+ * session logs: each line is a JSON object with a {@code kind} and a {@code payload}. This is a
+ * data-format reader only; it has no dependency beyond the standard library.
  *
  * <p>The reader understands the subset needed by the showcase ({@code input.attached},
  * {@code turn.started}, {@code assistant.completed}, {@code tool.completed}, {@code turn.completed},
@@ -301,7 +301,10 @@ final class TranscriptJsonlReader {
         return new HarnessTranscript.Usage(input, output, cached, uncached, context, rate);
     }
 
-    /** Formats a tool call as one readable line without exposing raw JSON. */
+    /**
+     * Formats a tool call as one readable line without exposing raw JSON. The invocation carries
+     * the shell-style marker the transcript paints, so the view renders the stored text as-is.
+     */
     static String formatCall(String name, String arguments) {
         String tool = name == null || name.isBlank() ? "tool" : name.strip();
         JsonObject args = parseObject(arguments);
@@ -311,7 +314,7 @@ final class TranscriptJsonlReader {
             case "ls" -> "ls" + suffix(path == null || path.isBlank() ? "." : path);
             case "write" -> "write" + suffix(path);
             case "edit" -> "edit" + suffix(path);
-            case "bash" -> "$ " + defaultString(string(args, "command"), "...");
+            case "bash" -> defaultString(string(args, "command"), "...");
             case "grep" -> "grep /" + defaultString(string(args, "pattern"), "")
                     + "/ in " + defaultString(path, ".");
             case "find" -> "find " + defaultString(string(args, "pattern"), "")
@@ -319,7 +322,7 @@ final class TranscriptJsonlReader {
             default -> tool + (arguments == null || arguments.isBlank()
                     ? "" : " " + compact(arguments));
         };
-        return HarnessRender.sanitize(call).replace("\n", " ");
+        return HarnessRender.sanitize("$ " + call).replace("\n", " ");
     }
 
     private static String suffix(String path) {

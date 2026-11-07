@@ -22,73 +22,152 @@
 
 package examples.harness.ai;
 
-import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.style.WidthPolicy;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.IntFunction;
 
 /**
- * Pure screen projection for the harness: geometry, content rows, and scroll clamping.
+ * Pure frame projection for the harness: geometry, region rows, and scroll clamping.
  *
- * <p>Update and view share this code, so scrolling bounds, page size, and the visible copy range
- * cannot drift from what is actually painted. Nothing here reads a clock, a terminal, or a mutable
- * cache.</p>
+ * <p>The frame is a full agent-terminal layout: a pinned identity block, the scrollable
+ * transcript, a queued-prompt band, one gap row, the status rule, the composer, a second rule, and
+ * a four-row footer. Update and view share this code, so scrolling bounds, page size, and the
+ * visible copy range cannot drift from what is actually painted. Nothing here reads a clock, a
+ * terminal, or a mutable cache.</p>
  */
 final class HarnessProjection {
 
     static final int SCROLL_STEP = 3;
     static final int TOOL_PREVIEW_LINES = 6;
-    private static final long FAKE_CACHED_TOKENS = 2_100_000L;
+
+    /** The pinned identity block: the identity line and the rule beneath it. */
+    static final int HEADER_HEIGHT = 2;
+    static final int FOOTER_HEIGHT = 4;
+    static final int INPUT_GAP_ROWS = 1;
+    /** Transcript rows the full layout keeps whenever the queue and the draft leave room. */
+    private static final int MIN_BODY_ROWS = 2;
+    /** The most composer rows the frame shows, however tall the terminal or long the draft. */
+    static final int MAX_EDITOR_ROWS = 10;
+    /**
+     * The shortest frame the full layout can carry: the header block, the input gap, two rules,
+     * one composer row, and the footer. Anything shorter uses the compact layout.
+     */
+    static final int MIN_FULLSCREEN_ROWS = HEADER_HEIGHT + INPUT_GAP_ROWS + 2 + 1 + FOOTER_HEIGHT;
+
+    /**
+     * The classpath resource the transcript is read from, shown in the footer's source row. It is
+     * the loader's own path rather than a second copy, so the row cannot name a resource the
+     * example does not read.
+     */
+    static final String TRANSCRIPT_SOURCE = TranscriptLoader.RESOURCE;
+
+    private static final String SEPARATOR = " | ";
+    private static final String EXIT_HINT = "ctrl+c again to exit";
 
     private HarnessProjection() {
     }
 
-    /** How the terminal height is divided. Invisible regions receive zero rows. */
-    record Allocation(int transcript, int gap, int topRule, int composer, int bottomRule, int footer) {
+    /**
+     * How the terminal height is divided, in paint order. Invisible regions receive zero rows; the
+     * composer is the one region painted by a component view rather than by this class.
+     */
+    record Layout(
+            int header,
+            int body,
+            int queued,
+            int gap,
+            int statusRule,
+            int editorPad,
+            int editor,
+            int bottomRule,
+            int footer,
+            int stats) {
+
+        int rows() {
+            return header + body + queued + gap + statusRule + editorPad + editor + bottomRule
+                    + footer + stats;
+        }
     }
 
     /**
-     * Allocates rows in the documented priority order: composer first, then footer, then the two
-     * rules and the gap, then the transcript with whatever remains.
+     * The prompt the composer mirrors while it waits in the queue, or an empty text when the
+     * composer is editable. A submitting prompt keeps the composer until the turn it is queued
+     * behind ends, so the editor cannot be typed into while a prompt of the user's is waiting.
      */
-    static Allocation allocate(int height, int editorRows) {
-        int budget = Math.max(0, height);
-        int composer = Math.min(Math.max(1, editorRows), budget);
-        budget -= composer;
-        int footer = Math.min(3, budget);
-        budget -= footer;
-        int bottomRule = budget > 0 ? 1 : 0;
-        budget -= bottomRule;
-        int topRule = budget > 0 ? 1 : 0;
-        budget -= topRule;
-        int gap = budget > 0 ? 1 : 0;
-        budget -= gap;
-        return new Allocation(budget, gap, topRule, composer, bottomRule, footer);
+    static String mirroredPrompt(Harness.Model state) {
+        return state.working() && !state.pending().isEmpty() ? state.pending().get(0) : "";
     }
 
-    record Segment(String text, Style style) {
+    /** The composer rows the frame needs: the mirrored prompt's, or the draft's. */
+    static int composerRows(Harness.Model state) {
+        String mirrored = mirroredPrompt(state);
+        int rows = mirrored.isEmpty() ? state.editorRows() : lineCount(mirrored);
+        return Math.max(1, Math.min(MAX_EDITOR_ROWS, rows));
+    }
+
+    private static int lineCount(String text) {
+        int lines = 1;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                lines++;
+            }
+        }
+        return lines;
+    }
+
+    static Layout layout(Harness.Model state) {
+        int height = Math.max(0, state.viewport().rows());
+        int width = Math.max(1, state.viewport().cols());
+        int draftRows = composerRows(state);
+        if (height < MIN_FULLSCREEN_ROWS) {
+            // The compact frame keeps the identity, then as much of the composer as fits, and the
+            // metrics lane last. A composer shorter than its region is pushed to the bottom, so
+            // the draft stays adjacent to the metrics row.
+            int header = Math.min(HEADER_HEIGHT, height);
+            int budget = height - header;
+            int region = budget >= 2 ? budget - 1 : budget;
+            int editor = Math.min(draftRows, region);
+            int pad = Math.max(0, region - editor);
+            int stats = budget >= 2 ? 1 : 0;
+            return new Layout(header, 0, 0, 0, 0, pad, editor, 0, 0, stats);
+        }
+        int editor = Math.min(draftRows, maxEditorRows(height));
+        int fixed = HEADER_HEIGHT + INPUT_GAP_ROWS + 2 + editor + FOOTER_HEIGHT;
+        int queued = queuedBand(state, width, Math.max(0, height - fixed - MIN_BODY_ROWS)).size();
+        int body = Math.max(0, height - fixed - queued);
+        return new Layout(
+                HEADER_HEIGHT, body, queued, INPUT_GAP_ROWS, 1, 0, editor, 1, FOOTER_HEIGHT, 0);
+    }
+
+    /**
+     * The composer rows the frame allows at this height: a third of the frame or the rows left
+     * once the pinned chrome and one composer row are set aside, whichever is smaller, and never
+     * more than {@link #MAX_EDITOR_ROWS}.
+     */
+    private static int maxEditorRows(int height) {
+        int rowsBesideTheBody = HEADER_HEIGHT + INPUT_GAP_ROWS + 2 + FOOTER_HEIGHT;
+        return Math.min(
+                MAX_EDITOR_ROWS, Math.min(Math.max(1, height / 3), Math.max(1, height - rowsBesideTheBody)));
     }
 
     // ── geometry ─────────────────────────────────────────────────────────────
 
     static int maxScroll(Harness.Model state) {
-        Allocation allocation = allocate(state.viewport().rows(), state.editorRows());
-        if (allocation.transcript() <= 0) {
+        int rows = layout(state).body();
+        if (rows <= 0) {
             return 0;
         }
-        int rows =
-                projectedRows(state.session(), state.viewport().cols()).stream()
-                        .mapToInt(ProjectedRows::size)
-                        .sum();
-        return Math.max(0, rows - allocation.transcript());
+        int total = projectedRows(state.session(), state.viewport().cols()).stream()
+                .mapToInt(ProjectedRows::size)
+                .sum();
+        return Math.max(0, total - rows);
     }
 
-    /** The visible transcript rows, padded to the allocation, before any scrollbar chrome. */
+    /** The visible transcript rows and the scroll position they were read at. */
     private record Slice(List<StyledText> rows, int start, int total) {
     }
 
@@ -113,45 +192,27 @@ final class HarnessProjection {
                 break;
             }
         }
-        while (window.size() < rows) {
-            window.add(row(width, HarnessTheme.BACKGROUND_COLOR));
-        }
         return new Slice(List.copyOf(window), start, total);
     }
 
-    /** The visible transcript window, padded and with a scrollbar when content overflows. */
+    /** The visible transcript window, padded with background rows to the allocated height. */
     static List<StyledText> window(Session.Model state, int width, int allocatedRows) {
-        Slice slice = slice(state, width, allocatedRows);
+        int rows = Math.max(0, allocatedRows);
+        Slice slice = slice(state, width, rows);
         List<StyledText> window = new ArrayList<>(slice.rows());
-        int rows = window.size();
-        if (rows > 0 && slice.total() > rows) {
-            int maxScroll = Math.max(0, slice.total() - rows);
-            int thumbHeight = Math.min(rows, Math.max(2,
-                    (int) Math.round((double) rows * rows / slice.total())));
-            int maxThumbTop = rows - thumbHeight;
-            int thumbTop = maxScroll == 0 ? 0
-                    : (int) Math.round((double) slice.start() / maxScroll * maxThumbTop);
-            for (int i = 0; i < rows; i++) {
-                boolean thumb = i >= thumbTop && i < thumbTop + thumbHeight;
-                window.set(i, withScrollbar(window.get(i), width,
-                        thumb ? "\u2503" : "\u2502",
-                        thumb ? HarnessTheme.SCROLLBAR_THUMB : HarnessTheme.SCROLLBAR_TRACK));
-            }
+        while (window.size() < rows) {
+            window.add(backgroundRow(width));
         }
         return List.copyOf(window);
     }
 
     /**
-     * Plain text of the currently visible transcript, used by Alt+T: no scrollbar column and no
-     * right padding, so pasted text carries the transcript only.
+     * Plain text of the currently visible transcript, used by Alt+T: no right padding, so pasted
+     * text carries the transcript only.
      */
     static String visiblePlainText(Harness.Model state) {
         List<StyledText> rows =
-                slice(
-                                state.session(),
-                                state.viewport().cols(),
-                                allocate(state.viewport().rows(), state.editorRows()).transcript())
-                        .rows();
+                slice(state.session(), state.viewport().cols(), layout(state).body()).rows();
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < rows.size(); i++) {
             if (i > 0) {
@@ -178,13 +239,9 @@ final class HarnessProjection {
         return result;
     }
 
+    /** One blank-separated group per entry, in transcript order. */
     private static List<ProjectedRows> projectedRows(Session.Model state, int width) {
         List<ProjectedRows> rows = new ArrayList<>();
-        rows.add(new ProjectedRows(2, i -> i == 0
-                ? row(width, HarnessTheme.BACKGROUND_COLOR,
-                        new Segment(" AI Harness", HarnessTheme.ACCENT.withBold()),
-                        new Segment("  \u00b7  mock transcript", HarnessTheme.DIM))
-                : row(width, HarnessTheme.BACKGROUND_COLOR)));
         List<HarnessEntry> entries = state.entries();
         if (entries.isEmpty()) {
             entries = List.of(new HarnessEntry.Notice(
@@ -192,271 +249,280 @@ final class HarnessProjection {
         }
         for (int i = 0; i < entries.size(); i++) {
             if (i > 0) {
-                rows.add(new ProjectedRows(1, ignored -> row(width, HarnessTheme.BACKGROUND_COLOR)));
+                rows.add(new ProjectedRows(1, ignored -> backgroundRow(width)));
             }
-            rows.add(entryRows(width, entries.get(i)));
+            List<StyledText> message = HarnessMessage.rows(width, entries.get(i));
+            rows.add(new ProjectedRows(message.size(), message::get));
         }
         return rows;
     }
 
-    private static ProjectedRows entryRows(int width, HarnessEntry entry) {
-        return switch (entry) {
-            case HarnessEntry.User user -> userRows(width, user.text());
-            case HarnessEntry.Assistant assistant -> plainRows(width, assistant.text(),
-                    HarnessTheme.TEXT);
-            case HarnessEntry.Reasoning reasoning -> plainRows(width, reasoning.text(),
-                    HarnessTheme.THINKING);
-            case HarnessEntry.Notice notice -> plainRows(width, notice.text(),
-                    HarnessTheme.NOTICE);
-            case HarnessEntry.Failure failure -> plainRows(width, failure.text(),
-                    HarnessTheme.ERROR);
-            case HarnessEntry.Tool tool -> toolRows(width, tool);
-        };
-    }
-
-    private static ProjectedRows userRows(int width, String text) {
-        int inner = Math.max(1, width - 2);
-        List<String> lines = HarnessRender.wrap(text, inner);
-        return new ProjectedRows(lines.size() + 2, i -> i == 0 || i == lines.size() + 1
-                ? row(width, HarnessTheme.USER_MESSAGE_BG_COLOR)
-                : row(width, HarnessTheme.USER_MESSAGE_BG_COLOR,
-                        new Segment(" " + HarnessRender.pad(lines.get(i - 1), inner) + " ", HarnessTheme.TEXT)));
-    }
-
-    private static ProjectedRows plainRows(int width, String text, Style style) {
-        List<String> lines = HarnessRender.wrap(text, Math.max(1, width - 1));
-        return new ProjectedRows(lines.size(), i -> row(width, HarnessTheme.BACKGROUND_COLOR,
-                new Segment(" " + lines.get(i), style)));
-    }
-
-    private static ProjectedRows toolRows(int width, HarnessEntry.Tool tool) {
-        Color background = switch (tool.status()) {
-            case PENDING -> HarnessTheme.TOOL_PENDING_BG_COLOR;
-            case SUCCESS -> HarnessTheme.TOOL_SUCCESS_BG_COLOR;
-            case ERROR -> HarnessTheme.TOOL_ERROR_BG_COLOR;
-        };
-        int inner = Math.max(1, width - 2);
-        List<Segment[]> rows = new ArrayList<>();
-        rows.add(new Segment[0]);
-        rows.add(new Segment[]{new Segment(" " + HarnessRender.truncate(tool.call(), inner) + " ",
-                HarnessTheme.TEXT.withBold())});
-        HarnessRender.Preview preview = HarnessRender.toolPreview(tool.result(), TOOL_PREVIEW_LINES);
-        if (!preview.lines().isEmpty()) {
-            rows.add(new Segment[0]);
-            for (String line : preview.lines()) {
-                for (String wrapped : HarnessRender.wrap(line, inner)) {
-                    rows.add(new Segment[]{new Segment(" " + HarnessRender.pad(wrapped, inner) + " ",
-                            HarnessTheme.DIM)});
-                }
-            }
-            if (preview.truncated()) {
-                String note = "... (" + preview.hidden() + " more lines, " + preview.totalLines() + " total)";
-                rows.add(new Segment[]{new Segment(" " + HarnessRender.truncate(note, inner) + " ", HarnessTheme.DIM)});
-            }
-        } else if (tool.status() == HarnessEntry.ToolStatus.PENDING) {
-            rows.add(new Segment[]{new Segment(" waiting for output...", HarnessTheme.DIM)});
-        }
-        rows.add(new Segment[0]);
-        return new ProjectedRows(rows.size(), i -> row(width, background, rows.get(i)));
-    }
-
     // ── chrome ───────────────────────────────────────────────────────────────
 
-    static StyledText topRule(Harness.Model state) {
+    /** The pinned identity block: the identity line, then a full-width rule. */
+    static List<StyledText> header(Harness.Model state, int width) {
+        int columns = Math.max(1, width);
+        List<StyledText> rows = new ArrayList<>(HEADER_HEIGHT);
+        rows.add(identityRow(columns));
+        rows.add(rule(columns));
+        return rows;
+    }
+
+    /**
+     * The identity line: the harness name in the accent with the example's version beside it in the
+     * metrics dim, and the recorded session it replays ending the row at the right edge. The
+     * session field is all or nothing, so a narrow frame shows the identity alone rather than a
+     * truncated identifier that could name a different session.
+     */
+    private static StyledText identityRow(int width) {
+        StyledText identity = StyledText.of(
+                        "AI Harness", Style.fg(HarnessTheme.ACCENT_COLOR).withBold())
+                .append(StyledText.of(" v" + HarnessTranscript.EXAMPLE_VERSION, HarnessTheme.DIM));
+        StyledText field = StyledText.of(HarnessTranscript.EXAMPLE_SESSION_ID, HarnessTheme.DIM);
+        int identityWidth = HarnessRender.visibleLength(identity);
+        int fieldWidth = HarnessRender.visibleLength(field);
+        if (fieldWidth == 0 || identityWidth + 1 + fieldWidth > width) {
+            return HarnessRender.fill(identity, width, HarnessTheme.BACKGROUND);
+        }
+        int gap = width - identityWidth - fieldWidth;
+        return HarnessRender.fill(
+                identity.append(StyledText.plain(" ".repeat(gap))).append(field),
+                width,
+                HarnessTheme.BACKGROUND);
+    }
+
+    /** A full-width horizontal rule in the metrics dim, the style every frame rule wears. */
+    static StyledText rule(int width) {
+        int columns = Math.max(1, width);
+        return HarnessRender.fill(
+                StyledText.of("\u2500".repeat(columns), HarnessTheme.DIM),
+                columns,
+                HarnessTheme.BACKGROUND);
+    }
+
+    /**
+     * The rule above the composer, carrying the turn's status label in the text colour. An idle
+     * frame, or a label that does not fit, leaves the plain rule.
+     */
+    static StyledText statusRule(Harness.Model state) {
         int width = Math.max(1, state.viewport().cols());
-        boolean quitArmed = state.quitArmedUntilNanos() > state.nowNanos();
+        String label = statusLabel(state);
+        if (label.isBlank() || HarnessRender.visibleLength(label) + 5 > width) {
+            return rule(width);
+        }
+        int trailing = Math.max(1, width - HarnessRender.visibleLength(label) - 3);
+        StyledText row = StyledText.of("\u2500 ", HarnessTheme.DIM)
+                .append(StyledText.of(label, HarnessTheme.TEXT))
+                .append(StyledText.of(" " + "\u2500".repeat(trailing), HarnessTheme.DIM));
+        return HarnessRender.fill(row, width, HarnessTheme.BACKGROUND);
+    }
+
+    /** The status label of a working turn, or the empty label of an idle one. */
+    static String statusLabel(Harness.Model state) {
         if (!state.working()) {
-            return rule(width, quitArmed ? "ctrl+c again to exit" : "");
+            return "";
         }
         long started = state.workStartedNanos();
         long elapsedMillis = started < 0L
                 ? 0L
                 : Math.max(0, (state.nowNanos() - started) / 1_000_000L);
-        String queued = state.pending().size() > 0
-                ? " \u00b7 " + state.pending().size() + " queued" : "";
         String hint = state.escArmedUntilNanos() > state.nowNanos()
-                ? " - esc again to stop" : "";
-        String quitHint = quitArmed ? " \u00b7 ctrl+c again to exit" : "";
-        String label = HarnessRender.spinner(elapsedMillis) + " Working ("
-                + HarnessRender.formatElapsed(elapsedMillis / 1000L) + queued + hint + quitHint + ")";
-        return rule(width, label);
+                ? " - esc again to stop"
+                : " - esc esc to stop";
+        return HarnessRender.spinner(elapsedMillis)
+                + " Working ("
+                + HarnessRender.formatElapsed(elapsedMillis / 1000L)
+                + hint
+                + ")";
     }
 
     /**
-     * The status line. {@link Harness.Model#statusMessage()} carries the program's transient
-     * feedback ("Queue full (64); prompt not submitted.", clipboard outcomes, the Ctrl+C hint), so
-     * it is painted here; an absent or blank message leaves the plain rule unchanged.
+     * The queued prompts, wrapped edge to edge at the viewport width, below one blank separator
+     * row. A band longer than {@code maxRows} keeps its leading rows and ends with a count of the
+     * prompts its rows do not name, so the prompts stay queued and are still sent in order.
      */
-    static StyledText bottomRule(Harness.Model state) {
-        String message = state.statusMessage();
-        return rule(Math.max(1, state.viewport().cols()), message == null ? "" : message);
+    static List<StyledText> queuedBand(Harness.Model state, int width, int maxRows) {
+        int limit = Math.max(0, maxRows);
+        List<StyledText> rows = new ArrayList<>();
+        if (limit == 0) {
+            return rows;
+        }
+        // The mirrored prompt is painted by the composer, not by the band, so it is not shown
+        // twice. A queue of one therefore leaves the band empty.
+        List<String> prompts = state.pending();
+        int first = mirroredPrompt(state).isEmpty() ? 0 : 1;
+        List<Integer> promptStarts = new ArrayList<>();
+        for (int index = first; index < prompts.size(); index++) {
+            String prompt = prompts.get(index);
+            List<StyledText> rendered = new ArrayList<>();
+            for (String line : HarnessRender.sanitize(prompt).split("\n", -1)) {
+                if (line.isEmpty()) {
+                    continue;
+                }
+                for (String wrapped : HarnessRender.wrap(line, width)) {
+                    rendered.add(HarnessRender.fill(
+                            StyledText.of(wrapped, HarnessTheme.QUEUED),
+                            width,
+                            HarnessTheme.BACKGROUND));
+                }
+            }
+            if (rendered.isEmpty()) {
+                continue;
+            }
+            if (rows.isEmpty()) {
+                rows.add(backgroundRow(width));
+            }
+            promptStarts.add(rows.size());
+            rows.addAll(rendered);
+        }
+        if (rows.isEmpty() || rows.size() <= limit) {
+            return rows;
+        }
+        int kept = Math.max(0, limit - 1);
+        int unnamed = 0;
+        for (int start : promptStarts) {
+            if (start >= kept) {
+                unnamed++;
+            }
+        }
+        List<StyledText> shown = new ArrayList<>(rows.subList(0, Math.min(kept, rows.size())));
+        shown.add(queuedCountRow(width, "[" + unnamed + " more queued]"));
+        return shown;
     }
 
-    static List<StyledText> footer(Harness.Model state) {
-        int limit = Math.max(0, state.viewport().cols());
-        String path = state.projectPath();
-        if (path == null || path.isBlank()) {
-            path = "braxton";
+    /**
+     * The composer rows for a prompt waiting in the queue: the prompt's own lines in the queued
+     * colour, with no caret. A line too wide for the frame is cut at its right edge, exactly as
+     * the editor cuts a draft line it cannot draw.
+     */
+    static List<StyledText> queuedComposerRows(Harness.Model state, int width, int rows) {
+        int columns = Math.max(1, width);
+        int limit = Math.max(0, rows);
+        String[] lines = HarnessRender.sanitize(mirroredPrompt(state)).split("\n", -1);
+        int from = Math.max(0, lines.length - limit);
+        List<StyledText> out = new ArrayList<>(limit);
+        for (int i = from; i < lines.length; i++) {
+            out.add(HarnessRender.fill(
+                    StyledText.of(lines[i], HarnessTheme.QUEUED), columns, HarnessTheme.BACKGROUND));
         }
-        List<StyledText> rows = new ArrayList<>(3);
-        rows.add(row(limit, HarnessTheme.BACKGROUND_COLOR,
-                new Segment(HarnessRender.truncateLeft(path, limit), HarnessTheme.DIM)));
-        rows.add(row(limit, HarnessTheme.BACKGROUND_COLOR,
-                new Segment(HarnessRender.truncate(state.profile().label(), limit),
-                        HarnessTheme.DIM)));
-        rows.add(statsRow(limit, state));
+        return out;
+    }
+
+    /** The footer: project path, example source, provider/model identity, and the metrics lane. */
+    static List<StyledText> footer(Harness.Model state, int width) {
+        int columns = Math.max(0, width);
+        List<StyledText> rows = new ArrayList<>(FOOTER_HEIGHT);
+        String path = state.projectPath();
+        rows.add(HarnessRender.fill(
+                StyledText.of(
+                        HarnessRender.truncateLeft(path == null || path.isBlank() ? "braxton" : path, columns),
+                        HarnessTheme.DIM),
+                columns,
+                HarnessTheme.BACKGROUND));
+        // A path from the root is read from its left edge, so it keeps the leading slash and is
+        // cut at its right edge instead of from the front.
+        rows.add(HarnessRender.fill(
+                StyledText.of(HarnessRender.truncate(TRANSCRIPT_SOURCE, columns), HarnessTheme.DIM),
+                columns,
+                HarnessTheme.BACKGROUND));
+        rows.add(HarnessRender.fill(
+                StyledText.of(
+                        HarnessRender.truncateLeft(state.profile().label(), columns), HarnessTheme.DIM),
+                columns,
+                HarnessTheme.BACKGROUND));
+        rows.add(statsRow(state, columns));
         return rows;
     }
 
-    private static StyledText statsRow(int width, Harness.Model state) {
-        if (width <= 0) {
+    /** The metrics lane: real totals, cache hit rate, context use, and generation rate. */
+    static StyledText statsRow(Harness.Model state, int width) {
+        int columns = Math.max(0, width);
+        if (columns == 0) {
             return StyledText.empty();
         }
         HarnessTranscript.Usage usage = state.usage();
-        long promptInput = usage.uncachedInputTokens() > 0
+        long prompt = usage.uncachedInputTokens() > 0
                 ? usage.uncachedInputTokens() : usage.inputTokens();
-        long promptTotal = usage.cachedInputTokens() + usage.uncachedInputTokens();
-        List<Segment> parts = new ArrayList<>();
-        if (promptInput > 0) {
-            parts.add(new Segment("\u2191 " + HarnessRender.formatTokens(promptInput),
-                    HarnessTheme.DIM));
-        }
-        if (usage.outputTokens() > 0) {
-            parts.add(new Segment("\u2193 " + HarnessRender.formatTokens(usage.outputTokens()),
-                    HarnessTheme.DIM));
-        }
-        parts.add(new Segment("R " + HarnessRender.formatTokens(FAKE_CACHED_TOKENS),
-                HarnessTheme.DIM));
-        if (promptTotal > 0) {
-            parts.add(new Segment("CH " + String.format(java.util.Locale.ROOT, "%.1f%%",
-                    usage.cachedInputTokens() * 100.0 / promptTotal), HarnessTheme.DIM));
-        }
+        long cacheTotal = usage.cachedInputTokens() + usage.uncachedInputTokens();
+        List<StyledText> parts = new ArrayList<>();
+        parts.add(metric("\u2191 " + count(prompt)));
+        parts.add(metric("\u2193 " + count(usage.outputTokens())));
+        parts.add(metric("R " + count(usage.cachedInputTokens())));
+        parts.add(metric("CH " + (cacheTotal > 0
+                ? String.format(Locale.ROOT, "%.1f%%", usage.cachedInputTokens() * 100.0 / cacheTotal)
+                : "-")));
         if (state.contextWindow() > 0) {
-            double percent = usage.contextTokens() * 100.0 / state.contextWindow();
-            Style color = usage.contextTokens() > 0 && percent > 90
-                    ? HarnessTheme.ERROR
-                    : usage.contextTokens() > 0 && percent > 70
-                            ? HarnessTheme.WARNING : HarnessTheme.DIM;
-            parts.add(new Segment(HarnessRender.formatTokens(state.contextWindow())
-                    + String.format(java.util.Locale.ROOT, " (%.1f%%)", percent), color));
+            parts.add(contextPart(usage, state.contextWindow()));
         }
-        if (!parts.isEmpty() && usage.generationRate() != null) {
-            parts.add(new Segment(HarnessRender.formatRate(usage.generationRate()),
-                    HarnessTheme.DIM));
-        }
+        parts.add(metric(HarnessRender.formatRate(usage.generationRate())));
 
-        for (int count = parts.size(); count > 0; count--) {
-            String plain = joinText(parts, count);
-            if (HarnessRender.visibleLength(plain) <= width) {
-                return segmentsRow(width, parts.subList(0, count));
-            }
+        String note = state.quitArmedUntilNanos() > state.nowNanos() ? EXIT_HINT : "";
+        int noteWidth = note.isEmpty() ? 0 : HarnessRender.visibleLength(note);
+        int available = Math.max(1, columns - (note.isEmpty() ? 0 : noteWidth + 2));
+        StyledText stats = HarnessRender.truncate(joined(parts, available), available);
+        if (note.isEmpty()) {
+            return HarnessRender.fill(stats, columns, HarnessTheme.BACKGROUND);
         }
-        if (parts.isEmpty()) {
-            return row(width, HarnessTheme.BACKGROUND_COLOR,
-                    new Segment("ready", HarnessTheme.DIM));
-        }
-        return row(width, HarnessTheme.BACKGROUND_COLOR,
-                new Segment(HarnessRender.truncate(parts.get(0).text(), width), HarnessTheme.DIM));
+        int gap = Math.max(2, columns - HarnessRender.visibleLength(stats) - noteWidth);
+        return HarnessRender.fill(
+                stats.append(StyledText.plain(" ".repeat(gap)))
+                        .append(StyledText.of(note, HarnessTheme.ACCENT)),
+                columns,
+                HarnessTheme.BACKGROUND);
     }
 
-    private static StyledText segmentsRow(int width, List<Segment> parts) {
-        List<Segment> withSeparators = new ArrayList<>(parts.size() * 2 - 1);
-        for (int i = 0; i < parts.size(); i++) {
-            if (i > 0) {
-                withSeparators.add(new Segment(" | ", HarnessTheme.DIM));
-            }
-            withSeparators.add(parts.get(i));
+    private static StyledText contextPart(HarnessTranscript.Usage usage, int contextWindow) {
+        long tokens = usage.contextTokens();
+        double percent = tokens * 100.0 / contextWindow;
+        String label = HarnessRender.formatTokens(contextWindow)
+                + String.format(Locale.ROOT, " (%.1f%%)", percent);
+        if (tokens > 0 && percent > 90) {
+            return StyledText.of(label, HarnessTheme.ERROR);
         }
-        return row(width, HarnessTheme.BACKGROUND_COLOR,
-                withSeparators.toArray(Segment[]::new));
+        if (tokens > 0 && percent > 70) {
+            return StyledText.of(label, HarnessTheme.WARNING);
+        }
+        return metric(label);
     }
 
-    private static String joinText(List<Segment> parts, int count) {
-        StringBuilder text = new StringBuilder();
-        for (int i = 0; i < count; i++) {
-            if (i > 0) {
-                text.append(" | ");
-            }
-            text.append(parts.get(i).text());
-        }
-        return text.toString();
-    }
-
-    static StyledText rule(int width, String label) {
-        int limit = Math.max(1, width);
-        if (label == null || label.isBlank()) {
-            return row(limit, HarnessTheme.BACKGROUND_COLOR,
-                    new Segment("\u2500".repeat(limit), HarnessTheme.TEXT));
-        }
-        int available = Math.max(1, limit - 4);
-        String fitted = HarnessRender.truncate(label, available);
-        int trailing = Math.max(1, limit - 3 - HarnessRender.visibleLength(fitted));
-        return row(limit, HarnessTheme.BACKGROUND_COLOR,
-                new Segment("\u2500 ", HarnessTheme.TEXT),
-                new Segment(fitted, HarnessTheme.TEXT),
-                new Segment(" " + "\u2500".repeat(trailing), HarnessTheme.TEXT));
-    }
-
-    /** One full-width, background-filled row. */
-    static StyledText row(int width, Color background, Segment... segments) {
-        int limit = Math.max(0, width);
-        Style pad = background == null ? Style.NONE : Style.bg(background);
+    /**
+     * Joins the metric parts that fit {@code available} columns with the lane separator. The first
+     * part always stays: a lane too narrow for it is truncated by the row fill rather than emptied.
+     */
+    private static StyledText joined(List<StyledText> parts, int available) {
         StyledText row = StyledText.empty();
         int used = 0;
-        for (Segment segment : segments) {
-            int remaining = limit - used;
-            if (remaining <= 0) {
+        for (StyledText part : parts) {
+            int size = HarnessRender.visibleLength(part) + (used == 0 ? 0 : SEPARATOR.length());
+            if (used > 0 && used + size > available) {
                 break;
             }
-            String text = HarnessRender.truncate(segment.text(), remaining);
-            if (text.isEmpty()) {
-                continue;
+            if (used > 0) {
+                row = row.append(StyledText.of(SEPARATOR, HarnessTheme.DIM));
             }
-            Style style = segment.style() == null ? Style.NONE : segment.style();
-            if (background != null) {
-                style = style.withBackground(background);
-            }
-            row = row.append(StyledText.of(text, style));
-            used += HarnessRender.visibleLength(text);
-        }
-        if (used < limit) {
-            row = row.append(StyledText.of(" ".repeat(limit - used), pad));
+            row = row.append(part);
+            used += size;
         }
         return row;
     }
 
-    private static StyledText withScrollbar(StyledText content, int width, String glyph,
-            Style style) {
-        if (width <= 0) {
-            return StyledText.empty();
-        }
-        StyledText body = truncateStyled(content, width - 1);
-        // A wide glyph straddling the last body column is dropped whole, so the body can end up
-        // short; pad it or the bar lands left of every other row's bar.
-        int used = TextMeasure.columns(body.plainText());
-        if (used < width - 1) {
-            body = body.append(StyledText.of(" ".repeat(width - 1 - used),
-                    HarnessTheme.BACKGROUND));
-        }
-        return body.append(StyledText.of(glyph, style.withBackground(HarnessTheme.BACKGROUND_COLOR)));
+    private static String count(long value) {
+        return value > 0 ? HarnessRender.formatTokens(value) : "-";
     }
 
-    private static StyledText truncateStyled(StyledText content, int columns) {
-        if (columns <= 0) {
-            return StyledText.empty();
-        }
-        int used = 0;
-        StyledText out = StyledText.empty();
-        for (StyledText.Span span : content.spans()) {
-            for (String grapheme : TextMeasure.graphemes(span.text())) {
-                int width = TextMeasure.clusterColumns(grapheme, WidthPolicy.PINNED);
-                if (used + width > columns) {
-                    return out;
-                }
-                out = out.append(StyledText.of(grapheme, span.style(), span.link()));
-                used += width;
-            }
-        }
-        return out;
+    private static StyledText metric(String text) {
+        return StyledText.of(text, HarnessTheme.DIM);
+    }
+
+    private static StyledText queuedCountRow(int width, String text) {
+        return HarnessRender.fill(
+                StyledText.of(HarnessRender.truncate(text, Math.max(1, width)), HarnessTheme.NOTICE),
+                Math.max(1, width),
+                HarnessTheme.BACKGROUND);
+    }
+
+    /** One full-width row painted with the frame background. */
+    static StyledText backgroundRow(int width) {
+        return HarnessRender.fill(StyledText.empty(), Math.max(0, width), HarnessTheme.BACKGROUND);
     }
 }

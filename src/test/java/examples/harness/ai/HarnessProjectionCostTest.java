@@ -43,13 +43,9 @@ class HarnessProjectionCostTest {
         }
         Harness.Model state =
                 Harness.Model.initial(new Size(24, 80), "probe", List.of()).withEntries(entries);
-        assertThat(
-                        AllocationProbe.bytes(
-                                () ->
-                                        HarnessProjection.window(
-                                                (state).session(),
-                                                80,
-                                                HarnessProjection.allocate(24, 1).transcript())))
+        int body = HarnessProjection.layout(state).body();
+        assertThat(AllocationProbe.bytes(
+                        () -> HarnessProjection.window(state.session(), 80, body)))
                 .isLessThan(3_000_000);
     }
 
@@ -85,17 +81,13 @@ class HarnessProjectionCostTest {
                     Harness.Model state =
                             base.withViewport(new Size(height, width)).withScroll(scroll);
                     List<StyledText> full = HarnessProjection.allRows(state, width);
-                    int rows = HarnessProjection.allocate(height, 1).transcript();
+                    int rows = HarnessProjection.layout(state).body();
                     int end = full.size() - Math.min(scroll, Math.max(0, full.size() - rows));
                     int start = Math.max(0, end - rows);
                     String expected = rows == 0 ? "" : String.join("\n", full.subList(start, end).stream()
                             .map(text -> text.plainText().stripTrailing()).toList()).stripTrailing();
                     assertThat(HarnessProjection.visiblePlainText(state)).isEqualTo(expected);
-                    assertThat(
-                                    HarnessProjection.window(
-                                            (state).session(),
-                                            width,
-                                            HarnessProjection.allocate(height, 1).transcript()))
+                    assertThat(HarnessProjection.window(state.session(), width, rows))
                             .hasSize(rows);
                 }
             }

@@ -78,6 +78,34 @@ class HarnessRenderTest {
     }
 
     @Test
+    void theWorkingSpinnerAdvancesOneBrailleFramePerInterval() {
+        assertThat(HarnessRender.SPINNER_FRAME_MILLIS).isEqualTo(80L);
+        assertThat(HarnessRender.spinner(0)).isEqualTo("\u280b");
+        assertThat(HarnessRender.spinner(79)).isEqualTo("\u280b");
+        assertThat(HarnessRender.spinner(80)).isEqualTo("\u2819");
+        assertThat(HarnessRender.spinner(800)).as("the rotation wraps").isEqualTo("\u280b");
+        assertThat(HarnessRender.spinner(-5)).as("a negative elapsed reads as zero").isEqualTo("\u280b");
+        List<String> frames = new java.util.ArrayList<>();
+        for (int frame = 0; frame < 10; frame++) {
+            frames.add(HarnessRender.spinner(frame * HarnessRender.SPINNER_FRAME_MILLIS));
+        }
+        assertThat(frames).doesNotHaveDuplicates().hasSize(10);
+    }
+
+    @Test
+    void aFilledRowPaintsItsBackgroundUnderTheTextAndThePadding() {
+        io.github.dhoard.braxton.style.StyledText text = io.github.dhoard.braxton.style.StyledText.of(
+                "AB", io.github.dhoard.braxton.style.Style.fg(HarnessTheme.TEXT_COLOR));
+        var row = HarnessRender.fill(text, 5, HarnessTheme.HEADER_BACKGROUND);
+        assertThat(row.plainText()).isEqualTo("AB   ");
+        assertThat(row.spans()).allSatisfy(span -> assertThat(span.style().background())
+                .isEqualTo(HarnessTheme.TRANSCRIPT_HEADER_BG_COLOR));
+        assertThat(row.spans().getFirst().style().foreground())
+                .as("the text keeps its own foreground")
+                .isEqualTo(HarnessTheme.TEXT_COLOR);
+    }
+
+    @Test
     void wrappingAnOverlongIndentKeepsTheLineBlankInsteadOfInventingAnEllipsis() {
         // A whitespace-only line must stay blank. Clipping the indent keeps its width; the old
         // truncate() call turned it into " …", an ellipsis that was never in the text.

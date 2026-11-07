@@ -28,8 +28,9 @@ import io.github.dhoard.braxton.style.Style;
 /**
  * The showcase's semantic palette.
  *
- * <p>These values re-express the roles used by the sibling Amanda TUI as plain Braxton styles. Nothing
- * here imports Amanda, and no library type is changed.</p>
+ * <p>These values are one complete agent-terminal palette of semantic roles, expressed as plain
+ * Braxton styles. The harness carries its own copy so the example has no configuration surface
+ * and no dependency beyond the library: one immutable startup palette, read by rendering only.</p>
  */
 final class HarnessTheme {
 
@@ -37,34 +38,30 @@ final class HarnessTheme {
     static final Color ERROR_COLOR = color("#cc6666");
     static final Color WARNING_COLOR = color("#ffff00");
     static final Color NOTICE_COLOR = color("#de935f");
-    static final Color MUTED_COLOR = color("#808080");
+    static final Color QUEUED_COLOR = color("#d183e8");
     static final Color DIM_COLOR = color("#666666");
     static final Color TEXT_COLOR = color("#d4d4d4");
     static final Color BACKGROUND_COLOR = color("#000000");
-
-    static final Color USER_MESSAGE_BG_COLOR = color("#343541");
-    static final Color TOOL_PENDING_BG_COLOR = color("#282832");
-    static final Color TOOL_SUCCESS_BG_COLOR = color("#283228");
-    static final Color TOOL_ERROR_BG_COLOR = color("#3c2828");
+    static final Color TRANSCRIPT_HEADER_BG_COLOR = color("#1c1c1c");
     static final Color THINKING_TEXT_COLOR = color("#808080");
 
-    static final Color SCROLLBAR_TRACK_COLOR = color("#505050");
-    static final Color SCROLLBAR_THUMB_COLOR = color("#d4d4d4");
+    static final Color USER_GUTTER_COLOR = color("#60a5fa");
+    static final Color THINKING_GUTTER_COLOR = color("#a3a3a3");
+    static final Color ASSISTANT_GUTTER_COLOR = color("#ffffff");
+    static final Color TOOL_GUTTER_COLOR = color("#c4b5fd");
+    static final Color SYSTEM_GUTTER_COLOR = color("#94a3b8");
+    static final Color ERROR_GUTTER_COLOR = ERROR_COLOR;
 
     static final Style BACKGROUND = Style.bg(BACKGROUND_COLOR);
     static final Style TEXT = Style.fg(TEXT_COLOR);
+    static final Style DIM = Style.fg(DIM_COLOR);
     static final Style ACCENT = Style.fg(ACCENT_COLOR);
     static final Style ERROR = Style.fg(ERROR_COLOR);
     static final Style WARNING = Style.fg(WARNING_COLOR);
     static final Style NOTICE = Style.fg(NOTICE_COLOR);
-    static final Style DIM = Style.fg(DIM_COLOR);
+    static final Style QUEUED = Style.fg(QUEUED_COLOR);
     static final Style THINKING = Style.fg(THINKING_TEXT_COLOR).withItalic();
-    static final Style USER_MESSAGE_BG = Style.bg(USER_MESSAGE_BG_COLOR);
-    static final Style TOOL_PENDING_BG = Style.bg(TOOL_PENDING_BG_COLOR);
-    static final Style TOOL_SUCCESS_BG = Style.bg(TOOL_SUCCESS_BG_COLOR);
-    static final Style TOOL_ERROR_BG = Style.bg(TOOL_ERROR_BG_COLOR);
-    static final Style SCROLLBAR_TRACK = Style.fg(SCROLLBAR_TRACK_COLOR).withBackground(BACKGROUND_COLOR);
-    static final Style SCROLLBAR_THUMB = Style.fg(SCROLLBAR_THUMB_COLOR).withBackground(BACKGROUND_COLOR);
+    static final Style HEADER_BACKGROUND = Style.bg(TRANSCRIPT_HEADER_BG_COLOR);
 
     private HarnessTheme() {
     }

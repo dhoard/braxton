@@ -30,49 +30,100 @@ package examples.harness.ai;
  */
 public sealed interface HarnessEntry {
 
+    /**
+     * When this entry entered the session, in Unix milliseconds, or zero when it carries no time.
+     * The header renders it when it is positive; a fixture record with no recorded time therefore
+     * shows its label alone rather than an invented time.
+     */
+    long epochMillis();
+
+    /** Returns this entry with the supplied time, or with no time when it is not positive. */
+    default HarnessEntry at(long millis) {
+        long time = Math.max(0L, millis);
+        return switch (this) {
+            case User user -> new User(user.text(), time);
+            case Assistant assistant -> new Assistant(assistant.text(), time);
+            case Reasoning reasoning -> new Reasoning(reasoning.text(), time);
+            case Tool tool -> new Tool(tool.call(), tool.result(), tool.truncated(), tool.status(), time);
+            case Notice notice -> new Notice(notice.text(), time);
+            case Failure failure -> new Failure(failure.text(), time);
+        };
+    }
+
     /** A prompt the user submitted. */
-    public record User(String text) implements HarnessEntry {
+    public record User(String text, long epochMillis) implements HarnessEntry {
+        public User(String text) {
+            this(text, 0L);
+        }
+
         public User {
             text = text == null ? "" : text;
+            epochMillis = Math.max(0L, epochMillis);
         }
     }
 
     /** Assistant prose. */
-    public record Assistant(String text) implements HarnessEntry {
+    public record Assistant(String text, long epochMillis) implements HarnessEntry {
+        public Assistant(String text) {
+            this(text, 0L);
+        }
+
         public Assistant {
             text = text == null ? "" : text;
+            epochMillis = Math.max(0L, epochMillis);
         }
     }
 
     /** Provider reasoning, rendered in the thinking style. */
-    public record Reasoning(String text) implements HarnessEntry {
+    public record Reasoning(String text, long epochMillis) implements HarnessEntry {
+        public Reasoning(String text) {
+            this(text, 0L);
+        }
+
         public Reasoning {
             text = text == null ? "" : text;
+            epochMillis = Math.max(0L, epochMillis);
         }
     }
 
     /** A completed or pending tool call with a bounded preview of its result. */
-    public record Tool(String call, String result, boolean truncated, ToolStatus status)
+    public record Tool(
+            String call, String result, boolean truncated, ToolStatus status, long epochMillis)
             implements HarnessEntry {
+
+        public Tool(String call, String result, boolean truncated, ToolStatus status) {
+            this(call, result, truncated, status, 0L);
+        }
 
         public Tool {
             call = call == null ? "" : call;
             result = result == null ? "" : result;
             status = status == null ? ToolStatus.SUCCESS : status;
+            epochMillis = Math.max(0L, epochMillis);
         }
     }
 
     /** A system notice, such as the "mock data" reminder or a fixture warning. */
-    public record Notice(String text) implements HarnessEntry {
+    public record Notice(String text, long epochMillis) implements HarnessEntry {
+        public Notice(String text) {
+            this(text, 0L);
+        }
+
         public Notice {
             text = text == null ? "" : text;
+            epochMillis = Math.max(0L, epochMillis);
         }
     }
 
     /** A failed turn or a transcript-loading problem. */
-    public record Failure(String text) implements HarnessEntry {
+    public record Failure(String text, long epochMillis) implements HarnessEntry {
+        public Failure(String text) {
+            this(text, 0L);
+        }
+
         public Failure {
             text = text == null ? "" : text;
+            epochMillis = Math.max(0L, epochMillis);
         }
     }
 

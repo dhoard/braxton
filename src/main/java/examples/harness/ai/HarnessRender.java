@@ -27,7 +27,10 @@ import java.util.List;
 import java.util.Locale;
 
 import io.github.dhoard.braxton.clipboard.PasteSanitizer;
+import io.github.dhoard.braxton.style.Style;
+import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.style.WidthPolicy;
 
 /**
  * Text and metric helpers for the showcase.
@@ -37,7 +40,17 @@ import io.github.dhoard.braxton.style.TextMeasure;
  */
 final class HarnessRender {
 
-    private static final String[] SPINNER = {"\u25c7", "\u25c8", "\u25c6", "\u25c8"};
+    /**
+     * The working-label spinner: the ten-frame braille rotation, each frame one step further
+     * clockwise than the last.
+     */
+    private static final String[] SPINNER = {
+        "\u280b", "\u2819", "\u2839", "\u2838", "\u283c",
+        "\u2834", "\u2826", "\u2827", "\u2807", "\u280f"
+    };
+
+    /** How long one spinner frame lasts; the label advances one frame per interval. */
+    static final long SPINNER_FRAME_MILLIS = 80L;
 
     private HarnessRender() {
     }
@@ -60,8 +73,8 @@ final class HarnessRender {
      *
      * <p>No row costs more than {@code width} cells unless one grapheme cluster of the text is
      * itself wider than that: a cluster cannot be split, so it starts a row of its own. Callers
-     * such as the user-message pill in {@link HarnessProjection} pad every row to this width, so an
-     * over-wide row costs real text.</p>
+     * such as {@link HarnessMessage} fill every row to the frame width, so an over-wide row costs
+     * real text.</p>
      */
     static List<String> wrap(String text, int width) {
         int limit = Math.max(1, width);
@@ -287,19 +300,70 @@ final class HarnessRender {
         return "\u2026" + kept;
     }
 
-    /** Pads or truncates plain text to exactly {@code width} cells. */
-    static String pad(String text, int width) {
+    /**
+     * Fills a row to exactly {@code width} cells: truncating styled text that is too wide and
+     * painting what is short with the row's own background.
+     *
+     * <p>The background covers the text as well as the padding, so a row painted on a band (a
+     * message header) keeps the band under its own glyphs instead of only beside them. Truncation
+     * keeps each span's style, and a wide cluster that would straddle the last column is dropped
+     * whole rather than painted on top of it.</p>
+     */
+    static StyledText fill(StyledText text, int width, Style background) {
         int limit = Math.max(0, width);
-        String fitted = truncate(text == null ? "" : text, limit);
-        int missing = limit - visibleLength(fitted);
-        return missing <= 0 ? fitted : fitted + " ".repeat(missing);
+        StyledText body = truncate(text == null ? StyledText.empty() : text, limit);
+        if (background != null) {
+            body = withBackground(body, background);
+        }
+        int used = visibleLength(body);
+        if (used >= limit) {
+            return body;
+        }
+        Style pad = background == null ? Style.NONE : background;
+        return body.append(StyledText.of(" ".repeat(limit - used), pad));
+    }
+
+    /** Applies a row background to every span of styled text, keeping each span's own style. */
+    private static StyledText withBackground(StyledText text, Style background) {
+        StyledText out = StyledText.empty();
+        for (StyledText.Span span : text.spans()) {
+            out = out.append(StyledText.of(span.text(), span.style().merge(background), span.link()));
+        }
+        return out;
+    }
+
+    /** Truncates styled text to {@code width} columns without splitting a grapheme cluster. */
+    static StyledText truncate(StyledText text, int width) {
+        if (text == null || width <= 0) {
+            return StyledText.empty();
+        }
+        if (visibleLength(text) <= width) {
+            return text;
+        }
+        int used = 0;
+        StyledText out = StyledText.empty();
+        for (StyledText.Span span : text.spans()) {
+            for (String grapheme : TextMeasure.graphemes(span.text())) {
+                int cluster = TextMeasure.clusterColumns(grapheme, WidthPolicy.PINNED);
+                if (used + cluster > width) {
+                    return out;
+                }
+                out = out.append(StyledText.of(grapheme, span.style(), span.link()));
+                used += cluster;
+            }
+        }
+        return out;
     }
 
     static int visibleLength(String text) {
         return text == null ? 0 : TextMeasure.columns(text);
     }
 
-    /** Amanda-compatible compact token counts. */
+    static int visibleLength(StyledText text) {
+        return text == null ? 0 : TextMeasure.columns(text);
+    }
+
+    /** Compact token counts for the metrics lane. */
     static String formatTokens(long count) {
         if (count < 1000) {
             return Long.toString(count);
@@ -339,8 +403,8 @@ final class HarnessRender {
     }
 
     static String spinner(long elapsedMillis) {
-        long frame = Math.max(0, elapsedMillis) / 250;
-        return SPINNER[Math.floorMod(frame, SPINNER.length)];
+        long frame = Math.max(0, elapsedMillis) / SPINNER_FRAME_MILLIS;
+        return SPINNER[(int) Math.floorMod(frame, SPINNER.length)];
     }
 
     /** A bounded preview of tool output: the first {@code maxLines} lines plus a total count. */

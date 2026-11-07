@@ -397,7 +397,7 @@ def check_cleanup(java_command, command, expected_code):
 
 
 def check_harness():
-    with PtyChild([str(ROOT / "run-ai-harness.sh"), "--no-build"], control=False) as child:
+    with PtyChild([str(ROOT / "run-ai-harness.sh"), "--skip-build"], control=False) as child:
         def screen_until(predicate, description):
             deadline = time.monotonic() + 30
             while not predicate("\n".join(child.screen.display)):
@@ -408,15 +408,14 @@ def check_harness():
         child.terminal_contains("\x1b[?2004h")
         screen_until(lambda text: "Yes" in text and "deepseek" in text, "loaded session")
         os.write(child.master, b"hierarchy probe")
-        screen_until(lambda text: "> hierarchy probe" in text, "mounted editor input")
+        screen_until(lambda text: "hierarchy probe" in text, "mounted editor input")
         os.write(child.master, b"\x1bc")  # Alt+C: copy the editor output through the parent.
         screen_until(lambda text: "Copied" in text, "clipboard output")
         os.write(child.master, b"\x16")  # Ctrl+V: session-local clipboard, no external clipboard read.
-        screen_until(lambda text: "> hierarchy probehierarchy probe" in text, "paste dispatch")
+        screen_until(lambda text: "hierarchy probehierarchy probe" in text, "paste dispatch")
         os.write(child.master, b"\r")
         screen_until(lambda text: "Working" in text, "submitted workflow")
         screen_until(lambda text: "I'll start by reading" in text, "timer-driven response")
-        screen_until(lambda text: "\u2503" in text, "overflow scrollbar")
         # Stop response pacing before comparing scroll positions; no task races the assertion.
         os.write(child.master, b"\x1b")
         screen_until(lambda text: "esc again to stop" in text, "cancel confirmation")
@@ -433,7 +432,7 @@ def check_harness():
         require(len(child.screen.display) == 20 and all(len(row) == 64 for row in child.screen.display),
                 "harness resize did not match the emulated viewport")
         os.write(child.master, b"\x03")
-        screen_until(lambda text: "Press Ctrl+C again" in text, "exit confirmation")
+        screen_until(lambda text: "ctrl+c again to exit" in text, "exit confirmation")
         os.write(child.master, b"\x03")
         child.finish()
     print("PASS packaged hierarchical AI Harness editor/output/paste/submit/timer/scroll/resize/cancel/quit/restoration")

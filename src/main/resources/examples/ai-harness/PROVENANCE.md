@@ -1,15 +1,15 @@
 # AI Harness example transcript
 
-`session.jsonl` is example data for the AI Harness showcase. It is not a live recording and is
+`test.json` is example data for the AI Harness showcase. It is not a live recording and is
 never refreshed at runtime.
 
 ## Source
 
-The transcript is copied from a real local Amanda session log recorded on 2026-10-17 in this
-repository:
+The transcript is copied from a real local agent session log recorded on 2026-10-17 in this
+repository. The session home is redacted here the same way the fixture redacts host paths:
 
 ```text
-~/.amanda/projects/mnt/storage/Development/github/dhoard/braxton/sessions/
+<session home>/projects/mnt/storage/Development/github/dhoard/braxton/sessions/
     01a14c5c-c2b7-756e-9291-62d0bed736a4/session-log/00000001.log
 ```
 
@@ -51,7 +51,11 @@ event types in any case.
 
 ## Runtime behavior
 
-The completed demo loads this file from the classpath. It does not read `~/.amanda`, an external
+The completed demo loads this file from the classpath. It does not read a session home, an external
 session path, an environment variable, or any user state.
+
+The source log records no wall-clock times per record, so the fixture carries none. The harness
+stamps each message with the time it enters the demo session, which is why a header shows when the
+showcase produced that message rather than when the original session ran.
 
 No credentials, tokens, or personal data are present.

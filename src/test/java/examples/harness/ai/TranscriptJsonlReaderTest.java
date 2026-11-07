@@ -77,8 +77,8 @@ class TranscriptJsonlReaderTest {
         // The fixture must stay rich enough to exercise the transcript: every tool kind the
         // showcase formats, and results long enough to need the "more lines" preview note.
         assertThat(tools).anySatisfy(tool -> assertThat(tool.call()).startsWith("$ "));
-        assertThat(tools).anySatisfy(tool -> assertThat(tool.call()).startsWith("read "));
-        assertThat(tools).anySatisfy(tool -> assertThat(tool.call()).startsWith("edit "));
+        assertThat(tools).anySatisfy(tool -> assertThat(tool.call()).startsWith("$ read "));
+        assertThat(tools).anySatisfy(tool -> assertThat(tool.call()).startsWith("$ edit "));
         assertThat(tools).anySatisfy(tool -> assertThat(tool.result().lines().count())
                 .isGreaterThan(HarnessProjection.TOOL_PREVIEW_LINES));
     }

@@ -54,7 +54,7 @@ import java.util.Optional;
 class HarnessTest {
 
     private static final HarnessTranscript.Profile PROFILE =
-            new HarnessTranscript.Profile("amanda", "m", "high");
+            new HarnessTranscript.Profile("local", "m", "high");
 
     private static HarnessTranscript scripted() {
         return new HarnessTranscript(List.of(
@@ -120,6 +120,59 @@ class HarnessTest {
     }
 
     @Test
+    void entriesAreStampedWithTheProgramClock() {
+        long time = 1_700_000_000_000L;
+        Harness clocked = new Harness(HarnessTest::scripted, "~/braxton", List.of(), () -> time);
+        Harness.Model seeded = clocked
+                .init(new InitContext(new Viewport(24, 80), TerminalCapabilities.PLAIN))
+                .model();
+        assertThat(seeded.entries()).isNotEmpty();
+        assertThat(seeded.entries()).allSatisfy(entry ->
+                assertThat(entry.epochMillis()).isEqualTo(time));
+
+        Harness.Model loaded = clocked
+                .update(seeded, new Harness.Msg.SessionMsg(new Session.Msg.Loaded(scripted())))
+                .model();
+        assertThat(loaded.entries()).allSatisfy(entry ->
+                assertThat(entry.epochMillis()).isEqualTo(time));
+
+        Harness.Model submitted = update(loaded, clocked, new Harness.Msg.Submit("hello")).model();
+        assertThat(submitted.entries().getLast())
+                .isInstanceOfSatisfying(
+                        HarnessEntry.User.class,
+                        user -> assertThat(user.epochMillis()).isEqualTo(time));
+
+        Harness.Model replayed = update(
+                        submitted,
+                        clocked,
+                        new Harness.Msg.ResponseBlock(submitted.generation(), 0))
+                .model();
+        assertThat(replayed.entries().getLast().epochMillis()).isEqualTo(time);
+
+        Harness.Model noticed =
+                update(replayed, clocked, new Harness.Msg.Notice("rejected"))
+                        .model();
+        assertThat(noticed.entries().getLast())
+                .isInstanceOfSatisfying(
+                        HarnessEntry.Notice.class,
+                        notice -> assertThat(notice.epochMillis()).isEqualTo(time));
+    }
+
+    /** Runs one message through the supplied program, draining dispatch commands. */
+    private static Update<Harness.Model, Harness.Msg, Never> update(
+            Harness.Model state, Harness program, Harness.Msg message) {
+        var pending = new java.util.ArrayDeque<Harness.Msg>();
+        pending.add(message);
+        var commands = new java.util.ArrayList<Command<Harness.Msg>>();
+        while (!pending.isEmpty()) {
+            var result = program.update(state, pending.removeFirst());
+            state = result.model();
+            inspect(result.command(), pending, commands);
+        }
+        return Update.next(state, Command.batch(commands));
+    }
+
+    @Test
     void loadingSeedsTheFirstTurnExactlyOnce() {
         Harness.Model state =
                 update(
@@ -128,8 +181,8 @@ class HarnessTest {
                         .model();
         assertThat(state.status()).isEqualTo(Session.Status.READY);
         assertThat(state.replayIndex()).isEqualTo(1);
-        assertThat(state.entries()).contains(new HarnessEntry.User("first"));
-        assertThat(state.entries()).contains(new HarnessEntry.Assistant("one"));
+        assertThat(texts(state, HarnessEntry.User.class)).contains("first");
+        assertThat(texts(state, HarnessEntry.Assistant.class)).contains("one");
         assertThat(state.entries().stream().filter(e -> e instanceof HarnessEntry.User)).hasSize(1);
     }
 
@@ -153,7 +206,7 @@ class HarnessTest {
         Update<Harness.Model, Harness.Msg, Never> transition =
                 update(state, new Harness.Msg.ComposerMsg(new Editor.Msg.Submit()));
 
-        assertThat(transition.model().entries()).contains(new HarnessEntry.User("hello"));
+        assertThat(texts(transition.model(), HarnessEntry.User.class)).contains("hello");
         assertThat(transition.model().draft().text()).isEmpty();
         assertThat(transition.model().working()).isTrue();
         assertThat(transition.model().generation()).isEqualTo(1);
@@ -170,15 +223,15 @@ class HarnessTest {
         Harness.Model idle = ready().withNow(1_000_000_000L);
         Update<Harness.Model, Harness.Msg, Never> started =
                 update(idle, new Harness.Msg.Submit("hi"));
-        assertThat(HarnessProjection.topRule(started.model()).plainText())
-                .contains("Working (0s)");
+        assertThat(HarnessProjection.statusRule(started.model()).plainText())
+                .contains("Working (0s");
         Harness.Model first =
                 update(started.model(), new Harness.Msg.Tick(61_000_000_000L)).model();
-        assertThat(HarnessProjection.topRule(first).plainText())
-                .contains("Working (0s)");
+        assertThat(HarnessProjection.statusRule(first).plainText())
+                .contains("Working (0s");
         Harness.Model later = update(first, new Harness.Msg.Tick(66_000_000_000L)).model();
-        assertThat(HarnessProjection.topRule(later).plainText())
-                .contains("Working (5s)");
+        assertThat(HarnessProjection.statusRule(later).plainText())
+                .contains("Working (5s");
     }
 
     @Test
@@ -190,7 +243,7 @@ class HarnessTest {
                                 started.model(),
                                 new Harness.Msg.ResponseBlock(started.model().generation(), 0))
                         .model();
-        assertThat(state.entries()).contains(new HarnessEntry.Assistant("two"));
+        assertThat(texts(state, HarnessEntry.Assistant.class)).contains("two");
         assertThat(state.working()).isFalse();
         assertThat(state.outstandingPrompts()).isZero();
     }
@@ -202,7 +255,7 @@ class HarnessTest {
         Harness.Model afterFirst =
                 update(first.model(), new Harness.Msg.ResponseBlock(first.model().generation(), 0))
                         .model();
-        assertThat(afterFirst.entries()).contains(new HarnessEntry.Assistant("two"));
+        assertThat(texts(afterFirst, HarnessEntry.Assistant.class)).contains("two");
         assertThat(afterFirst.replayIndex()).isEqualTo(2);
 
         Update<Harness.Model, Harness.Msg, Never> second =
@@ -258,7 +311,7 @@ class HarnessTest {
                         .model();
         assertThat(afterFirst.working()).isTrue();
         assertThat(afterFirst.pending()).isEmpty();
-        assertThat(afterFirst.entries()).contains(new HarnessEntry.User("two"));
+        assertThat(texts(afterFirst, HarnessEntry.User.class)).contains("two");
     }
 
     @Test
@@ -268,8 +321,8 @@ class HarnessTest {
         Harness.Model ticked = update(first.model(), new Harness.Msg.Tick(1_000_000_000L)).model();
         Harness.Model queued = update(ticked, new Harness.Msg.Submit("two")).model();
         Harness.Model later = update(queued, new Harness.Msg.Tick(61_000_000_000L)).model();
-        assertThat(HarnessProjection.topRule(later).plainText())
-                .contains("Working (1m 0s \u00b7 1 queued)");
+        assertThat(HarnessProjection.statusRule(later).plainText())
+                .contains("Working (1m 0s - esc esc to stop)");
 
         // The last block of the running turn hands over to the queued one, which has not been
         // observed by a tick yet, so its label starts at zero rather than at the old start.
@@ -278,12 +331,12 @@ class HarnessTest {
         assertThat(drained.pending()).isEmpty();
         assertThat(drained.working()).isTrue();
         assertThat(drained.workStartedNanos()).isEqualTo(-1L);
-        assertThat(HarnessProjection.topRule(drained).plainText()).contains("Working (0s)");
+        assertThat(HarnessProjection.statusRule(drained).plainText()).contains("Working (0s");
 
         Harness.Model started = update(drained, new Harness.Msg.Tick(70_000_000_000L)).model();
-        assertThat(HarnessProjection.topRule(started).plainText()).contains("Working (0s)");
+        assertThat(HarnessProjection.statusRule(started).plainText()).contains("Working (0s");
         Harness.Model elapsed = update(started, new Harness.Msg.Tick(73_000_000_000L)).model();
-        assertThat(HarnessProjection.topRule(elapsed).plainText()).contains("Working (3s)");
+        assertThat(HarnessProjection.statusRule(elapsed).plainText()).contains("Working (3s");
     }
 
     @Test
@@ -328,7 +381,7 @@ class HarnessTest {
                 program.update(
                         started.model(),
                         new Harness.Msg.ResponseBlock(started.model().generation(), 0));
-        assertThat(second.model().entries()).contains(new HarnessEntry.Reasoning("one"));
+        assertThat(texts(second.model(), HarnessEntry.Reasoning.class)).contains("one");
         assertThat(delayOf(second)).isEqualTo(Harness.RESPONSE_DELAY);
     }
 
@@ -353,40 +406,44 @@ class HarnessTest {
         Update<Harness.Model, Harness.Msg, Never> stopped =
                 update(armed, new Harness.Msg.Escape(2_000_000_000L));
         assertThat(stopped.model().working()).isFalse();
-        assertThat(stopped.model().entries()).contains(new HarnessEntry.Notice("Stopped."));
+        assertThat(texts(stopped.model(), HarnessEntry.Notice.class)).contains("Stopped.");
         assertThat(stopped.model().pending()).isEmpty();
         assertThat(stopped.model().draft().text()).isEmpty();
         assertThat(stopped.command()).isInstanceOf(Command.CancelAll.class);
     }
 
     /**
-     * A terminal that sends ESC for the Alt key encodes Alt+Enter as the byte pair ESC CR, so two
-     * Alt+Enter submissions used to arrive as two bare Escapes: neither Enter reached the composer
-     * (the README promises "Type / Enter") and the second fabricated Escape landed inside the 2 s
-     * window documented for Esc, stopping the running turn and discarding the queued prompts.
+     * A terminal that sends ESC for the Alt key encodes Alt+Enter as the byte pair ESC CR, so an
+     * Alt+Enter submission used to arrive as a bare Escape: Enter never reached the composer (the
+     * README promises "Type / Enter") and the fabricated Escape landed inside the 2 s window
+     * documented for Esc, stopping the running turn and discarding the queued prompts.
      */
     @Test
-    void altEnterSubmissionsReachTheComposerAndNeverArmTheEscapeWindow() throws IOException {
+    void altEnterSubmissionReachesTheComposerAndNeverArmsTheEscapeWindow() throws IOException {
         Harness.Model running = update(ready(), new Harness.Msg.Submit("hello")).model();
         assertThat(running.working()).isTrue();
 
         InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteArrayInputStream(
                 new byte[] {0x1B, 0x0D, 0x1B, 0x0D})));
-        Harness.Model state = running;
-        for (int press = 0; press < 2; press++) {
-            state = state.withDraft(Editor.Model.of("press " + press));
-            InputEvent event = decoder.read().orElseThrow();
-            Harness.Msg message = InputRouter.route(HarnessView.view(state), event).orElseThrow();
-            assertThat(message)
-                    .as("press %d reaches the composer", press)
-                    .isEqualTo(new Harness.Msg.ComposerMsg(new Editor.Msg.Submit()));
-            state = update(state, message).model();
-        }
+        Harness.Model state = running.withDraft(Editor.Model.of("press 0"));
+        InputEvent event = decoder.read().orElseThrow();
+        Harness.Msg message = InputRouter.route(HarnessView.view(state), event).orElseThrow();
+        assertThat(message)
+                .isEqualTo(new Harness.Msg.ComposerMsg(new Editor.Msg.Submit()));
+        state = update(state, message).model();
+        assertThat(state.pending()).containsExactly("press 0");
+
+        // The queued prompt owns the composer until its turn starts, so the same gesture is
+        // refused rather than queued twice.
+        InputEvent second = decoder.read().orElseThrow();
+        assertThat(InputRouter.route(
+                        HarnessView.view(state.withDraft(Editor.Model.of("press 1"))), second))
+                .as("a queued prompt blocks further submissions")
+                .isEmpty();
 
         assertThat(state.working()).as("a key the user never pressed must not stop the turn")
                 .isTrue();
-        assertThat(state.pending()).containsExactly("press 0", "press 1");
-        assertThat(state.entries()).doesNotContain(new HarnessEntry.Notice("Stopped."));
+        assertThat(texts(state, HarnessEntry.Notice.class)).doesNotContain("Stopped.");
         assertThat(state.escArmedUntilNanos()).isZero();
         assertThat(decoder.read()).as("both keystroke pairs were consumed").isEmpty();
     }
@@ -401,18 +458,17 @@ class HarnessTest {
         Harness.Model armed = update(twoQueued, new Harness.Msg.Escape(1_000_000_000L)).model();
         Harness.Model stopped = update(armed, new Harness.Msg.Escape(2_000_000_000L)).model();
         assertThat(stopped.pending()).isEmpty();
-        assertThat(stopped.statusMessage()).contains("2 queued prompts");
+        assertThat(notices(stopped))
+                .contains("Stopped; 2 queued prompts discarded.");
 
         // Nothing queued means nothing to report, so the stop stays exactly as before.
         Harness.Model alone = update(started, new Harness.Msg.Escape(1_000_000_000L)).model();
         Harness.Model quiet = update(alone, new Harness.Msg.Escape(2_000_000_000L)).model();
-        assertThat(quiet.statusMessage()).isEmpty();
-        assertThat(quiet.entries()).contains(new HarnessEntry.Notice("Stopped."));
+        assertThat(notices(quiet)).contains("Stopped.");
 
         Harness.Model oneArmed = update(queued, new Harness.Msg.Escape(1_000_000_000L)).model();
         Harness.Model oneStopped = update(oneArmed, new Harness.Msg.Escape(2_000_000_000L)).model();
-        assertThat(oneStopped.statusMessage())
-                .contains("1 queued prompt").doesNotContain("1 queued prompts");
+        assertThat(notices(oneStopped)).contains("Stopped; 1 queued prompt discarded.");
     }
 
     @Test
@@ -437,9 +493,10 @@ class HarnessTest {
                 update(
                         working.withDraft(Editor.Model.of("keep me")),
                         new Harness.Msg.Submit("overflow"));
-        assertThat(rejected.model().statusMessage()).contains("Queue full");
+        assertThat(notices(rejected.model())).anySatisfy(notice ->
+                assertThat(notice).contains("Queue full"));
         assertThat(rejected.model().draft().text()).isEqualTo("keep me");
-        assertThat(rejected.model().entries()).doesNotContain(new HarnessEntry.User("overflow"));
+        assertThat(texts(rejected.model(), HarnessEntry.User.class)).doesNotContain("overflow");
     }
 
     @Test
@@ -452,7 +509,8 @@ class HarnessTest {
         Harness.Model loading = Harness.Model.initial(new Size(24, 80), "~/braxton", List.of());
         Update<Harness.Model, Harness.Msg, Never> rejected =
                 update(loading, new Harness.Msg.Submit("hi"));
-        assertThat(rejected.model().statusMessage()).contains("still loading");
+        assertThat(notices(rejected.model())).anySatisfy(notice ->
+                assertThat(notice).contains("still loading"));
     }
 
     @Test
@@ -534,30 +592,29 @@ class HarnessTest {
     }
 
     /**
-     * The README says the Ctrl+C confirmation is transient feedback on the rule above the footer
-     * and that another key cancels the pending confirmation. The hint is a status message, so once
-     * the confirmation is abandoned or has expired the rule must stop claiming that a second
-     * Ctrl+C exits; otherwise the bottom rule disagrees with the top rule (which drops its own
-     * hint) and keeps a false promise on screen indefinitely.
+     * The README says the Ctrl+C confirmation hint is shown for exactly the window it announces,
+     * and that another key cancels the pending confirmation. The hint is derived from the armed
+     * deadline alone, so once the confirmation is abandoned or has expired the metrics row must
+     * stop claiming that a second Ctrl+C exits rather than keep a false promise on screen.
      */
     @Test
-    void anAbandonedCtrlCConfirmationTakesItsHintOffTheStatusRule() {
+    void anAbandonedCtrlCConfirmationTakesItsHintOffTheMetricsRow() {
         Update<Harness.Model, Harness.Msg, Never> armed =
                 update(ready(), new Harness.Msg.QuitRequest(1_000_000_000L));
-        assertThat(painted(armed.model())).contains("Press Ctrl+C again");
+        assertThat(painted(armed.model())).contains("ctrl+c again to exit");
 
         Harness.Model abandoned = update(armed.model(), new Harness.Msg.UnhandledKey()).model();
         assertThat(abandoned.quitArmedUntilNanos()).isZero();
         assertThat(painted(abandoned)).as("an abandoned confirmation must not keep its hint")
-                .doesNotContain("Press Ctrl+C again");
+                .doesNotContain("ctrl+c again to exit");
 
         Harness.Model expired = update(armed.model(), new Harness.Msg.Tick(3_000_000_001L)).model();
         assertThat(expired.quitArmedUntilNanos()).isZero();
         assertThat(painted(expired)).as("an expired confirmation must not keep its hint")
-                .doesNotContain("Press Ctrl+C again");
+                .doesNotContain("ctrl+c again to exit");
 
-        // Only the confirmation's own hint goes: feedback a background event put on the rule after
-        // the confirmation was armed still belongs to that event.
+        // A notice a background event appended while the confirmation was armed stays where it
+        // belongs: in the transcript, not on the metrics row.
         Harness.Model reported =
                 update(
                                 armed.model(),
@@ -567,12 +624,37 @@ class HarnessTest {
         Harness.Model disarmed = update(reported, new Harness.Msg.UnhandledKey()).model();
         assertThat(disarmed.quitArmedUntilNanos()).isZero();
         assertThat(painted(disarmed)).contains("Queue full (64)")
-                .doesNotContain("Press Ctrl+C again");
+                .doesNotContain("ctrl+c again to exit");
     }
 
     /** Every painted row of the production view, joined, so assertions read the real screen. */
     private static String painted(Harness.Model state) {
         return String.join("\n", HarnessView.renderLines(state));
+    }
+
+    /** The text of every entry of one kind the state holds, oldest first. */
+    private static List<String> texts(Harness.Model state, Class<? extends HarnessEntry> type) {
+        return state.entries().stream()
+                .filter(type::isInstance)
+                .map(
+                        entry ->
+                                switch (entry) {
+                                    case HarnessEntry.User user -> user.text();
+                                    case HarnessEntry.Assistant assistant -> assistant.text();
+                                    case HarnessEntry.Reasoning reasoning -> reasoning.text();
+                                    case HarnessEntry.Tool tool -> tool.call();
+                                    case HarnessEntry.Notice notice -> notice.text();
+                                    case HarnessEntry.Failure failure -> failure.text();
+                                })
+                .toList();
+    }
+
+    /** The transcript notices the state holds, oldest first. */
+    private static List<String> notices(Harness.Model state) {
+        return state.entries().stream()
+                .filter(entry -> entry instanceof HarnessEntry.Notice)
+                .map(entry -> ((HarnessEntry.Notice) entry).text())
+                .toList();
     }
 
     @Test
@@ -588,7 +670,7 @@ class HarnessTest {
         Update<Harness.Model, Harness.Msg, Never> transition =
                 update(ready(), new Harness.Msg.ComposerMsg(new Editor.Msg.Copy()));
         assertThat(transition.command()).isInstanceOf(Command.None.class);
-        assertThat(transition.model().statusMessage()).isEqualTo("Nothing to copy.");
+        assertThat(notices(transition.model())).last().isEqualTo("Nothing to copy.");
     }
 
     @Test
@@ -599,7 +681,8 @@ class HarnessTest {
         Update<Harness.Model, Harness.Msg, Never> transition =
                 update(blank, new Harness.Msg.CopyLastReply());
         assertThat(transition.command()).isInstanceOf(Command.None.class);
-        assertThat(transition.model().statusMessage()).contains("No assistant reply");
+        assertThat(notices(transition.model())).anySatisfy(notice ->
+                assertThat(notice).contains("No assistant reply"));
     }
 
     @Test
@@ -615,7 +698,7 @@ class HarnessTest {
                 update(ready(), new Harness.Msg.CopyVisible());
         assertThat(transition.command()).isInstanceOf(Command.Copy.class);
         Command.Copy<Harness.Msg> copy = (Command.Copy<Harness.Msg>) transition.command();
-        assertThat(copy.text()).contains("AI Harness");
+        assertThat(copy.text()).contains("ASSISTANT").doesNotContain("AI Harness");
     }
 
     @Test
@@ -634,7 +717,8 @@ class HarnessTest {
                                                 io.github.dhoard.braxton.clipboard.ClipboardPath
                                                         .INTERNAL_ONLY)))
                         .model();
-        assertThat(internal.statusMessage()).contains("in-process clipboard only");
+        assertThat(notices(internal)).anySatisfy(notice ->
+                assertThat(notice).contains("in-process clipboard only"));
         Harness.Model truncated =
                 update(
                                 ready(),
@@ -649,7 +733,8 @@ class HarnessTest {
                                                 io.github.dhoard.braxton.clipboard.ClipboardPath
                                                         .OSC52_DIRECT)))
                         .model();
-        assertThat(truncated.statusMessage()).contains("truncated").contains("OSC 52");
+        assertThat(notices(truncated)).anySatisfy(notice ->
+                assertThat(notice).contains("truncated").contains("OSC 52"));
     }
 
     @Test

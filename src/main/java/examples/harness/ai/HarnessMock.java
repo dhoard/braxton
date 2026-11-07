@@ -67,7 +67,7 @@ final class HarnessMock {
                 """;
         HarnessEntry.Tool tool =
                 new HarnessEntry.Tool(
-                        "read src/main/java/examples/harness/ai/Harness.java",
+                        "$ read src/main/java/examples/harness/ai/Harness.java",
                         result,
                         false,
                         HarnessEntry.ToolStatus.SUCCESS);

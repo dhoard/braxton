@@ -607,12 +607,20 @@ transcript loading/history/metadata/replay/scroll; the editor owns the composer 
 The root coordinates cross-component workflow and consumes editor outputs through local dispatch.
 Mounted child views use the same production renderer as the headless projection tests:
 
-
 - transcript loading is a task command;
 - response pacing is a delayed message guarded by generation and ordinal;
 - animation is a 50 ms interval subscription, active only while working or while a hint is armed;
 - clipboard copy/paste goes through commands and the shared output owner;
 - cancellation and exit use input capture timestamps.
+
+The frame is a full agent-terminal layout: a pinned identity block over a rule, the scrollable
+transcript, a queued-prompt band, one gap row, the status rule, the composer, a second rule, and a
+four-row footer (project path, example source, provider/model identity, metrics). Every transcript
+block is a `TYPE` header carrying the time the message entered the session, one blank row, and its
+body, so prompts, reasoning, tool calls, notices, and failures are told apart by their label accent
+rather than by a coloured panel.
+The composer is flush-left, the status rule carries the spinner, elapsed time, and cancel hint, and
+the metrics row ends with the exit-confirmation hint while one is armed.
 
 | Key | Action |
 | --- | --- |
@@ -629,9 +637,10 @@ Mounted child views use the same production renderer as the headless projection 
 | Alt+T / Alt+L | Copy the visible transcript / the last assistant reply |
 
 Any other key cancels a pending Ctrl+C confirmation; a later Ctrl+C becomes the new first press.
-Transient feedback (clipboard outcomes, a full queue, the Ctrl+C confirmation) appears on the rule
-above the footer until the next action replaces it; the Ctrl+C hint leaves the rule with the
-confirmation it announces, so cancelling it or missing the window also clears it.
+Transient feedback (clipboard outcomes, a full queue, a rejected schedule, a stop) is appended to
+the transcript as a `SYSTEM` notice, so it reads in order with the work it describes; the Ctrl+C
+confirmation hint sits at the right edge of the metrics row for exactly the window it announces, so
+cancelling it or missing the window also clears it.
 The harness is fully offline: it replays a sanitized bundled transcript and deterministic fallback
 responses, with no model, provider, network, or user-session access.
 

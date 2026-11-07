@@ -35,7 +35,7 @@ import java.util.List;
  */
 public final class TranscriptLoader {
 
-    public static final String RESOURCE = "/examples/ai-harness/session.jsonl";
+    public static final String RESOURCE = "/examples/ai-harness/test.json";
 
     private TranscriptLoader() {
     }
