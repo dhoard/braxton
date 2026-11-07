@@ -18,6 +18,15 @@
 > unknown. Mark an irrelevant consideration **Not applicable — <reason>**. Retain all numbered
 > sections, scaling their detail to the actual complexity. Never mark the design
 > approved without explicit approval. Formal approval is not mandatory unless the user or project requires it.
+>
+> **Length and detail:** Aim for 1,500–2,000 words or fewer; small changes should need less.
+> This is a target, not a hard cap: exceed it only where needed to resolve ambiguity or preserve
+> a critical contract, and briefly explain the need. Keep all nine numbered sections and required
+> evidence, decisions, acceptance criteria, failure behavior, and open questions.
+> State each fact once, then reference its section, R-xx, or D-xx identifier elsewhere.
+> Link to authoritative specifications, architecture, and project rules instead of reproducing
+> them. Keep table cells concise and avoid repeating their contents in surrounding prose.
+> Include only findings and alternatives that affect the proposed behavior or its evaluation.
 
 ## 1. Problem, goal, and observable outcome
 

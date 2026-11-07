@@ -5,7 +5,7 @@
 #
 # Usage:
 #   ./run-ai-harness.sh            # ./mvnw clean package, then start the harness
-#   ./run-ai-harness.sh --no-build # skip packaging and start the existing jar
+#   ./run-ai-harness.sh --skip-build # skip packaging and start the existing jar
 #
 # The runtime uses JLine 4.4.8 FFM. The harness additionally uses optional
 # Gson and its annotation dependency; all runtime jars are copied into
@@ -17,7 +17,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 build=1
-if [ "${1:-}" = "--no-build" ]; then
+if [ "${1:-}" = "--skip-build" ]; then
     build=0
     shift
 fi

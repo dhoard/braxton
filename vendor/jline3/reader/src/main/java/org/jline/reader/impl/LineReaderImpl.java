@@ -600,6 +600,7 @@ public class LineReaderImpl implements LineReader, Flushable {
         // maskingCallback may be null
         // buffer may be null
         if (!commandsBuffer.isEmpty()) {
+            this.maskingCallback = maskingCallback;
             String cmd = commandsBuffer.remove(0);
             boolean done = false;
             do {
@@ -635,6 +636,8 @@ public class LineReaderImpl implements LineReader, Flushable {
         SignalHandler previousWinchHandler = null;
         SignalHandler previousContHandler = null;
         Attributes originalAttributes = null;
+        KillRing savedKillRing = null;
+        String savedYankBuffer = null;
         boolean dumb = isTerminalDumb();
         boolean userInterrupt = false;
         try {
@@ -656,6 +659,16 @@ public class LineReaderImpl implements LineReader, Flushable {
             state = State.NORMAL;
 
             modifiedHistory.clear();
+
+            if (maskingCallback != null) {
+                // Text killed or yanked while reading masked input (a password) must not stay in
+                // the kill ring or vi yank buffer, where a yank at a later prompt would insert it
+                // in clear text. Use a private ring for this read and restore the shared one after.
+                savedKillRing = killRing;
+                savedYankBuffer = yankBuffer;
+                killRing = new KillRing();
+                yankBuffer = "";
+            }
 
             setPrompt(prompt);
             setRightPrompt(rightPrompt);
@@ -814,6 +827,11 @@ public class LineReaderImpl implements LineReader, Flushable {
                 lock.lock();
 
                 this.reading = false;
+
+                if (savedKillRing != null) {
+                    killRing = savedKillRing;
+                    yankBuffer = savedYankBuffer;
+                }
 
                 Terminal.SignalHandler tmpHandler = terminal.handle(Signal.INT, s -> interrupted.set(true));
                 if (previousIntrHandler == null) {
@@ -1259,10 +1277,19 @@ public class LineReaderImpl implements LineReader, Flushable {
         return finish(buf.toString());
     }
 
+    /**
+     * Masked input is a secret (a password or passphrase) and must be returned exactly as
+     * typed, so history event expansion and the matching backslash unescaping only apply
+     * when no masking callback is active.
+     */
+    private boolean isEventExpansionEnabled() {
+        return !isSet(Option.DISABLE_EVENT_EXPANSION) && maskingCallback == null;
+    }
+
     protected String finish(String str) {
         String historyLine = str;
 
-        if (!isSet(Option.DISABLE_EVENT_EXPANSION)) {
+        if (isEventExpansionEnabled()) {
             StringBuilder sb = new StringBuilder();
             boolean escaped = false;
             for (int i = 0; i < str.length(); i++) {
@@ -1308,42 +1335,50 @@ public class LineReaderImpl implements LineReader, Flushable {
      *
      * <p>Autosuggestions are disabled when any handled signal is received.
      *
+     * @implNote This method acquires the reader's {@code lock} to serialize
+     *           with the input thread. Subclasses that override should do the same.
      * @param signal the received terminal signal (e.g. WINCH or CONT)
      */
-    protected synchronized void handleSignal(Signal signal) {
-        doAutosuggestion = false;
-        if (signal == Signal.WINCH) {
-            // Check if the character grid size actually changed.
-            // Pixel-level resizing can trigger SIGWINCH without changing
-            // the number of rows/columns.
-            Size newSize = terminal.getBufferSize();
-            if (newSize.getRows() != size.getRows() || newSize.getColumns() != size.getColumns()) {
-                Status status = Status.getStatus(terminal, false);
-                if (status == null || status.size() == 0) {
-                    // The terminal has already reflowed the active reader display to
-                    // the new width. When no status rows are active, resize Display's
-                    // existing rendered model without emitting output. Repainting here
-                    // races the terminal emulator's own reflow and can leave duplicate
-                    // prompt fragments or clear unrelated scrollback above the active
-                    // prompt.
-                    size = newSize;
-                    display.resize(size);
-                } else {
-                    // Status bars reserve terminal rows and need explicit resize
-                    // coordination; keep the existing redraw path for that mode.
-                    size = newSize;
-                    doDisplay();
-                    status.resize(size);
-                    redisplay();
+    protected void handleSignal(Signal signal) {
+        lock.lock();
+        try {
+            doAutosuggestion = false;
+            if (signal == Signal.WINCH) {
+                // Check if the character grid size actually changed.
+                // Pixel-level resizing can trigger SIGWINCH without changing
+                // the number of rows/columns.
+                Size newSize = terminal.getBufferSize();
+                if (newSize.getRows() != size.getRows() || newSize.getColumns() != size.getColumns()) {
+                    Status status = Status.getStatus(terminal, false);
+                    if (status == null || status.size() == 0) {
+                        // The terminal has already reflowed the active reader display to
+                        // the new width. When no status rows are active, resize Display's
+                        // existing rendered model without emitting output. Repainting here
+                        // races the terminal emulator's own reflow and can leave duplicate
+                        // prompt fragments or clear unrelated scrollback above the active
+                        // prompt.
+                        size = newSize;
+                        display.resize(size);
+                    } else {
+                        // Preserve the cursor offset while repainting any prompt rows
+                        // that Status.resize may clear when the reserved area moves.
+                        size = newSize;
+                        display.resize(size);
+                        display.reset();
+                        status.resize(size);
+                        redisplay();
+                    }
                 }
+            } else if (signal == Signal.CONT) {
+                terminal.enterRawMode();
+                size = terminal.getBufferSize();
+                display.resize(size);
+                terminal.puts(Capability.keypad_xmit);
+                redrawLine();
+                redisplay();
             }
-        } else if (signal == Signal.CONT) {
-            terminal.enterRawMode();
-            size = terminal.getBufferSize();
-            display.resize(size);
-            terminal.puts(Capability.keypad_xmit);
-            redrawLine();
-            redisplay();
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -3390,7 +3425,7 @@ public class LineReaderImpl implements LineReader, Flushable {
     protected boolean acceptLine() {
         parsedLine = null;
         int curPos = 0;
-        if (!isSet(Option.DISABLE_EVENT_EXPANSION)) {
+        if (isEventExpansionEnabled()) {
             try {
                 String str = buf.toString();
                 String exp = expander.expandHistory(history, str);
@@ -4052,7 +4087,7 @@ public class LineReaderImpl implements LineReader, Flushable {
         boolean out = true;
         File file = null;
         try {
-            file = File.createTempFile("jline-execute-", null);
+            file = ReaderUtils.createSecureTempFile("jline-execute-", null);
             try (FileWriter writer = new FileWriter(file)) {
                 writer.write(buf.toString());
             }
@@ -4779,6 +4814,9 @@ public class LineReaderImpl implements LineReader, Flushable {
     }
 
     protected boolean expandHistory() {
+        if (!isEventExpansionEnabled()) {
+            return false;
+        }
         String str = buf.toString();
         String exp = expander.expandHistory(history, str);
         if (!exp.equals(str)) {
@@ -4880,7 +4918,7 @@ public class LineReaderImpl implements LineReader, Flushable {
         }
         // Try to expand history first
         // If there is actually an expansion, bail out now
-        if (!isSet(Option.DISABLE_EVENT_EXPANSION)) {
+        if (isEventExpansionEnabled()) {
             try {
                 if (expandHistory()) {
                     return true;
@@ -5872,7 +5910,7 @@ public class LineReaderImpl implements LineReader, Flushable {
                     strings.add(group);
                 }
                 List<Candidate> candidates = entry.getValue();
-                Collections.sort(candidates);
+                candidates.sort(null);
                 strings.add(candidates);
                 if (ordered != null) {
                     ordered.addAll(candidates);
@@ -5891,7 +5929,7 @@ public class LineReaderImpl implements LineReader, Flushable {
             if (autoGroup) {
                 strings.addAll(groups);
             }
-            Collections.sort(sorted);
+            sorted.sort(null);
             strings.add(sorted);
             if (ordered != null) {
                 ordered.addAll(sorted);

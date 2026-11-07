@@ -19,6 +19,17 @@
 > placeholders with verified project-specific details before treating the plan as ready. Retain all
 > numbered sections, marking inapplicable sections with a reason. Distinguish planned commands
 > from actual results.
+>
+> **Length and detail:** Aim for 1,500–2,000 words or fewer for the initial plan; small changes
+> should need less. This is a target, not a hard cap: exceed it only where needed to resolve
+> ambiguity or preserve a critical contract, and briefly explain the need. Keep all nine numbered
+> sections, concrete files and changes, regression coverage, exact verification commands, blockers,
+> and rollback considerations. Reference the governing design's R-xx and D-xx identifiers instead
+> of restating its requirements, decisions, and rationale. State each fact or planned command once,
+> then reference its section, step, or verification row elsewhere. Keep table cells concise and
+> avoid repeating their contents in surrounding prose. Expand implementation substeps only where
+> needed to make execution unambiguous. The execution record may grow as actual results accumulate;
+> retain the evidence needed for an accurate handoff.
 
 ## 1. Design contract and readiness
 

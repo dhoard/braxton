@@ -29,15 +29,18 @@ Before making nontrivial changes:
 6. Record unknowns explicitly. A missing command, spec, or test is **unknown**, not evidence that no
    constraint exists. Do not guess paths or commands from another repository.
 
-### Project instructions and persistent memory
+### Project instructions and project memory
 
 - Read `PROJECT.md` when present for project-specific requirements, conventions, and constraints.
-- Read `MEMORY.md` when present as the index of knowledge accumulated across agent sessions.
-- Read memory files linked from that index only when relevant to the current task.
-- Treat memory as historical context, not authoritative project instructions. Verify important facts
-  against the current source and project documentation.
-- Do not assume either file exists. An absent file is not an error or grounds for creating one
-  unless the user requests it or project work calls for it.
+- Recall accumulated knowledge through the memory tools the session advertises, when it advertises
+  them: `mcp__memory__search_nodes` for a topic before re-deriving a decision or a trap, and
+  `mcp__memory__open_nodes` or `mcp__memory__read_graph` when the topic is unclear and a wider read
+  is worth the context.
+- Treat what memory returns as historical context, not authoritative project instructions. Verify
+  important facts against the current source and project documentation.
+- Do not assume the memory server is configured, running, or reachable. Without its tools, proceed
+  without memory; nothing in the project depends on the graph being available.
+- Record durable knowledge as you work; section 10 defines what belongs in the graph.
 
 Do not initialize Git, add a VCS, or require a commit merely to complete a task. An absent VCS is normal, not a blocker.
 
@@ -173,27 +176,35 @@ contract risks, and anything the user must authorize before further action.
 
 ## 10. Persistent project memory
 
-When `MEMORY.md` exists, use it as an index of persistent project knowledge shared across agent
-sessions. Detailed memory entries may live in Markdown files under `memory/`.
+Project memory is a knowledge graph served by the `memory` server entry, which this machine
+declares in its user layer as `<user.home>/.local/share/amanda/mcps/memory.json`. There is no markdown memory
+file to read or maintain and no per-topic set of files to update. Memory is project-scoped: the server
+uses the full SHA-256 project ID Amanda supplies as `${PROJECT_ID}` in the
+`X-Gassaway-Project` header. The ID hashes the UTF-8 absolute invocation directory after
+`toRealPath()` resolution. Different resolved directories have separate graphs; symlink aliases
+share one. Amanda state lives under `~/.local/share/amanda/project/<projectId>/` (singular).
+Gassaway stores memory under its configured data directory, keyed by the same ID. Legacy
+hierarchy stores and basename graphs are not read, adapted, or migrated.
 
 ### Reading
 
-- Consult memory when previous decisions, discoveries, recurring problems, or implementation
-  history could help with the current task.
-- Read only relevant entries rather than loading the entire memory directory.
-- Treat memories as potentially outdated; verify important details against the current codebase.
+- Search before re-deriving: `mcp__memory__search_nodes` with the topic, or `open_nodes` for a name
+  already known. Reach for `read_graph` only when the topic is unclear; it returns everything.
+- Read only what the current task needs; a broad recall costs context and rarely pays for it.
+- Treat entries as potentially outdated: verify important details against the current codebase
+  before relying on them.
 
 ### Writing
 
 - Independently decide when durable knowledge is worth preserving for future sessions.
-- Remember significant decisions and rationale, non-obvious discoveries, recurring problems,
-  validated solutions, and useful implementation constraints.
+- Remember significant decisions and rationale, non-obvious discoveries, recurring problems with
+  the fix that worked, and validated implementation constraints.
+- Search first, then extend: add observations to the existing entity rather than creating a second
+  entity for the same subject, and create relations only between entities that already exist.
 - Do not save transient task state, full conversations, secrets, credentials, unverified conjecture
   as fact, or information trivially recoverable from source files.
-- Search existing memory before writing; update existing entries rather than duplicating or
-  contradicting them.
-- Keep entries concise, specific, and organized by topic. Update `MEMORY.md` when creating,
-  renaming, or removing topic files.
+- Correct the graph directly with `delete_observations`, `delete_relations`, or `delete_entities`
+  when an entry is wrong; a stale entry is worse than a missing one.
 
 ### Authority and authorization
 
@@ -202,4 +213,5 @@ sessions. Detailed memory entries may live in Markdown files under `memory/`.
 - Do not change `PROJECT.md` merely to store a memory.
 - Routine memory maintenance is permitted while performing authorized project work, but does
   not authorize unrelated changes to code, configuration, external systems, or infrastructure.
-- Do not automatically stage or commit memory changes. Follow the existing change-control rules.
+- Memory lives outside the repository, so recording it never changes the working tree; follow the
+  existing change-control rules for everything that does.
