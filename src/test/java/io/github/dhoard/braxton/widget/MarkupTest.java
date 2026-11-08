@@ -1,0 +1,452 @@
+/*
+ * Copyright (c) 2026-present Doug Hoard
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package io.github.dhoard.braxton.widget;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.style.Color;
+import io.github.dhoard.braxton.style.Style;
+import io.github.dhoard.braxton.style.StyledText;
+import io.github.dhoard.braxton.style.TextMeasure;
+import io.github.dhoard.braxton.view.RenderedScreen;
+import io.github.dhoard.braxton.view.ScreenRenderer;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+/** Markup styling tokens, the regular reset, and the table grid. */
+class MarkupTest {
+
+    private static Style spanStyle(String xml) {
+        StyledText parsed = Markup.parse(xml);
+        assertThat(parsed.spans()).isNotEmpty();
+        return parsed.spans().get(0).style();
+    }
+
+    @Test
+    void styleTokensAreAppliedCaseInsensitivelyAndUnknownOnesAreIgnored() {
+        Style style = spanStyle("<root><span style=\"BOLD Italic underline\">x</span></root>");
+        assertThat(style.bold()).isTrue();
+        assertThat(style.italic()).isTrue();
+        assertThat(style.underline()).isTrue();
+        assertThat(style.strikethrough()).isFalse();
+        assertThat(style.invert()).isFalse();
+        assertThat(style.hidden()).isFalse();
+        assertThat(spanStyle("<root><span style=\"strikethrough invert hidden\">x</span></root>"))
+                .satisfies(all -> {
+                    assertThat(all.strikethrough()).isTrue();
+                    assertThat(all.invert()).isTrue();
+                    assertThat(all.hidden()).isTrue();
+                });
+        // An unknown token changes nothing and does not stop the ones after it.
+        assertThat(spanStyle("<root><span style=\"blink bold\">x</span></root>").bold())
+                .isTrue();
+        assertThat(spanStyle("<root><span style=\"  \">x</span></root>")).isEqualTo(Style.NONE);
+    }
+
+    @Test
+    void regularClearsEveryFlagWhateverOrderItIsWrittenIn() {
+        // The reset is applied once the whole list is read, so "regular" wins in either position
+        // while the colours it does not mention survive.
+        for (String tokens : List.of("bold regular", "regular bold", "REGULAR Italic Underline")) {
+            Style style = spanStyle(
+                    "<root><span style=\"" + tokens + "\" color=\"#112233\"" + " bg-color=\"#445566\">x</span></root>");
+            assertThat(style.bold()).as(tokens).isFalse();
+            assertThat(style.italic()).as(tokens).isFalse();
+            assertThat(style.underline()).as(tokens).isFalse();
+            assertThat(style.foreground())
+                    .as(tokens)
+                    .isEqualTo(Color.parse("#112233").orElseThrow());
+            assertThat(style.background())
+                    .as(tokens)
+                    .isEqualTo(Color.parse("#445566").orElseThrow());
+        }
+    }
+
+    @Test
+    void stylesNestAndAreInheritedByChildren() {
+        StyledText parsed = Markup.parse(
+                "<root><span style=\"bold\" color=\"#ff0000\">a<span style=\"italic\">b</span>c</span></root>");
+        assertThat(parsed.plainText()).isEqualTo("abc");
+        List<StyledText.Span> spans = parsed.spans();
+        assertThat(spans).extracting(StyledText.Span::text).contains("a", "b", "c");
+        assertThat(spans)
+                .filteredOn(span -> "b".equals(span.text()))
+                .singleElement()
+                .satisfies(span -> {
+                    assertThat(span.style().bold()).as("inherited").isTrue();
+                    assertThat(span.style().italic()).isTrue();
+                    assertThat(span.style().foreground())
+                            .isEqualTo(Color.parse("#ff0000").orElseThrow());
+                });
+    }
+
+    @Test
+    void aDoctypeOrEntityDeclarationIsRejectedInsteadOfBeingResolved() {
+        // The documented security rule: "Markup disables DTDs and external entities, so untrusted
+        // text cannot fetch a file or URL." A parser that resolved this document would put the
+        // file's contents (or a billion-laughs expansion) into the rendered text.
+        String externalEntity = "<!DOCTYPE root [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><root>&xxe;</root>";
+        assertThatThrownBy(() -> Markup.parse(externalEntity))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("DOCTYPE")
+                .hasMessageNotContaining("root:");
+        assertThatThrownBy(() -> Markup.parse("<!DOCTYPE root SYSTEM \"file:///etc/passwd\"><root>hi</root>"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Markup.parse("<!DOCTYPE root [<!ENTITY laugh \"ha\">]><root>&laugh;</root>"))
+                .isInstanceOf(IllegalArgumentException.class);
+        // An undeclared entity is a malformed document too, not literal text to echo.
+        assertThatThrownBy(() -> Markup.parse("<root>&undefined;</root>")).isInstanceOf(IllegalArgumentException.class);
+        // The ordinary document still renders, so the guard did not disable parsing.
+        assertThat(Markup.parse("<root>hi</root>").plainText()).isEqualTo("hi");
+    }
+
+    /**
+     * The documented attributes - {@code color}, {@code bg-color} and the {@code style} list - belong
+     * to the element that carries them wherever it sits in the document. A {@code td}, {@code tr} or
+     * {@code li} outside a grid reaches {@code renderNode} and keeps them; inside its owning
+     * container the renderer re-rendered the element's children with the container's own style, so
+     * the attributes disappeared with no diagnostic and the text painted in the terminal default
+     * while the markup around it kept its colour.
+     */
+    @Test
+    void cellsAndItemsKeepTheirOwnAttributesInsideTheirContainer() {
+        Color red = Color.parse("#ff0000").orElseThrow();
+        Color green = Color.parse("#00ff00").orElseThrow();
+        Color leaf = Color.parse("#22aa22").orElseThrow();
+        String coloured = "color=\"#ff0000\" bg-color=\"#00ff00\" style=\"bold\"";
+        Style standalone = spanStyle("<root><td " + coloured + ">red</td></root>");
+        assertThat(standalone.foreground()).as("a cell on its own is styled").isEqualTo(red);
+        assertThat(spanStyle("<root><p><td " + coloured + ">red</td></p></root>"))
+                .as("the same cell nested in a paragraph")
+                .isEqualTo(standalone);
+
+        StyledText table = Markup.parse("<root><table><tr><td " + coloured + ">red</td></tr></table></root>");
+        assertThat(table.plainText())
+                .as("the plain text and the padding are unchanged")
+                .isEqualTo("red  ");
+        assertThat(styleOfSpanContaining(table, "red"))
+                .as("the cell's own attributes")
+                .satisfies(cell -> {
+                    assertThat(cell.foreground()).isEqualTo(red);
+                    assertThat(cell.background()).isEqualTo(green);
+                    assertThat(cell.bold()).isTrue();
+                });
+        // Painted, not just stored: the cell's first character carries its foreground.
+        RenderedScreen screen =
+                new ScreenRenderer().screen(io.github.dhoard.braxton.view.Views.text(table), new Viewport(1, 12));
+        assertThat(screen.cell(0, 0).text()).isEqualTo("r");
+        assertThat(screen.cell(0, 0).style().foreground()).isEqualTo(red);
+        assertThat(table.spans())
+                .filteredOn(span -> "  ".equals(span.text()))
+                .as("the pad the grid adds is the table's decoration, not the cell's")
+                .allSatisfy(pad -> assertThat(pad.style()).isEqualTo(Style.NONE));
+
+        StyledText row =
+                Markup.parse("<root><table><tr color=\"#ff0000\"><td>one</td><td>two</td></tr></table></root>");
+        assertThat(styleOfSpanContaining(row, "one").foreground())
+                .as("a row's own attributes inherit into its cells")
+                .isEqualTo(red);
+        assertThat(styleOfSpanContaining(row, "two").foreground())
+                .as("every cell of the row")
+                .isEqualTo(red);
+
+        StyledText list = Markup.parse("<root><ul><li color=\"#22aa22\">a<br/>b</li></ul></root>");
+        assertThat(list.plainText()).isEqualTo("  \u2022 a\n    b");
+        assertThat(styleOfSpanContaining(list, "a").foreground())
+                .as("the item's first line")
+                .isEqualTo(leaf);
+        assertThat(styleOfSpanContaining(list, "b").foreground())
+                .as("the item's continuation line keeps it too")
+                .isEqualTo(leaf);
+        assertThat(styleOfSpanContaining(list, "\u2022").foreground())
+                .as("the bullet is the list's decoration and takes the list's attributes")
+                .isNull();
+
+        // Preserved: the container's own attributes still reach every cell and item.
+        assertThat(Markup.parse("<root><table color=\"#ff0000\"><tr><td>one</td><td>two</td></tr></table></root>")
+                        .spans())
+                .filteredOn(span -> !span.text().isBlank())
+                .allSatisfy(span -> assertThat(span.style().foreground()).isEqualTo(red));
+        assertThat(Markup.parse("<root><ul color=\"#ff0000\"><li>one</li></ul></root>")
+                        .spans())
+                .filteredOn(span -> !span.text().isBlank())
+                .allSatisfy(span -> assertThat(span.style().foreground()).isEqualTo(red));
+        // Preserved in the other direction: an item's own attributes stay on its own text.
+        StyledText boldItem = Markup.parse("<root><ul><li style=\"bold\">one</li></ul></root>");
+        assertThat(styleOfSpanContaining(boldItem, "one").bold()).isTrue();
+        assertThat(styleOfSpanContaining(boldItem, "\u2022").bold())
+                .as("an item does not restyle the list's bullet")
+                .isFalse();
+        assertThat(List.of(Markup.parse("<root><table><tr><td>a</td><td>longer</td></tr>"
+                                + "<tr><td>bb</td><td>c</td></tr></table></root>")
+                        .plainText()
+                        .split("\n", -1)))
+                .as("grid geometry is untouched")
+                .containsExactly("a   longer  ", "bb  c       ");
+    }
+
+    /** The style of the spans whose text contains {@code needle}. */
+    private static Style styleOfSpanContaining(StyledText rendered, String needle) {
+        List<StyledText.Span> matching = rendered.spans().stream()
+                .filter(span -> span.text().contains(needle))
+                .toList();
+        assertThat(matching)
+                .as("spans containing [%s] in %s", needle, rendered.spans())
+                .isNotEmpty();
+        assertThat(matching).as("one styled run per search needle").hasSize(1);
+        return matching.get(0).style();
+    }
+
+    @Test
+    void aTableIsARectangularGridWithEveryCellPadded() {
+        StyledText parsed = Markup.parse(
+                "<root><table><tr><td>a</td><td>longer</td></tr>" + "<tr><td>bb</td><td>c</td></tr></table></root>");
+        List<String> lines = List.of(parsed.plainText().split("\n", -1));
+        assertThat(lines).as("no trailing newline after the last row").hasSize(2);
+        // Every cell is padded on its right to its column's widest cell plus the two-space gap, so
+        // the last column is padded too and the grid stays rectangular.
+        assertThat(lines.get(0)).isEqualTo("a   " + "longer  ");
+        assertThat(lines.get(1)).isEqualTo("bb  " + "c       ");
+        assertThat(lines)
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line)).isEqualTo(12));
+    }
+
+    /**
+     * A row is painted as one cluster sequence, so a cell that opens with a cluster that has no base
+     * of its own - a combining mark, a variation selector, a joiner - joins the gap of the cell
+     * before it and occupies no column of its own there. Padding each cell from its own measurement
+     * charged that cell a column the row never spent, so the rows of one table came out different
+     * widths and the grid stopped being rectangular.
+     */
+    @Test
+    void aCellOpeningWithABaselessClusterKeepsTheGridRectangular() {
+        StyledText parsed = Markup.parse(
+                "<root><table><tr><td>a</td><td>\u0301x</td></tr>" + "<tr><td>b</td><td>y</td></tr></table></root>");
+        List<String> lines = List.of(parsed.plainText().split("\n", -1));
+        assertThat(lines).isEqualTo(List.of("a  \u0301x   ", "b  y   "));
+        assertThat(lines)
+                .allSatisfy(line -> assertThat(TextMeasure.columns(line))
+                        .as("line [%s]", line)
+                        .isEqualTo(7));
+        // Painted, the mark shares the cell of the gap before it, so the second cell's text still
+        // starts in the column the other row starts its second cell in.
+        RenderedScreen screen =
+                new ScreenRenderer().screen(io.github.dhoard.braxton.view.Views.text(parsed), new Viewport(2, 12));
+        assertThat(paintedColumn(screen, 0, 'x'))
+                .as("second cell column of row 0, rows painted to %d columns", screen.cols())
+                .isEqualTo(paintedColumn(screen, 1, 'y'));
+    }
+
+    /**
+     * A list item whose text opens with a cluster that has no base of its own paints that cluster
+     * behind the space its bullet ends with, and a variation selector widens it. The continuation
+     * indent is charged the same way, so the continuation lines stay under the item text instead of
+     * a column to its left.
+     */
+    @Test
+    void aListItemOpeningWithABaselessClusterHangsItsContinuationUnderItsText() {
+        String selector = "<root><ul gap=\"0\" icon=\"*\"><li>\uFE0Fx<br/>y</li></ul></root>";
+        RenderedScreen starred = new ScreenRenderer().screen(Markup.view(selector), new Viewport(6, 24));
+        assertThat(paintedColumn(starred, 0, 'x'))
+                .as("item text column, painted to %d columns", starred.cols())
+                .isEqualTo(paintedColumn(starred, 1, 'y'))
+                .isNotEqualTo(-1);
+        // The selector widens the space the icon ends with, so the item text really is painted in
+        // the third column, one right of the two columns the icon measures on its own.
+        assertThat(paintedColumn(starred, 0, 'x')).as("widened icon").isEqualTo(3);
+
+        RenderedScreen bulleted = new ScreenRenderer()
+                .screen(Markup.view("<root><ul><li>\uFE0Fx<br/>y</li></ul></root>"), new Viewport(6, 24));
+        assertThat(paintedColumn(bulleted, 0, 'x'))
+                .as("item text column of a default bullet, painted to %d columns", bulleted.cols())
+                .isEqualTo(paintedColumn(bulleted, 1, 'y'))
+                .isNotEqualTo(-1);
+        assertThat(paintedColumn(bulleted, 0, 'x')).as("widened default bullet").isEqualTo(5);
+    }
+
+    /**
+     * A continuation line that opens with the same kind of cluster widens the last space of its own
+     * indent, and that column comes back out of the indent: charging only the first line's leading
+     * cluster left such a line a column right of the text it hangs under.
+     */
+    @Test
+    void aContinuationLineOpeningWithABaselessClusterHangsUnderItsItemText() {
+        RenderedScreen screen = new ScreenRenderer()
+                .screen(
+                        Markup.view("<root><ul gap=\"0\" icon=\"*\"><li>x<br/>\uFE0Fy</li></ul></root>"),
+                        new Viewport(6, 24));
+        assertThat(paintedColumn(screen, 0, 'x'))
+                .as("item text column, painted to %d columns", screen.cols())
+                .isEqualTo(paintedColumn(screen, 1, 'y'))
+                .isNotEqualTo(-1);
+
+        // The item's own head is a base, so the icon is painted at the two columns it measures;
+        // it is the continuation line's selector that would widen that line's indent to three.
+        assertThat(paintedColumn(screen, 0, 'x')).as("item text column").isEqualTo(2);
+
+        RenderedScreen both = new ScreenRenderer()
+                .screen(
+                        Markup.view("<root><ul gap=\"0\" icon=\"*\"><li>\uFE0Fa<br/>\uFE0Fb</li></ul></root>"),
+                        new Viewport(6, 24));
+        assertThat(paintedColumn(both, 0, 'a'))
+                .as("item text column, painted to %d columns", both.cols())
+                .isEqualTo(paintedColumn(both, 1, 'b'))
+                .isNotEqualTo(-1);
+        assertThat(paintedColumn(both, 1, 'b')).as("continuation column").isEqualTo(3);
+    }
+
+    /**
+     * A cluster with no base of its own that does not widen the painted prefix - a combining mark, a
+     * joiner, the text-display selector - must keep the alignment it already had.
+     */
+    @Test
+    void aListItemOpeningWithANarrowBaselessClusterKeepsItsIndent() {
+        for (String head : List.of("\u0301", "\u200D", "\uFE0E")) {
+            RenderedScreen screen = new ScreenRenderer()
+                    .screen(
+                            Markup.view("<root><ul gap=\"0\" icon=\"*\"><li>" + head + "x<br/>y</li></ul></root>"),
+                            new Viewport(6, 24));
+            assertThat(paintedColumn(screen, 0, 'x'))
+                    .as("item text column of head U+%04X, painted to %d columns", head.codePointAt(0), screen.cols())
+                    .isEqualTo(paintedColumn(screen, 1, 'y'))
+                    .isNotEqualTo(-1);
+            // Joined, but narrow: the text still starts at the icon's own two columns.
+            assertThat(paintedColumn(screen, 1, 'y'))
+                    .as("continuation column of head U+%04X", head.codePointAt(0))
+                    .isEqualTo(2);
+        }
+    }
+
+    /** The column {@code needle} was painted in on {@code row}, or -1 when it is not painted. */
+    private static int paintedColumn(RenderedScreen screen, int row, char needle) {
+        for (int column = 0; column < screen.cols(); column++) {
+            if (screen.cell(row, column).text().indexOf(needle) >= 0) {
+                return column;
+            }
+        }
+        return -1;
+    }
+
+    @Test
+    void aShortRowPadsItsMissingCells() {
+        StyledText parsed = Markup.parse(
+                "<root><table><tr><td>a</td><td>b</td><td>c</td></tr>" + "<tr><td>d</td></tr></table></root>");
+        List<String> lines = List.of(parsed.plainText().split("\n", -1));
+        assertThat(lines.get(0)).isEqualTo("a  b  c  ");
+        assertThat(lines.get(1))
+                .as("a missing cell is padded like an empty one")
+                .isEqualTo("d  " + "   " + "   ");
+        assertThat(TextMeasure.columns(lines.get(1))).isEqualTo(TextMeasure.columns(lines.get(0)));
+    }
+
+    @Test
+    void aTableGapIsHonouredAndDefaultsToOne() {
+        StyledText wide = Markup.parse("<root><table gap=\"3\"><tr><td>a</td><td>b</td></tr></table></root>");
+        assertThat(wide.plainText().lines().toList().get(0)).isEqualTo("a   b   ");
+        assertThat(Markup.parse("<root><table gap=\"nope\"><tr><td>a</td></tr></table></root>")
+                        .plainText()
+                        .lines()
+                        .toList()
+                        .get(0))
+                .as("an unusable gap falls back to the default")
+                .isEqualTo("a  ");
+    }
+
+    @Test
+    void listsIndentTheirBulletAndHangTheContinuationLines() {
+        StyledText parsed = Markup.parse("<root><ul><li>first line that wraps</li><li>second</li></ul></root>");
+        List<String> lines = List.of(parsed.plainText().split("\n", -1));
+        assertThat(lines).allSatisfy(line -> assertThat(line).startsWith("  \u2022 "));
+        assertThat(Markup.parse("<root><ul icon=\"-\" gap=\"0\"><li>x</li></ul></root>")
+                        .plainText()
+                        .lines()
+                        .toList()
+                        .get(0))
+                .isEqualTo("- x");
+        assertThat(Markup.parse("<root><ul><li>bullet</li><p>text</p></ul></root>")
+                        .plainText()
+                        .lines()
+                        .toList()
+                        .get(0))
+                .as("only li children become bullets")
+                .isEqualTo("  \u2022 bullet");
+    }
+
+    /**
+     * A list icon is a one-line prefix, so it is painted as one: a tab advances to the text view's
+     * four-column stop and a line break becomes a space. Measuring the raw icon with
+     * {@code TextMeasure.columns} (which counts a tab or a break as one column) calculated a
+     * continuation indent under a column the painted prefix never reaches.
+     */
+    @Test
+    void aListIconIsMeasuredAsThePaintedOneLinePrefix() {
+        String tabbed = "<root><ul gap=\"0\" icon=\"&gt;&#9;\"><li>a<br/>b</li></ul></root>";
+        assertThat(Markup.parse(tabbed).plainText()).isEqualTo(">    a\n     b");
+        assertPaintedContinuationAlignsUnderTheItemText(tabbed, 'a', 'b');
+
+        String broken = "<root><ul gap=\"0\" icon=\"a&#10;b\"><li>c<br/>d</li></ul></root>";
+        assertThat(Markup.parse(broken).plainText()).isEqualTo("a b c\n    d");
+        assertPaintedContinuationAlignsUnderTheItemText(broken, 'c', 'd');
+
+        String carriageReturn = "<root><ul gap=\"0\" icon=\"e&#13;f\"><li>g<br/>h</li></ul></root>";
+        assertThat(Markup.parse(carriageReturn).plainText()).isEqualTo("e f g\n    h");
+        assertPaintedContinuationAlignsUnderTheItemText(carriageReturn, 'g', 'h');
+    }
+
+    /** The painted first-line item text and the painted continuation text share one column. */
+    private static void assertPaintedContinuationAlignsUnderTheItemText(String xml, char item, char continuation) {
+        List<String> painted = new io.github.dhoard.braxton.view.ScreenRenderer()
+                .plainLines(Markup.view(xml), new io.github.dhoard.braxton.layout.Viewport(4, 24));
+        assertThat(painted.get(1).indexOf(continuation))
+                .as("continuation column in %s", painted)
+                .isEqualTo(painted.get(0).indexOf(item))
+                .isNotEqualTo(-1);
+    }
+
+    @Test
+    void paragraphsAndBreaksEndTheirLines() {
+        assertThat(Markup.parse("<root><p>one</p><p>two</p></root>").plainText())
+                .as("the trailing newline is stripped")
+                .isEqualTo("one\ntwo");
+        assertThat(Markup.parse("<root>a<br/>b</root>").plainText()).isEqualTo("a\nb");
+        assertThat(Markup.parse("<root><unknown>kept</unknown></root>").plainText())
+                .isEqualTo("kept");
+    }
+
+    @Test
+    void emptyElementsMustBeClosedExplicitlyBecauseTheDocumentIsXml() {
+        // The documented contract: markup is a well-formed XML document, not HTML, so an empty
+        // element is closed explicitly. A bare void tag is a malformed document, not a break.
+        assertThat(Markup.parse("<root>a<br/>b</root>").plainText()).isEqualTo("a\nb");
+        assertThat(Markup.parse("<root><span></span>empty</root>").plainText()).isEqualTo("empty");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> Markup.parse("<root>a<br>b</root>"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("invalid markup");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> Markup.parse("<p>one</p><p>two</p>"))
+                .as("one document has exactly one root element")
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("invalid markup");
+    }
+}

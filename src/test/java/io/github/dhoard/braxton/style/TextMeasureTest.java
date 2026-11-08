@@ -1,0 +1,190 @@
+/*
+ * Copyright (c) 2026-present Doug Hoard
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package io.github.dhoard.braxton.style;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+
+/** Grapheme segmentation and terminal-column measurement are separate contracts. */
+class TextMeasureTest {
+
+    private static final String FAMILY = new String(new int[] {0x1F469, 0x200D, 0x1F469, 0x200D, 0x1F467}, 0, 5);
+
+    @Test
+    void combiningMarksAndZwjSequencesAreSingleGraphemes() {
+        assertThat(TextMeasure.graphemeCount("e\u0301")).isEqualTo(1);
+        assertThat(TextMeasure.graphemeCount(FAMILY)).isEqualTo(1);
+        assertThat(TextMeasure.graphemeCount("a" + FAMILY + "b")).isEqualTo(3);
+    }
+
+    @Test
+    void invisibleFormatCharactersOccupyNoColumn() {
+        for (String format : new String[] {"\u200B", "\u200C", "\u200D", "\u2060", "\u200E", "\uFEFF"}) {
+            assertThat(TextMeasure.columns(format))
+                    .as("columns of U+%04X", (int) format.charAt(0))
+                    .isZero();
+        }
+        assertThat(TextMeasure.columns("a\u200Bb")).isEqualTo(2);
+        assertThat(TextMeasure.columns("a\uFEFFb\u200Bc")).isEqualTo(3);
+    }
+
+    @Test
+    void aBareCombiningMarkStillNeedsTheCellItsDottedBaseUses() {
+        assertThat(TextMeasure.columns("\u0301")).isEqualTo(1);
+        assertThat(TextMeasure.columns("e\u0301")).isEqualTo(1);
+    }
+
+    @Test
+    void aSelectorInABaselessClusterIsMeasuredAsTheDottedCellItIsPaintedIn() {
+        // Painting stands the dotted circle in for the base a cluster does not have, so a selector
+        // inside such a cluster widens that circle the way it widens any other base: the cell is
+        // two columns, not the one the bare cluster measures. Charged one column, every grid widget
+        // padded the row one column short and painted a column past its own column boundary.
+        for (String cluster : new String[] {"\u0301\uFE0F", "\uFE0F\u0301", "\u0301\u0301\uFE0F"}) {
+            assertThat(TextMeasure.columns(cluster))
+                    .as("columns of the base-less cluster and of the dotted cell painted for it")
+                    .isEqualTo(2)
+                    .isEqualTo(TextMeasure.columns(TextMeasure.DOTTED_CIRCLE + cluster));
+        }
+        // Without the selector the dotted cell keeps the one column of the circle.
+        assertThat(TextMeasure.columns("\u0301\uFE0E")).isEqualTo(1);
+    }
+
+    @Test
+    void asciiIsOneColumn() {
+        assertThat(TextMeasure.columns("abc")).isEqualTo(3);
+        assertThat(TextMeasure.columns("")).isZero();
+    }
+
+    @Test
+    void styledValuesMeasureTheirWidestLineLikeStyledTextColumns() {
+        StyledText value = StyledText.plain("ab\ncdef");
+        assertThat(TextMeasure.columns(value)).isEqualTo(4);
+        assertThat(TextMeasure.columns(value)).isEqualTo(value.columns());
+    }
+
+    @Test
+    void eastAsianWideAndDefaultEmojiAreTwoColumns() {
+        assertThat(TextMeasure.columns("\u65E5")).isEqualTo(2);
+        assertThat(TextMeasure.columns("\uD83D\uDE00")).isEqualTo(2);
+        assertThat(TextMeasure.columns(FAMILY)).isEqualTo(2);
+    }
+
+    @Test
+    void variationSelectorsDecideEmojiPresentation() {
+        assertThat(TextMeasure.columns("\u2764")).isEqualTo(1);
+        assertThat(TextMeasure.columns("\u2764\uFE0F")).isEqualTo(2);
+        // One column because the base is one column wide, not because the selector narrowed it.
+        assertThat(TextMeasure.columns("\u2764\uFE0E")).isEqualTo(1);
+        assertThat(TextMeasure.columns("\u00A9")).isEqualTo(1);
+    }
+
+    @Test
+    void aTextPresentationSelectorDoesNotNarrowItsBase() {
+        // U+FE0E asks for the text form of the character before it and claims no column of its own.
+        // It is not a request to paint that character in one cell: Bubble Tea measures through
+        // x/ansi and displaywidth, where VS15 "requests text presentation but does not affect width,
+        // in my reading of Unicode TR51. Falls through to return the base character's property."
+        // Only VS16 changes a width, and only upward. A terminal gives a wide ideograph two cells in
+        // either form, so charging one column made every row holding one a column shorter than the
+        // cells it painted.
+        assertThat(TextMeasure.columns("\u4E2D")).isEqualTo(2);
+        assertThat(TextMeasure.columns("\u4E2D\uFE0E")).isEqualTo(2);
+        assertThat(TextMeasure.columns("\uD83D\uDE00")).isEqualTo(2);
+        assertThat(TextMeasure.columns("\uD83D\uDE00\uFE0E")).isEqualTo(2);
+        assertThat(TextMeasure.columns(FAMILY)).isEqualTo(2);
+        assertThat(TextMeasure.columns(FAMILY + "\uFE0E")).isEqualTo(2);
+        // A selector cannot widen a narrow base on its own, and it does not override a policy that
+        // measures everything in one column.
+        assertThat(TextMeasure.columns("a\uFE0E")).isEqualTo(1);
+        assertThat(TextMeasure.columns("\u00A9\uFE0E")).isEqualTo(1);
+        assertThat(TextMeasure.columns("\u4E2D\uFE0E", WidthPolicy.ONE_COLUMN)).isOne();
+        assertThat(TextMeasure.columns("\uD83D\uDE00\uFE0E", WidthPolicy.ONE_COLUMN))
+                .isOne();
+        // With no base of its own it still needs the cell a painted dotted base would use.
+        assertThat(TextMeasure.columns("\uFE0E")).isEqualTo(1);
+    }
+
+    @Test
+    void combiningClusterMeasuresAsItsBase() {
+        assertThat(TextMeasure.columns("e\u0301")).isEqualTo(1);
+        assertThat(TextMeasure.columns("\u0301")).isEqualTo(1);
+    }
+
+    @Test
+    void truncationNeverSplitsAClusterAndDropsAWideGlyphThatDoesNotFit() {
+        assertThat(TextMeasure.truncate("abcd", 2)).isEqualTo("ab");
+        assertThat(TextMeasure.truncate("a\u65E5", 2)).isEqualTo("a");
+        assertThat(TextMeasure.truncate("\u65E5x", 1)).isEmpty();
+        assertThat(TextMeasure.truncate("e\u0301x", 1)).isEqualTo("e\u0301");
+    }
+
+    @Test
+    void boundariesFollowGraphemeClusters() {
+        String text = "a" + FAMILY + "b";
+        int afterEmoji = TextMeasure.boundaryAfter(text, 1);
+        assertThat(afterEmoji).isEqualTo(1 + FAMILY.length());
+        assertThat(TextMeasure.previousBoundary(text, afterEmoji)).isEqualTo(1);
+        assertThat(TextMeasure.isBoundary(text, afterEmoji)).isTrue();
+        assertThat(TextMeasure.isBoundary(text, 2)).isFalse();
+    }
+
+    @Test
+    void boundaryBeforeSnapsDownToTheClusterStartAndDiffersFromThePreviousBoundary() {
+        // boundaryBefore() is "the cluster boundary at or before the index", so it is the identity
+        // on a boundary and snaps back inside one; previousBoundary() is always strictly earlier.
+        String text = "a" + FAMILY + "b";
+        assertThat(TextMeasure.boundaryBefore("abc", 2)).isEqualTo(2);
+        assertThat(TextMeasure.previousBoundary("abc", 2)).isEqualTo(1);
+        int insideFamily = 2;
+        assertThat(TextMeasure.boundaryBefore(text, insideFamily)).isEqualTo(1);
+        assertThat(TextMeasure.previousBoundary(text, insideFamily)).isEqualTo(1);
+        assertThat(TextMeasure.boundaryBefore(text, 1)).isEqualTo(1);
+        assertThat(TextMeasure.boundaryBefore("abc", 0)).isZero();
+        assertThat(TextMeasure.boundaryBefore("abc", -5)).isZero();
+        assertThat(TextMeasure.boundaryBefore("abc", 99)).isEqualTo(3);
+        assertThat(TextMeasure.boundaryBefore("", 3)).isZero();
+        assertThat(TextMeasure.boundaryBefore(null, 3)).isZero();
+        // Snapping down always lands on a boundary, never inside a cluster.
+        for (int index = 0; index <= text.length(); index++) {
+            assertThat(TextMeasure.isBoundary(text, TextMeasure.boundaryBefore(text, index)))
+                    .as("boundaryBefore(%d)", index)
+                    .isTrue();
+        }
+    }
+
+    @Test
+    void boundaryAfterAnIndexBeforeTheTextIsItsStart() {
+        assertThat(TextMeasure.boundaryAfter("ab", -1)).isZero();
+        assertThat(TextMeasure.boundaryAfter("", -1)).isZero();
+        assertThat(TextMeasure.boundaryAfter("ab", 2)).isEqualTo(2);
+        assertThat(TextMeasure.boundaryAfter("ab", 99)).isEqualTo(2);
+    }
+
+    @Test
+    void fitPadsAndTruncatesToExactColumns() {
+        assertThat(TextMeasure.fit("ab", 4)).isEqualTo("ab  ");
+        assertThat(TextMeasure.fit("abcdef", 3)).isEqualTo("abc");
+    }
+}

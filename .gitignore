@@ -1,0 +1,13 @@
+bin/
+target/
+*.class
+.idea/
+plans/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+.DS_Store
+.flattened-pom.xml
+tools/terminal/__pycache__/

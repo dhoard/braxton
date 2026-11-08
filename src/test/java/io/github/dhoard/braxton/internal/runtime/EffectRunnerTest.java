@@ -1,0 +1,399 @@
+/*
+ * Copyright (c) 2026-present Doug Hoard
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package io.github.dhoard.braxton.internal.runtime;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import io.github.dhoard.braxton.clipboard.ClipboardConfig;
+import io.github.dhoard.braxton.clipboard.ClipboardPath;
+import io.github.dhoard.braxton.clipboard.ClipboardResult;
+import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.effect.EffectId;
+import io.github.dhoard.braxton.internal.clipboard.ClipboardService;
+import io.github.dhoard.braxton.internal.clipboard.TerminalEnvironment;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Test;
+
+/** Commands are inert descriptions with exactly-once, epoch-guarded interpretation. */
+class EffectRunnerTest {
+
+    private final Mailbox mailbox = new Mailbox(16);
+    private final ManualTimers timers = new ManualTimers();
+    private final List<String> writes = new ArrayList<>();
+    private final RuntimeServices environment = new RuntimeServices(() -> 0L, Runnable::run, timers, message -> {});
+    private final ClipboardService clipboard = new ClipboardService(
+            ClipboardConfig.defaults(), new TerminalEnvironment(Map.of("TERM", "dumb")), writes::add);
+    private final EffectRunner<String> runner = new EffectRunner<>(mailbox, environment, clipboard, 2);
+
+    EffectRunnerTest() {
+        runner.bindOwner(Thread.currentThread());
+    }
+
+    private String nextMessage() throws InterruptedException {
+        Mailbox.Envelope envelope = mailbox.poll(20);
+        assertThat(envelope).isInstanceOf(Mailbox.AppMessage.class);
+        return (String) ((Mailbox.AppMessage) envelope).payload();
+    }
+
+    @Test
+    void aDelayDeliversItsMessageOnce() throws Exception {
+        runner.interpret(Command.delay(EffectId.of("a"), Duration.ofSeconds(1), "tick", "rejected"));
+        timers.advance(999_000_000L);
+        assertThat(mailbox.size()).isZero();
+        timers.advance(1_000_000L);
+        assertThat(nextMessage()).isEqualTo("tick");
+        timers.advance(5_000_000_000L);
+        assertThat(mailbox.size()).isZero();
+    }
+
+    @Test
+    void aTaskResultIsNotDroppedWhenTheMailboxIsFull() throws Exception {
+        Mailbox small = new Mailbox(1);
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().factory());
+        try {
+            EffectRunner<String> runner = new EffectRunner<>(
+                    small, new RuntimeServices(() -> 0L, executor, timers, message -> {}), clipboard, 2);
+            runner.bindOwner(Thread.currentThread());
+            small.enqueueFromOwner(new Mailbox.AppMessage("occupant"));
+            runner.interpret(
+                    Command.task(EffectId.of("t"), () -> "done", value -> "result:" + value, failure -> "failed"));
+            Thread.sleep(1_300L);
+            assertThat(small.poll(2_000)).isInstanceOf(Mailbox.AppMessage.class);
+            assertThat(small.poll(2_000))
+                    .as("the task result is delivered once the owner makes room")
+                    .isInstanceOf(Mailbox.AppMessage.class);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void cancellingAnEffectSuppressesDelivery() throws Exception {
+        EffectId id = EffectId.of("a");
+        runner.interpret(Command.delay(id, Duration.ofSeconds(1), "tick", "rejected"));
+        runner.interpret(Command.cancel(id));
+        timers.advance(2_000_000_000L);
+        assertThat(mailbox.size()).isZero();
+    }
+
+    @Test
+    void replacingAnIdInvalidatesTheOlderEpoch() throws Exception {
+        EffectId id = EffectId.of("a");
+        runner.interpret(Command.delay(id, Duration.ofSeconds(1), "first", "rejected"));
+        runner.interpret(Command.delay(id, Duration.ofSeconds(2), "second", "rejected"));
+        timers.advance(1_000_000_000L);
+        assertThat(mailbox.size()).isZero();
+        timers.advance(1_000_000_000L);
+        assertThat(nextMessage()).isEqualTo("second");
+    }
+
+    @Test
+    void exceedingTheEffectQuotaMapsToTheRejectionMessage() throws Exception {
+        runner.interpret(Command.delay(EffectId.of("a"), Duration.ofSeconds(1), "a", "rejected-a"));
+        runner.interpret(Command.delay(EffectId.of("b"), Duration.ofSeconds(1), "b", "rejected-b"));
+        runner.interpret(Command.delay(EffectId.of("c"), Duration.ofSeconds(1), "c", "rejected-c"));
+        assertThat(nextMessage()).isEqualTo("rejected-c");
+    }
+
+    @Test
+    void replacingAnIdAtQuotaIsAllowed() throws Exception {
+        EffectId id = EffectId.of("a");
+        runner.interpret(Command.delay(id, Duration.ofSeconds(1), "first", "rejected-a"));
+        runner.interpret(Command.delay(EffectId.of("b"), Duration.ofSeconds(1), "b", "rejected-b"));
+        runner.interpret(Command.delay(id, Duration.ofSeconds(2), "second", "rejected-a"));
+        timers.advance(1_000_000_000L);
+        assertThat(nextMessage()).isEqualTo("b");
+        timers.advance(1_000_000_000L);
+        assertThat(nextMessage()).isEqualTo("second");
+    }
+
+    @Test
+    void taskSuccessAndFailureBecomeMessages() throws Exception {
+        runner.interpret(Command.task(EffectId.of("ok"), () -> 7, value -> "ok:" + value, failure -> "fail"));
+        assertThat(nextMessage()).isEqualTo("ok:7");
+
+        runner.interpret(Command.task(
+                EffectId.of("bad"),
+                () -> {
+                    throw new IllegalStateException("boom");
+                },
+                value -> "ok",
+                failure -> "fail:" + failure.getMessage()));
+        assertThat(nextMessage()).isEqualTo("fail:boom");
+    }
+
+    @Test
+    void taskRejectionByTheExecutorMapsToFailure() throws Exception {
+        RuntimeServices rejecting = new RuntimeServices(
+                () -> 0L,
+                task -> {
+                    throw new java.util.concurrent.RejectedExecutionException("busy");
+                },
+                timers,
+                message -> {});
+        EffectRunner<String> limited = new EffectRunner<>(mailbox, rejecting, clipboard, 4);
+        limited.bindOwner(Thread.currentThread());
+        limited.interpret(Command.task(
+                EffectId.of("t"),
+                () -> 1,
+                value -> "ok",
+                failure -> "rejected:" + failure.getClass().getSimpleName()));
+        assertThat(nextMessage()).isEqualTo("rejected:RejectedExecutionException");
+    }
+
+    @Test
+    void aGraceTooLargeForTheClockAdditionStillWaitsForARunningTask() throws Exception {
+        // RuntimeOptions accepts every grace that fits in nanoseconds, Long.MAX_VALUE included,
+        // and the deadline addition then wraps. The wait is still correct because it compares clock
+        // differences: the wrapped deadline subtracts back to exactly the grace that is left, so a
+        // running task body is waited for instead of the wait ending immediately. The task is
+        // released well inside the grace period, so the wait must return zero.
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            RuntimeServices async = new RuntimeServices(() -> 0L, executor, timers, message -> {});
+            EffectRunner<String> asyncRunner = new EffectRunner<>(mailbox, async, clipboard, 4);
+            asyncRunner.bindOwner(Thread.currentThread());
+            asyncRunner.interpret(Command.task(
+                    EffectId.of("work"),
+                    () -> {
+                        entered.countDown();
+                        release.await();
+                        return "done";
+                    },
+                    value -> "success:" + value,
+                    failure -> "failure"));
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+            Thread releaser = Thread.ofVirtual().start(() -> {
+                try {
+                    Thread.sleep(100L);
+                } catch (InterruptedException stop) {
+                    Thread.currentThread().interrupt();
+                }
+                release.countDown();
+            });
+            try {
+                assertThat(asyncRunner.awaitIdle(Duration.ofNanos(Long.MAX_VALUE)))
+                        .as("the wait must cover a running task body")
+                        .isZero();
+            } finally {
+                release.countDown();
+                releaser.join();
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void cancellingARunningTaskInterruptsItsBodyAndDropsItsLateResult() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            RuntimeServices async = new RuntimeServices(() -> 0L, executor, timers, message -> {});
+            EffectRunner<String> asyncRunner = new EffectRunner<>(mailbox, async, clipboard, 4);
+            asyncRunner.bindOwner(Thread.currentThread());
+            asyncRunner.interpret(Command.task(
+                    EffectId.of("work"),
+                    () -> {
+                        entered.countDown();
+                        try {
+                            Thread.sleep(60_000L);
+                        } catch (InterruptedException stop) {
+                            interrupted.countDown();
+                            Thread.currentThread().interrupt();
+                        }
+                        return "done";
+                    },
+                    value -> "success:" + value,
+                    failure -> "failure:" + failure.getClass().getSimpleName()));
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+            asyncRunner.interpret(Command.cancel(EffectId.of("work")));
+            assertThat(interrupted.await(5, TimeUnit.SECONDS))
+                    .as("cancelling a running task must interrupt its body")
+                    .isTrue();
+            Thread.sleep(100L);
+            assertThat(mailbox.size())
+                    .as("a cancelled task's result must not arrive")
+                    .isZero();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void aThrowingSuccessMapperIsReportedThroughTheFailureMapper() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            RuntimeServices async = new RuntimeServices(() -> 0L, executor, timers, message -> {});
+            EffectRunner<String> asyncRunner = new EffectRunner<>(mailbox, async, clipboard, 4);
+            asyncRunner.bindOwner(Thread.currentThread());
+            asyncRunner.interpret(Command.task(
+                    EffectId.of("work"),
+                    () -> "value",
+                    value -> {
+                        throw new IllegalStateException("mapper broke");
+                    },
+                    failure -> "failure:" + failure.getMessage()));
+            String message = nextMessage();
+            assertThat(message).isEqualTo("failure:mapper broke");
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void aThrowingFailureMapperIsContainedAndReportedAsADiagnostic() throws Exception {
+        List<String> diagnostics = new ArrayList<>();
+        RuntimeServices reporting = new RuntimeServices(() -> 0L, Runnable::run, timers, diagnostics::add);
+        EffectRunner<String> runner = new EffectRunner<>(mailbox, reporting, clipboard, 4);
+        runner.bindOwner(Thread.currentThread());
+        runner.interpret(Command.task(
+                EffectId.of("work"),
+                () -> {
+                    throw new IllegalStateException("work broke");
+                },
+                value -> "ok",
+                failure -> {
+                    throw new IllegalStateException("failure mapper broke");
+                }));
+        assertThat(mailbox.size()).as("no message can be produced").isZero();
+        assertThat(diagnostics)
+                .anySatisfy(
+                        message -> assertThat(message).contains("effect work").contains("failure mapper"));
+    }
+
+    @Test
+    void copyReportsTheTruthfulResultAndWritesThroughTheSession() throws Exception {
+        ClipboardConfig config = ClipboardConfig.builder()
+                .tmuxStrategy(io.github.dhoard.braxton.clipboard.TmuxStrategy.DIRECT)
+                .build();
+        ClipboardService direct =
+                new ClipboardService(config, new TerminalEnvironment(Map.of("TERM", "xterm-256color")), writes::add);
+        EffectRunner<String> copyRunner = new EffectRunner<>(mailbox, environment, direct, 4);
+        copyRunner.bindOwner(Thread.currentThread());
+        copyRunner.interpret(Command.copy(
+                "hello", result -> result.path() + ":" + result.systemWriteRequested() + ":" + result.text()));
+        assertThat(nextMessage()).isEqualTo(ClipboardPath.OSC52_DIRECT + ":true:hello");
+        assertThat(writes).hasSize(1).allSatisfy(write -> assertThat(write).startsWith("\u001B]52;c;"));
+    }
+
+    @Test
+    void readingTheClipboardReturnsTheInternalBuffer() throws Exception {
+        ClipboardResult stored = clipboard.copy("payload");
+        assertThat(stored.storedInternally()).isTrue();
+        runner.interpret(Command.readClipboard(text -> "read:" + text));
+        assertThat(nextMessage()).isEqualTo("read:payload");
+    }
+
+    @Test
+    void aBatchStopsAfterQuitAndQuitIsRecorded() {
+        runner.interpret(Command.batch(
+                Command.delay(EffectId.of("a"), Duration.ofSeconds(1), "a", "r"),
+                Command.quit(3),
+                Command.delay(EffectId.of("b"), Duration.ofSeconds(1), "b", "r")));
+        assertThat(runner.quitRequested()).isTrue();
+        assertThat(runner.quitStatus()).isEqualTo(3);
+        assertThat(timers.pending()).isEqualTo(1);
+    }
+
+    @Test
+    void cancelScopeInvalidatesEveryChildEffect() throws Exception {
+        EffectRunner<String> runner = new EffectRunner<>(mailbox, environment, clipboard, 8);
+        runner.bindOwner(Thread.currentThread());
+        runner.interpret(Command.batch(
+                Command.delay(EffectId.of("a"), Duration.ofSeconds(1), "a", "r")
+                        .scoped(io.github.dhoard.braxton.mvu.ComponentPath.ROOT.append(
+                                io.github.dhoard.braxton.mvu.ComponentId.of("harness"))),
+                Command.delay(EffectId.of("b"), Duration.ofSeconds(1), "b", "r")
+                        .scoped(io.github.dhoard.braxton.mvu.ComponentPath.ROOT.append(
+                                io.github.dhoard.braxton.mvu.ComponentId.of("harness"))),
+                Command.delay(EffectId.of("other-c"), Duration.ofSeconds(1), "c", "r")));
+        runner.interpret(Command.<String>cancelAll()
+                .scoped(io.github.dhoard.braxton.mvu.ComponentPath.ROOT.append(
+                        io.github.dhoard.braxton.mvu.ComponentId.of("harness"))));
+        timers.advance(2_000_000_000L);
+        assertThat(nextMessage()).isEqualTo("c");
+        assertThat(mailbox.size()).isZero();
+    }
+
+    @Test
+    void timersWithNoPendingWorkReportZero() {
+        assertThat(timers.pending()).isZero();
+        assertThat(Timers.system()).isNotNull();
+    }
+
+    @Test
+    void aMappedCommandRetypesEveryMessageItCanProduce() throws Exception {
+        // Command.map is the composition primitive: every message a command can produce - a delay's
+        // message and its rejection, a task's success and failure, a clipboard report, and a quit's
+        // status - must survive re-typing unchanged.
+        EffectRunner<String> integers = new EffectRunner<>(mailbox, environment, clipboard, 4);
+        integers.bindOwner(Thread.currentThread());
+        integers.interpret(Command.<Integer>batch(
+                        Command.delay(EffectId.of("d"), Duration.ofSeconds(1), 1, 2), Command.copy("hi", result -> 3))
+                .map(value -> "mapped-" + value));
+        assertThat(nextMessage()).as("a copy reports at once, mapped").isEqualTo("mapped-3");
+        assertThat(mailbox.size()).isZero();
+        timers.advance(1_000_000_000L);
+        assertThat(nextMessage())
+                .as("the delayed message arrives later, mapped")
+                .isEqualTo("mapped-1");
+        assertThat(integers.quitRequested()).isFalse();
+
+        EffectRunner<String> quitting = new EffectRunner<>(mailbox, environment, clipboard, 4);
+        quitting.bindOwner(Thread.currentThread());
+        quitting.interpret(Command.quit(7).map(value -> "never"));
+        assertThat(quitting.quitStatus()).as("a quit keeps its status").isEqualTo(7);
+        EffectRunner<String> mappedQuit = new EffectRunner<>(mailbox, environment, clipboard, 4);
+        mappedQuit.bindOwner(Thread.currentThread());
+        mappedQuit.interpret(Command.<Integer>quit(9).map(value -> "never"));
+        assertThat(mappedQuit.quitStatus()).isEqualTo(9);
+
+        EffectRunner<String> tasks = new EffectRunner<>(mailbox, environment, clipboard, 4);
+        tasks.bindOwner(Thread.currentThread());
+        tasks.interpret(Command.<Integer, String>task(EffectId.of("t"), () -> "ok", value -> 1, failure -> 2)
+                .map(value -> "mapped-" + value));
+        assertThat(nextMessage()).isEqualTo("mapped-1");
+        tasks.interpret(Command.<Integer, String>task(
+                        EffectId.of("f"),
+                        () -> {
+                            throw new IllegalStateException("boom");
+                        },
+                        value -> 1,
+                        failure -> 2)
+                .map(value -> "mapped-" + value));
+        assertThat(nextMessage()).isEqualTo("mapped-2");
+        assertThat(mailbox.size()).as("no unmapped message leaked").isZero();
+    }
+}

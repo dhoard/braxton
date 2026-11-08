@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2026-present Doug Hoard
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package io.github.dhoard.braxton.internal.runtime;
+
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Shared scheduler for real-time operation.
+ *
+ * <p>One virtual thread serializes scheduled tasks, so timer callbacks keep their previous ordering
+ * while a waiting or blocking callback parks instead of pinning a platform thread. Virtual threads
+ * are daemons, so pending timers cannot keep the process alive.</p>
+ */
+final class SystemTimers implements Timers {
+
+    static final SystemTimers INSTANCE = new SystemTimers();
+
+    private final ScheduledThreadPoolExecutor scheduler = newScheduler();
+
+    private SystemTimers() {}
+
+    private static ScheduledThreadPoolExecutor newScheduler() {
+        ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(
+                1, Thread.ofVirtual().name("braxton-timers").factory());
+        // Without this, a cancelled delay keeps its task (and everything it captured) in the queue
+        // until the original deadline elapses; a cancelled hour-long timer would pin its state.
+        scheduler.setRemoveOnCancelPolicy(true);
+        return scheduler;
+    }
+
+    /** Queued tasks; a cancelled delay must leave the queue at once, not at its deadline. */
+    int pendingTasks() {
+        return scheduler.getQueue().size();
+    }
+
+    @Override
+    public Handle schedule(long delayNanos, Runnable task) {
+        // Round up to the next millisecond without the overflow that `delayNanos + 999_999` has
+        // near Long.MAX_VALUE, which would schedule a very long delay for right now.
+        long millis = delayNanos <= 0L ? 0L : 1L + (delayNanos - 1L) / 1_000_000L;
+        ScheduledFuture<?> future = scheduler.schedule(task, millis, TimeUnit.MILLISECONDS);
+        return () -> future.cancel(false);
+    }
+}
