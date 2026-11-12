@@ -38,9 +38,16 @@ class NativeLibraryProcessTest {
     @TempDir
     Path work;
 
+    /** Stands in for the build-recorded hash; the fixture only needs a valid, stable identity. */
+    private static final String CONTENT_HASH = "5c".repeat(32);
+
     private Process start(String mode, Path root, Path ready, Path release, Path payload, String name)
             throws Exception {
-        Path temporary = Files.createDirectories(work.resolve("tmp-" + name));
+        return start(mode, root, ready, release, payload, name, Files.createDirectories(work.resolve("tmp-" + name)));
+    }
+
+    private Process start(String mode, Path root, Path ready, Path release, Path payload, String name, Path temporary)
+            throws Exception {
         Path home = Files.createDirectories(work.resolve("home-" + name));
         var command = List.of(
                 Path.of(System.getProperty("java.home"), "bin", "java").toString(),
@@ -54,7 +61,8 @@ class NativeLibraryProcessTest {
                 ready.toString(),
                 release.toString(),
                 "1.0.0",
-                payload.toString());
+                payload.toString(),
+                CONTENT_HASH);
         var builder = new ProcessBuilder(command)
                 .redirectErrorStream(true)
                 .redirectOutput(work.resolve(name + ".log").toFile());
@@ -84,6 +92,47 @@ class NativeLibraryProcessTest {
     private static void stop(Process process) throws Exception {
         if (process.isAlive()) process.destroyForcibly();
         assertThat(process.waitFor(5, TimeUnit.SECONDS)).isTrue();
+    }
+
+    @Test
+    void separateUsersSharingTemporaryStorageEachExtractAndCleanTheirOwnCopy() throws Exception {
+        byte[] bytes = "shared packaged image".repeat(4096).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        Path payload = Files.write(work.resolve("shared-payload"), bytes);
+        Path shared = Files.createDirectories(work.resolve("shared-tmp"));
+        Path release = work.resolve("shared-release");
+        var processes = new ArrayList<Process>();
+        try {
+            // Distinct user.home values model distinct users; temporary storage is shared.
+            for (int index = 0; index < 3; index++) {
+                processes.add(start(
+                        "temporary",
+                        work.resolve("unused-cache-" + index),
+                        work.resolve("user-ready-" + index),
+                        release,
+                        payload,
+                        "user-" + index,
+                        shared));
+            }
+            for (int index = 0; index < processes.size(); index++) waitFor(work.resolve("user-ready-" + index));
+            Files.createFile(release);
+            var loaded = new ArrayList<Path>();
+            for (int index = 0; index < processes.size(); index++) {
+                Path result = Path.of(completed(processes.get(index), "user-" + index));
+                // The temporary copy is already removed, so compare the textual prefix only.
+                assertThat(result.toString()).startsWith(shared.toString());
+                loaded.add(result);
+            }
+            assertThat(loaded).doesNotHaveDuplicates();
+            try (var entries = Files.list(shared)) {
+                assertThat(entries.toList())
+                        .as("each user removed its own copy")
+                        .isEmpty();
+            }
+            for (int index = 0; index < processes.size(); index++)
+                assertThat(work.resolve("unused-cache-" + index)).doesNotExist();
+        } finally {
+            for (Process process : processes) stop(process);
+        }
     }
 
     @Test
@@ -123,7 +172,7 @@ class NativeLibraryProcessTest {
         Path payload = Files.write(work.resolve("payload"), bytes);
         Path root = work.resolve("cache");
         Path expected = NativeLibraryLoader.cached(
-                new NativeLibraryLoader.Image("1.0.0", "linux-x86_64", "libbraxton.so", bytes), root);
+                new NativeLibraryLoader.Image("1.0.0", "linux-x86_64", "libbraxton.so", bytes, CONTENT_HASH), root);
         Files.delete(expected);
         Path locked = work.resolve("locked");
         Process holder = start(

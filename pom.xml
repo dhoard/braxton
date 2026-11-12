@@ -435,6 +435,13 @@
                                     <arg value="${project.build.outputDirectory}"/>
                                     <arg value="${project.version}"/>
                                 </exec>
+                                <!-- Record the packaged binary's SHA-256 beside it. The loader names its
+                                     cache entry from this build-time value instead of hashing the image
+                                     during application startup, and never shells out to sha256sum/shasum. -->
+                                <checksum algorithm="SHA-256" fileext=".sha256" forceoverwrite="true">
+                                    <fileset dir="${project.build.outputDirectory}/META-INF/braxton/native"
+                                             includes="**/libbraxton.so,**/libbraxton.dylib"/>
+                                </checksum>
                             </target>
                         </configuration>
                     </execution>

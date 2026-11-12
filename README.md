@@ -785,14 +785,21 @@ the full project gate, and a terminal-emulation check when TUI code is touched.
 Interactive runs require `--enable-native-access=ALL-UNNAMED` on the classpath, or
 `--enable-native-access=io.github.dhoard.braxton` on the module path. Permission is checked
 before native initialization. The library first extracts into a private directory under
-`java.io.tmpdir`, loads the binary, and removes its temporary copy. If extraction or loading
+`java.io.tmpdir`, loads the binary, and removes its temporary copy. That directory is created
+exclusively with an unpredictable name taken from `/dev/urandom` and an owner-only mode applied at
+creation, so instances and different users sharing a temporary directory never collide or adopt
+one another's entry, and no `SecureRandom` (and therefore no JCA provider) is initialized to name
+it. The temporary copy is not flushed to stable storage, because it is removed moments after it is
+loaded. If extraction or loading
 fails there (including a `noexec` filesystem), it falls back to
-`user.home/.local/share/braxton/native/<version>/<platform>/<sha256>/libbraxton.so`
+`user.home/.local/share/braxton/native/<version>/<platform>/<content-hash>/libbraxton.so`
 (`libbraxton.dylib` on macOS). `user.home` is the JVM property, independent of the `HOME`
 environment variable.
 
-The cache uses the embedded Braxton version and full SHA-256 of the packaged binary, so
-separate releases and different builds of one release coexist. Concurrent first starts use
+The cache uses the embedded Braxton version and the SHA-256 that Maven records beside the compiled
+binary, so separate releases and different builds of one release coexist. Nothing is hashed while
+the application starts: the recorded value only names the cache entry, and an existing entry is
+reused only when its bytes match the packaged image exactly. Concurrent first starts use
 private staging files, a process lock, and atomic publication; published libraries are never
 modified in place. Existing cached bytes are checked before reuse, and corrupted regular files
 are repaired atomically. Managed entries reject symlinks and permissions that allow other

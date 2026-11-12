@@ -35,10 +35,9 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
+import java.util.Arrays;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 /** Native extraction policy, independent of FFM so publication and fallback are testable headlessly. */
 final class NativeLibraryLoader {
@@ -52,43 +51,54 @@ final class NativeLibraryLoader {
         Path get() throws IOException;
     }
 
+    /**
+     * A packaged native image and its build-recorded identity. The content hash is written beside the
+     * binary during the native build; it names the cache entry and is never recomputed at startup.
+     */
     static final class Image {
         private final String version;
         private final String platform;
         private final String filename;
         private final byte[] bytes;
-        private final String digest;
+        private final String contentHash;
 
-        Image(String version, String platform, String filename, byte[] bytes) throws IOException {
+        Image(String version, String platform, String filename, byte[] bytes, String contentHash) throws IOException {
             this.version = component(version);
             this.platform = component(platform);
             this.filename = component(filename);
             this.bytes = bytes.clone();
             if (bytes.length == 0) throw new IOException("empty Braxton native library");
-            digest = HexFormat.of().formatHex(sha256().digest(this.bytes));
+            this.contentHash = validateContentHash(contentHash);
         }
     }
 
     private static final Set<PosixFilePermission> DIRECTORY_MODE = PosixFilePermissions.fromString("rwx------");
     private static final Set<PosixFilePermission> STAGING_MODE = PosixFilePermissions.fromString("rw-------");
     private static final Set<PosixFilePermission> LIBRARY_MODE = PosixFilePermissions.fromString("r-x------");
+    /** Bounded attempts to pick an entry name that nothing else already occupies. */
+    static final int TEMPORARY_ATTEMPTS = 16;
 
     private NativeLibraryLoader() {}
 
     static Image packaged(String platform) throws IOException {
         String filename = platform.startsWith("macos-") ? "libbraxton.dylib" : "libbraxton.so";
         String prefix = "/META-INF/braxton/native/" + component(platform) + "/";
-        String version;
-        try (var input = NativeLibraryLoader.class.getResourceAsStream(prefix + "version.txt")) {
-            if (input == null) throw new IOException("missing Braxton native version metadata for " + platform);
-            byte[] metadata = input.readNBytes(257);
-            if (metadata.length > 256) throw new IOException("invalid Braxton native version metadata");
-            version = new String(metadata, java.nio.charset.StandardCharsets.UTF_8).strip();
-        }
+        String version = metadata(prefix + "version.txt");
+        String contentHash = metadata(prefix + filename + ".sha256");
         try (var input = NativeLibraryLoader.class.getResourceAsStream(prefix + filename)) {
             if (input == null)
                 throw new IOException("native library missing for " + platform + "; build Braxton on this platform");
-            return new Image(version, platform, filename, input.readAllBytes());
+            return new Image(version, platform, filename, input.readAllBytes(), contentHash);
+        }
+    }
+
+    /** Reads one small build-generated metadata resource beside the packaged binary. */
+    private static String metadata(String resource) throws IOException {
+        try (var input = NativeLibraryLoader.class.getResourceAsStream(resource)) {
+            if (input == null) throw new IOException("missing Braxton native metadata " + resource);
+            byte[] bytes = input.readNBytes(257);
+            if (bytes.length > 256) throw new IOException("invalid Braxton native metadata " + resource);
+            return new String(bytes, java.nio.charset.StandardCharsets.UTF_8).strip();
         }
     }
 
@@ -122,12 +132,11 @@ final class NativeLibraryLoader {
     }
 
     private static <T> T temporary(Image image, Path root, Link<T> link) throws IOException {
-        Path directory = Files.createTempDirectory(
-                root, "braxton-native-", PosixFilePermissions.asFileAttribute(DIRECTORY_MODE));
+        Path directory = privateTemporaryDirectory(root);
         Path file = directory.resolve(image.filename);
         Throwable primary = null;
         try {
-            write(file, image.bytes);
+            write(file, image.bytes, false);
             return link.load(file);
         } catch (IOException | RuntimeException | Error failure) {
             primary = failure;
@@ -166,7 +175,7 @@ final class NativeLibraryLoader {
         privateDirectory(directory);
         directory = directory.resolve(image.platform);
         privateDirectory(directory);
-        directory = directory.resolve(image.digest);
+        directory = directory.resolve(image.contentHash);
         privateDirectory(directory);
         directory = directory.toRealPath();
         Path file = directory.resolve(image.filename);
@@ -186,11 +195,10 @@ final class NativeLibraryLoader {
                 try (var lock = channel.lock(0, 1, false)) {
                     if (!lock.isValid()) throw new IOException("native extraction lock is invalid");
                     if (matches(image, file, directory)) return file;
-                    Path staging = Files.createTempFile(
-                            directory, ".extract-", ".part", PosixFilePermissions.asFileAttribute(STAGING_MODE));
+                    Path staging = stagingFile(directory);
                     Throwable primary = null;
                     try {
-                        write(staging, image.bytes);
+                        write(staging, image.bytes, true);
                         Files.move(staging, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
                         return file;
                     } catch (IOException | RuntimeException | Error failure) {
@@ -209,31 +217,106 @@ final class NativeLibraryLoader {
         }
     }
 
-    private static void write(Path file, byte[] bytes) throws IOException {
+    /**
+     * Creates an exclusively named private directory under {@code root}. An occupied name is never
+     * adopted: it may be another user's entry, so it only costs an attempt. The mode is applied by
+     * {@code mkdir} itself, so the directory is never briefly wider than owner-only.
+     */
+    static Path privateTemporaryDirectory(Path root) throws IOException {
+        return privateTemporaryDirectory(root, unpredictable());
+    }
+
+    static Path privateTemporaryDirectory(Path root, String suffix) throws IOException {
+        for (int attempt = 0; attempt < TEMPORARY_ATTEMPTS; attempt++) {
+            Path candidate = root.resolve("braxton-native-" + suffix + "-" + attempt);
+            try {
+                Files.createDirectory(candidate, PosixFilePermissions.asFileAttribute(DIRECTORY_MODE));
+            } catch (FileAlreadyExistsException taken) {
+                continue;
+            }
+            validatePrivateDirectory(candidate);
+            return candidate;
+        }
+        throw new IOException("cannot create a private Braxton temporary directory in " + root);
+    }
+
+    /**
+     * A staging name inside an already validated private directory. Exclusive creation means a
+     * crashed writer's partial file is never reused. Abandoned files are left alone, because they
+     * may belong to another process.
+     */
+    private static Path stagingFile(Path directory) throws IOException {
+        String suffix = unpredictable();
+        for (int attempt = 0; attempt < TEMPORARY_ATTEMPTS; attempt++) {
+            Path candidate = directory.resolve(".extract-" + suffix + "-" + attempt + ".part");
+            try {
+                Files.createFile(candidate, PosixFilePermissions.asFileAttribute(STAGING_MODE));
+                return candidate;
+            } catch (FileAlreadyExistsException taken) {
+                continue;
+            }
+        }
+        throw new IOException("cannot create a Braxton staging file in " + directory);
+    }
+
+    /**
+     * A name component other local users cannot predict. Linux and macOS both provide /dev/urandom,
+     * and eight bytes from it cost about 0.2 ms; obtaining the same strength from SecureRandom would
+     * initialize the JCA provider framework (~4.6 ms) on every application start. The fallback is
+     * not cryptographic and is safe only because creation is exclusive and every collision is
+     * retried rather than adopted.
+     */
+    private static String unpredictable() {
+        try (var channel = FileChannel.open(Path.of("/dev/urandom"), StandardOpenOption.READ)) {
+            ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+            while (buffer.hasRemaining()) if (channel.read(buffer) < 0) throw new IOException("short read");
+            buffer.flip();
+            return Long.toHexString(buffer.getLong());
+        } catch (IOException | RuntimeException unavailable) {
+            return Long.toHexString(System.nanoTime()
+                    ^ (ThreadLocalRandom.current().nextLong() * 0x9E3779B97F4A7C15L)
+                    ^ ProcessHandle.current().pid());
+        }
+    }
+
+    /**
+     * Writes one image and restricts its mode. Only a published cache entry is forced to stable
+     * storage: the temporary copy is unlinked moments after it is mapped, so flushing it buys
+     * nothing and costs a full journal commit per launch on a disk-backed temporary directory.
+     */
+    private static void write(Path file, byte[] bytes, boolean durable) throws IOException {
         try (var output = FileChannel.open(
                 file,
                 Set.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS),
                 PosixFilePermissions.asFileAttribute(STAGING_MODE))) {
             ByteBuffer buffer = ByteBuffer.wrap(bytes);
             while (buffer.hasRemaining()) output.write(buffer);
-            output.force(true);
+            if (durable) output.force(true);
         }
         Files.setPosixFilePermissions(file, LIBRARY_MODE);
     }
 
+    /**
+     * Reuses a published entry only when it is byte-for-byte the packaged image. Exact comparison
+     * replaces a digest check: the recorded hash names the cache directory, so a duplicated or stale
+     * hash can at worst cause an unnecessary replacement, never a wrong binary being loaded.
+     */
     private static boolean matches(Image image, Path file, Path directory) throws IOException {
         if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return false;
-        trustedFile(file, directory);
-        MessageDigest digest = sha256();
+        PosixFileAttributes attributes = trustedFile(file, directory);
+        if (attributes.size() != image.bytes.length) return false;
         try (var input = FileChannel.open(file, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
             ByteBuffer buffer = ByteBuffer.allocate(8192);
-            while (input.read(buffer) != -1) {
-                buffer.flip();
-                digest.update(buffer);
+            int offset = 0;
+            while (offset < image.bytes.length) {
                 buffer.clear();
+                int count = input.read(buffer);
+                if (count <= 0) return false;
+                if (Arrays.mismatch(buffer.array(), 0, count, image.bytes, offset, offset + count) != -1) return false;
+                offset += count;
             }
+            return true;
         }
-        return image.digest.equals(HexFormat.of().formatHex(digest.digest()));
     }
 
     private static void privateDirectory(Path directory) throws IOException {
@@ -242,17 +325,22 @@ final class NativeLibraryLoader {
         } catch (FileAlreadyExistsException existing) {
             /* Validate the existing entry below. */
         }
+        validatePrivateDirectory(directory);
+    }
+
+    private static void validatePrivateDirectory(Path directory) throws IOException {
         var attributes = Files.readAttributes(directory, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         if (!attributes.isDirectory() || writableByOthers(attributes))
             throw new IOException("unsafe native cache directory: " + directory);
     }
 
-    private static void trustedFile(Path file, Path directory) throws IOException {
+    private static PosixFileAttributes trustedFile(Path file, Path directory) throws IOException {
         var attributes = Files.readAttributes(file, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         if (!attributes.isRegularFile()
                 || writableByOthers(attributes)
                 || !attributes.owner().equals(Files.getOwner(directory)))
             throw new IOException("unsafe native cache file: " + file);
+        return attributes;
     }
 
     private static boolean writableByOthers(PosixFileAttributes attributes) {
@@ -266,6 +354,12 @@ final class NativeLibraryLoader {
         return value;
     }
 
+    private static String validateContentHash(String value) throws IOException {
+        if (value == null || !value.matches("[0-9a-f]{64}"))
+            throw new IOException("invalid Braxton native content hash; the native build must record one");
+        return value;
+    }
+
     private static Path propertyPath(String name) throws IOException {
         String value = System.getProperty(name);
         if (value == null || value.isBlank()) throw new IOException("missing " + name + " for native extraction");
@@ -273,14 +367,6 @@ final class NativeLibraryLoader {
             return Path.of(value);
         } catch (java.nio.file.InvalidPathException failure) {
             throw new IOException("invalid " + name + " for native extraction", failure);
-        }
-    }
-
-    private static MessageDigest sha256() {
-        try {
-            return MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException unavailable) {
-            throw new AssertionError(unavailable);
         }
     }
 }

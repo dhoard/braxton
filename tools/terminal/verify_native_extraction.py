@@ -80,9 +80,15 @@ def verify(args):
         prefix = f"META-INF/braxton/native/{target}/"
         with zipfile.ZipFile(jar) as source:
             payload = source.read(prefix + filename)
-            version = (source.read(prefix + "version.txt").decode().strip()
-                       if not args.expect_load_failure else "pre-fix")
-        digest = hashlib.sha256(payload).hexdigest()
+            if args.expect_load_failure:
+                # A saved pre-fix jar has no recorded hash; only the failure path uses this mode.
+                version, digest = "pre-fix", ""
+            else:
+                version = source.read(prefix + "version.txt").decode().strip()
+                digest = source.read(prefix + filename + ".sha256").decode().strip()
+        if digest:
+            require(digest == hashlib.sha256(payload).hexdigest(),
+                    f"packaged {filename}.sha256 does not describe the packaged binary")
         home = work / "home"
         home.mkdir()
         gate = work / "release"

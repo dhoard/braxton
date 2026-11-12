@@ -63,7 +63,9 @@ Size polling remains a fallback. Termination signals stay with the JVM; its shut
 restores modes. No native input worker is installed.
 
 Maven invokes `build.sh` during generate-resources, passing its output directory and Braxton version.
-The script emits `version.txt` beside the binary; shaded consumers must retain both. It requires
+The script emits `version.txt` beside the binary, and the same Maven execution records the binary's
+SHA-256 as `libbraxton.so.sha256` (`libbraxton.dylib.sha256` on macOS). Shaded consumers must retain
+the binary and both metadata files. It requires
 a C11 compiler (`CC` selects the compiler executable), Linux libc development headers or the
 macOS ARM64 SDK. Warnings are errors. Darwin gates `SIGWINCH` behind `_DARWIN_C_SOURCE` even at
 `_POSIX_C_SOURCE 200809L`, so `terminal.c` defines that macro before its first system include;
@@ -80,26 +82,49 @@ The default Maven tests use owned streams, with native access disabled.
 `NativeLibraryLoader` handles extraction independently of FFM. It first loads from a private
 owner-only temporary directory, removing that copy after loading. Actual OS loading decides
 whether the filesystem permits execution; file mode alone does not detect `noexec` mounts.
+That directory is created exclusively as `java.io.tmpdir/braxton-native-<nonce>-<attempt>` with its
+owner-only mode applied by `mkdir` itself, for at most 16 attempts. The nonce is read from
+`/dev/urandom`, so no other local user can predict the name; `SecureRandom` is deliberately not
+used because constructing it initializes the JCA provider framework (~4.5 ms) on every start. An
+occupied name is skipped, never adopted: it may be another user's entry. The temporary copy is
+written and mapped but never forced to stable storage — it is unlinked moments after loading, so a
+journal commit per launch would be pure cost, and on a disk-backed temporary directory it dominated
+the entire load. Distinct users and distinct instances share `java.io.tmpdir` safely: each one
+creates its own directory, and failures only ever cost an attempt.
 On temporary extraction/loading failure it retries from the JVM user's home cache:
 
 ```
-~/.local/share/braxton/native/<embedded-version>/<platform>/<sha256>/libbraxton.so
+~/.local/share/braxton/native/<embedded-version>/<platform>/<recorded-content-hash>/libbraxton.so
 ```
 
 macOS uses `libbraxton.dylib`. The location uses `System.getProperty("user.home")`; it does not
-read `HOME`. Each version/platform/content combination gets a distinct path. SHA-256 covers
-all packaged native bytes, isolating rebuilds that retain the same Maven version. Version
-metadata travels with the native resource, independently of a consuming application's manifest.
+read `HOME`. Each version/platform/content combination gets a distinct path. The content hash is
+not computed at startup: Maven records the SHA-256 of the compiled binary beside it during
+generate-resources, so it covers all packaged native bytes and isolates rebuilds that retain the
+same Maven version, and the loader never hashes the image or a published entry while the
+application starts. Version metadata travels with the native resource, independently of a
+consuming application's manifest. Because the recorded value only names the cache entry, a
+duplicate or stale record cannot load the wrong binary: reuse compares the published bytes with
+the packaged image exactly.
 
-Extraction creates private directories and a sibling staging file, writes and forces the
-complete image, marks it owner read/execute, then atomically renames it into place. A persistent
+Extraction creates private directories and an exclusively named sibling staging file, writes and
+forces the complete image (durability belongs to this published copy, not to the temporary one),
+marks it owner read/execute, then atomically renames it into place. A persistent
 `.extract.lock` coordinates cooperating processes. A canonical JVM-wide monitor serializes
 lock-channel access across threads/class loaders before the OS lock is opened. Neither loaded
-files nor lock files are truncated or removed during reuse; corrupt regular entries are
-replaced atomically. Abandoned `.part` files are ignored, not mistaken for complete entries.
+files nor lock files are truncated or removed during reuse; an entry is reused only when it is
+byte-for-byte the packaged image, and corrupt regular entries are replaced atomically. Abandoned
+`.part` files are ignored, not mistaken for complete entries.
 Old versions are not evicted automatically. Managed directories/files reject symlinks and
 other-user-writable permissions. Unsupported atomic moves/locking/permissions or a cache that
 also disallows loading result in an error preserving both attempts.
+
+The cache is per user: two users have separate caches under their own `user.home`, so the same
+version and build simply produce the same relative path in each. Entries are owner-only and are
+rejected when their owner differs from the directory's, so a user who shares one `user.home` with
+a different uid fails closed with an error instead of loading another user's binary. Sharing a home
+that way is not supported; each user still works through temporary extraction whenever temporary
+storage is usable.
 
 The opt-in `verify_native_extraction.py` compiles its Java probe outside the source tree,
 coordinates separate JVMs starting from an absent cache, keeps handles alive while another

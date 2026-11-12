@@ -37,7 +37,7 @@ public final class NativeExtractionProcess {
         Path ready = Path.of(args[2]);
         Path release = Path.of(args[3]);
         var image = new NativeLibraryLoader.Image(
-                args[4], "linux-x86_64", "libbraxton.so", Files.readAllBytes(Path.of(args[5])));
+                args[4], "linux-x86_64", "libbraxton.so", Files.readAllBytes(Path.of(args[5])), args[6]);
         Files.writeString(ready, "ready");
         if (mode.equals("hold")) {
             try (var channel = FileChannel.open(root, StandardOpenOption.WRITE);
@@ -54,13 +54,16 @@ public final class NativeExtractionProcess {
             if (System.nanoTime() > deadline) throw new AssertionError("start barrier was never released");
             Thread.sleep(5);
         }
-        Path result = mode.equals("fallback")
-                ? NativeLibraryLoader.load(image, file -> {
+        Path result = switch (mode) {
+            case "fallback" ->
+                NativeLibraryLoader.load(image, file -> {
                     if (file.startsWith(Path.of(System.getProperty("java.io.tmpdir"))))
                         throw new IllegalArgumentException("noexec");
                     return file;
-                })
-                : NativeLibraryLoader.cached(image, root);
+                });
+            case "temporary" -> NativeLibraryLoader.load(image, file -> file);
+            default -> NativeLibraryLoader.cached(image, root);
+        };
         System.out.println(result);
     }
 }

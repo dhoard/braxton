@@ -46,7 +46,17 @@ class NativeLibraryLoaderTest {
             "complete native image".repeat(8192).getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
     private NativeLibraryLoader.Image image(String version, byte[] bytes) throws IOException {
-        return new NativeLibraryLoader.Image(version, "linux-x86_64", "libbraxton.so", bytes);
+        return new NativeLibraryLoader.Image(version, "linux-x86_64", "libbraxton.so", bytes, sha256(bytes));
+    }
+
+    private static String sha256(byte[] bytes) throws IOException {
+        try {
+            return java.util.HexFormat.of()
+                    .formatHex(
+                            java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (java.security.NoSuchAlgorithmException unavailable) {
+            throw new IOException(unavailable);
+        }
     }
 
     @Test
@@ -138,7 +148,8 @@ class NativeLibraryLoaderTest {
         byte[] other = "different build of the same release".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         Path laterBuild = NativeLibraryLoader.cached(image("1.0.0", other), root);
         Path otherPlatform = NativeLibraryLoader.cached(
-                new NativeLibraryLoader.Image("1.0.0", "macos-aarch64", "libbraxton.dylib", PAYLOAD), root);
+                new NativeLibraryLoader.Image("1.0.0", "macos-aarch64", "libbraxton.dylib", PAYLOAD, sha256(PAYLOAD)),
+                root);
         assertThat(List.of(first, laterRelease, laterBuild, otherPlatform)).doesNotHaveDuplicates();
         assertThat(Files.readAllBytes(first)).isEqualTo(PAYLOAD);
         assertThat(Files.readAllBytes(laterRelease)).isEqualTo(PAYLOAD);
@@ -185,9 +196,71 @@ class NativeLibraryLoaderTest {
     }
 
     @Test
+    void theRecordedHashNamesTheCacheEntryAndReuseRequiresIdenticalBytes() throws Exception {
+        Path root = work.resolve("cache");
+        String recorded = "0123456789abcdef".repeat(4);
+        var image = new NativeLibraryLoader.Image("1.0.0", "linux-x86_64", "libbraxton.so", PAYLOAD, recorded);
+        Path file = NativeLibraryLoader.cached(image, root);
+        assertThat(file.getParent().getFileName().toString()).isEqualTo(recorded);
+        assertThat(Files.readAllBytes(file)).isEqualTo(PAYLOAD);
+        byte[] altered = PAYLOAD.clone();
+        altered[altered.length / 2] ^= 0x01;
+        Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-------"));
+        Files.write(file, altered);
+        assertThat(NativeLibraryLoader.cached(image, root)).isEqualTo(file);
+        assertThat(Files.readAllBytes(file)).isEqualTo(PAYLOAD);
+    }
+
+    @Test
+    void temporaryDirectoriesAreExclusiveAndNeverAdoptAnExistingEntry() throws Exception {
+        Path root = Files.createDirectory(work.resolve("tmp"));
+        String suffix = "fixed";
+        Path foreign = Files.createDirectory(
+                root.resolve("braxton-native-" + suffix + "-0"),
+                PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-x---")));
+        var foreignMode = Files.getPosixFilePermissions(foreign);
+        Path linked =
+                Files.createSymbolicLink(root.resolve("braxton-native-" + suffix + "-1"), work.resolve("elsewhere"));
+        Path created = NativeLibraryLoader.privateTemporaryDirectory(root, suffix);
+        assertThat(created.getFileName().toString()).isEqualTo("braxton-native-" + suffix + "-2");
+        assertThat(Files.getPosixFilePermissions(created)).isEqualTo(PosixFilePermissions.fromString("rwx------"));
+        assertThat(Files.getPosixFilePermissions(foreign))
+                .as("a foreign entry keeps its own mode")
+                .isEqualTo(foreignMode);
+        assertThat(Files.isSymbolicLink(linked)).isTrue();
+    }
+
+    @Test
+    void exhaustedTemporaryNamesFailWithoutAdoptingAnyEntry() throws Exception {
+        Path root = Files.createDirectory(work.resolve("tmp"));
+        String suffix = "fixed";
+        for (int attempt = 0; attempt < NativeLibraryLoader.TEMPORARY_ATTEMPTS; attempt++)
+            Files.createDirectory(
+                    root.resolve("braxton-native-" + suffix + "-" + attempt),
+                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+        assertThatThrownBy(() -> NativeLibraryLoader.privateTemporaryDirectory(root, suffix))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("temporary directory");
+    }
+
+    @Test
+    void defaultTemporaryNamesAreUnpredictableAndUnique() throws Exception {
+        Path root = Files.createDirectory(work.resolve("tmp"));
+        Path first = NativeLibraryLoader.privateTemporaryDirectory(root);
+        Path second = NativeLibraryLoader.privateTemporaryDirectory(root);
+        assertThat(first).isNotEqualTo(second);
+        assertThat(first.getFileName().toString()).matches("braxton-native-[0-9a-f]{1,16}-0");
+    }
+
+    @Test
     void unsafeMetadataNeverBecomesACachePath() {
         for (String value : new String[] {"", ".", "..", "../other", "/outside", "1/2", "x\ny", "a".repeat(129)}) {
             assertThatThrownBy(() -> image(value, PAYLOAD)).isInstanceOf(IOException.class);
+        }
+        for (String hash : new String[] {null, "", "abc", "z".repeat(64), "A".repeat(64), "a".repeat(63)}) {
+            assertThatThrownBy(() ->
+                            new NativeLibraryLoader.Image("1.0.0", "linux-x86_64", "libbraxton.so", PAYLOAD, hash))
+                    .isInstanceOf(IOException.class);
         }
         assertThatThrownBy(() -> image("1.0.0", new byte[0])).isInstanceOf(IOException.class);
     }
@@ -217,6 +290,13 @@ class NativeLibraryLoaderTest {
     @Test
     void packagedVersionMatchesTheLibraryBuildRatherThanAConsumerManifest() throws Exception {
         String platform = NativeTerminal.platform();
+        String extension = platform.startsWith("macos") ? "dylib" : "so";
+        byte[] packaged;
+        try (var input =
+                getClass().getResourceAsStream("/META-INF/braxton/native/" + platform + "/libbraxton." + extension)) {
+            assertThat(input).isNotNull();
+            packaged = input.readAllBytes();
+        }
         var image = NativeLibraryLoader.packaged(platform);
         Path result = NativeLibraryLoader.cached(image, work.resolve("cache"));
         String pom = Files.readString(Path.of("pom.xml"));
@@ -226,5 +306,8 @@ class NativeLibraryLoaderTest {
         assertThat(result)
                 .startsWith(
                         work.resolve("cache/native").resolve(revision.group(1)).resolve(platform));
+        assertThat(result.getParent().getFileName().toString())
+                .as("recorded content hash describes the packaged binary")
+                .isEqualTo(sha256(packaged));
     }
 }
