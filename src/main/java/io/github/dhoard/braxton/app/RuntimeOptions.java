@@ -32,7 +32,9 @@ import java.time.Duration;
  * <p>Defaults are the documented numbers, not hidden constants: a 4,096-entry mailbox, 64
  * concurrent one-shot effects (tasks and delays together), 64 ongoing sources, 4,096 active
  * components including the root, a child depth of 64, 1,024 local dispatches per turn, and a
- * two-second shutdown grace period. The component and dispatch limits bound a hostile or
+ * two-second shutdown grace period. Producers outside the runtime thread block while the mailbox
+ * holds {@code mailboxCapacity} entries. The runtime thread's own deliveries are counted
+ * separately against the same capacity, because that thread cannot wait for itself. The component and dispatch limits bound a hostile or
  * accidentally cyclic hierarchy instead of allowing it to allocate or spin without end.</p>
  */
 public record RuntimeOptions(

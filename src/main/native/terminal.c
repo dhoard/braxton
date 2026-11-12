@@ -10,7 +10,6 @@
 #include <poll.h>
 #include <limits.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <stdatomic.h>
@@ -37,8 +36,9 @@ int bt_resize_epoch(void) {
     return (int)atomic_load_explicit(&resize_epoch, memory_order_relaxed);
 }
 
-/* ABI 1: opaque contexts; no platform-specific structures cross the Java boundary. */
-int bt_abi(void) { return 1; }
+/* ABI 2: opaque contexts; no platform-specific structures cross the Java boundary.
+   ABI 2 replaced the deadline-bound bt_write with the single bounded attempt bt_write_some. */
+int bt_abi(void) { return 2; }
 
 int bt_open(int input, int output, void **result) {
     *result = NULL;
@@ -112,33 +112,29 @@ int bt_read(struct bt_terminal *t, unsigned char *bytes, int capacity, int timeo
     return -(errno + 2);
 }
 
-/* One call has a one-second total budget, including short writes and interruptions. */
-int bt_write(struct bt_terminal *t, const unsigned char *bytes, int length) {
-    if (length < 0) return EINVAL;
-    if (length == 0) return 0;
-    struct timespec start, now;
-    if (clock_gettime(CLOCK_MONOTONIC, &start) < 0) return errno;
-    int offset = 0;
-    while (offset < length) {
-        if (clock_gettime(CLOCK_MONOTONIC, &now) < 0) return errno;
-        long long elapsed = (long long)(now.tv_sec - start.tv_sec) * 1000000000LL +
-            now.tv_nsec - start.tv_nsec;
-        long long remaining = 1000000000LL - elapsed;
-        if (remaining <= 0) return ETIMEDOUT;
-        ssize_t count = write(t->output, bytes + offset, (size_t)(length - offset));
-        if (count > 0) { offset += (int)count; continue; }
-        if (count < 0 && errno == EINTR) continue;
-        if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            struct pollfd descriptor = {t->output, POLLOUT, 0};
-            int ready = poll(&descriptor, 1, (int)((remaining + 999999LL) / 1000000LL));
-            if (ready < 0 && errno != EINTR) return errno;
-            if (ready > 0 && (descriptor.revents & POLLNVAL)) return EBADF;
-            if (ready > 0 && (descriptor.revents & (POLLERR | POLLHUP))) return EIO;
-            continue;
-        }
-        return count == 0 ? EIO : errno;
+/* write_some: one bounded attempt. Returns the positive count of bytes the terminal accepted,
+   0 when it accepted nothing within timeout milliseconds (or the wait was interrupted), or
+   -errno when the terminal failed. The caller owns retry and stall policy: only it knows how
+   much progress has been made and whether shutdown has begun. */
+int bt_write_some(struct bt_terminal *t, const unsigned char *bytes, int length, int timeout) {
+    if (length <= 0 || timeout < 0) return -EINVAL;
+    int polled = 0;
+    for (;;) {
+        ssize_t count = write(t->output, bytes, (size_t)length);
+        if (count > 0) return (int)count;
+        if (count == 0) return -EIO;
+        if (errno == EINTR) continue;
+        if (errno != EAGAIN && errno != EWOULDBLOCK) return -errno;
+        /* Writable after a poll yet still full: report no progress rather than spin. */
+        if (polled) return 0;
+        struct pollfd descriptor = {t->output, POLLOUT, 0};
+        int ready = poll(&descriptor, 1, timeout);
+        if (ready < 0) return errno == EINTR ? 0 : -errno;
+        if (ready == 0) return 0;
+        if (descriptor.revents & POLLNVAL) return -EBADF;
+        if (descriptor.revents & (POLLERR | POLLHUP)) return -EIO;
+        polled = 1;
     }
-    return 0;
 }
 
 int bt_size(struct bt_terminal *t, int *rows, int *columns) {

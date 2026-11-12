@@ -34,11 +34,27 @@ public interface Terminal extends Closeable {
 
     PrintWriter writer();
 
+    /**
+     * The most recent I/O failure behind {@link #writer()}. A {@link PrintWriter} only reports
+     * that an error occurred, so the runtime attaches this as the cause of its output failure;
+     * {@code null} when no failure was recorded.
+     */
+    default IOException outputError() {
+        return null;
+    }
+
     Size size();
 
     TerminalCapabilities capabilities();
 
     void enterRawMode() throws IOException;
+
+    /**
+     * Called when shutdown begins. From then on, output the terminal does not accept within the
+     * short shutdown stall limit fails instead of waiting out the running limit, including a write
+     * that is already in progress. Idempotent and callable from any thread without locks.
+     */
+    default void boundOutput() {}
 
     default void onResize(Runnable callback) {}
 

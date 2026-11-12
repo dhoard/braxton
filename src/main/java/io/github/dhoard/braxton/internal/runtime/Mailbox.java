@@ -71,9 +71,24 @@ public final class Mailbox {
     private final Condition notEmpty = lock.newCondition();
     private final Condition notFull = lock.newCondition();
     private final int capacity;
+    /** Whether each queued envelope, in queue order, was enqueued by the owner. */
+    private final Deque<Boolean> ownerEnqueued = new ArrayDeque<>();
+
+    private int ownerQueued;
     private volatile boolean closed;
     private boolean woken;
 
+    /**
+     * Creates a mailbox holding up to {@code capacity} producer envelopes, plus up to
+     * {@code capacity} envelopes the owner enqueued itself.
+     *
+     * <p>Producers block while the queue holds {@code capacity} envelopes of any origin. The owner
+     * cannot wait on a queue only it drains, so it fails instead, but only when its <em>own</em>
+     * queued envelopes reach {@code capacity}. Counting all envelopes there would make overflow a
+     * race: the owner takes one envelope from a full mailbox, a blocked producer refills the slot
+     * at once, and a delivery from the owner in the same turn would overflow. Producer back pressure
+     * is unchanged, and an owner burst larger than {@code capacity} is still the fatal overflow.</p>
+     */
     public Mailbox(int capacity) {
         this.capacity = Math.max(1, capacity);
     }
@@ -113,6 +128,7 @@ public final class Mailbox {
                 return false;
             }
             queue.addLast(envelope);
+            ownerEnqueued.addLast(Boolean.FALSE);
             notEmpty.signal();
             return true;
         } finally {
@@ -123,16 +139,18 @@ public final class Mailbox {
     /**
      * Enqueues from the owner thread without waiting.
      *
-     * @throws IllegalStateException when the queue is full or closed; the runtime treats this as a
-     *     fatal overflow instead of dropping the message or recursing into {@code update}
+     * @throws IllegalStateException when the queue is closed or already holds {@code capacity}
+     *     owner-enqueued envelopes; the runtime treats this as a fatal overflow instead of dropping the message or recursing into {@code update}
      */
     public void enqueueFromOwner(Envelope envelope) {
         lock.lock();
         try {
-            if (closed || queue.size() >= capacity) {
+            if (closed || ownerQueued >= capacity) {
                 throw new IllegalStateException("runtime mailbox overflow (capacity " + capacity + ")");
             }
             queue.addLast(envelope);
+            ownerEnqueued.addLast(Boolean.TRUE);
+            ownerQueued++;
             notEmpty.signal();
         } finally {
             lock.unlock();
@@ -171,6 +189,7 @@ public final class Mailbox {
                 return null;
             }
             Envelope envelope = queue.pollFirst();
+            if (ownerEnqueued.pollFirst()) ownerQueued--;
             notFull.signal();
             return envelope;
         } finally {
@@ -184,6 +203,8 @@ public final class Mailbox {
         try {
             closed = true;
             queue.clear();
+            ownerEnqueued.clear();
+            ownerQueued = 0;
             notEmpty.signalAll();
             notFull.signalAll();
         } finally {

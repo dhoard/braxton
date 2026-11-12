@@ -123,6 +123,10 @@ class TerminalRuntimeTest {
             var result = TestTerminal.run(program(Command.quit()), RuntimeOptions.defaults(), fixture);
             assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
             assertThat(result.failure()).hasMessage("terminal output failed");
+            assertThat(result.failure().getCause())
+                    .as("the writer's hidden I/O exception is the cause")
+                    .isInstanceOf(java.io.IOException.class)
+                    .hasMessage("broken output");
             assertThat(fixture.isOpen()).isFalse();
             assertThat(result.cleanupFailures()).isNotEmpty();
         }

@@ -46,6 +46,7 @@ public final class TestTerminal implements AutoCloseable {
     private volatile RuntimeException sizeFailure;
     private volatile RuntimeException closeFailure;
     private volatile boolean outputFailure;
+    private volatile IOException outputError;
     private volatile java.util.function.Consumer<String> outputObserver = text -> {};
     private volatile java.util.function.Consumer<String> beforeWrite = text -> {};
     private volatile Runnable beforeFlush = () -> {};
@@ -62,12 +63,12 @@ public final class TestTerminal implements AutoCloseable {
         this.size = size;
         OutputStream capture = new OutputStream() {
             public synchronized void write(int b) throws IOException {
-                if (outputFailure) throw new IOException("broken output");
+                if (outputFailure) throw outputError = new IOException("broken output");
                 output.write(b);
             }
 
             public synchronized void write(byte[] b, int off, int len) throws IOException {
-                if (outputFailure) throw new IOException("broken output");
+                if (outputFailure) throw outputError = new IOException("broken output");
                 output.write(b, off, len);
             }
 
@@ -117,6 +118,10 @@ public final class TestTerminal implements AutoCloseable {
 
             public PrintWriter writer() {
                 return writer;
+            }
+
+            public IOException outputError() {
+                return outputError;
             }
 
             public TimedReader reader() {

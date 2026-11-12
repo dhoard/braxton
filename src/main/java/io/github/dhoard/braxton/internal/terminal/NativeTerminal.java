@@ -51,6 +51,11 @@ public final class NativeTerminal implements Terminal {
     private final TerminalCapabilities capabilities;
     private final Utf8Reader reader;
     private final PrintWriter writer;
+    private volatile IOException outputError;
+    private final long outputStallNanos;
+    // Set by boundOutput() or close() without any lock, so a write stalled under the lifetime
+    // read lock notices within one attempt and close is never held behind it for long.
+    private volatile boolean outputBounded;
     private boolean closed;
 
     public static String platform() {
@@ -67,11 +72,28 @@ public final class NativeTerminal implements Terminal {
     }
 
     public static NativeTerminal open() throws IOException {
+        return open(java.time.Duration.ofNanos(OutputDrain.RUNNING_STALL_NANOS));
+    }
+
+    /**
+     * Opens the attached terminal with an explicit running stall limit: the time the terminal may
+     * accept no output at all before a write fails. Shutdown always uses the shorter of this and
+     * one second. Internal; the runtime uses {@link #open()}.
+     */
+    public static NativeTerminal open(java.time.Duration outputStallLimit) throws IOException {
         if (!NativeTerminal.class.getModule().isNativeAccessEnabled())
             throw new IllegalStateException("Braxton requires --enable-native-access=ALL-UNNAMED on the classpath,"
                     + " or --enable-native-access=io.github.dhoard.braxton on the module path");
+        if (outputStallLimit == null || outputStallLimit.isNegative() || outputStallLimit.isZero())
+            throw new IllegalArgumentException("output stall limit must be positive");
+        long stallNanos;
+        try {
+            stallNanos = outputStallLimit.toNanos();
+        } catch (ArithmeticException overflow) {
+            stallNanos = Long.MAX_VALUE;
+        }
         String type = System.getenv("TERM");
-        return new NativeTerminal(type);
+        return new NativeTerminal(type, stallNanos);
     }
 
     static TerminalCapabilities capabilities(String type) {
@@ -92,7 +114,8 @@ public final class NativeTerminal implements Terminal {
         return new TerminalCapabilities(!name.startsWith("vt"), modern, modern, modern, type);
     }
 
-    private NativeTerminal(String type) throws IOException {
+    private NativeTerminal(String type, long outputStallNanos) throws IOException {
+        this.outputStallNanos = outputStallNanos;
         MemorySegment acquired;
         try {
             var slot = arena.allocate(ValueLayout.ADDRESS);
@@ -117,7 +140,12 @@ public final class NativeTerminal implements Terminal {
                     }
 
                     public void write(byte[] bytes, int offset, int length) throws IOException {
-                        NativeTerminal.this.write(bytes, offset, length);
+                        try {
+                            NativeTerminal.this.write(bytes, offset, length);
+                        } catch (IOException failure) {
+                            outputError = failure;
+                            throw failure;
+                        }
                     }
                 },
                 StandardCharsets.UTF_8));
@@ -144,7 +172,13 @@ public final class NativeTerminal implements Terminal {
             while (length > 0) {
                 int count = Math.min(length, (int) outputTransfer.byteSize());
                 MemorySegment.copy(bytes, offset, outputTransfer, ValueLayout.JAVA_BYTE, 0, count);
-                check(call(Library.WRITE, context, outputTransfer, count), "write terminal");
+                OutputDrain.drain(
+                        count,
+                        (from, remaining, timeout) ->
+                                call(Library.WRITE_SOME, context, outputTransfer.asSlice(from), remaining, timeout),
+                        System::nanoTime,
+                        outputStallNanos,
+                        () -> outputBounded);
                 offset += count;
                 length -= count;
             }
@@ -159,6 +193,14 @@ public final class NativeTerminal implements Terminal {
 
     public PrintWriter writer() {
         return writer;
+    }
+
+    public IOException outputError() {
+        return outputError;
+    }
+
+    public void boundOutput() {
+        outputBounded = true;
     }
 
     public TerminalCapabilities capabilities() {
@@ -197,6 +239,8 @@ public final class NativeTerminal implements Terminal {
     }
 
     public void close() throws IOException {
+        // Before the lock: an in-flight write holds the read lock and must see this to give up.
+        outputBounded = true;
         lifetime.writeLock().lock();
         try {
             if (closed) return;
@@ -235,8 +279,8 @@ public final class NativeTerminal implements Terminal {
         static final MethodHandle RAW = bind("bt_raw", ValueLayout.ADDRESS);
         static final MethodHandle READ =
                 bind("bt_read", ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT);
-        static final MethodHandle WRITE =
-                bind("bt_write", ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT);
+        static final MethodHandle WRITE_SOME = bind(
+                "bt_write_some", ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT);
         static final MethodHandle SIZE = bind("bt_size", ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS);
         static final MethodHandle CLOSE = bind("bt_close", ValueLayout.ADDRESS);
         static final MethodHandle RESIZE_EPOCH = bind("bt_resize_epoch");
@@ -249,7 +293,7 @@ public final class NativeTerminal implements Terminal {
                     MethodHandle abi = Linker.nativeLinker()
                             .downcallHandle(
                                     symbols.find("bt_abi").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
-                    if (call(abi) != 1) throw new IOException("unsupported Braxton native ABI");
+                    if (call(abi) != 2) throw new IOException("unsupported Braxton native ABI");
                     return symbols;
                 });
             } catch (IOException failure) {

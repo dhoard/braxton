@@ -207,7 +207,7 @@ public final class RuntimeLoop<M, Msg> {
         try {
             var writer = terminal.writer();
             writer.flush();
-            if (writer.checkError()) throw new IllegalStateException("terminal output failed");
+            if (writer.checkError()) throw outputFailed();
         } catch (RuntimeException | Error flushing) {
             if (failure == null) failure = flushing;
             else failure.addSuppressed(flushing);
@@ -225,7 +225,12 @@ public final class RuntimeLoop<M, Msg> {
         var writer = terminal.writer();
         writer.write(data);
         writer.flush();
-        if (writer.checkError()) throw new IllegalStateException("terminal output failed");
+        if (writer.checkError()) throw outputFailed();
+    }
+
+    /** The writer hides its I/O exception, so the terminal's recorded one becomes the cause. */
+    private IllegalStateException outputFailed() {
+        return new IllegalStateException("terminal output failed", terminal.outputError());
     }
 
     /**
@@ -241,6 +246,8 @@ public final class RuntimeLoop<M, Msg> {
     /** Shutdown restoration: close admission before restoring application modes. */
     void shutdownRestore() {
         stopping = true;
+        // Outside outputLock: a frame stalled under that lock has to notice and give up first.
+        boundTerminalOutput();
         Mailbox current = mailbox;
         if (current != null) current.close();
         restoreModes();
@@ -260,6 +267,16 @@ public final class RuntimeLoop<M, Msg> {
                     }
                 }
             }
+        }
+    }
+
+    private void boundTerminalOutput() {
+        Terminal current = terminal;
+        if (current == null) return;
+        try {
+            current.boundOutput();
+        } catch (RuntimeException failure) {
+            services.diagnostics().accept("terminal output bound failed: " + failure);
         }
     }
 
@@ -591,6 +608,7 @@ public final class RuntimeLoop<M, Msg> {
         // mailbox open (its producers, including the input reader, keep retrying an owner that has
         // already gone away) and skip the thread joins.
         stopping = true;
+        boundTerminalOutput();
         if (mailbox != null) mailbox.close();
         // Let the finite input read expire normally. Stop the consumer before closing/releasing the native terminal.
         if (inputThread != null) {

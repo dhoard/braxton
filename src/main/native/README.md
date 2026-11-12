@@ -28,25 +28,31 @@ its own typed component tree, views, routing, effects, subscriptions and runtime
 This provenance record describes this replacement; it does not certify a formally separated
 clean-room process or retrospectively establish provenance for all existing project files.
 
-The ABI version is 1. `bt_open` duplicates the attached input descriptor and reopens the
+The ABI version is 2 (ABI 2 replaced `bt_write` with `bt_write_some`). `bt_open` duplicates the attached input descriptor and reopens the
 output terminal with a private nonblocking open file description, snapshots input terminal
 state and returns an opaque context. The reopened output is checked against the original
 character device's device/inode identity; symlinks are rejected. The terminal device path must
 be accessible for reopening. Failure happens before raw mode or application output modes are
 entered. Unlike setting `O_NONBLOCK` on a duplicate, reopening does not change the caller's
 stdout flags (duplicates share those flags). `bt_raw` applies raw mode. `bt_read` polls for a
-bounded interval and reads into a caller-owned buffer. `bt_write` handles partial writes and
-`EINTR`/`EAGAIN` using `poll` and a monotonic one-second total deadline per call. Expiry returns `ETIMEDOUT`, even if a prefix was written;
-the runtime treats output failure as fatal and attempts mode restoration before native close.
-This intentionally rejects output that takes more than one second per native transfer (Java
-transfers at most 8192 bytes), rather than allowing a stalled terminal to block close forever.
-This is not a guarantee of a one-second whole-application shutdown: cleanup may perform several
-transfers, and application effects have their own grace period. Termios restoration does not
-require output to drain. Escape-based restoration is best effort when the output peer no
-longer accepts bytes; no software can guarantee delivery to a disconnected terminal.
+bounded interval and reads into a caller-owned buffer. `bt_write_some` makes one bounded attempt: it returns the number of bytes the terminal
+accepted, `0` when nothing was accepted within the caller's timeout (or the wait was interrupted),
+or `-errno` on failure. `POLLHUP`/`POLLERR` map to `EIO` and `POLLNVAL` to `EBADF`. Retry and stall
+policy live in Java (`OutputDrain`), which knows how much progress has been made and whether
+shutdown has begun. Attempts wait at most 100 ms. Output fails only when the terminal accepts no
+bytes at all for the stall limit: 30 seconds while running, and the shorter of that and one second
+once shutdown has begun (runtime cleanup, the JVM shutdown hook, or `NativeTerminal.close`, which
+bounds output before taking the lifetime lock). A slow terminal that keeps accepting bytes is
+therefore waited for, because a frame that has started must finish. A frozen peer fails, and
+close is never held behind a stalled writer for more than about one second plus one attempt.
+Terminal errors fail at once. This is not a guarantee of a one-second whole-application
+shutdown: cleanup may perform several transfers, and application effects have their own grace
+period. Termios restoration does not require output to drain. Escape-based restoration is best
+effort when the output peer no longer accepts bytes; no software can guarantee delivery to a
+disconnected terminal.
 `bt_size` returns rows and columns. `bt_close` restores terminal attributes, closes its descriptors,
 and frees the context. Error codes use target `errno`; read reserves 0 for timeout and -1 for
-EOF and encodes other failures as `-(errno + 2)`. Other operations return 0 or positive errno.
+EOF and encodes other failures as `-(errno + 2)`; `bt_write_some` is described above. Other operations return 0 or positive errno.
 Java permits one input read alongside output/size queries. A fair lifetime lock prevents
 close from freeing a context until active bounded calls have finished. Input/output use
 separate transfer buffers. A scoped SIGWINCH handler increments only a lock-free atomic counter. It never calls Java or
