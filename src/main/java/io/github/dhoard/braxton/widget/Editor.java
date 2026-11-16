@@ -54,18 +54,44 @@ import java.util.function.Function;
  * or turns a paste request into a clipboard command.</p>
  */
 public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.Output> {
+    /**
+     * Immutable editor state: the draft, the caret and selection offsets, the preferred column and focus.
+     *
+     * @param text the draft text; null is empty and line endings are normalized to LF
+     * @param caret the caret offset, clamped to a grapheme boundary
+     * @param anchor the selection anchor offset, clamped to a grapheme boundary
+     * @param preferredColumn the visual column a vertical move returns to, or 0
+     * @param focused whether the editor currently owns focus
+     */
     public record Model(String text, int caret, int anchor, int preferredColumn, boolean focused) {
 
+        /**
+         * State that starts focused.
+         *
+         * @param text the draft text
+         * @param caret the caret offset
+         * @param anchor the selection anchor offset
+         * @param preferredColumn the preferred visual column
+         */
         public Model(String text, int caret, int anchor, int preferredColumn) {
             this(text, caret, anchor, preferredColumn, true);
         }
 
+        /**
+         * The same state with a new focus.
+         *
+         * @param value whether the editor owns focus
+         * @return this instance when the focus did not change
+         */
         public Model withFocus(boolean value) {
             // Returning the same model when focus is unchanged keeps an editor message that changed
             // nothing a value-equal no-op, so the runtime's unchanged-reference view rule holds.
             return value == focused ? this : new Model(text, caret, anchor, preferredColumn, value);
         }
 
+        /**
+         * Normalizes the draft's line endings and clamps both offsets to grapheme boundaries.
+         */
         public Model {
             String supplied = text == null ? "" : text;
             // Preparing the line endings where the draft is entered, not only where the reducer
@@ -119,10 +145,21 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
             return TextMeasure.boundaryBefore(text, limit);
         }
 
+        /**
+         * An empty draft with the caret at the start.
+         *
+         * @return the empty state
+         */
         public static Model empty() {
             return new Model("", 0, 0, 0);
         }
 
+        /**
+         * A draft with the caret and the anchor at its end.
+         *
+         * @param text the draft text; null is empty
+         * @return the state holding that draft
+         */
         public static Model of(String text) {
             String value = text == null ? "" : text;
             // The offsets are the caller's own coordinates in the text it supplied; the constructor
@@ -130,27 +167,57 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
             return new Model(value, value.length(), value.length(), 0);
         }
 
+        /**
+         * Whether the anchor and the caret differ.
+         *
+         * @return whether the anchor and the caret differ
+         */
         public boolean hasSelection() {
             return anchor != caret;
         }
 
+        /**
+         * The lower selection offset.
+         *
+         * @return the lower selection offset
+         */
         public int selectionStart() {
             return Math.min(anchor, caret);
         }
 
+        /**
+         * The higher selection offset.
+         *
+         * @return the higher selection offset
+         */
         public int selectionEnd() {
             return Math.max(anchor, caret);
         }
 
+        /**
+         * The selected text, or an empty string.
+         *
+         * @return the selected text, or an empty string
+         */
         public String selection() {
             return hasSelection() ? text.substring(selectionStart(), selectionEnd()) : "";
         }
 
+        /**
+         * Whether the draft is empty.
+         *
+         * @return whether the draft is empty
+         */
         public boolean isEmpty() {
             return text.isEmpty();
         }
 
-        /** Zero-based logical line containing {@code index}. */
+        /**
+         * Zero-based logical line containing {@code index}.
+         *
+         * @param index the draft offset
+         * @return the zero-based line containing it
+         */
         public int lineAt(int index) {
             int limit = Math.max(0, Math.min(index, text.length()));
             int line = 0;
@@ -162,6 +229,11 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
             return line;
         }
 
+        /**
+         * The number of logical lines.
+         *
+         * @return the number of logical lines
+         */
         public int lineCount() {
             int lines = 1;
             for (int i = 0; i < text.length(); i++) {
@@ -172,6 +244,12 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
             return lines;
         }
 
+        /**
+         * The offset where a logical line starts.
+         *
+         * @param line the zero-based line
+         * @return the first offset of that line
+         */
         public int lineStart(int line) {
             if (line <= 0) {
                 return 0;
@@ -185,12 +263,24 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
             return text.length();
         }
 
+        /**
+         * The offset where a logical line ends.
+         *
+         * @param line the zero-based line
+         * @return the offset of its line break, or the end of the draft
+         */
         public int lineEnd(int line) {
             int start = lineStart(line);
             int next = text.indexOf('\n', start);
             return next < 0 ? text.length() : next;
         }
 
+        /**
+         * The same state with a different draft and the caret at its end.
+         *
+         * @param value the new draft; null is empty
+         * @return the new state
+         */
         public Model withText(String value) {
             // The canonical constructor and of() treat null as an empty draft; a wither must not be
             // the one public entry point that throws instead. Replacing the draft prepares its line
@@ -200,19 +290,43 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
             return new Model(text, text.length(), text.length(), 0, focused);
         }
 
+        /**
+         * The same draft with the caret moved, clearing the selection.
+         *
+         * @param index the new caret offset
+         * @return the new state
+         */
         public Model withCaret(int index) {
             return new Model(text, index, index, preferredColumn, focused);
         }
 
+        /**
+         * The same draft with a selection and the caret at its end.
+         *
+         * @param from the selection anchor offset
+         * @param to the caret offset
+         * @return the new state
+         */
         public Model withSelection(int from, int to) {
             return new Model(text, to, from, preferredColumn, focused);
         }
 
+        /**
+         * The same draft with a different preferred column.
+         *
+         * @param column the visual column a vertical move returns to
+         * @return the new state
+         */
         public Model withPreferredColumn(int column) {
             return new Model(text, caret, anchor, column, focused);
         }
 
-        /** The text to display, honoring masking, or empty when hidden. */
+        /**
+         * The text to display, honoring masking, or empty when hidden.
+         *
+         * @param options the editing and rendering policy
+         * @return the text the rows paint
+         */
         public String displayText(Config options) {
             return switch (options.masking()) {
                 case NONE -> text;
@@ -240,13 +354,20 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
             return masked.toString();
         }
 
+        /**
+         * The logical line the caret sits on.
+         *
+         * @return that line, without its break
+         */
         public Optional<String> caretLine() {
             int line = lineAt(caret);
             return Optional.of(text.substring(lineStart(line), lineEnd(line)));
         }
     }
 
+    /** Editing, navigation and intent messages. */
     public sealed interface Msg {
+        /** Replaces the draft with an empty one. */
         record Clear() implements Msg {}
 
         /**
@@ -256,6 +377,9 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
          */
         record Insert(String text) implements Msg {
 
+            /**
+             * An insertion never carries null.
+             */
             public Insert {
                 text = text == null ? "" : text;
             }
@@ -268,29 +392,42 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
          */
         record Paste(String text) implements Msg {
 
+            /**
+             * A paste payload never carries null.
+             */
             public Paste {
                 text = text == null ? "" : text;
             }
         }
 
+        /** Deletes the selection, or the cluster before the caret. */
         record Backspace() implements Msg {}
 
+        /** Deletes the selection, or the cluster after the caret. */
         record Delete() implements Msg {}
 
+        /** Moves the caret one cluster left. */
         record MoveLeft() implements Msg {}
 
+        /** Moves the caret one cluster right. */
         record MoveRight() implements Msg {}
 
+        /** Moves the caret one visual row up. */
         record MoveUp() implements Msg {}
 
+        /** Moves the caret one visual row down. */
         record MoveDown() implements Msg {}
 
+        /** Moves the caret to the start of its line. */
         record MoveHome() implements Msg {}
 
+        /** Moves the caret to the end of its line. */
         record MoveEnd() implements Msg {}
 
+        /** Selects the whole draft. */
         record SelectAll() implements Msg {}
 
+        /** Inserts a line break at the caret. */
         record Newline() implements Msg {}
 
         /** Requests submission; the application decides what submission means. */
@@ -303,9 +440,14 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
         record PasteRequest() implements Msg {}
     }
 
+    /** Semantic outputs the parent consumes. */
     public sealed interface Output {
 
-        /** The user asked to submit this text. */
+        /**
+         * The user asked to submit this text.
+         *
+         * @param text the submitted draft
+         */
         record Submit(String text) implements Output {}
 
         /**
@@ -319,6 +461,22 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
         record PasteRequest() implements Output {}
     }
 
+    /**
+     * Immutable editing and rendering policy.
+     *
+     * @param maxLength the maximum draft length in UTF-16 units, or empty for unlimited
+     * @param pasteMode the sanitizing policy applied to a paste payload
+     * @param collapsePasteBlankLines whether a paste collapses runs of blank lines
+     * @param masking how the draft is displayed and whether it may be copied
+     * @param copyKey the key gesture that copies
+     * @param pasteKey the key gesture that requests a paste
+     * @param prompt the one-line prompt painted before the first visible row
+     * @param promptStyle the style applied to the prompt
+     * @param textStyle the style applied to the draft
+     * @param selectionStyle the style applied to the selection
+     * @param maxVisibleLines the number of draft rows the editor paints at once
+     * @param copyEnabled whether a visible draft may be copied
+     */
     public record Config(
             OptionalInt maxLength,
             PasteMode pasteMode,
@@ -342,14 +500,20 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
          * field opts out of copying entirely.</p>
          */
         public enum Masking {
+            /** The draft is displayed as typed. */
             NONE,
+            /** Every cluster is displayed as one mask glyph. */
             PASSWORD,
+            /** The draft is not displayed at all. */
             HIDDEN
         }
 
         public static final Key DEFAULT_COPY_KEY = Key.of("c", io.github.dhoard.braxton.input.Modifiers.ALT);
         public static final Key DEFAULT_PASTE_KEY = Key.of("v", io.github.dhoard.braxton.input.Modifiers.CTRL);
 
+        /**
+         * Rejects an inconsistent policy and prepares the one-line prompt.
+         */
         public Config {
             maxLength = maxLength == null ? OptionalInt.empty() : maxLength;
             maxLength.ifPresent(limit -> {
@@ -375,6 +539,11 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
             return LineBreaks.singleRow(value);
         }
 
+        /**
+         * The default policy: unlimited, unmasked, copyable, six rows.
+         *
+         * @return the default configuration
+         */
         public static Config defaults() {
             return new Config(
                     OptionalInt.empty(),
@@ -391,6 +560,12 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
                     true);
         }
 
+        /**
+         * The same policy with a length limit.
+         *
+         * @param limit the maximum draft length in UTF-16 units; never negative
+         * @return the new configuration
+         */
         public Config withMaxLength(int limit) {
             return new Config(
                     OptionalInt.of(limit),
@@ -407,6 +582,11 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
                     copyEnabled);
         }
 
+        /**
+         * The same policy with no length limit.
+         *
+         * @return the new configuration
+         */
         public Config withUnlimitedLength() {
             return new Config(
                     OptionalInt.empty(),
@@ -423,6 +603,13 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
                     copyEnabled);
         }
 
+        /**
+         * The same policy with a different paste policy.
+         *
+         * @param mode the sanitizing policy applied to a paste payload
+         * @param collapseBlankLines whether a paste collapses runs of blank lines
+         * @return the new configuration
+         */
         public Config withPaste(PasteMode mode, boolean collapseBlankLines) {
             return new Config(
                     maxLength,
@@ -439,6 +626,12 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
                     copyEnabled);
         }
 
+        /**
+         * The same policy with a different masking policy.
+         *
+         * @param value how the draft is displayed and copied
+         * @return the new configuration
+         */
         public Config withMasking(Masking value) {
             return new Config(
                     maxLength,
@@ -455,6 +648,13 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
                     copyEnabled);
         }
 
+        /**
+         * The same policy with different copy and paste gestures.
+         *
+         * @param copy the key gesture that copies
+         * @param paste the key gesture that requests a paste
+         * @return the new configuration
+         */
         public Config withKeys(Key copy, Key paste) {
             return new Config(
                     maxLength,
@@ -471,6 +671,13 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
                     copyEnabled);
         }
 
+        /**
+         * The same policy with a different prompt.
+         *
+         * @param value the prompt text; line breaks become spaces
+         * @param style the style applied to the prompt
+         * @return the new configuration
+         */
         public Config withPrompt(String value, Style style) {
             return new Config(
                     maxLength,
@@ -487,6 +694,14 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
                     copyEnabled);
         }
 
+        /**
+         * The same policy with different styles.
+         *
+         * @param text the style applied to the draft
+         * @param promptText the style applied to the prompt
+         * @param selection the style applied to the selection
+         * @return the new configuration
+         */
         public Config withStyles(Style text, Style promptText, Style selection) {
             return new Config(
                     maxLength,
@@ -503,6 +718,12 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
                     copyEnabled);
         }
 
+        /**
+         * The same policy with a different visible height.
+         *
+         * @param lines the number of draft rows to paint; must be positive
+         * @return the new configuration
+         */
         public Config withVisibleLines(int lines) {
             return new Config(
                     maxLength,
@@ -519,6 +740,12 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
                     copyEnabled);
         }
 
+        /**
+         * The same policy with copying allowed or refused.
+         *
+         * @param value whether a visible draft may be copied
+         * @return the new configuration
+         */
         public Config withCopyEnabled(boolean value) {
             return new Config(
                     maxLength,
@@ -535,7 +762,11 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
                     value);
         }
 
-        /** Whether copying is allowed under the masking policy. */
+        /**
+         * Whether copying is allowed under the masking policy.
+         *
+         * @return whether copying is permitted
+         */
         public boolean canCopy() {
             return copyEnabled && masking != Masking.PASSWORD && masking != Masking.HIDDEN;
         }
@@ -554,11 +785,18 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
         }
     }
 
+    /** The block glyph painted at the caret. */
     public static final String CURSOR = "\u2588";
+
     private static final String MASK = "\u2022";
 
     private final Config config;
 
+    /**
+     * Creates the component.
+     *
+     * @param config the immutable editing and rendering policy; required
+     */
     public Editor(Config config) {
         this.config = Objects.requireNonNull(config, "config");
     }
@@ -608,6 +846,8 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
      * <p>This is the raw text: it does not consider masking, so a password or hidden draft is
      * returned verbatim. Callers that must honour {@code canCopy} use {@link #copyableText}
      * instead, which is what the {@code Copy} action uses.</p>
+     * @param state the editor state to copy from
+     * @return the selection, or the whole draft
      */
     public static String copyText(Model state) {
         return state.hasSelection() ? state.selection() : state.text();
@@ -929,6 +1169,10 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
      * the prompt whenever a new line is added to a multi-line draft, which reads as a second caret
      * beside the block cursor. The prompt itself is one line: {@link Config} turns a break
      * in it into a space, so the painted rows stay the window's rows.</p>
+     * @param state the editor state to paint
+     * @param options the editing and rendering policy
+     * @param focused whether the caret is painted
+     * @return the painted rows
      */
     public static StyledText render(Model state, Config options, boolean focused) {
         Config opts = options == null ? Config.defaults() : options;
@@ -1042,6 +1286,9 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
      *
      * <p>A configured copy or paste key wins over printable text, so a shift+letter binding remains
      * reachable.</p>
+     * @param event the normalized input event
+     * @param options the editing and rendering policy
+     * @return the editing message, or empty when the event is not an editor gesture
      */
     public static Optional<Msg> actionFor(InputEvent event, Config options) {
         Config opts = options == null ? Config.defaults() : options;
@@ -1093,7 +1340,12 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
         };
     }
 
-    /** All logical lines of a draft, used by projections that need the line count. */
+    /**
+     * All logical lines of a draft, used by projections that need the line count.
+     *
+     * @param state the editor state
+     * @return its logical lines
+     */
     public static List<String> lines(Model state) {
         List<String> lines = new ArrayList<>(state.lineCount());
         int start = 0;
@@ -1106,18 +1358,35 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
         return lines;
     }
 
-    /** Visible line count for layout projections. */
+    /**
+     * Visible line count for layout projections.
+     *
+     * @param state the editor state
+     * @param options the editing and rendering policy
+     * @return the number of rows the editor paints
+     */
     public static int visibleLineCount(Model state, Config options) {
         Config opts = options == null ? Config.defaults() : options;
         return Math.max(1, Math.min(opts.maxVisibleLines(), state.lineCount()));
     }
 
-    /** Convenience: number of visible lines under the defaults. */
+    /**
+     * Convenience: number of visible lines under the defaults.
+     *
+     * @param state the editor state
+     * @return the number of rows the editor paints
+     */
     public static int visibleLineCount(Model state) {
         return visibleLineCount(state, Config.defaults());
     }
 
-    /** Convenience: the selection or the whole draft, honoring masking through {@code canCopy}. */
+    /**
+     * Convenience: the selection or the whole draft, honoring masking through {@code canCopy}.
+     *
+     * @param state the editor state to copy from
+     * @param options the editing and rendering policy
+     * @return the text copying would produce, or empty when copying is refused
+     */
     public static Optional<String> copyableText(Model state, Config options) {
         Config opts = options == null ? Config.defaults() : options;
         return opts.canCopy() ? Optional.of(copyText(state)) : Optional.empty();

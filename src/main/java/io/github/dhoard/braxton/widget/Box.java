@@ -61,24 +61,54 @@ public final class Box {
         this.content = content == null ? StyledText.empty() : content;
     }
 
+    /**
+     * A box around already-styled content.
+     *
+     * @param content the content to frame
+     * @return the box builder
+     */
     public static Box of(StyledText content) {
         return new Box(content);
     }
 
+    /**
+     * A box around plain text.
+     *
+     * @param content the content to frame
+     * @return the box builder
+     */
     public static Box of(String content) {
         return new Box(StyledText.plain(content));
     }
 
+    /**
+     * The same box with a different frame.
+     *
+     * @param value the frame characters, or null for none
+     * @return this builder
+     */
     public Box border(Border value) {
         border = value == null ? Border.NONE : value;
         return this;
     }
 
+    /**
+     * The same box with a different frame style.
+     *
+     * @param value the frame style, or null for plain
+     * @return this builder
+     */
     public Box style(Style value) {
         style = value == null ? Style.NONE : value;
         return this;
     }
 
+    /**
+     * The same box with a plain-text title.
+     *
+     * @param value the title; line breaks become spaces
+     * @return this builder
+     */
     public Box title(String value) {
         // Prepare the raw title before the span boundary: Span deletes a bare CR as a control, so
         // flattening afterwards painted "one\rtwo" as "onetwo" while LF and CRLF kept a space.
@@ -88,23 +118,44 @@ public final class Box {
         return this;
     }
 
+    /**
+     * The same box with a styled title.
+     *
+     * @param value the title
+     * @return this builder
+     */
     public Box title(StyledText value) {
         title = SingleRow.of(value);
         return this;
     }
 
-    /** Uses the width passed to {@link #render}, discarding any fixed width set earlier. */
+    /**
+     * Uses the width passed to {@link #render}, discarding any fixed width set earlier.
+     *
+     * @return this builder
+     */
     public Box responsive() {
         fixedWidth = -1;
         return this;
     }
 
+    /**
+     * The same box with a fixed width.
+     *
+     * @param value the fixed width in columns
+     * @return this builder
+     */
     public Box width(int value) {
         fixedWidth = value;
         return this;
     }
 
-    /** Renders the box at {@code width} columns (or its fixed width when configured). */
+    /**
+     * Renders the box at {@code width} columns (or its fixed width when configured).
+     *
+     * @param width the available width when the box is responsive
+     * @return the rendered box
+     */
     public StyledText render(int width) {
         // The two frame columns are the floor: a narrower box would have a negative inner width.
         int limit = fixedWidth > 0 ? Math.max(2, fixedWidth) : Math.max(2, width);
@@ -277,11 +328,21 @@ public final class Box {
         return result;
     }
 
+    /**
+     * A one-element view of the rendered box.
+     *
+     * @param width the available width when the box is responsive
+     * @return a text view holding {@link #render(int)}
+     */
     public View<Object> view(int width) {
         return Views.text(render(width));
     }
 
-    /** Whether {@link #render} uses its argument instead of a fixed width. */
+    /**
+     * Whether {@link #render} uses its argument instead of a fixed width.
+     *
+     * @return whether {@link #render(int)} uses its argument
+     */
     public boolean isResponsive() {
         return fixedWidth <= 0;
     }

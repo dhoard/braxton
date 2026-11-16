@@ -152,10 +152,13 @@ public final class NativeTerminal implements Terminal {
     }
 
     private int readBytes(byte[] bytes, long timeoutMillis) throws IOException {
+        // The native side reads into the shared transfer segment, so the capacity it is given can
+        // never exceed that segment however large a caller's array is.
+        int capacity = Math.min(bytes.length, (int) inputTransfer.byteSize());
         lifetime.readLock().lock();
         try {
             if (closed) return -1;
-            int count = call(Library.READ, context, inputTransfer, bytes.length, (int) Math.min(100, timeoutMillis));
+            int count = call(Library.READ, context, inputTransfer, capacity, (int) Math.min(100, timeoutMillis));
             if (count < -1) throw new IOException("terminal input failed (errno " + (-count - 2) + ")");
             if (count > 0) MemorySegment.copy(inputTransfer, ValueLayout.JAVA_BYTE, 0, bytes, 0, count);
             return count;

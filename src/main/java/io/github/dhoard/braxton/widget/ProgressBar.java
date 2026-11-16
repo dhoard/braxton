@@ -72,6 +72,12 @@ public final class ProgressBar {
         this.append = append;
     }
 
+    /**
+     * A bar of {@code width} cells.
+     *
+     * @param width the bar width in cells
+     * @return the builder
+     */
     public static ProgressBar of(int width) {
         return new ProgressBar(
                 width,
@@ -85,11 +91,23 @@ public final class ProgressBar {
                 StyledText.empty());
     }
 
+    /**
+     * The same bar with a different width.
+     *
+     * @param value the bar width in cells
+     * @return this builder
+     */
     public ProgressBar width(int value) {
         return new ProgressBar(
                 value, buffer, activeIcon, inactiveIcon, activeStyle, inactiveStyle, showPercentage, prepend, append);
     }
 
+    /**
+     * The same bar with a different cell buffer.
+     *
+     * @param value the cells reserved around the bar
+     * @return this builder
+     */
     public ProgressBar buffer(int value) {
         return new ProgressBar(
                 width,
@@ -103,6 +121,13 @@ public final class ProgressBar {
                 append);
     }
 
+    /**
+     * The same bar with different active and inactive glyphs.
+     *
+     * @param active the glyph for a filled cell
+     * @param inactive the glyph for an empty cell
+     * @return this builder
+     */
     public ProgressBar icons(String active, String inactive) {
         return new ProgressBar(
                 width,
@@ -116,6 +141,13 @@ public final class ProgressBar {
                 append);
     }
 
+    /**
+     * The same bar with different colours.
+     *
+     * @param active the colour of a filled cell
+     * @param inactive the colour of an empty cell
+     * @return this builder
+     */
     public ProgressBar colors(Color active, Color inactive) {
         return new ProgressBar(
                 width,
@@ -129,11 +161,23 @@ public final class ProgressBar {
                 append);
     }
 
+    /**
+     * The same bar with the percentage label shown or hidden.
+     *
+     * @param value whether to show the percentage
+     * @return this builder
+     */
     public ProgressBar showPercentage(boolean value) {
         return new ProgressBar(
                 width, buffer, activeIcon, inactiveIcon, activeStyle, inactiveStyle, value, prepend, append);
     }
 
+    /**
+     * The same bar with a label before it.
+     *
+     * @param value the label to prepend
+     * @return this builder
+     */
     public ProgressBar prepend(StyledText value) {
         return new ProgressBar(
                 width,
@@ -147,6 +191,12 @@ public final class ProgressBar {
                 append);
     }
 
+    /**
+     * The same bar with a label after it.
+     *
+     * @param value the label to append
+     * @return this builder
+     */
     public ProgressBar append(StyledText value) {
         return new ProgressBar(
                 width,
@@ -160,7 +210,13 @@ public final class ProgressBar {
                 SingleRow.of(value));
     }
 
-    /** Renders a fraction of {@code value / max}; invalid bounds render an empty bar. */
+    /**
+     * Renders a fraction of {@code value / max}; invalid bounds render an empty bar.
+     *
+     * @param value the completed amount
+     * @param max the amount that fills the bar
+     * @return the painted bar
+     */
     public StyledText render(double value, double max) {
         int cells = Math.max(0, width);
         // NaN cannot be clamped onto the 0..1 scale, so it is unusable in the same way as a
@@ -187,17 +243,36 @@ public final class ProgressBar {
         return StyledText.concat(parts.toArray(StyledText[]::new));
     }
 
-    /** A single-line view of the bar. */
+    /**
+     * A single-line view of the bar.
+     *
+     * @param value the completed amount
+     * @param max the amount that fills the bar
+     * @return a text view holding the painted bar
+     */
     public View<Object> view(double value, double max) {
         return Views.text(render(value, max));
     }
 
-    /** Visible cell count for a rendered bar (useful for tests). */
+    /**
+     * Visible cell count for a rendered bar (useful for tests).
+     *
+     * @param value the completed amount
+     * @param max the amount that fills the bar
+     * @return the columns the painted bar occupies
+     */
     public int columns(double value, double max) {
         return TextMeasure.columns(render(value, max).plainText());
     }
 
-    /** Up to {@code count} icon cells from the left, used by tests to assert fill order. */
+    /**
+     * Up to {@code count} icon cells from the left, used by tests to assert fill order.
+     *
+     * @param count the number of cells to describe
+     * @param value the completed amount
+     * @param max the amount that fills the bar
+     * @return one glyph per cell, in order
+     */
     public List<String> icons(int count, double value, double max) {
         List<String> icons = new ArrayList<>();
         if (count <= 0) {

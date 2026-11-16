@@ -54,27 +54,59 @@ public final class Table {
     private Border border = Border.NONE;
     private Style borderStyle = Style.NONE;
 
+    /**
+     * An empty table with the default buffer and no frame.
+     */
     public Table() {}
 
+    /**
+     * An empty table.
+     *
+     * @return the builder
+     */
     public static Table of() {
         return new Table();
     }
 
+    /**
+     * The same table with a different cell buffer.
+     *
+     * @param value the cells added to each column width
+     * @return this builder
+     */
     public Table buffer(int value) {
         buffer = Math.max(0, value);
         return this;
     }
 
+    /**
+     * The same table with a frame.
+     *
+     * @param value the frame characters, or null for none
+     * @return this builder
+     */
     public Table border(Border value) {
         border = value == null ? Border.NONE : value;
         return this;
     }
 
+    /**
+     * The same table with a frame style.
+     *
+     * @param value the frame style, or null for plain
+     * @return this builder
+     */
     public Table borderStyle(Style value) {
         borderStyle = value == null ? Style.NONE : value;
         return this;
     }
 
+    /**
+     * The same table with one more row.
+     *
+     * @param cells the row's cells
+     * @return this builder
+     */
     public Table row(StyledText... cells) {
         if (cells == null) {
             throw new IllegalArgumentException("table cells are required");
@@ -87,6 +119,12 @@ public final class Table {
         return this;
     }
 
+    /**
+     * The same table with one more row.
+     *
+     * @param cells the row's cells
+     * @return this builder
+     */
     public Table row(List<StyledText> cells) {
         if (cells == null) {
             throw new IllegalArgumentException("table cells are required");
@@ -106,11 +144,20 @@ public final class Table {
         return cell;
     }
 
+    /**
+     * The rows added so far.
+     *
+     * @return an immutable copy of the rows
+     */
     public List<List<StyledText>> rows() {
         return List.copyOf(rows);
     }
 
-    /** Widest cell per column plus the buffer; returns an empty array for an empty table. */
+    /**
+     * Widest cell per column plus the buffer; returns an empty array for an empty table.
+     *
+     * @return the width of each column, including the buffer
+     */
     public int[] columnWidths() {
         int columns = 0;
         for (List<StyledText> row : rows) {
@@ -135,6 +182,8 @@ public final class Table {
     /**
      * Rendered rows; each row is padded to its column boundaries and every row to the width of the
      * widest one.
+     *
+     * @return the rendered rows
      */
     public List<StyledText> renderLines() {
         int[] widths = columnWidths();
@@ -171,7 +220,11 @@ public final class Table {
         return GridRows.shareOneWidth(out);
     }
 
-    /** Table as a single styled value with newlines between rows. */
+    /**
+     * Table as a single styled value with newlines between rows.
+     *
+     * @return the rendered table
+     */
     public StyledText render() {
         StyledText out = StyledText.empty();
         List<StyledText> lines = renderLines();
@@ -225,11 +278,22 @@ public final class Table {
         return out;
     }
 
+    /**
+     * A one-element view of the rendered table.
+     *
+     * @return a text view holding {@link #render()}
+     */
     public View<Object> view() {
         return Views.text(render());
     }
 
-    /** Convenience for callers that build plain cells. */
+    /**
+     * Convenience for callers that build plain cells.
+     *
+     * @param text the cell text; null is empty
+     * @param color the text colour, or null for the inherited colour
+     * @return the styled cell
+     */
     public static StyledText cell(String text, Color color) {
         return StyledText.of(text == null ? "" : text, color == null ? Style.NONE : Style.fg(color));
     }

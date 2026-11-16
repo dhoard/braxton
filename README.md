@@ -315,7 +315,9 @@ arrives later may be the next key the user pressed.
 | `Command.dispatch(message)` | Bounded local FIFO message after commit |
 | `Command.quit()` | End the application and discard queued local messages |
 
-Effects are epoch-guarded and component-scoped. Individual cancellation affects a local ID;
+Effects are identity-guarded and component-scoped: registering an id again replaces its
+registration, and removing a component invalidates its scope's epoch, so a late completion cannot
+reach the model. Individual cancellation affects a local ID;
 `cancelAll()` invalidates work in the current scope and descendants, never siblings. Removing a
 component invalidates queued async messages even if a task ignores interruption. Task results,
 timer ticks and clipboard reports arrive as ordinary messages, so update is never re-entered.
@@ -673,8 +675,8 @@ output and size queries. Closing a terminal waits for active native calls before
 
 - **State changes only through `update`.** Widget state is a value in the model; configuration is
   separate and immutable.
-- **Effects are data with lifetimes.** Commands run once; subscriptions are reconciled, epoch-guarded,
-  and closed deterministically.
+- **Effects are data with lifetimes.** Commands run once; subscriptions are reconciled,
+  identity-guarded, and closed deterministically.
 - **Routing is structural.** Modal → capture → interceptor → focused → bubble, with duplicate
   bindings rejected at build time.
 - **Rendering is safe by construction.** Content is control-character sanitized; only the encoder
@@ -718,6 +720,18 @@ Format (version pinned in the POM) and enforces the MIT license headers during `
 The developer probes under `tools/`
 are also outside the formatter's include set, because they are compiled ad hoc by the terminal
 verifier rather than as part of the build.
+
+The generated Unicode column-width table is formatter-clean and reproducible from the pinned data
+under `tools/unicode/16.0.0`. Regenerate it only through its script, and check it before a release:
+
+```bash
+python3 tools/generate_unicode_widths.py           # rewrite the table
+python3 tools/generate_unicode_widths.py --check   # verify it matches the generator
+```
+
+The check needs only the Python standard library, so it is not part of `./build.sh`;
+`Unicode16WidthReproducibilityTest` independently re-derives the wide set from the same pinned
+files during `verify`, so a hand edit or stale data fails the normal gate.
 
 Dependency- and plugin-update reports honor the pre-release filter in `versions-rules.xml`:
 
@@ -863,6 +877,10 @@ module name, coordinates, Unicode policy and offline fixture remain unchanged.
 - `ScrollView` is vertical and line-oriented. Content is published as pre-wrapped display rows; the
   pane clips a row that is too wide and does not reflow on resize, and there is no horizontal
   scrolling, scrollbar, selection, or mouse hit-testing.
+- One `ImageAsset` holds at most 4,194,304 pixels, the same bound the renderer puts on the cells it
+  allocates. A file's dimensions are read from its header before any pixel is decoded, so a larger
+  image fails with a diagnostic instead of allocating an unbounded raster; downsample it before
+  loading.
 - The API is pre-1.0 and may change between minor releases.
 
 ## Contributing

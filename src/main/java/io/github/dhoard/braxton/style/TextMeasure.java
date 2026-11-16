@@ -42,7 +42,12 @@ public final class TextMeasure {
 
     private TextMeasure() {}
 
-    /** Grapheme clusters of {@code text}, in order. */
+    /**
+     * Grapheme clusters of {@code text}, in order.
+     *
+     * @param text the text to segment; null or empty has no clusters
+     * @return the clusters, in order
+     */
     public static List<String> graphemes(String text) {
         if (text == null || text.isEmpty()) {
             return List.of();
@@ -54,7 +59,12 @@ public final class TextMeasure {
         return clusters;
     }
 
-    /** Number of grapheme clusters in {@code text}. Newlines count as one cluster. */
+    /**
+     * Number of grapheme clusters in {@code text}. Newlines count as one cluster.
+     *
+     * @param text the text to measure
+     * @return the number of grapheme clusters
+     */
     public static int graphemeCount(String text) {
         int count = 0;
         for (String ignored : Graphemes.iterate(text)) {
@@ -63,12 +73,23 @@ public final class TextMeasure {
         return count;
     }
 
-    /** Terminal columns used by a single line of {@code text} under {@link WidthPolicy#PINNED}. */
+    /**
+     * Terminal columns used by a single line of {@code text} under {@link WidthPolicy#PINNED}.
+     *
+     * @param text the single line to measure
+     * @return the columns of its widest line
+     */
     public static int columns(String text) {
         return columns(text, WidthPolicy.PINNED);
     }
 
-    /** Terminal columns used by a single line of {@code text}. */
+    /**
+     * Terminal columns used by a single line of {@code text}.
+     *
+     * @param text the text to measure
+     * @param policy the column-width policy
+     * @return the columns of its widest line
+     */
     public static int columns(String text, WidthPolicy policy) {
         if (text != null && policy != null && ascii(text)) {
             return text.length();
@@ -98,6 +119,9 @@ public final class TextMeasure {
      * cells wide whatever form it is drawn in, and charging one column for it made every row holding
      * one a column shorter than what was painted. Only U+FE0F (VS16) changes a width, and only upward:
      * it asks for the emoji form of a base that would otherwise be one column wide.</p>
+     * @param cluster the grapheme cluster to measure
+     * @param policy the column-width policy
+     * @return the columns it occupies, 0, 1 or 2
      */
     public static int clusterColumns(String cluster, WidthPolicy policy) {
         if (cluster.isEmpty()) {
@@ -156,12 +180,22 @@ public final class TextMeasure {
     /**
      * Truncates {@code text} to at most {@code maxColumns} columns without splitting a cluster.
      * A wide cluster that does not fit is dropped entirely rather than half-painted.
+     * @param text the text to truncate
+     * @param maxColumns the column budget
+     * @return the longest whole-cluster prefix that fits
      */
     public static String truncate(String text, int maxColumns) {
         return truncate(text, maxColumns, WidthPolicy.PINNED);
     }
 
-    /** Truncates {@code text} to at most {@code maxColumns} columns. */
+    /**
+     * Truncates {@code text} to at most {@code maxColumns} columns.
+     *
+     * @param text the text to truncate
+     * @param maxColumns the column budget
+     * @param policy the column-width policy
+     * @return the longest whole-cluster prefix that fits
+     */
     public static String truncate(String text, int maxColumns, WidthPolicy policy) {
         if (text == null || text.isEmpty() || maxColumns <= 0) {
             return "";
@@ -179,14 +213,26 @@ public final class TextMeasure {
         return result.toString();
     }
 
-    /** Pads {@code text} with spaces to {@code columns}, truncating when it is too wide. */
+    /**
+     * Pads {@code text} with spaces to {@code columns}, truncating when it is too wide.
+     *
+     * @param text the text to fit
+     * @param columns the exact width to fill
+     * @return the value padded or truncated to that width
+     */
     public static String fit(String text, int columns) {
         String clipped = truncate(text, columns);
         int used = TextMeasure.columns(clipped);
         return used >= columns ? clipped : clipped + " ".repeat(columns - used);
     }
 
-    /** UTF-16 index of the cluster boundary at or before {@code index}. */
+    /**
+     * UTF-16 index of the cluster boundary at or before {@code index}.
+     *
+     * @param text the text to inspect
+     * @param index the offset to search from
+     * @return the cluster boundary at or before it
+     */
     public static int boundaryBefore(String text, int index) {
         if (text == null || text.isEmpty() || index <= 0) {
             return 0;
@@ -209,7 +255,13 @@ public final class TextMeasure {
         return previous == BreakIterator.DONE ? 0 : previous;
     }
 
-    /** UTF-16 index of the next cluster boundary strictly after {@code index}. */
+    /**
+     * UTF-16 index of the next cluster boundary strictly after {@code index}.
+     *
+     * @param text the text to inspect
+     * @param index the offset to search from
+     * @return the next cluster boundary after it
+     */
     public static int boundaryAfter(String text, int index) {
         if (text == null || text.isEmpty() || index < 0) {
             // The first boundary after an index before the text is the start, not the end of the
@@ -231,7 +283,13 @@ public final class TextMeasure {
         return next == BreakIterator.DONE ? text.length() : next;
     }
 
-    /** UTF-16 index of the previous cluster boundary before {@code index}. */
+    /**
+     * UTF-16 index of the previous cluster boundary before {@code index}.
+     *
+     * @param text the text to inspect
+     * @param index the offset to search from
+     * @return the previous cluster boundary before it
+     */
     public static int previousBoundary(String text, int index) {
         if (text == null || text.isEmpty() || index <= 0) {
             return 0;
@@ -246,7 +304,13 @@ public final class TextMeasure {
         return previous == BreakIterator.DONE ? 0 : previous;
     }
 
-    /** True when {@code index} is a UTF-16 offset on a grapheme boundary. */
+    /**
+     * True when {@code index} is a UTF-16 offset on a grapheme boundary.
+     *
+     * @param text the text to inspect
+     * @param index the offset to test
+     * @return whether it falls on a cluster boundary
+     */
     public static boolean isBoundary(String text, int index) {
         if (text == null) {
             return index == 0;
@@ -296,12 +360,19 @@ public final class TextMeasure {
      * cell accounting all take this shortcut, so the rule has one owner here: if it were restated per
      * call site, one copy could drift and a caret column or a painted cell would disagree with the
      * measurement that placed it.</p>
+     * @param value the character to test
+     * @return whether it is printable ASCII
      */
     public static boolean isPrintableAscii(char value) {
         return value >= 0x20 && value <= 0x7E;
     }
 
-    /** Columns of the widest line of a {@link StyledText} value; newlines are not columns. */
+    /**
+     * Columns of the widest line of a {@link StyledText} value; newlines are not columns.
+     *
+     * @param text the styled value to measure
+     * @return the columns of its widest line
+     */
     public static int columns(StyledText text) {
         return text.columns();
     }

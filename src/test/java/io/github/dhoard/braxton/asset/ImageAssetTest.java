@@ -85,6 +85,39 @@ class ImageAssetTest {
     }
 
     @Test
+    void anImagePastThePixelCeilingIsRejectedBeforeItIsCopied(@TempDir Path directory) throws IOException {
+        // One pixel past the documented 4,194,304-pixel ceiling, in a single row so the file itself
+        // stays tiny: the dimensions must be refused before any raster is decoded, not after.
+        BufferedImage wide = new BufferedImage(4_194_305, 1, BufferedImage.TYPE_INT_ARGB);
+        assertThatThrownBy(() -> ImageAsset.of(wide))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("4194304")
+                .hasMessageContaining("4194305x1");
+
+        Path png = directory.resolve("wide.png");
+        assertThat(ImageIO.write(wide, "png", png.toFile())).isTrue();
+        assertThatThrownBy(() -> ImageAsset.load(png))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("4194304")
+                .hasMessageContaining("4194305x1");
+    }
+
+    @Test
+    void anImageAtThePixelCeilingStillLoadsAndCopies(@TempDir Path directory) throws IOException {
+        BufferedImage widest = new BufferedImage(4_194_304, 1, BufferedImage.TYPE_INT_ARGB);
+        widest.setRGB(4_194_303, 0, 0xFF123456);
+        ImageAsset atLimit = ImageAsset.of(widest);
+        assertThat(atLimit.width()).isEqualTo(4_194_304);
+        assertThat(atLimit.argb(4_194_303, 0)).isEqualTo(0xFF123456);
+
+        Path png = directory.resolve("widest.png");
+        assertThat(ImageIO.write(widest, "png", png.toFile())).isTrue();
+        ImageAsset loaded = ImageAsset.load(png);
+        assertThat(loaded.width()).isEqualTo(4_194_304);
+        assertThat(loaded.argb(4_194_303, 0)).isEqualTo(0xFF123456);
+    }
+
+    @Test
     void loadingRejectsMissingAndUnsupportedFiles(@TempDir Path directory) throws IOException {
         assertThatThrownBy(() -> ImageAsset.load(null)).isInstanceOf(IOException.class);
         assertThatThrownBy(() -> ImageAsset.load(directory.resolve("absent.png")))

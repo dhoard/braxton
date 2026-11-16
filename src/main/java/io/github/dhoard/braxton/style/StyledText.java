@@ -46,6 +46,9 @@ public final class StyledText {
      */
     public record Span(String text, Style style, String link) {
 
+        /**
+         * Rejects or normalizes the run's text, style and link.
+         */
         public Span {
             text = sanitize(text == null ? "" : text);
             style = style == null ? Style.NONE : style;
@@ -134,18 +137,44 @@ public final class StyledText {
         this.empty = left.empty && right.empty;
     }
 
+    /**
+     * A value with no content.
+     *
+     * @return the empty value
+     */
     public static StyledText empty() {
         return EMPTY;
     }
 
+    /**
+     * Plain unstyled text.
+     *
+     * @param text the content; null or empty is empty
+     * @return the styled value
+     */
     public static StyledText plain(String text) {
         return text == null || text.isEmpty() ? EMPTY : of(text, Style.NONE);
     }
 
+    /**
+     * One run of text with a style.
+     *
+     * @param text the content; null or empty is empty
+     * @param style the style applied to it
+     * @return the styled value
+     */
     public static StyledText of(String text, Style style) {
         return of(text, style, null);
     }
 
+    /**
+     * One run of text with a style and a link.
+     *
+     * @param text the content; null or empty is empty
+     * @param style the style applied to it
+     * @param link the hyperlink target, or null
+     * @return the styled value
+     */
     public static StyledText of(String text, Style style, String link) {
         if (text == null || text.isEmpty()) {
             return EMPTY;
@@ -153,7 +182,12 @@ public final class StyledText {
         return new StyledText(List.of(new Span(text, style, link)));
     }
 
-    /** Joins values that may be heterogeneous, preserving each span's own styling. */
+    /**
+     * Joins values that may be heterogeneous, preserving each span's own styling.
+     *
+     * @param parts the values to join
+     * @return the joined value
+     */
     public static StyledText concat(StyledText... parts) {
         List<Span> spans = new ArrayList<>();
         Span last = null;
@@ -181,6 +215,11 @@ public final class StyledText {
         return spans.isEmpty() ? EMPTY : new StyledText(List.copyOf(spans));
     }
 
+    /**
+     * The spans of this value, in order.
+     *
+     * @return the immutable span list
+     */
     public List<Span> spans() {
         List<Span> cached = spans;
         return cached != null ? cached : materialize();
@@ -235,11 +274,20 @@ public final class StyledText {
         return cached;
     }
 
+    /**
+     * Whether the value holds no text.
+     *
+     * @return whether every span is empty
+     */
     public boolean isEmpty() {
         return empty;
     }
 
-    /** The concatenated content with all styling removed. */
+    /**
+     * The concatenated content with all styling removed.
+     *
+     * @return the concatenated content
+     */
     public String plainText() {
         if (spans().size() == 1) {
             return spans().get(0).text();
@@ -251,7 +299,11 @@ public final class StyledText {
         return text.toString();
     }
 
-    /** UTF-16 length of the content. */
+    /**
+     * UTF-16 length of the content.
+     *
+     * @return the content length in UTF-16 units
+     */
     public int length() {
         int length = 0;
         for (Span span : spans()) {
@@ -260,7 +312,11 @@ public final class StyledText {
         return length;
     }
 
-    /** Terminal columns of the widest line under {@link WidthPolicy#PINNED}. */
+    /**
+     * Terminal columns of the widest line under {@link WidthPolicy#PINNED}.
+     *
+     * @return the columns of its widest line
+     */
     public int columns() {
         int widest = 0;
         for (String line : plainText().split("\n", -1)) {
@@ -269,16 +325,30 @@ public final class StyledText {
         return widest;
     }
 
-    /** Number of grapheme clusters across all lines. */
+    /**
+     * Number of grapheme clusters across all lines.
+     *
+     * @return the number of grapheme clusters
+     */
     public int graphemeCount() {
         return TextMeasure.graphemeCount(plainText());
     }
 
-    /** The style of the first span, or {@link Style#NONE}. */
+    /**
+     * The style of the first span, or {@link Style#NONE}.
+     *
+     * @return the first span's style, or a plain style
+     */
     public Style style() {
         return spans().isEmpty() ? Style.NONE : spans().get(0).style();
     }
 
+    /**
+     * This value followed by another.
+     *
+     * @param other the value to append
+     * @return the combined value
+     */
     public StyledText append(StyledText other) {
         Objects.requireNonNull(other, "other");
         if (!other.hasSpans) {
@@ -290,11 +360,22 @@ public final class StyledText {
         return new StyledText(this, other);
     }
 
+    /**
+     * This value followed by plain text.
+     *
+     * @param text the text to append
+     * @return the combined value
+     */
     public StyledText append(String text) {
         return append(plain(text));
     }
 
-    /** Returns the same content with every span restyled, keeping links. */
+    /**
+     * Returns the same content with every span restyled, keeping links.
+     *
+     * @param style the replacement style
+     * @return this content with that style
+     */
     public StyledText withStyle(Style style) {
         if (!hasSpans) {
             return this;
@@ -306,7 +387,12 @@ public final class StyledText {
         return new StyledText(List.copyOf(restyled));
     }
 
-    /** Returns the same content with every span linked to {@code target}. */
+    /**
+     * Returns the same content with every span linked to {@code target}.
+     *
+     * @param target the hyperlink target
+     * @return this content linked to it
+     */
     public StyledText withLink(String target) {
         if (!hasSpans) {
             return this;
@@ -318,7 +404,11 @@ public final class StyledText {
         return new StyledText(List.copyOf(linked));
     }
 
-    /** Removes trailing newline characters without disturbing styling. */
+    /**
+     * Removes trailing newline characters without disturbing styling.
+     *
+     * @return this content without trailing line breaks
+     */
     public StyledText stripTrailingNewlines() {
         List<Span> trimmed = new ArrayList<>(spans());
         int index = trimmed.size() - 1;
@@ -346,7 +436,11 @@ public final class StyledText {
         return trimmed.isEmpty() ? EMPTY : new StyledText(List.copyOf(trimmed));
     }
 
-    /** Splits this value on {@code \n}, returning one entry per line (never null entries). */
+    /**
+     * Splits this value on {@code \n}, returning one entry per line (never null entries).
+     *
+     * @return one value per line
+     */
     public List<StyledText> lines() {
         List<StyledText> lines = new ArrayList<>();
         StyledText current = EMPTY;

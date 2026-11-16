@@ -25,6 +25,7 @@ package io.github.dhoard.braxton.internal.runtime;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
 import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.mvu.ComponentFailure;
 import io.github.dhoard.braxton.mvu.ComponentPath;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -49,7 +50,6 @@ public final class SubscriptionManager<Msg> {
     private abstract static class Live {
         final SubscriptionId id;
         final Object configuration;
-        long epoch;
 
         Live(SubscriptionId id, Object configuration) {
             this.id = id;
@@ -74,7 +74,6 @@ public final class SubscriptionManager<Msg> {
                 SubscriptionId id,
                 Duration period,
                 Function<Long, Msg> mapper,
-                long epoch,
                 java.util.function.BiConsumer<Object, java.util.function.BooleanSupplier> emitter,
                 Consumer<String> diagnostics) {
             super(id, period);
@@ -83,7 +82,6 @@ public final class SubscriptionManager<Msg> {
             this.periodNanos = Math.max(1L, period.toNanos());
             this.emitter = emitter;
             this.diagnostics = diagnostics;
-            this.epoch = epoch;
             scheduleNext();
         }
 
@@ -153,10 +151,9 @@ public final class SubscriptionManager<Msg> {
     private static final class ResizeLive<Msg> extends Live {
         final AtomicReference<Function<Size, Msg>> mapper;
 
-        ResizeLive(SubscriptionId id, Function<Size, Msg> mapper, long epoch) {
+        ResizeLive(SubscriptionId id, Function<Size, Msg> mapper) {
             super(id, "resize");
             this.mapper = new AtomicReference<>(mapper);
-            this.epoch = epoch;
         }
 
         @Override
@@ -175,12 +172,10 @@ public final class SubscriptionManager<Msg> {
                 Object configuration,
                 AtomicReference<Function<Object, Msg>> mapper,
                 AutoCloseable resource,
-                long epoch,
                 Consumer<String> diagnostics) {
             super(id, configuration);
             this.mapper = mapper;
             this.resource = resource;
-            this.epoch = epoch;
             this.diagnostics = diagnostics;
         }
 
@@ -220,7 +215,6 @@ public final class SubscriptionManager<Msg> {
             }
         }
         for (Live source : removed) {
-            source.epoch = -1L;
             source.close();
         }
     }
@@ -231,7 +225,6 @@ public final class SubscriptionManager<Msg> {
     private final Consumer<String> diagnostics;
     private final Map<SubscriptionId, Live> live = new java.util.LinkedHashMap<>();
     private final Object lock = new Object();
-    private long nextEpoch = 1L;
     private boolean closed;
     private Thread owner = Thread.currentThread();
 
@@ -305,7 +298,6 @@ public final class SubscriptionManager<Msg> {
             }
         }
         for (Live removed : toClose) {
-            removed.epoch = -1L;
             removed.close();
         }
         if (rejected instanceof RuntimeException runtime) {
@@ -344,7 +336,6 @@ public final class SubscriptionManager<Msg> {
     }
 
     private Live start(Subscription<Msg> leaf) {
-        long epoch = nextEpoch++;
         ScopeManager.Origin origin = origin(leaf.id());
         if (leaf instanceof Subscription.Interval<Msg> interval) {
             return new IntervalLive<>(
@@ -352,12 +343,11 @@ public final class SubscriptionManager<Msg> {
                     interval.id(),
                     interval.period(),
                     interval.onTick(),
-                    epoch,
                     (message, valid) -> enqueue(message, origin, valid),
                     diagnostics);
         }
         if (leaf instanceof Subscription.Resize<Msg> resize) {
-            return new ResizeLive<>(resize.id(), resize.onResize(), epoch);
+            return new ResizeLive<>(resize.id(), resize.onResize());
         }
         if (leaf instanceof Subscription.Source<Msg> source) {
             AtomicReference<Function<Object, Msg>> mapper = new AtomicReference<>(source.mapper());
@@ -374,7 +364,7 @@ public final class SubscriptionManager<Msg> {
             };
             try {
                 AutoCloseable resource = source.start().apply(emitter);
-                return new ExternalLive<>(source.id(), source.configuration(), mapper, resource, epoch, diagnostics);
+                return new ExternalLive<>(source.id(), source.configuration(), mapper, resource, diagnostics);
             } catch (RuntimeException | Error failure) {
                 // start may have handed this emitter to another thread before failing. No Live
                 // was returned for reconcile to close, so invalidate that callback here instead.
@@ -395,7 +385,7 @@ public final class SubscriptionManager<Msg> {
             if (source instanceof ResizeLive<?> resize) {
                 Function<Size, Msg> mapper = resizeMapper(resize);
                 if (mapper != null) {
-                    Msg message = mapper.apply(size);
+                    Msg message = mapResize(source, mapper, size);
                     // A null result declines this size, exactly as it does on the interval and
                     // source paths (enqueue drops it): a null is not a message, and enqueuing one
                     // would hand the owner's update a value outside the application's message type.
@@ -405,6 +395,28 @@ public final class SubscriptionManager<Msg> {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Maps one measured size for the source that declared it.
+     *
+     * <p>Interval and source mappers run on a thread the runtime does not own, so a failure there
+     * is contained and reported: letting it escape would end a tick chain while the source stayed
+     * declared, leaving a dead subscription nobody hears about. A resize mapper runs on the owner
+     * thread, inside the run loop, so a throw is an application failure on a synchronous path - the
+     * runtime fails the run as it does for {@code update} and {@code view}, and reports the failure
+     * with the source's structural path and the {@code SUBSCRIPTIONS} phase.</p>
+     */
+    private Msg mapResize(Live source, Function<Size, Msg> mapper, Size size) {
+        try {
+            return mapper.apply(size);
+        } catch (RuntimeException failure) {
+            throw new ComponentFailure(
+                    source.id.path(),
+                    ComponentFailure.Phase.SUBSCRIPTIONS,
+                    "resize mapper threw " + failure.getClass().getSimpleName(),
+                    failure);
         }
     }
 
@@ -458,7 +470,6 @@ public final class SubscriptionManager<Msg> {
             live.clear();
         }
         for (Live source : all) {
-            source.epoch = -1L;
             source.close();
         }
     }

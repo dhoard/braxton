@@ -40,9 +40,10 @@ import java.util.function.Consumer;
  * Interprets inert {@link Command} values: exactly once, on the owner thread for structured
  * effects, and on the effect executor for application tasks.
  *
- * <p>Every one-shot effect is registered under its id and an epoch. Replacing an id invalidates the
- * old epoch, so a late completion can never reach the model. Results are enqueued as ordinary
- * messages; the interpreter never calls {@code update} itself.</p>
+ * <p>Every one-shot effect is registered under its id. Registering that id again replaces the
+ * registration, and cancelling removes it, so a late completion compares itself with the live
+ * registration and can never reach the model. Results are enqueued as ordinary messages; the
+ * interpreter never calls {@code update} itself.</p>
  * @param <Msg> the component message type effects deliver
  */
 public final class EffectRunner<Msg> {
@@ -50,16 +51,14 @@ public final class EffectRunner<Msg> {
     private static final class Entry {
         final EffectId id;
         final ScopeManager.Origin origin;
-        final long epoch;
         final boolean task;
         final Duration delay;
         Timers.Handle timer;
         volatile Thread thread;
 
-        Entry(EffectId id, long epoch, boolean task, Duration delay, ScopeManager.Origin origin) {
+        Entry(EffectId id, boolean task, Duration delay, ScopeManager.Origin origin) {
             this.origin = origin;
             this.id = id;
-            this.epoch = epoch;
             this.task = task;
             this.delay = delay;
         }
@@ -107,7 +106,6 @@ public final class EffectRunner<Msg> {
     }
 
     private Thread owner = Thread.currentThread();
-    private long nextEpoch = 1L;
     private boolean quitRequested;
     private int quitStatus;
 
@@ -185,11 +183,7 @@ public final class EffectRunner<Msg> {
                 return;
             }
             entry = new Entry(
-                    command.id(),
-                    nextEpoch++,
-                    false,
-                    command.delay(),
-                    origin(command.id().path()));
+                    command.id(), false, command.delay(), origin(command.id().path()));
             replaceLocked(entry);
         }
         Timers.Handle handle =
@@ -220,11 +214,7 @@ public final class EffectRunner<Msg> {
                 return;
             }
             entry = new Entry(
-                    command.id(),
-                    nextEpoch++,
-                    true,
-                    Duration.ZERO,
-                    origin(command.id().path()));
+                    command.id(), true, Duration.ZERO, origin(command.id().path()));
             replaceLocked(entry);
         }
         Executor executor = environment.effectExecutor();

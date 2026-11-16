@@ -40,6 +40,13 @@ import java.util.function.Function;
  * closes it exactly once and ignores later emissions. A mapper that returns {@code null} declines
  * an emission: nothing is delivered to the owner.</p>
  *
+ * <p>A mapper that throws is handled where it runs. An {@link Interval} or {@link Source} mapper
+ * runs on a thread the runtime does not own, so its failure is reported through runtime diagnostics
+ * and the source keeps running, because letting the throwable end a tick chain would leave a dead
+ * declared subscription unreported. A {@link Resize} mapper runs on the runtime thread, inside the
+ * run loop, so its failure ends the run with a {@link io.github.dhoard.braxton.mvu.ComponentFailure}
+ * that reports the {@code SUBSCRIPTIONS} phase and the source's structural path.</p>
+ *
  * @param <Msg> the component message type this source emits
  */
 public sealed interface Subscription<Msg> {
@@ -104,6 +111,9 @@ public sealed interface Subscription<Msg> {
 
         private static final SubscriptionId ID = SubscriptionId.of("batch");
 
+        /**
+         * Rejects a null list of sources.
+         */
         public Batch {
             items = List.copyOf(items);
         }
@@ -139,6 +149,9 @@ public sealed interface Subscription<Msg> {
      */
     record Interval<Msg>(SubscriptionId id, Duration period, Function<Long, Msg> onTick) implements Subscription<Msg> {
 
+        /**
+         * Rejects a null identity, mapper or a non-positive period that does not fit in nanoseconds.
+         */
         public Interval {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(period, "period");
@@ -174,6 +187,9 @@ public sealed interface Subscription<Msg> {
      */
     record Resize<Msg>(SubscriptionId id, Function<Size, Msg> onResize) implements Subscription<Msg> {
 
+        /**
+         * Rejects a null identity or mapper.
+         */
         public Resize {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(onResize, "onResize");
@@ -218,6 +234,9 @@ public sealed interface Subscription<Msg> {
             Function<Object, Msg> mapper)
             implements Subscription<Msg> {
 
+        /**
+         * Rejects a null identity, configuration, start function or mapper.
+         */
         public Source {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(configuration, "configuration");

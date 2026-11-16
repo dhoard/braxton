@@ -44,7 +44,13 @@ import java.util.function.Function;
  */
 public sealed interface Command<Msg> {
 
-    /** Re-types every message this command can produce. */
+    /**
+     * Re-types every message this command can produce.
+     *
+     * @param <Msg2> the message type the mapped command produces
+     * @param mapper maps every message this command produces
+     * @return the re-typed command
+     */
     <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper);
 
     /**
@@ -69,6 +75,9 @@ public sealed interface Command<Msg> {
      */
     record Batch<Msg>(List<Command<Msg>> commands) implements Command<Msg> {
 
+        /**
+         * Rejects a null list of commands.
+         */
         public Batch {
             commands = List.copyOf(commands);
         }
@@ -100,6 +109,9 @@ public sealed interface Command<Msg> {
     record Task<Msg>(EffectId id, Callable<?> work, Function<Object, Msg> onSuccess, Function<Throwable, Msg> onFailure)
             implements Command<Msg> {
 
+        /**
+         * Rejects a null work, success mapper or failure mapper.
+         */
         public Task {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(work, "work");
@@ -128,6 +140,9 @@ public sealed interface Command<Msg> {
      */
     record Delay<Msg>(EffectId id, Duration delay, Msg message, Msg rejected) implements Command<Msg> {
 
+        /**
+         * Rejects a negative delay and a delay that does not fit in nanoseconds.
+         */
         public Delay {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(delay, "delay");
@@ -156,6 +171,9 @@ public sealed interface Command<Msg> {
      */
     record Cancel<Msg>(EffectId id) implements Command<Msg> {
 
+        /**
+         * Rejects a null effect id.
+         */
         public Cancel {
             Objects.requireNonNull(id, "id");
         }
@@ -187,6 +205,9 @@ public sealed interface Command<Msg> {
      * @param <Msg> the component message type this command produces
      */
     record Dispatch<Msg>(Msg message) implements Command<Msg> {
+        /**
+         * Rejects a null message.
+         */
         public Dispatch {
             Objects.requireNonNull(message, "message");
         }
@@ -206,6 +227,9 @@ public sealed interface Command<Msg> {
      * @param <Msg> the component message type this command produces
      */
     record Scoped<Msg>(ComponentPath path, Command<Msg> command) implements Command<Msg> {
+        /**
+         * Rejects a null path or command.
+         */
         public Scoped {
             Objects.requireNonNull(path, "path");
             Objects.requireNonNull(command, "command");
@@ -218,6 +242,12 @@ public sealed interface Command<Msg> {
         }
     }
 
+    /**
+     * The same command in a structural scope.
+     *
+     * @param path the structural scope to prepend
+     * @return this command in that scope
+     */
     default Command<Msg> scoped(ComponentPath path) {
         Objects.requireNonNull(path, "path");
         return this instanceof None<Msg> ? this : new Scoped<>(path, this);
@@ -231,6 +261,9 @@ public sealed interface Command<Msg> {
      */
     record ReadClipboard<Msg>(Function<String, Msg> mapper) implements Command<Msg> {
 
+        /**
+         * Rejects a null mapper.
+         */
         public ReadClipboard {
             Objects.requireNonNull(mapper, "mapper");
         }
@@ -251,6 +284,9 @@ public sealed interface Command<Msg> {
      */
     record Copy<Msg>(String text, Function<ClipboardResult, Msg> mapper) implements Command<Msg> {
 
+        /**
+         * Treats a null text as empty.
+         */
         public Copy {
             text = text == null ? "" : text;
             Objects.requireNonNull(mapper, "mapper");
@@ -278,11 +314,23 @@ public sealed interface Command<Msg> {
         }
     }
 
+    /**
+     * Does nothing.
+     *
+     * @param <Msg> the component message type
+     * @return the inert command
+     */
     static <Msg> Command<Msg> none() {
         return new None<>();
     }
 
-    /** Ordered batch, flattened and with {@link None} entries removed. */
+    /**
+     * Ordered batch, flattened and with {@link None} entries removed.
+     *
+     * @param <Msg> the component message type these commands produce
+     * @param commands the commands to interpret in order
+     * @return one command that interprets them in order
+     */
     @SafeVarargs
     static <Msg> Command<Msg> batch(Command<Msg>... commands) {
         List<Command<Msg>> copy = new ArrayList<>(commands.length);
@@ -292,6 +340,13 @@ public sealed interface Command<Msg> {
         return batch(copy);
     }
 
+    /**
+     * One ordered batch with empty and nested batches flattened.
+     *
+     * @param <Msg> the component message type these commands produce
+     * @param commands the commands to interpret in order
+     * @return the flattened batch, or the single command it holds
+     */
     static <Msg> Command<Msg> batch(List<Command<Msg>> commands) {
         List<Command<Msg>> flat = new ArrayList<>();
         for (Command<Msg> command : commands) {
@@ -313,6 +368,14 @@ public sealed interface Command<Msg> {
     /**
      * Typed one-shot application effect. The unchecked casts are confined to this factory: Java
      * erases {@code T}, and the interpreter invokes the success mapper with the task's own result.
+     *
+     * @param <Msg> the component message type the task produces
+     * @param <T> the work's result type
+     * @param id the effect identity; replacing it invalidates an earlier registration
+     * @param work the application work to run on the effect executor
+     * @param onSuccess maps the result to the message delivered on success
+     * @param onFailure maps the failure to the message delivered on failure
+     * @return the task command
      */
     static <Msg, T> Command<Msg> task(
             EffectId id,
@@ -326,34 +389,92 @@ public sealed interface Command<Msg> {
         return new Task<>(id, work, success, onFailure::apply);
     }
 
+    /**
+     * Delivers a message after a delay.
+     *
+     * @param <Msg> the component message type
+     * @param id the effect identity
+     * @param delay how long to wait
+     * @param message the message delivered after the delay
+     * @param rejected the message delivered when the effect quota is exhausted
+     * @return the delay command
+     */
     static <Msg> Command<Msg> delay(EffectId id, Duration delay, Msg message, Msg rejected) {
         return new Delay<>(id, delay, message, rejected);
     }
 
+    /**
+     * Invalidates one effect.
+     *
+     * @param <Msg> the component message type
+     * @param id the effect identity to invalidate
+     * @return the cancel command
+     */
     static <Msg> Command<Msg> cancel(EffectId id) {
         return new Cancel<>(id);
     }
 
+    /**
+     * Invalidates every effect in the current scope and its descendants.
+     *
+     * @param <Msg> the component message type
+     * @return the cancel-all command
+     */
     static <Msg> Command<Msg> cancelAll() {
         return new CancelAll<>();
     }
 
+    /**
+     * Enqueues an owner-local message after commit.
+     *
+     * @param <Msg> the component message type
+     * @param message the message to deliver
+     * @return the dispatch command
+     */
     static <Msg> Command<Msg> dispatch(Msg message) {
         return new Dispatch<>(message);
     }
 
+    /**
+     * Copies text and reports the clipboard result.
+     *
+     * @param <Msg> the component message type
+     * @param text the text to copy
+     * @param mapper maps the result to a message
+     * @return the copy command
+     */
     static <Msg> Command<Msg> copy(String text, Function<ClipboardResult, Msg> mapper) {
         return new Copy<>(text, mapper);
     }
 
+    /**
+     * Reads the in-process clipboard buffer.
+     *
+     * @param <Msg> the component message type
+     * @param mapper maps the stored text to a message
+     * @return the read command
+     */
     static <Msg> Command<Msg> readClipboard(Function<String, Msg> mapper) {
         return new ReadClipboard<>(mapper);
     }
 
+    /**
+     * Ends the program with status 0.
+     *
+     * @param <Msg> the component message type
+     * @return the quit command
+     */
     static <Msg> Command<Msg> quit() {
         return new Quit<>(0);
     }
 
+    /**
+     * Ends the program with a status.
+     *
+     * @param <Msg> the component message type
+     * @param status the exit status
+     * @return the quit command
+     */
     static <Msg> Command<Msg> quit(int status) {
         return new Quit<>(status);
     }

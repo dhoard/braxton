@@ -32,8 +32,11 @@ import java.util.List;
 /**
  * Vertical colour gradient over styled text.
  *
- * <p>Every grapheme is coloured as a unit. Malformed or unusable colours are ignored: the original
- * text is returned unchanged rather than partially repainted.</p>
+ * <p>The colour position advances one cluster at a time, over the clusters of each span in order.
+ * A style boundary that splits one grapheme - a base in one span, its combining mark or variation
+ * selector in the next - therefore colours the two pieces from their own positions, and only the
+ * painted text stays unchanged: the two spans still paint one cell. Malformed or unusable colours
+ * are ignored: the original text is returned unchanged rather than partially repainted.</p>
  */
 public final class Gradient {
 

@@ -53,10 +53,21 @@ public final class Quote {
     private Style background = Style.NONE;
     private String bar = "\u2502";
 
+    /**
+     * A quote with no content.
+     *
+     * @return the builder
+     */
     public static Quote of() {
         return new Quote();
     }
 
+    /**
+     * The same quote with styled content appended.
+     *
+     * @param text the content to append
+     * @return this builder
+     */
     public Quote append(StyledText text) {
         if (text != null) {
             lines.addAll(text.lines());
@@ -64,15 +75,33 @@ public final class Quote {
         return this;
     }
 
+    /**
+     * The same quote with plain text appended.
+     *
+     * @param text the content to append
+     * @return this builder
+     */
     public Quote append(String text) {
         return append(StyledText.plain(text));
     }
 
+    /**
+     * The same quote with a different bar colour.
+     *
+     * @param color the bar colour
+     * @return this builder
+     */
     public Quote border(Color color) {
         borderStyle = color == null ? Style.NONE : Style.fg(color);
         return this;
     }
 
+    /**
+     * The same quote with a different background colour.
+     *
+     * @param color the background colour
+     * @return this builder
+     */
     public Quote background(Color color) {
         background = color == null ? Style.NONE : Style.bg(color);
         return this;
@@ -81,6 +110,9 @@ public final class Quote {
     /**
      * Sets the bar painted at the start of every quoted line. The bar is a one-line prefix, so
      * CRLF, CR, and LF each become one space; a null or empty value falls back to a space.
+     *
+     * @param value the bar glyph
+     * @return this builder
      */
     public Quote bar(String value) {
         bar = value == null || value.isEmpty() ? " " : singleLine(value);
@@ -91,6 +123,11 @@ public final class Quote {
         return LineBreaks.singleRow(value);
     }
 
+    /**
+     * The quote as one styled value.
+     *
+     * @return the painted quote
+     */
     public StyledText render() {
         List<StyledText> body = new ArrayList<>(lines.size());
         for (StyledText line : lines) {
@@ -130,6 +167,11 @@ public final class Quote {
         return body;
     }
 
+    /**
+     * A one-element view of the rendered quote.
+     *
+     * @return a text view holding {@link #render()}
+     */
     public View<Object> view() {
         return Views.text(render());
     }

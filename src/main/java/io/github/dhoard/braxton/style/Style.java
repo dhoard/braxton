@@ -49,49 +49,110 @@ public record Style(
 
     public static final Style NONE = new Style(null, null, false, false, false, false, false, false);
 
+    /**
+     * Rejects no value; null colours mean inherit.
+     */
     public Style {}
 
+    /**
+     * A style with a foreground colour.
+     *
+     * @param foreground the foreground colour
+     * @return the style
+     */
     public static Style fg(Color foreground) {
         return NONE.withForeground(foreground);
     }
 
+    /**
+     * A style with a background colour.
+     *
+     * @param background the background colour
+     * @return the style
+     */
     public static Style bg(Color background) {
         return NONE.withBackground(background);
     }
 
+    /**
+     * The same style with a foreground colour.
+     *
+     * @param color the foreground colour
+     * @return the new style
+     */
     public Style withForeground(Color color) {
         return new Style(color, background, bold, italic, underline, strikethrough, invert, hidden);
     }
 
+    /**
+     * The same style with a background colour.
+     *
+     * @param color the background colour
+     * @return the new style
+     */
     public Style withBackground(Color color) {
         return new Style(foreground, color, bold, italic, underline, strikethrough, invert, hidden);
     }
 
+    /**
+     * The same style with bold set.
+     *
+     * @return the new style
+     */
     public Style withBold() {
         return new Style(foreground, background, true, italic, underline, strikethrough, invert, hidden);
     }
 
+    /**
+     * The same style with italic set.
+     *
+     * @return the new style
+     */
     public Style withItalic() {
         return new Style(foreground, background, bold, true, underline, strikethrough, invert, hidden);
     }
 
+    /**
+     * The same style with underline set.
+     *
+     * @return the new style
+     */
     public Style withUnderline() {
         return new Style(foreground, background, bold, italic, true, strikethrough, invert, hidden);
     }
 
+    /**
+     * The same style with strikethrough set.
+     *
+     * @return the new style
+     */
     public Style withStrikethrough() {
         return new Style(foreground, background, bold, italic, underline, true, invert, hidden);
     }
 
+    /**
+     * The same style with reverse video set.
+     *
+     * @return the new style
+     */
     public Style withInvert() {
         return new Style(foreground, background, bold, italic, underline, strikethrough, true, hidden);
     }
 
+    /**
+     * The same style with concealment set.
+     *
+     * @return the new style
+     */
     public Style withHidden() {
         return new Style(foreground, background, bold, italic, underline, strikethrough, invert, true);
     }
 
-    /** True when this style would emit no SGR parameters at all. */
+    /**
+     * True when this style would emit no SGR parameters at all.
+     *
+     * @return whether it would emit no SGR parameters
+     */
     public boolean isPlain() {
         return foreground == null
                 && background == null
@@ -103,7 +164,12 @@ public record Style(
                 && !hidden;
     }
 
-    /** Applies {@code overlay} on top of this style, inheriting unspecified colours. */
+    /**
+     * Applies {@code overlay} on top of this style, inheriting unspecified colours.
+     *
+     * @param overlay the style applied on top
+     * @return the merged style
+     */
     public Style merge(Style overlay) {
         if (overlay == null) {
             return this;

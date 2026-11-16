@@ -190,6 +190,60 @@ class RuntimeLoopTest {
 
     @Test
     @Timeout(15)
+    void aThrowingResizeMapperEndsTheRunAsASubscriptionFailure() throws Exception {
+        // A resize mapper runs on the owner thread, so a throw is a synchronous application
+        // failure: the run ends, and the failure names the source's structural path and the
+        // SUBSCRIPTIONS phase instead of surfacing as a bare application exception.
+        TestTerminal terminal = new TestTerminal(new Size(6, 20));
+        RuntimeOptions options = options();
+        Component<Integer, ResizeMessage, Never> program = new Component<>() {
+            @Override
+            public Update<Integer, ResizeMessage, Never> init(InitContext context) {
+                return Update.next(0);
+            }
+
+            @Override
+            public Update<Integer, ResizeMessage, Never> update(Integer model, ResizeMessage message) {
+                return Update.next(0);
+            }
+
+            @Override
+            public View<ResizeMessage> view(Integer model, ViewContext context) {
+                Viewport viewport = context.viewport();
+                return Views.text("size: " + viewport.rows() + "x" + viewport.cols());
+            }
+
+            @Override
+            public Subscription<ResizeMessage> subscriptions(Integer model) {
+                return Subscription.resize(SubscriptionId.of("resize"), size -> {
+                    throw new IllegalStateException("resize boom");
+                });
+            }
+        };
+        AtomicReference<ExitResult> result = new AtomicReference<>();
+        Thread run =
+                Thread.ofVirtual().name("throwing-resize").start(() -> result.set(run(program, options, terminal)));
+        await(() -> terminal.outputText().contains("size: 6x20"));
+
+        terminal.resize(new Size(4, 10));
+        terminal.signalResize();
+
+        run.join(5_000L);
+        assertThat(run.isAlive()).isFalse();
+        assertThat(result.get().kind()).isEqualTo(ExitResult.Kind.FAILURE);
+        assertThat(result.get().failure())
+                .as("the failure is reported with the subscription's path and phase")
+                .isInstanceOfSatisfying(ComponentFailure.class, failure -> {
+                    assertThat(failure.phase()).isEqualTo(ComponentFailure.Phase.SUBSCRIPTIONS);
+                    assertThat(failure.detail()).contains("IllegalStateException");
+                    assertThat(failure.getCause())
+                            .isInstanceOf(IllegalStateException.class)
+                            .hasMessage("resize boom");
+                });
+    }
+
+    @Test
+    @Timeout(15)
     void unavailableSizeUsesFallbackAndTheRunRemainsUsable() {
         TestTerminal terminal = new TestTerminal(new Size(6, 20));
         terminal.failSize(new IllegalStateException("temporary size failure"));
