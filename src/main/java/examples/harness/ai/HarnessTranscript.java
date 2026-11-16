@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +30,12 @@ import java.util.List;
  * <p>A turn keeps its example user text separate from its response entries. The program seeds the
  * first turn and, when the user submits later prompts, replays a later turn's response entries under
  * the user's actual text.</p>
+ *
+ * @param turns the parsed turns, in recorded order
+ * @param profile the provider/model identity shown in the footer
+ * @param usage the token and rate observations shown in the footer
+ * @param contextWindow the context window used for the context gauge
+ * @param warnings reader diagnostics, one per skipped or malformed record
  */
 public record HarnessTranscript(
         List<HarnessTurn> turns, Profile profile, Usage usage, int contextWindow, List<String> warnings) {
@@ -42,7 +48,14 @@ public record HarnessTranscript(
         contextWindow = contextWindow <= 0 ? Profile.DEFAULT_CONTEXT_WINDOW : contextWindow;
     }
 
-    /** One example turn: the prompt it was recorded under and the response blocks. */
+    /**
+     * One example turn: the prompt it was recorded under and the response blocks.
+     *
+     * @param userText the recorded prompt, or empty
+     * @param responses the response blocks to replay, in order
+     * @param usage the token observations for this turn
+     * @param profile the provider/model identity reported for this turn
+     */
     public record HarnessTurn(String userText, List<HarnessEntry> responses, Usage usage, Profile profile) {
 
         public HarnessTurn {
@@ -65,7 +78,13 @@ public record HarnessTranscript(
      */
     public static final String EXAMPLE_VERSION = "1.2.3";
 
-    /** Provider/model identity shown in the footer and used by mock fallbacks. */
+    /**
+     * Provider/model identity shown in the footer and used by mock fallbacks.
+     *
+     * @param provider the provider name; blank becomes {@code local}
+     * @param model the model name; blank becomes the example default
+     * @param reasoning the reasoning effort suffix, or empty
+     */
     public record Profile(String provider, String model, String reasoning) {
 
         public static final int DEFAULT_CONTEXT_WINDOW = 1_048_576;
@@ -87,7 +106,16 @@ public record HarnessTranscript(
         }
     }
 
-    /** Token and rate observations used by the footer. */
+    /**
+     * Token and rate observations used by the footer.
+     *
+     * @param inputTokens input tokens reported for the session
+     * @param outputTokens output tokens reported for the session
+     * @param cachedInputTokens the part of the input that was cached
+     * @param uncachedInputTokens the part of the input that was not cached
+     * @param contextTokens tokens currently occupying the context window
+     * @param generationRate tokens per second, or null when unreported
+     */
     public record Usage(
             long inputTokens,
             long outputTokens,
@@ -110,6 +138,12 @@ public record HarnessTranscript(
         }
     }
 
+    /**
+     * A transcript with no turns and the default display metadata.
+     *
+     * @param warnings reader diagnostics to carry
+     * @return an empty transcript
+     */
     public static HarnessTranscript empty(List<String> warnings) {
         return new HarnessTranscript(List.of(), Profile.DEFAULT, Usage.EMPTY, Profile.DEFAULT_CONTEXT_WINDOW, warnings);
     }

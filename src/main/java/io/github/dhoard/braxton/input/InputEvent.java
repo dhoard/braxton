@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -33,7 +33,12 @@ import io.github.dhoard.braxton.layout.Size;
  */
 public sealed interface InputEvent {
 
-    /** A key gesture. {@code text} is non-empty only for printable input. */
+    /** A key gesture. {@code text} is non-empty only for printable input.
+     *
+     * @param key the normalized key identity
+     * @param text the printable text this gesture carries, or empty
+     * @param capturedAtNanos the runtime capture time, or zero when unstamped
+     */
     record KeyInput(Key key, String text, long capturedAtNanos) implements InputEvent {
 
         public KeyInput {
@@ -62,7 +67,10 @@ public sealed interface InputEvent {
         }
     }
 
-    /** One complete bracketed-paste payload (unsanitized; sanitizing is the application's policy). */
+    /** One complete bracketed-paste payload (unsanitized; sanitizing is the application's policy).
+     *
+     * @param text the complete paste payload, unsanitized
+     */
     record PasteInput(String text) implements InputEvent {
 
         public PasteInput {
@@ -70,7 +78,10 @@ public sealed interface InputEvent {
         }
     }
 
-    /** The terminal changed size. */
+    /** The terminal changed size.
+     *
+     * @param size the measured terminal size
+     */
     record ResizeInput(Size size) implements InputEvent {
 
         public ResizeInput {

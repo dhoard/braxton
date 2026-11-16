@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -35,7 +35,11 @@ import java.util.Objects;
 
 /** Deterministic single-component test driver. Commands (including dispatch and quit) remain inert
  * and inspectable. This is not a runtime: no executor, subscription start, lifecycle or terminal I/O.
- * Send resulting dispatch messages explicitly when testing a composed pure update sequence. */
+ * Send resulting dispatch messages explicitly when testing a composed pure update sequence.
+ * @param <M> the component model type
+ * @param <Msg> the component message type
+ * @param <Out> the component output type
+ */
 public final class ComponentDriver<M, Msg, Out> {
     private final Component<M, Msg, Out> component;
     private Update<M, Msg, Out> latest;

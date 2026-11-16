@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -41,9 +41,6 @@ import java.util.Optional;
  * decoding and Braxton owns event normalization.</p>
  */
 public final class InputDecoder {
-
-    public static final int DEFAULT_ESCAPE_TIMEOUT_MILLIS = 30;
-    public static final int MAX_CSI_LENGTH = 64;
 
     private final ScalarInput in;
     private final long escapeTimeoutNanos;

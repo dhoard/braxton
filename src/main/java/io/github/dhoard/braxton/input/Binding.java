@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,12 @@
 
 package io.github.dhoard.braxton.input;
 
-/** Binds one key gesture to one application message value. */
+/** Binds one key gesture to one application message value.
+ *
+ * @param key the key gesture this binding matches
+ * @param message the message value it produces
+ * @param <Msg> the message type of the owning component
+ */
 public record Binding<Msg>(Key key, Msg message) {
 
     public Binding {

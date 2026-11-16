@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -48,10 +48,18 @@ import java.util.Objects;
  */
 public final class LayoutEngine {
 
-    /** One focusable element's painted rectangle, in paint order. */
+    /** One focusable element's painted rectangle, in paint order.
+     *
+     * @param id the focus identity that declared this region
+     * @param bounds the rectangle it was painted in
+     */
     public record Region(ElementId id, Rect bounds) {}
 
-    /** The painted screen plus the focus regions declared while painting it. */
+    /** The painted screen plus the focus regions declared while painting it.
+     *
+     * @param screen the painted screen
+     * @param regions the focus regions declared while painting it, in paint order
+     */
     public record Layout(Screen screen, List<Region> regions) {}
 
     private final WidthPolicy policy;

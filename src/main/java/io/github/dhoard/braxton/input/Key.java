@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +30,8 @@ import java.util.Objects;
  *
  * <p>Keys compare by value, so two independent bindings for the same gesture are equal and
  * duplicate detection is meaningful. Escape-sequence bytes never leak into this type.</p>
+ * @param name the lower-case key name
+ * @param modifiers the modifier state that must match
  */
 public record Key(String name, Modifiers modifiers) implements Comparable<Key> {
 

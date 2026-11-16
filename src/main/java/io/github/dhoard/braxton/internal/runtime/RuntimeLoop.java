@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -66,6 +66,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>The owner is the caller's thread. A virtual input worker enqueues normalized events.
  * The owner samples terminal sizes on a bounded interval; resize notifications from supplied
  * terminals can wake it sooner. Native reads are bounded. The POSIX resize handler only increments a lock-free counter.</p>
+ * @param <M> the root model type
+ * @param <Msg> the root message type
  */
 public final class RuntimeLoop<M, Msg> {
 
@@ -108,7 +110,6 @@ public final class RuntimeLoop<M, Msg> {
     private Screen currentScreen;
     private Viewport viewport = Viewport.EMPTY;
     private boolean viewDirty = true;
-    private boolean failed;
     private long nextFrameAtNanos;
 
     private Thread inputThread;
@@ -337,7 +338,6 @@ public final class RuntimeLoop<M, Msg> {
             interrupted = true;
             result = ExitResult.interrupted();
         } catch (Throwable failure) {
-            failed = true;
             result = ExitResult.failure(failure, List.of());
         }
         ExitResult outcome = cleanup(result);
@@ -642,9 +642,6 @@ public final class RuntimeLoop<M, Msg> {
             }
         }
         join(inputThread);
-        if (failed && result.failure() == null) {
-            return ExitResult.failure(new IllegalStateException("runtime failed"), cleanupFailures);
-        }
         if (result.failure() == null && !cleanupFailures.isEmpty()) {
             return ExitResult.failure(cleanupFailures.get(0), cleanupFailures);
         }

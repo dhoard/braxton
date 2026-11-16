@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -794,6 +794,18 @@ class LayoutEngineTest {
         Screen screen = paint(view, 5, 7);
         assertThat(screen.plainLine(0)).startsWith("\u250C");
         assertThat(screen.plainLine(2)).contains("x");
+    }
+
+    @Test
+    void insetsTooLargeForTheRemainingSpaceClipTheChildInsteadOfFailingTheLayout() {
+        // The padded child starts below the first row, so its origin plus the huge top inset is what
+        // the geometry has to survive: the inset can only shrink the rectangle, never move it back
+        // to a negative coordinate the value type rejects.
+        View<?> view = Views.column(Views.text("x"), Views.padding(Insets.uniform(Integer.MAX_VALUE), Views.text("y")));
+        Screen screen = paint(view, 3, 10);
+        assertThat(screen.plainLine(0)).isEqualTo("x");
+        assertThat(screen.plainLine(1)).isEmpty();
+        assertThat(screen.plainLine(2)).isEmpty();
     }
 
     @Test

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -33,6 +33,10 @@ import java.util.function.LongSupplier;
  * each task a virtual thread (e.g. a waiting task parks instead of pinning a platform thread).
  * Tests provide manual timers and a controlled executor; production injection points stay small so
  * applications cannot accidentally reach terminal or thread state from pure code.</p>
+ * @param nanoTime the monotonic clock used for pacing
+ * @param effectExecutor runs application task bodies
+ * @param timers schedules one-shot work
+ * @param diagnostics receives runtime diagnostic messages
  */
 public record RuntimeServices(
         LongSupplier nanoTime, Executor effectExecutor, Timers timers, Consumer<String> diagnostics) {

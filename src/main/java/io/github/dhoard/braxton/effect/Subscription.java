@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -39,6 +39,8 @@ import java.util.function.Function;
  * with the current one, so closures over stale models cannot be retained. Removing a subscription
  * closes it exactly once and ignores later emissions. A mapper that returns {@code null} declines
  * an emission: nothing is delivered to the owner.</p>
+ *
+ * @param <Msg> the component message type this source emits
  */
 public sealed interface Subscription<Msg> {
 
@@ -66,7 +68,11 @@ public sealed interface Subscription<Msg> {
         };
     }
 
-    /** No source. */
+    /**
+     * No source.
+     *
+     * @param <Msg> the component message type a source would have emitted
+     */
     record None<Msg>() implements Subscription<Msg> {
 
         private static final SubscriptionId ID = SubscriptionId.of("none");
@@ -88,7 +94,12 @@ public sealed interface Subscription<Msg> {
         }
     }
 
-    /** Several independent sources, reconciled as a set. */
+    /**
+     * Several independent sources, reconciled as a set.
+     *
+     * @param items the sources to reconcile, in declaration order
+     * @param <Msg> the component message type these sources emit
+     */
     record Batch<Msg>(List<Subscription<Msg>> items) implements Subscription<Msg> {
 
         private static final SubscriptionId ID = SubscriptionId.of("batch");
@@ -118,7 +129,14 @@ public sealed interface Subscription<Msg> {
         }
     }
 
-    /** Emits a message after every {@code period}; the payload is the emission time in nanos. */
+    /**
+     * Emits a message after every {@code period}; the payload is the emission time in nanos.
+     *
+     * @param id the source identity, scoped by the owning mount
+     * @param period the interval between emissions; must be positive and fit in nanoseconds
+     * @param onTick maps the emission time in nanoseconds to a message, or to null to decline it
+     * @param <Msg> the component message type this source emits
+     */
     record Interval<Msg>(SubscriptionId id, Duration period, Function<Long, Msg> onTick) implements Subscription<Msg> {
 
         public Interval {
@@ -147,7 +165,13 @@ public sealed interface Subscription<Msg> {
         }
     }
 
-    /** Emits a message whenever the terminal size changes. */
+    /**
+     * Emits a message whenever the terminal size changes.
+     *
+     * @param id the source identity, scoped by the owning mount
+     * @param onResize maps the measured size to a message, or to null to decline it
+     * @param <Msg> the component message type this source emits
+     */
     record Resize<Msg>(SubscriptionId id, Function<Size, Msg> onResize) implements Subscription<Msg> {
 
         public Resize {
@@ -180,6 +204,12 @@ public sealed interface Subscription<Msg> {
      * <p>Emitting from {@code start} itself runs on the owner thread, where an envelope never waits
      * for the queue to drain: a burst larger than the mailbox capacity fails the run with a mailbox
      * overflow instead of waiting for the consumer that is already blocked in {@code start}.</p>
+     *
+     * @param id the source identity, scoped by the owning mount
+     * @param configuration compared with the live source's configuration to decide reuse
+     * @param start receives the emitter and returns the resource to close on removal
+     * @param mapper maps one emitted value to a message, or to null to decline it
+     * @param <Msg> the component message type this source emits
      */
     record Source<Msg>(
             SubscriptionId id,

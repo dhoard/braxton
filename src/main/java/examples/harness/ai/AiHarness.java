@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -41,6 +41,11 @@ public final class AiHarness {
 
     private AiHarness() {}
 
+    /**
+     * Runs one session and reports a failure on stderr.
+     *
+     * @param args ignored; the example takes no command-line options
+     */
     public static void main(String[] args) {
         ExitResult result = run();
         if (result.kind() == ExitResult.Kind.FAILURE) {
@@ -54,17 +59,30 @@ public final class AiHarness {
         }
     }
 
-    /** Runs one harness session; exposed so tests and embedding code can drive it explicitly. */
+    /**
+     * Runs one harness session; exposed so tests and embedding code can drive it explicitly.
+     *
+     * @return how the run ended
+     */
     public static ExitResult run() {
         RuntimeOptions options = RuntimeOptions.defaults().withTerminal(TerminalOptions.DEFAULT.withMouse(true));
         return Application.run(createProgram(), options);
     }
 
-    /** The production harness program, used directly and as an embedded feature by the showcase. */
+    /**
+     * The production harness program, used directly and as an embedded feature by the showcase.
+     *
+     * @return a harness program that loads the bundled transcript
+     */
     public static Harness createProgram() {
         return new Harness(TranscriptLoader::load, projectPath(), List.of());
     }
 
+    /**
+     * The current working directory, abbreviated under the user's home directory.
+     *
+     * @return the display path shown in the footer
+     */
     public static String projectPath() {
         String path = Path.of("").toAbsolutePath().normalize().toString();
         String home = System.getProperty("user.home");

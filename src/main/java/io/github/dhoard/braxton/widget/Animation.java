@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -38,14 +38,29 @@ public final class Animation {
 
     private Animation() {}
 
-    /** A four-frame spinner advancing every 250 ms. */
+    /**
+     * A four-frame spinner advancing every 250 ms.
+     *
+     * @param nowNanos the current monotonic time, in nanoseconds
+     * @param startedNanos the time the animation started, in nanoseconds
+     * @param style the style applied to the frame
+     * @return the frame for that time
+     */
     public static StyledText spinner(long nowNanos, long startedNanos, Style style) {
         long elapsedMillis = Math.max(0, (nowNanos - startedNanos) / 1_000_000L);
         int frame = Math.floorMod(elapsedMillis / 250L, SPINNER.length);
         return StyledText.of(SPINNER[frame], style);
     }
 
-    /** A shimmering highlight travelling across {@code text}. */
+    /**
+     * A shimmering highlight travelling across {@code text}.
+     *
+     * @param text the text to animate; null is empty
+     * @param nowNanos the current monotonic time, in nanoseconds
+     * @param base the colour of the unlit text, or null for the inherited colour
+     * @param highlight the colour of the highlight, or null for {@code base}
+     * @return the styled text for that time
+     */
     public static StyledText shimmer(String text, long nowNanos, Color base, Color highlight) {
         String value = text == null ? "" : text;
         Style baseStyle = base == null ? Style.NONE : Style.fg(base);
@@ -64,7 +79,11 @@ public final class Animation {
         return StyledText.concat(parts);
     }
 
-    /** The number of frames in a full spinner cycle. */
+    /**
+     * The number of frames in a full spinner cycle.
+     *
+     * @return the frame count
+     */
     public static int spinnerFrames() {
         return SPINNER.length;
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,6 +28,14 @@ package io.github.dhoard.braxton.clipboard;
  * <p>{@code systemWriteRequested} means an escape sequence was written. It is <strong>not</strong>
  * evidence that the terminal or tmux accepted the text: OSC 52 has no acknowledgement. The
  * in-process buffer remains the dependable destination.</p>
+ *
+ * @param text the text actually stored in the in-process buffer, after any truncation
+ * @param byteLength the UTF-8 length of {@code text}
+ * @param truncated whether the in-process buffer or the OSC 52 payload limit removed text
+ * @param storedInternally whether the in-process buffer holds this copy
+ * @param systemWriteRequested whether an escape sequence was written; never proof of acceptance
+ * @param deduplicated whether an identical sequence was suppressed because it was already written
+ * @param path the transport path this copy used
  */
 public record ClipboardResult(
         String text,

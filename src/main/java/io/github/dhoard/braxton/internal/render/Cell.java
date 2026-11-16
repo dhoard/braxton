@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,9 @@ import io.github.dhoard.braxton.style.Style;
  *
  * <p>{@code text} is empty for a continuation cell (the second column of a wide glyph) and for an
  * untouched cell.</p>
+ * @param text the grapheme cluster painted here, or empty
+ * @param style the style painted with it
+ * @param link the hyperlink target, or null
  */
 public record Cell(String text, Style style, String link) {
 

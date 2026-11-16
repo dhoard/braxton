@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +26,13 @@ import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Style;
 import java.util.List;
 
-/** Immutable inspection result of Braxton's actual layout, including wide-cell continuations. */
+/** Immutable inspection result of Braxton's actual layout, including wide-cell continuations.
+ *
+ * @param rows the number of rows
+ * @param cols the number of columns
+ * @param cells the cells of each row, in paint order
+ * @param regions the focus regions declared while painting, in paint order
+ */
 public record RenderedScreen(int rows, int cols, List<List<Cell>> cells, List<Region> regions) {
     public record Cell(String text, Style style, String link, int columns, boolean continuation) {
         public Cell {

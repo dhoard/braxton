@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -47,6 +47,8 @@ import java.util.function.Function;
  * {@link Fixed} and {@link Grow} express main-axis sizing, {@link Padding}, {@link BorderBox}, and
  * {@link Overlay} handle nesting, and {@link Focused} plus {@link Keyed} express routing structure.
  * There is no retained component lifecycle and no virtual-DOM reconciliation.</p>
+ *
+ * @param <Msg> the message type this view can produce
  */
 public sealed interface View<Msg> {
 
@@ -89,7 +91,11 @@ public sealed interface View<Msg> {
         };
     }
 
-    /** Handles one input event, returning a message when the event is consumed. */
+    /**
+     * Handles one input event, returning a message when the event is consumed.
+     *
+     * @param <Msg> the message type this handler can produce
+     */
     @FunctionalInterface
     interface InputHandler<Msg> {
 
@@ -105,7 +111,11 @@ public sealed interface View<Msg> {
         }
     }
 
-    /** Styled text. The text wraps to the available width during layout. */
+    /** Styled text. The text wraps to the available width during layout.
+     *
+     * @param text the styled text to paint
+     * @param <Msg> the message type this view can produce
+     */
     record Text<Msg>(StyledText text) implements View<Msg> {
 
         public Text {
@@ -125,7 +135,10 @@ public sealed interface View<Msg> {
         }
     }
 
-    /** Occupies no space; useful as an explicit empty branch. */
+    /** Occupies no space; useful as an explicit empty branch.
+     *
+     * @param <Msg> the message type this view can produce
+     */
     record Blank<Msg>() implements View<Msg> {
 
         @Override
@@ -148,6 +161,8 @@ public sealed interface View<Msg> {
      * background layer (the usual case) or to clear a region deliberately, never as a tint over
      * content you want to keep. In a row it also spans the row's full height, so it can back the
      * siblings beside it.</p>
+     * @param style the style painted across every cell of its bounds
+     * @param <Msg> the message type this view can produce
      */
     record Fill<Msg>(Style style) implements View<Msg> {
 
@@ -175,6 +190,10 @@ public sealed interface View<Msg> {
      * nested inside a row or overlay layer contributes what it holds rather than the zero it
      * measures on its own main axis - the rows a child is measured in and the rectangle it is
      * painted in are then the same width, and alignment cannot clip its content away.
+     *
+     * @param items the children, stacked top to bottom
+     * @param align the cross-axis placement of a child narrower than the column
+     * @param <Msg> the message type these children can produce
      */
     record Column<Msg>(List<View<Msg>> items, Alignment align) implements View<Msg> {
 
@@ -199,6 +218,10 @@ public sealed interface View<Msg> {
      * Children side by side, each in the columns it measured. A start-aligned child is painted from
      * the top at its content height; a centred or end-aligned child keeps its content height at the
      * aligned offset.
+     *
+     * @param items the children, painted side by side
+     * @param align the cross-axis placement of a child shorter than the row
+     * @param <Msg> the message type these children can produce
      */
     record Row<Msg>(List<View<Msg>> items, Alignment align) implements View<Msg> {
 
@@ -219,7 +242,13 @@ public sealed interface View<Msg> {
         }
     }
 
-    /** Adds asymmetric spacing around one child. */
+    /**
+     * Adds asymmetric spacing around one child.
+     *
+     * @param insets the spacing reserved on each side
+     * @param child the padded child
+     * @param <Msg> the message type the child can produce
+     */
     record Padding<Msg>(Insets insets, View<Msg> child) implements View<Msg> {
 
         public Padding {
@@ -239,7 +268,15 @@ public sealed interface View<Msg> {
         }
     }
 
-    /** Frames one child; an optional title is drawn into the top edge. */
+    /**
+     * Frames one child; an optional title is drawn into the top edge.
+     *
+     * @param border the characters used for the frame, or a border that draws nothing
+     * @param title the label drawn into the top edge; empty for no title
+     * @param style the style applied to the frame itself
+     * @param child the framed child
+     * @param <Msg> the message type the child can produce
+     */
     record BorderBox<Msg>(Border border, StyledText title, Style style, View<Msg> child) implements View<Msg> {
 
         public BorderBox {
@@ -261,7 +298,13 @@ public sealed interface View<Msg> {
         }
     }
 
-    /** Reserves exactly {@code size} cells on the parent's main axis. */
+    /**
+     * Reserves exactly {@code size} cells on the parent's main axis.
+     *
+     * @param size the reserved cells; never negative
+     * @param child the child painted inside that reservation
+     * @param <Msg> the message type the child can produce
+     */
     record Fixed<Msg>(int size, View<Msg> child) implements View<Msg> {
 
         public Fixed {
@@ -283,7 +326,13 @@ public sealed interface View<Msg> {
         }
     }
 
-    /** Takes a share of the parent's remaining main-axis space. */
+    /**
+     * Takes a share of the parent's remaining main-axis space.
+     *
+     * @param weight the share of the remaining space; never negative
+     * @param child the child painted inside that share
+     * @param <Msg> the message type the child can produce
+     */
     record Grow<Msg>(int weight, View<Msg> child) implements View<Msg> {
 
         public Grow {
@@ -310,6 +359,10 @@ public sealed interface View<Msg> {
      *
      * <p>When {@code modal} is true, input routing is restricted to the topmost modal layer; the
      * layers underneath neither receive keys nor hit-testing.</p>
+     *
+     * @param layers the layers, painted back to front
+     * @param modal whether input routing is restricted to the topmost layer
+     * @param <Msg> the message type these layers can produce
      */
     record Overlay<Msg>(List<View<Msg>> layers, boolean modal) implements View<Msg> {
 
@@ -335,6 +388,12 @@ public sealed interface View<Msg> {
      * <p>{@code capture} bindings run outermost-first before the focused target; {@code bubble}
      * bindings run after it, innermost-first. Duplicate keys within the same list are rejected at
      * build time rather than resolved by insertion order.</p>
+     *
+     * @param capture bindings matched outermost-first before the focused element
+     * @param intercept the full-event handler run before the focused element
+     * @param child the wrapped subtree
+     * @param bubble bindings matched innermost-first after the focused element
+     * @param <Msg> the message type these bindings and the child can produce
      */
     record Keyed<Msg>(
             List<Binding<Msg>> capture, InputHandler<Msg> intercept, View<Msg> child, List<Binding<Msg>> bubble)
@@ -368,6 +427,13 @@ public sealed interface View<Msg> {
     /**
      * Declares a focus target: its stable identity, whether it currently owns focus, its local key
      * bindings, and the handler for events its bindings do not consume.
+     *
+     * @param id the focus identity, scoped by the owning mount
+     * @param focused whether this element currently owns focus
+     * @param bindings the local key bindings, matched while focused
+     * @param input the handler for events the bindings do not consume
+     * @param child the wrapped subtree
+     * @param <Msg> the message type this element can produce
      */
     record Focused<Msg>(
             ElementId id, boolean focused, List<Binding<Msg>> bindings, InputHandler<Msg> input, View<Msg> child)

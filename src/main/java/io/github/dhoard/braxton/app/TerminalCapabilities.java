@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,14 @@
 
 package io.github.dhoard.braxton.app;
 
-/** Facts about the attached terminal, captured once when the session opens. */
+/** Facts about the attached terminal, captured once when the session opens.
+ *
+ * @param color whether truecolor SGR output is enabled
+ * @param alternateScreen whether the alternate screen is available
+ * @param bracketedPaste whether bracketed paste is available
+ * @param mouse whether mouse reporting is available
+ * @param term the terminal type the facts were inferred from
+ */
 public record TerminalCapabilities(
         boolean color, boolean alternateScreen, boolean bracketedPaste, boolean mouse, String term) {
 

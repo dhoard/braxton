@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,12 @@
 
 package io.github.dhoard.braxton.layout;
 
-/** A non-negative terminal size in cells. */
+/**
+ * A non-negative terminal size in cells.
+ *
+ * @param rows the number of rows, never negative
+ * @param cols the number of columns, never negative
+ */
 public record Size(int rows, int cols) {
 
     public static final Size EMPTY = new Size(0, 0);

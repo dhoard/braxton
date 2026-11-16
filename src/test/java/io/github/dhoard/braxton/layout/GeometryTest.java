@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -79,6 +79,20 @@ class GeometryTest {
         // A sum that still fits in an int stays exact.
         assertThat(Insets.uniform(1_000_000_000).horizontal()).isEqualTo(2_000_000_000);
         assertThat(Insets.uniform(1_000_000_000).vertical()).isEqualTo(2_000_000_000);
+    }
+
+    @Test
+    void anInsetLargerThanTheRemainingRoomSaturatesTheOriginInsteadOfWrappingIt() {
+        // Insetting can only shrink and move a rectangle towards its far corner, so an origin that is
+        // not at zero plus a huge inset saturates at the largest coordinate instead of wrapping
+        // negative and being rejected by the value type.
+        Rect rect = new Rect(5, 7, 4, 4);
+        Rect shrunk = rect.inset(Insets.uniform(Integer.MAX_VALUE));
+        assertThat(shrunk.row()).isEqualTo(Integer.MAX_VALUE);
+        assertThat(shrunk.col()).isEqualTo(Integer.MAX_VALUE);
+        assertThat(shrunk.rows()).isZero();
+        assertThat(shrunk.cols()).isZero();
+        assertThat(shrunk.isEmpty()).isTrue();
     }
 
     @Test

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +24,13 @@ package io.github.dhoard.braxton.app;
 
 import java.util.List;
 
-/** How an application run ended. */
+/** How an application run ended.
+ *
+ * @param kind how the run ended
+ * @param status the exit status the run reports
+ * @param failure the failure that ended the run, or null
+ * @param cleanupFailures failures raised while cleaning up, in the order they happened
+ */
 public record ExitResult(Kind kind, int status, Throwable failure, List<Throwable> cleanupFailures) {
 
     public enum Kind {

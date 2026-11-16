@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,14 @@ package io.github.dhoard.braxton.input;
 import java.time.Duration;
 import java.util.Objects;
 
-/** Input limits measured in complete Unicode scalars and UTF-8 equivalent payload bytes. */
+/** Input limits measured in complete Unicode scalars and UTF-8 equivalent payload bytes.
+ *
+ * @param escapeTimeout how long an incomplete escape sequence may stay open
+ * @param maxCsiCharacters the largest CSI body kept, in characters
+ * @param maxPasteBytes the largest paste payload kept, in UTF-8 equivalent bytes
+ * @param pasteIdleTimeout how long a paste may pause before it is ended
+ * @param cancellationInterval how often a blocked read rechecks cancellation
+ */
 public record InputOptions(
         Duration escapeTimeout,
         int maxCsiCharacters,

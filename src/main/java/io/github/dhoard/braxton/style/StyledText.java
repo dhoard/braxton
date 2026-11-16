@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -38,7 +38,12 @@ import java.util.Objects;
  */
 public final class StyledText {
 
-    /** One styled run of text. {@code link} may be null but cannot contain C0/C1 controls. */
+    /** One styled run of text. {@code link} may be null but cannot contain C0/C1 controls.
+     *
+     * @param text the run of text, with control characters removed
+     * @param style the style painted with it
+     * @param link the hyperlink target, or null
+     */
     public record Span(String text, Style style, String link) {
 
         public Span {

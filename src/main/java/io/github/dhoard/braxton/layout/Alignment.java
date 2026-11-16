@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +24,10 @@ package io.github.dhoard.braxton.layout;
 
 /** Cross-axis placement of children that do not fill their allocated space. */
 public enum Alignment {
+    /** The start edge of the parent's cross axis. */
     START,
+    /** The centre of the parent's cross axis. */
     CENTER,
+    /** The end edge of the parent's cross axis. */
     END
 }

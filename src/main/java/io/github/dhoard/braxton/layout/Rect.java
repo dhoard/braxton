@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,14 @@
 
 package io.github.dhoard.braxton.layout;
 
-/** A half-open rectangle of cells, relative to the screen origin. */
+/**
+ * A half-open rectangle of cells, relative to the screen origin.
+ *
+ * @param row the first row, never negative
+ * @param col the first column, never negative
+ * @param rows the number of rows, never negative
+ * @param cols the number of columns, never negative
+ */
 public record Rect(int row, int col, int rows, int cols) {
 
     public Rect {
@@ -41,11 +48,18 @@ public record Rect(int row, int col, int rows, int cols) {
 
     /** Shrinks this rectangle by insets; never produces negative dimensions. */
     public Rect inset(Insets insets) {
-        int newRow = row + insets.top();
-        int newCol = col + insets.left();
+        // The origin addition saturates for the same reason the sums below do: a row or column
+        // already inside the screen plus a huge inset would otherwise wrap negative and be rejected
+        // by the constructor, turning a layout that can only clip into a failed run.
+        int newRow = saturatedAdd(row, insets.top());
+        int newCol = saturatedAdd(col, insets.left());
         int newRows = Math.max(0, rows - insets.vertical());
         int newCols = Math.max(0, cols - insets.horizontal());
         return new Rect(newRow, newCol, newRows, newCols);
+    }
+
+    private static int saturatedAdd(int origin, int offset) {
+        return (int) Math.min(Integer.MAX_VALUE, (long) origin + offset);
     }
 
     public Rect clip(Rect bounds) {

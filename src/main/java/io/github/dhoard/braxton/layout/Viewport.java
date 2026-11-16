@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,6 +27,9 @@ package io.github.dhoard.braxton.layout;
  *
  * <p>A viewport is a plain value: the runtime owns when it changes and the application owns any
  * geometry-dependent state it derives from it.</p>
+ *
+ * @param rows the number of rows available to the view, never negative
+ * @param cols the number of columns available to the view, never negative
  */
 public record Viewport(int rows, int cols) {
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -57,7 +57,14 @@ import java.util.function.Function;
  */
 public final class TableSelector implements Component<TableSelector.Model, TableSelector.Msg, TableSelector.Output> {
 
-    /** Immutable selection state. */
+    /** Immutable selection state.
+     *
+     * @param header the column headers
+     * @param rows the selectable rows
+     * @param row the selected row index
+     * @param column the selected column index
+     * @param focused whether the selector currently owns focus
+     */
     public record Model(List<String> header, List<List<String>> rows, int row, int column, boolean focused) {
 
         public Model(List<String> header, List<List<String>> rows, int row, int column) {

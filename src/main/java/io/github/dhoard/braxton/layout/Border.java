@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -41,6 +41,13 @@ import io.github.dhoard.braxton.style.WidthPolicy;
  * budgeted one, so its row overruns the edges above and below it and a repeated horizontal edge
  * overruns the frame's own width. Every edge character is measured under the pinned {@link
  * WidthPolicy} and kept only when it occupies exactly one column.</p>
+ *
+ * @param topLeft the character painted in the top-left corner
+ * @param topRight the character painted in the top-right corner
+ * @param bottomLeft the character painted in the bottom-left corner
+ * @param bottomRight the character painted in the bottom-right corner
+ * @param horizontal the character repeated along the top and bottom edges
+ * @param vertical the character repeated along the left and right edges
  */
 public record Border(char topLeft, char topRight, char bottomLeft, char bottomRight, char horizontal, char vertical) {
 

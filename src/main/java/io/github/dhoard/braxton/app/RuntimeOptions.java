@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -36,6 +36,16 @@ import java.time.Duration;
  * holds {@code mailboxCapacity} entries. The runtime thread's own deliveries are counted
  * separately against the same capacity, because that thread cannot wait for itself. The component and dispatch limits bound a hostile or
  * accidentally cyclic hierarchy instead of allowing it to allocate or spin without end.</p>
+ * @param shutdownGrace how long shutdown waits for running effect tasks
+ * @param mailboxCapacity the producer envelope bound and the owner delivery bound
+ * @param maxConcurrentEffects the bound on tasks and delays that have not completed
+ * @param maxSubscriptions the bound on live ongoing sources
+ * @param maxComponents the bound on active components, including the root
+ * @param maxComponentDepth the bound on child nesting depth
+ * @param maxLocalDispatchesPerTurn the bound on owner-local messages in one turn
+ * @param clipboard the clipboard policy for the session
+ * @param terminal the presentation modes requested from the terminal
+ * @param input the input decoding limits
  */
 public record RuntimeOptions(
         Duration shutdownGrace,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -43,6 +43,7 @@ import java.util.function.Consumer;
  * <p>Every one-shot effect is registered under its id and an epoch. Replacing an id invalidates the
  * old epoch, so a late completion can never reach the model. Results are enqueued as ordinary
  * messages; the interpreter never calls {@code update} itself.</p>
+ * @param <Msg> the component message type effects deliver
  */
 public final class EffectRunner<Msg> {
 

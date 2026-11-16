@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -249,7 +249,11 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
     public sealed interface Msg {
         record Clear() implements Msg {}
 
-        /** Inserts printable text at the caret, replacing the selection. */
+        /**
+         * Inserts printable text at the caret, replacing the selection.
+         *
+         * @param text the text to insert; null is empty
+         */
         record Insert(String text) implements Msg {
 
             public Insert {
@@ -257,7 +261,11 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
             }
         }
 
-        /** Inserts one complete paste payload, sanitized according to the editor options. */
+        /**
+         * Inserts one complete paste payload, sanitized according to the editor options.
+         *
+         * @param text the paste payload; null is empty
+         */
         record Paste(String text) implements Msg {
 
             public Paste {
@@ -300,7 +308,11 @@ public final class Editor implements Component<Editor.Model, Editor.Msg, Editor.
         /** The user asked to submit this text. */
         record Submit(String text) implements Output {}
 
-        /** The user asked to copy this text (empty when copying is not permitted). */
+        /**
+         * The user asked to copy this text (empty when copying is not permitted).
+         *
+         * @param text the copied text, empty when copying is not permitted
+         */
         record Copy(String text) implements Output {}
 
         /** The user asked to paste the internal clipboard buffer. */

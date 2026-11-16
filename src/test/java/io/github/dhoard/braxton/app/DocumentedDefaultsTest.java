@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.dhoard.braxton.clipboard.ClipboardConfig;
-import io.github.dhoard.braxton.internal.input.InputDecoder;
+import io.github.dhoard.braxton.input.InputOptions;
 import io.github.dhoard.braxton.internal.input.PasteDecoder;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -71,10 +71,13 @@ class DocumentedDefaultsTest {
 
     @Test
     void theDocumentedInputAndClipboardLimitsAreTheShippedOnes() {
-        assertThat(InputDecoder.DEFAULT_ESCAPE_TIMEOUT_MILLIS)
-                .as("escape timeout ms")
-                .isEqualTo(30);
-        assertThat(InputDecoder.MAX_CSI_LENGTH).as("CSI length bytes").isEqualTo(64);
+        // The runtime reads these limits from InputOptions.DEFAULT, not from the convenience
+        // overloads' constants, so the shipped values are what this test has to pin.
+        InputOptions input = InputOptions.DEFAULT;
+        assertThat(input.escapeTimeout()).as("escape timeout").isEqualTo(Duration.ofMillis(30));
+        assertThat(input.maxCsiCharacters()).as("CSI length bytes").isEqualTo(64);
+        assertThat(input.maxPasteBytes()).as("paste payload bytes").isEqualTo(1_048_576);
+        assertThat(input.pasteIdleTimeout()).as("paste idle timeout").isEqualTo(Duration.ofMillis(250));
         assertThat(PasteDecoder.DEFAULT_MAX_BYTES).as("paste payload bytes").isEqualTo(1_048_576);
         assertThat(PasteDecoder.DEFAULT_IDLE_TIMEOUT_MILLIS)
                 .as("paste idle timeout ms")

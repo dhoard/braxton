@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,6 +27,9 @@ package io.github.dhoard.braxton.app;
  *
  * <p>Full-window applications use the alternate screen by default so exit restores the user's
  * scrollback instead of erasing it. Mouse reporting is opt-in; bracketed paste defaults on when supported.</p>
+ * @param alternateScreen whether to enter the alternate screen for the session
+ * @param mouse whether to enable mouse reporting
+ * @param bracketedPaste whether to enable bracketed paste
  */
 public record TerminalOptions(boolean alternateScreen, boolean mouse, boolean bracketedPaste) {
 

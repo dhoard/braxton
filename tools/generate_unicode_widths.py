@@ -115,19 +115,27 @@ public final class Unicode16Width {{
 """
 
 
-def wrap(text: str, width: int = 92) -> str:
+def wrap(text: str, width: int = 120) -> str:
+    """Wrap a comma-separated list the way the project's formatter lays out the array literal.
+
+    spotless:check validates this generated file, so the wrapping must match Palantir Java
+    Format exactly: eight-space indent, a 120-column limit, one column for the comma that the
+    join below puts at the end of every line but the last, and the closing brace on its own line
+    indented one level.
+    """
+    indent = "        "
     lines: list[str] = []
     line = ""
     for token in text.split(", "):
         candidate = token if not line else line + ", " + token
-        if len(candidate) > width and line:
+        if len(indent) + len(candidate) + 1 > width and line:
             lines.append(line)
             line = token
         else:
             line = candidate
     if line:
         lines.append(line)
-    return "\n            " + ",\n            ".join(lines)
+    return "\n" + indent + (",\n" + indent).join(lines) + "\n    "
 
 
 def main() -> int:

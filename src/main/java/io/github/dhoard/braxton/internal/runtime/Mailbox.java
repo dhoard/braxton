@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -43,7 +43,12 @@ public final class Mailbox {
     /** One item in the hand-off queue. */
     public sealed interface Envelope permits AppMessage, Input, Close {}
 
-    /** An application message produced by routing, a command, or a source. */
+    /** An application message produced by routing, a command, or a source.
+     *
+     * @param payload the application message value
+     * @param origin the scope that produced it, or null for the root
+     * @param valid whether it may still be delivered when the owner takes it
+     */
     public record AppMessage(Object payload, ScopeManager.Origin origin, java.util.function.BooleanSupplier valid)
             implements Envelope {
         private static final java.util.function.BooleanSupplier ALWAYS = () -> true;
@@ -57,10 +62,16 @@ public final class Mailbox {
         }
     }
 
-    /** Raw normalized input, routed later against the latest committed view. */
+    /** Raw normalized input, routed later against the latest committed view.
+     *
+     * @param event the normalized input event
+     */
     public record Input(InputEvent event) implements Envelope {}
 
-    /** A request to stop the runtime; generated inside the runtime or by a backend. */
+    /** A request to stop the runtime; generated inside the runtime or by a backend.
+     *
+     * @param result how the run ended
+     */
     public record Close(ExitResult result) implements Envelope {}
 
     /** Largest millisecond timeout that still converts to nanoseconds without overflowing. */

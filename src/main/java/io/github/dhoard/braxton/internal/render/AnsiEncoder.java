@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -35,15 +35,23 @@ import java.util.List;
  */
 public final class AnsiEncoder {
 
+    /** Reset every SGR attribute and colour. */
     public static final String RESET = "\u001B[0m";
+    /** Hide the cursor while a frame owns the screen. */
     public static final String HIDE_CURSOR = "\u001B[?25l";
+    /** Show the cursor again on the way out. */
     public static final String SHOW_CURSOR = "\u001B[?25h";
-    public static final String CLEAR_SCREEN = "\u001B[H\u001B[2J";
+    /** Enter the alternate screen. */
     public static final String ALT_SCREEN_ON = "\u001B[?1049h";
+    /** Leave the alternate screen. */
     public static final String ALT_SCREEN_OFF = "\u001B[?1049l";
+    /** Enable bracketed paste. */
     public static final String ENABLE_BRACKETED_PASTE = "\u001B[?2004h";
+    /** Disable bracketed paste. */
     public static final String DISABLE_BRACKETED_PASTE = "\u001B[?2004l";
+    /** Enable button and SGR mouse reporting. */
     public static final String ENABLE_MOUSE = "\u001B[?1000h\u001B[?1006h";
+    /** Disable SGR and button mouse reporting. */
     public static final String DISABLE_MOUSE = "\u001B[?1006l\u001B[?1000l";
 
     private static final String OSC8_OPEN = "\u001B]8;;";
@@ -51,7 +59,13 @@ public final class AnsiEncoder {
 
     private AnsiEncoder() {}
 
-    /** A complete frame: every row repainted in place. */
+    /**
+     * A complete frame: every row repainted in place.
+     *
+     * @param screen the screen to encode
+     * @param color whether colour SGR parameters are emitted
+     * @return the escape sequences for the whole screen
+     */
     public static String frame(Screen screen, boolean color) {
         StringBuilder out = new StringBuilder();
         for (int row = 0; row < screen.rows(); row++) {
@@ -60,7 +74,14 @@ public final class AnsiEncoder {
         return out.toString();
     }
 
-    /** Only the rows whose cells differ, or a full frame when there is no previous screen. */
+    /**
+     * Only the rows whose cells differ, or a full frame when there is no previous screen.
+     *
+     * @param previous the last presented screen, or null
+     * @param next the screen to present
+     * @param color whether colour SGR parameters are emitted
+     * @return the escape sequences that take the terminal to {@code next}
+     */
     public static String diff(Screen previous, Screen next, boolean color) {
         if (previous == null || previous.rows() != next.rows() || previous.cols() != next.cols()) {
             return frame(next, color);
@@ -94,7 +115,14 @@ public final class AnsiEncoder {
         return true;
     }
 
-    /** Absolute cursor move, styled content, then a default-style clear of the unused suffix. */
+    /**
+     * Absolute cursor move, styled content, then a default-style clear of the unused suffix.
+     *
+     * @param screen the screen holding the row
+     * @param row the row to encode
+     * @param color whether colour SGR parameters are emitted
+     * @return the escape sequences for that row
+     */
     public static String encodeRow(Screen screen, int row, boolean color) {
         if (screen.cols() == 0) {
             return "";
@@ -209,7 +237,12 @@ public final class AnsiEncoder {
         return safe.toString();
     }
 
-    /** SGR parameter sequence for a style (without the reset terminator). */
+    /**
+     * SGR parameter sequence for a style (without the reset terminator).
+     *
+     * @param style the style to encode
+     * @return the sequence, or an empty string for a plain style
+     */
     public static String sgr(Style style) {
         List<String> params = new ArrayList<>();
         if (style.bold()) {

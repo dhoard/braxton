@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -31,6 +31,9 @@ import java.util.Optional;
  * <p>Parsing accepts the {@code #RRGGBB} form used by Braxton's documented markup and builder
  * configuration. Invalid or missing input yields {@link Optional#empty()} so callers can keep
  * their previous value instead of silently rendering a replacement colour.</p>
+ * @param red the red channel, 0..255
+ * @param green the green channel, 0..255
+ * @param blue the blue channel, 0..255
  */
 public record Color(int red, int green, int blue) {
 

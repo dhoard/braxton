@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,14 @@
 
 package io.github.dhoard.braxton.layout;
 
-/** Immutable spacing around a view, in cells. */
+/**
+ * Immutable spacing around a view, in cells.
+ *
+ * @param top the cells reserved above the content, never negative
+ * @param right the cells reserved to the right of the content, never negative
+ * @param bottom the cells reserved below the content, never negative
+ * @param left the cells reserved to the left of the content, never negative
+ */
 public record Insets(int top, int right, int bottom, int left) {
 
     public static final Insets NONE = new Insets(0, 0, 0, 0);

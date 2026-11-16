@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -37,21 +37,54 @@ public final class Badge {
     private final List<Segment> segments = new ArrayList<>();
     private boolean pathway;
 
-    /** One badge label and its styling. */
+    /**
+     * One badge label and its styling.
+     *
+     * @param text the label painted in the segment
+     * @param style the style applied to that label
+     */
     public record Segment(StyledText text, Style style) {}
 
+    /** Creates a badge with no segments. */
+    public Badge() {}
+
+    /**
+     * A badge with no segments.
+     *
+     * @return an empty badge builder
+     */
     public static Badge of() {
         return new Badge();
     }
 
+    /**
+     * Appends a label with the default segment styling.
+     *
+     * @param text the label to paint; required
+     * @return this builder
+     */
     public Badge append(StyledText text) {
         return append(text, Style.NONE);
     }
 
+    /**
+     * Appends a label on a background colour.
+     *
+     * @param text the label to paint; required
+     * @param background the segment background, or null for none
+     * @return this builder
+     */
     public Badge append(StyledText text, Color background) {
         return append(text, background == null ? Style.NONE : Style.bg(background));
     }
 
+    /**
+     * Appends a label with an explicit segment style.
+     *
+     * @param text the label to paint; required
+     * @param style the segment style, or null for none
+     * @return this builder
+     */
     public Badge append(StyledText text, Style style) {
         segments.add(new Segment(SingleRow.of(text), style == null ? Style.NONE : style));
         return this;
@@ -66,6 +99,11 @@ public final class Badge {
         return this;
     }
 
+    /**
+     * Renders the segments as one styled value.
+     *
+     * @return the painted badge
+     */
     public StyledText render() {
         StyledText out = StyledText.empty();
         for (int i = 0; i < segments.size(); i++) {
@@ -89,15 +127,29 @@ public final class Badge {
         return out;
     }
 
+    /**
+     * A one-element view of the rendered badge.
+     *
+     * @return a text view holding {@link #render()}
+     */
     public View<Object> view() {
         return Views.text(render());
     }
 
-    /** Width of the rendered badge, used by layout tests. */
+    /**
+     * Width of the rendered badge, used by layout tests.
+     *
+     * @return the columns the rendered badge occupies
+     */
     public int columns() {
         return TextMeasure.columns(render().plainText());
     }
 
+    /**
+     * The segments added so far, in order.
+     *
+     * @return an immutable copy of the segments
+     */
     public List<Segment> segments() {
         return List.copyOf(segments);
     }

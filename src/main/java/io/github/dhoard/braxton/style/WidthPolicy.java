@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +30,7 @@ package io.github.dhoard.braxton.style;
  * Unicode 16.0.0 table (East Asian wide/fullwidth plus emoji), with ambiguous-width characters
  * narrow. Terminals can disagree; an application may pass a different policy to the renderer and to
  * its own measurement calls.</p>
+ * @param wideEmoji whether East Asian wide and emoji clusters occupy two columns
  */
 public record WidthPolicy(boolean wideEmoji) {
 

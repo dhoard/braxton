@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -40,6 +40,9 @@ public final class Application {
     /**
      * Runs with the owned POSIX system terminal and default options.
      *
+     * @param program the root component; required
+     * @param <M> the root model type
+     * @param <Msg> the root message type
      * @return how the run ended; never null
      */
     public static <M, Msg> ExitResult run(Component<M, Msg, Never> program) {
@@ -49,6 +52,10 @@ public final class Application {
     /**
      * Runs with the owned POSIX system terminal.
      *
+     * @param program the root component; required
+     * @param options the immutable limits and presentation choices; required
+     * @param <M> the root model type
+     * @param <Msg> the root message type
      * @return how the run ended; never null
      */
     public static <M, Msg> ExitResult run(Component<M, Msg, Never> program, RuntimeOptions options) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,12 @@
 
 package io.github.dhoard.braxton.input;
 
-/** Keyboard modifier state carried by a normalized input event. */
+/** Keyboard modifier state carried by a normalized input event.
+ *
+ * @param ctrl whether Ctrl was held
+ * @param alt whether Alt or Meta was held
+ * @param shift whether Shift was held
+ */
 public record Modifiers(boolean ctrl, boolean alt, boolean shift) {
 
     public static final Modifiers NONE = new Modifiers(false, false, false);

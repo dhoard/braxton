@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -98,6 +98,10 @@ public final class Osc52 {
     /**
      * The encoded payload. {@code byteLength} is the UTF-8 size of {@code text} after any
      * truncation, and {@code truncated} reports whether the configured limit removed text.
+     * @param sequence the complete OSC 52 sequence
+     * @param text the payload text after any truncation
+     * @param byteLength the UTF-8 length of the payload text
+     * @param truncated whether a limit removed text
      */
     public record Encoded(String sequence, String text, int byteLength, boolean truncated) {
         public Encoded {

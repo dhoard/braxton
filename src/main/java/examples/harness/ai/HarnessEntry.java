@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -50,7 +50,12 @@ public sealed interface HarnessEntry {
         };
     }
 
-    /** A prompt the user submitted. */
+    /**
+     * A prompt the user submitted.
+     *
+     * @param text the prompt text
+     * @param epochMillis when the message entered the session, or zero
+     */
     public record User(String text, long epochMillis) implements HarnessEntry {
         public User(String text) {
             this(text, 0L);
@@ -62,7 +67,12 @@ public sealed interface HarnessEntry {
         }
     }
 
-    /** Assistant prose. */
+    /**
+     * Assistant prose.
+     *
+     * @param text the reply text
+     * @param epochMillis when the message entered the session, or zero
+     */
     public record Assistant(String text, long epochMillis) implements HarnessEntry {
         public Assistant(String text) {
             this(text, 0L);
@@ -74,7 +84,12 @@ public sealed interface HarnessEntry {
         }
     }
 
-    /** Provider reasoning, rendered in the thinking style. */
+    /**
+     * Provider reasoning, rendered in the thinking style.
+     *
+     * @param text the reasoning text
+     * @param epochMillis when the message entered the session, or zero
+     */
     public record Reasoning(String text, long epochMillis) implements HarnessEntry {
         public Reasoning(String text) {
             this(text, 0L);
@@ -86,7 +101,15 @@ public sealed interface HarnessEntry {
         }
     }
 
-    /** A completed or pending tool call with a bounded preview of its result. */
+    /**
+     * A completed or pending tool call with a bounded preview of its result.
+     *
+     * @param call the tool name and arguments as one display line
+     * @param result the preview of the tool's output
+     * @param truncated whether the preview was cut short
+     * @param status whether the call completed, failed, or is still pending
+     * @param epochMillis when the message entered the session, or zero
+     */
     public record Tool(String call, String result, boolean truncated, ToolStatus status, long epochMillis)
             implements HarnessEntry {
 
@@ -102,7 +125,12 @@ public sealed interface HarnessEntry {
         }
     }
 
-    /** A system notice, such as the "mock data" reminder or a fixture warning. */
+    /**
+     * A system notice, such as the "mock data" reminder or a fixture warning.
+     *
+     * @param text the notice text
+     * @param epochMillis when the message entered the session, or zero
+     */
     public record Notice(String text, long epochMillis) implements HarnessEntry {
         public Notice(String text) {
             this(text, 0L);
@@ -114,7 +142,12 @@ public sealed interface HarnessEntry {
         }
     }
 
-    /** A failed turn or a transcript-loading problem. */
+    /**
+     * A failed turn or a transcript-loading problem.
+     *
+     * @param text the diagnostic text
+     * @param epochMillis when the message entered the session, or zero
+     */
     public record Failure(String text, long epochMillis) implements HarnessEntry {
         public Failure(String text) {
             this(text, 0L);

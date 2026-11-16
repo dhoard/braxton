@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,6 +28,14 @@ package io.github.dhoard.braxton.style;
  * <p>{@code null} colours mean "inherit nothing"; the renderer simply omits that component. Use the
  * {@code with*} methods to derive a changed style; a style instance is shared freely across span
  * values and is safe to compare.</p>
+ * @param foreground the foreground colour, or null to inherit
+ * @param background the background colour, or null to inherit
+ * @param bold whether bold is set
+ * @param italic whether italic is set
+ * @param underline whether underline is set
+ * @param strikethrough whether strikethrough is set
+ * @param invert whether reverse video is set
+ * @param hidden whether concealed text is set
  */
 public record Style(
         Color foreground,

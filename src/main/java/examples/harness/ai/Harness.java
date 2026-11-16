@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -344,17 +344,29 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
         /** One editor gesture, mapped from the composer view. */
         public record ComposerMsg(Editor.Msg action) implements Harness.Msg {}
 
-        /** A submission request (used by the editor intent, not by any widget callback). */
+        /**
+         * A submission request (used by the editor intent, not by any widget callback).
+         *
+         * @param text the prompt text submitted
+         */
         public record Submit(String text) implements Harness.Msg {
             public Submit {
                 text = text == null ? "" : text;
             }
         }
 
-        /** Periodic time update; carries the runtime's monotonic clock. */
+        /**
+         * Periodic time update; carries the runtime's monotonic clock.
+         *
+         * @param nowNanos the current monotonic time, in nanoseconds
+         */
         public record Tick(long nowNanos) implements Harness.Msg {}
 
-        /** Terminal geometry changed. */
+        /**
+         * Terminal geometry changed.
+         *
+         * @param size the measured terminal size
+         */
         public record Resized(Size size) implements Harness.Msg {}
 
         public record ScrollUp() implements Harness.Msg {}
@@ -367,16 +379,33 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
 
         public record ScrollBottom() implements Harness.Msg {}
 
-        /** One Escape press, with its capture time so the window never depends on a tick. */
+        /**
+         * One Escape press, with its capture time so the window never depends on a tick.
+         *
+         * @param atNanos the runtime capture time of the press, in nanoseconds
+         */
         public record Escape(long atNanos) implements Harness.Msg {}
 
-        /** One Ctrl+C press with its capture time; two within two seconds exit. */
+        /**
+         * One Ctrl+C press with its capture time; two within two seconds exit.
+         *
+         * @param atNanos the runtime capture time of the press, in nanoseconds
+         */
         public record QuitRequest(long atNanos) implements Harness.Msg {}
 
-        /** A scheduled mock response block; only the matching generation and ordinal is accepted. */
+        /**
+         * A scheduled mock response block; only the matching generation and ordinal is accepted.
+         *
+         * @param generation the prompt generation that scheduled it
+         * @param ordinal the block's position within that generation
+         */
         public record ResponseBlock(long generation, int ordinal) implements Harness.Msg {}
 
-        /** The clipboard reported what it actually stored and wrote. */
+        /**
+         * The clipboard reported what it actually stored and wrote.
+         *
+         * @param result the truthful clipboard result
+         */
         public record Copied(ClipboardResult result) implements Harness.Msg {}
 
         /** Copy the visible transcript as plain text (Alt+T). */
@@ -394,7 +423,11 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
          */
         public record UnhandledKey() implements Harness.Msg {}
 
-        /** A non-fatal notice, such as an overload rejection. */
+        /**
+         * A non-fatal notice, such as an overload rejection.
+         *
+         * @param text the notice text
+         */
         public record Notice(String text) implements Harness.Msg {}
 
         /** Request application exit. */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -39,13 +39,19 @@ import java.util.function.Function;
  * interpreter, and its result is delivered back as an ordinary message. Structured built-ins cover
  * the operations the library itself owns; {@link #task} is the documented escape hatch for
  * application effects and is explicitly not a pure or replayable description.</p>
+ *
+ * @param <Msg> the component message type this command produces
  */
 public sealed interface Command<Msg> {
 
     /** Re-types every message this command can produce. */
     <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper);
 
-    /** Does nothing. */
+    /**
+     * Does nothing.
+     *
+     * @param <Msg> the component message type this command would have produced
+     */
     record None<Msg>() implements Command<Msg> {
 
         @Override
@@ -55,7 +61,12 @@ public sealed interface Command<Msg> {
         }
     }
 
-    /** Interpreted in order; a {@link Quit} ends the batch. */
+    /**
+     * Interpreted in order; a {@link Quit} ends the batch.
+     *
+     * @param commands the commands to interpret, in declaration order
+     * @param <Msg> the component message type these commands produce
+     */
     record Batch<Msg>(List<Command<Msg>> commands) implements Command<Msg> {
 
         public Batch {
@@ -79,6 +90,12 @@ public sealed interface Command<Msg> {
      * <p>The captured arguments should be immutable values: the task may run after later updates.
      * Its success or failure becomes exactly one message. The body must not touch the active
      * terminal, mutate application state, or call {@code update}.</p>
+     *
+     * @param id the effect identity; replacing it invalidates an earlier registration
+     * @param work the application work to run on the effect executor
+     * @param onSuccess maps the work's result to the message delivered on success
+     * @param onFailure maps the thrown failure to the message delivered on failure
+     * @param <Msg> the component message type this command produces
      */
     record Task<Msg>(EffectId id, Callable<?> work, Function<Object, Msg> onSuccess, Function<Throwable, Msg> onFailure)
             implements Command<Msg> {
@@ -102,6 +119,12 @@ public sealed interface Command<Msg> {
      *
      * <p>The delay must be representable in nanoseconds, the unit the scheduler uses; a longer
      * delay is rejected here instead of overflowing when it is scheduled.</p>
+     *
+     * @param id the effect identity; replacing it invalidates an earlier registration
+     * @param delay how long to wait before delivering {@code message}
+     * @param message the message delivered after the delay
+     * @param rejected the message delivered instead when the effect quota is exhausted
+     * @param <Msg> the component message type this command produces
      */
     record Delay<Msg>(EffectId id, Duration delay, Msg message, Msg rejected) implements Command<Msg> {
 
@@ -125,7 +148,12 @@ public sealed interface Command<Msg> {
         }
     }
 
-    /** Invalidates one effect id; its pending or queued results are ignored. */
+    /**
+     * Invalidates one effect id; its pending or queued results are ignored.
+     *
+     * @param id the local effect identity to invalidate
+     * @param <Msg> the component message type this command would have produced
+     */
     record Cancel<Msg>(EffectId id) implements Command<Msg> {
 
         public Cancel {
@@ -139,7 +167,11 @@ public sealed interface Command<Msg> {
         }
     }
 
-    /** Invalidates all effects in the current component scope and descendants. */
+    /**
+     * Invalidates all effects in the current component scope and descendants.
+     *
+     * @param <Msg> the component message type this command would have produced
+     */
     record CancelAll<Msg>() implements Command<Msg> {
         @Override
         public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
@@ -148,7 +180,12 @@ public sealed interface Command<Msg> {
         }
     }
 
-    /** Enqueues an owner-local message after commit; never invokes update recursively. */
+    /**
+     * Enqueues an owner-local message after commit; never invokes update recursively.
+     *
+     * @param message the message to deliver to this component's own update
+     * @param <Msg> the component message type this command produces
+     */
     record Dispatch<Msg>(Msg message) implements Command<Msg> {
         public Dispatch {
             Objects.requireNonNull(message, "message");
@@ -161,7 +198,13 @@ public sealed interface Command<Msg> {
         }
     }
 
-    /** Structural origin for a mounted command, including unkeyed built-ins and dispatch. */
+    /**
+     * Structural origin for a mounted command, including unkeyed built-ins and dispatch.
+     *
+     * @param path the component path the wrapped command belongs to
+     * @param command the command to interpret in that scope
+     * @param <Msg> the component message type this command produces
+     */
     record Scoped<Msg>(ComponentPath path, Command<Msg> command) implements Command<Msg> {
         public Scoped {
             Objects.requireNonNull(path, "path");
@@ -180,7 +223,12 @@ public sealed interface Command<Msg> {
         return this instanceof None<Msg> ? this : new Scoped<>(path, this);
     }
 
-    /** Reads the session's in-process clipboard buffer and reports it as one message. */
+    /**
+     * Reads the session's in-process clipboard buffer and reports it as one message.
+     *
+     * @param mapper maps the stored text to the delivered message
+     * @param <Msg> the component message type this command produces
+     */
     record ReadClipboard<Msg>(Function<String, Msg> mapper) implements Command<Msg> {
 
         public ReadClipboard {
@@ -194,7 +242,13 @@ public sealed interface Command<Msg> {
         }
     }
 
-    /** Copies text and reports the truthful {@link ClipboardResult} as one message. */
+    /**
+     * Copies text and reports the truthful {@link ClipboardResult} as one message.
+     *
+     * @param text the text to copy; null is treated as empty
+     * @param mapper maps the reported result to the delivered message
+     * @param <Msg> the component message type this command produces
+     */
     record Copy<Msg>(String text, Function<ClipboardResult, Msg> mapper) implements Command<Msg> {
 
         public Copy {
@@ -209,7 +263,12 @@ public sealed interface Command<Msg> {
         }
     }
 
-    /** Ends the program with {@code status}; terminal for the enclosing batch. */
+    /**
+     * Ends the program with {@code status}; terminal for the enclosing batch.
+     *
+     * @param status the process exit status reported by {@code ExitResult}
+     * @param <Msg> the component message type this command would have produced
+     */
     record Quit<Msg>(int status) implements Command<Msg> {
 
         @Override

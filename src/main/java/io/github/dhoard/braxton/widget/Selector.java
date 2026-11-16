@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026-present Doug Hoard
+ * Copyright (c) 2026-present Douglas Hoard
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -57,7 +57,13 @@ import java.util.function.Function;
  */
 public final class Selector implements Component<Selector.Model, Selector.Msg, Selector.Output> {
 
-    /** Immutable selector state. {@code focused} is focus, not selection. */
+    /**
+     * Immutable selector state. {@code focused} is focus, not selection.
+     *
+     * @param options the selectable options, one painted row each
+     * @param selected the index of the selected option
+     * @param focused whether the selector currently owns focus
+     */
     public record Model(List<String> options, int selected, boolean focused) {
 
         public Model withFocus(boolean value) {
