@@ -25,9 +25,12 @@ package io.github.dhoard.braxton.internal.clipboard;
 import io.github.dhoard.braxton.clipboard.ClipboardConfig;
 import io.github.dhoard.braxton.clipboard.ClipboardPath;
 import io.github.dhoard.braxton.clipboard.ClipboardResult;
+import io.github.dhoard.braxton.clipboard.ClipboardSelection;
 import io.github.dhoard.braxton.clipboard.PasteSanitizer;
 import io.github.dhoard.braxton.clipboard.TmuxStrategy;
 import java.nio.charset.StandardCharsets;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -44,7 +47,14 @@ public final class ClipboardService {
     private final TerminalEnvironment environment;
     private final Consumer<String> writer;
     private final ClipboardBuffer buffer;
-    private String lastSequence = "";
+    /**
+     * The last sequence written for each selection.
+     *
+     * <p>One slot per selection, because the two are independent destinations: copying the same text to
+     * the primary selection after copying it to the system one is a new write, and saying otherwise
+     * would leave the primary selection stale.</p>
+     */
+    private final Map<ClipboardSelection, String> lastSequences = new EnumMap<>(ClipboardSelection.class);
 
     public ClipboardService(ClipboardConfig config, TerminalEnvironment environment, Consumer<String> writer) {
         this.config = config == null ? ClipboardConfig.defaults() : config;
@@ -53,29 +63,46 @@ public final class ClipboardService {
         this.buffer = new ClipboardBuffer(this.config.maxInternalChars());
     }
 
-    /** Copies text, always storing it internally, and writes at most one OSC 52 sequence. */
+    /** Copies text to the system clipboard, always storing it internally. */
     public synchronized ClipboardResult copy(String text) {
+        return copy(ClipboardSelection.SYSTEM, text);
+    }
+
+    /**
+     * Copies text to one selection, always storing it internally, and writes at most one OSC 52
+     * sequence.
+     *
+     * <p>The in-process buffer holds the text whatever the transport does, so a terminal that ignores
+     * the sequence loses nothing the application can still paste. Which selection the escape sequence
+     * names is the only difference between a system copy and a primary copy: the encoding, the
+     * payload limit, the tmux strategy and the deduplication are shared.</p>
+     *
+     * @param selection the selection to write; a missing selection copies to the system clipboard
+     * @param text the text to copy; null is treated as empty
+     */
+    public synchronized ClipboardResult copy(ClipboardSelection selection, String text) {
+        ClipboardSelection target = selection == null ? ClipboardSelection.SYSTEM : selection;
         String plain = PasteSanitizer.plainText(text);
         String stored = buffer.set(plain);
         boolean internalTruncated = stored.length() < plain.length();
         int storedBytes = stored.getBytes(StandardCharsets.UTF_8).length;
 
         if (plain.isEmpty()) {
-            lastSequence = "";
+            lastSequences.remove(target);
             return new ClipboardResult("", 0, false, true, false, false, ClipboardPath.NONE);
         }
 
         ClipboardPath path = resolvePath();
         if (path == ClipboardPath.INTERNAL_ONLY) {
-            lastSequence = "";
+            lastSequences.remove(target);
             return new ClipboardResult(stored, storedBytes, internalTruncated, true, false, false, path);
         }
 
-        Osc52.Encoded encoded = Osc52.encode(plain, config.maxPayloadBytes());
+        Osc52.Encoded encoded = Osc52.encode(target, plain, config.maxPayloadBytes());
         if (encoded.text().isEmpty()) {
             // The payload limit left nothing to write, and an empty OSC 52 payload clears the
             // clipboard. A copy that can carry no text must not clear what the user already had.
-            lastSequence = "";
+            lastSequences.remove(target);
             return new ClipboardResult(stored, storedBytes, true, true, false, false, ClipboardPath.INTERNAL_ONLY);
         }
         String sequence = path == ClipboardPath.TMUX_PASSTHROUGH
@@ -83,23 +110,42 @@ public final class ClipboardService {
                 : encoded.sequence();
         boolean truncated = internalTruncated || encoded.truncated();
 
-        if (sequence.equals(lastSequence)) {
+        if (sequence.equals(lastSequences.get(target))) {
             return new ClipboardResult(stored, storedBytes, truncated, true, false, true, path);
         }
 
         try {
             writer.accept(sequence);
         } catch (RuntimeException failure) {
-            lastSequence = "";
+            lastSequences.remove(target);
             return new ClipboardResult(stored, storedBytes, truncated, true, false, false, ClipboardPath.INTERNAL_ONLY);
         }
-        lastSequence = sequence;
+        lastSequences.put(target, sequence);
         return new ClipboardResult(stored, storedBytes, truncated, true, true, false, path);
     }
 
     /** The text currently held by the in-process buffer. */
     public String internalText() {
         return buffer.get();
+    }
+
+    /**
+     * The transport a terminal read would use, or null when the session cannot ask.
+     *
+     * <p>Reading is the same question as writing, asked backwards, so it is available exactly when an
+     * escape sequence may be written at all: a session with OSC 52 emission off, a strategy that never
+     * writes, or a terminal that cannot interpret escapes has nothing to ask with. Reads also have
+     * their own switch, because a deployment may allow writing the clipboard without allowing an
+     * application to ask what is in it.</p>
+     *
+     * @return the transport a read would be written on, or null when reads are unavailable
+     */
+    public ClipboardPath readPath() {
+        if (!config.terminalReadsEnabled()) {
+            return null;
+        }
+        ClipboardPath path = resolvePath();
+        return path == ClipboardPath.INTERNAL_ONLY ? null : path;
     }
 
     private ClipboardPath resolvePath() {

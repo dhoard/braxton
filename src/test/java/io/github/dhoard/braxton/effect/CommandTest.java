@@ -52,6 +52,47 @@ class CommandTest {
     }
 
     @Test
+    void sequencesSnapshotTheirStepsAndFlattenNestedOnes() {
+        Command<String> first = Command.delay(EffectId.of("first"), Duration.ZERO, "first", "rejected");
+        Command<String> second = Command.delay(EffectId.of("second"), Duration.ZERO, "second", "rejected");
+        List<Command<String>> source = new ArrayList<>(List.of(first, second));
+        Command.Sequence<String> direct = new Command.Sequence<>(source);
+        source.clear();
+
+        assertThat(direct.commands()).containsExactly(first, second);
+        assertThatThrownBy(() -> direct.commands().add(Command.none()))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThat(direct.map(String::length)).isInstanceOf(Command.Sequence.class);
+        assertThat(direct.commands()).containsExactly(first, second);
+
+        Command<String> nested =
+                Command.sequence(Command.none(), first, Command.sequence(second, Command.none()), Command.none());
+        assertThat(nested).isInstanceOf(Command.Sequence.class);
+        assertThat(((Command.Sequence<String>) nested).commands())
+                .as("empty steps and nested sequences are flattened away")
+                .containsExactly(first, second);
+        assertThat(Command.sequence(List.<Command<String>>of()))
+                .as("a sequence with nothing in it is the inert command")
+                .isInstanceOf(Command.None.class);
+        assertThat(Command.sequence(List.of(first)))
+                .as("a single-step sequence is that step")
+                .isSameAs(first);
+        assertThatThrownBy(() -> new Command.Sequence<String>(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> Command.afterUpdate(null)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void anUpdateOrderedContinuationCarriesItsMessageWithoutDeliveringIt() {
+        Command<String> continuation = Command.afterUpdate("message");
+        assertThat(continuation).isInstanceOf(Command.AfterUpdate.class);
+        assertThat(((Command.AfterUpdate<String>) continuation).message()).isEqualTo("message");
+        assertThat(continuation.map(String::toUpperCase))
+                .isInstanceOf(Command.AfterUpdate.class)
+                .extracting(command -> ((Command.AfterUpdate<String>) command).message())
+                .isEqualTo("MESSAGE");
+    }
+
+    @Test
     void constructingAndMappingABatchNeverRunsItsTaskOrMessageMapper() throws Exception {
         AtomicInteger work = new AtomicInteger();
         AtomicInteger mappings = new AtomicInteger();
@@ -75,10 +116,44 @@ class CommandTest {
     }
 
     @Test
+    void aPrintedLineIsAnInertValueThatProducesNoMessage() {
+        Command<Integer> printed = Command.println("installed parser");
+        assertThat(printed).isInstanceOf(Command.PrintLine.class);
+        assertThat(((Command.PrintLine<Integer>) printed).text()).isEqualTo("installed parser");
+        assertThat(((Command.PrintLine<Long>) printed.map(Integer::longValue)).text())
+                .as("re-typing a print command keeps the same text")
+                .isEqualTo("installed parser");
+        assertThatThrownBy(() -> Command.println(null))
+                .as("a print command needs text")
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
     void aDelayLongerThanItsNanosecondScheduleIsRejectedAtConstruction() {
         assertThatThrownBy(() -> Command.delay(EffectId.of("a"), Duration.ofDays(1_000_000), "message", "rejected"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("nanoseconds");
+    }
+
+    @Test
+    void aTimestampRequestIsInertUntilItIsInterpreted() {
+        AtomicInteger mappings = new AtomicInteger();
+        Command<String> command = Command.monotonicTime(reading -> {
+            mappings.incrementAndGet();
+            return "now:" + reading;
+        });
+        assertThat(command).isInstanceOf(Command.MonotonicTime.class);
+        assertThat(mappings)
+                .as("building a command reads no clock and maps nothing")
+                .hasValue(0);
+        Command<Integer> mapped = command.map(value -> {
+            mappings.incrementAndGet();
+            return value.length();
+        });
+        assertThat(mappings).hasValue(0);
+        assertThat(((Command.MonotonicTime<Integer>) mapped).mapper().apply(7L)).isEqualTo(5);
+        assertThat(mappings).hasValue(2);
+        assertThatThrownBy(() -> Command.monotonicTime(null)).isInstanceOf(NullPointerException.class);
     }
 
     @Test

@@ -68,8 +68,9 @@ public final class ScreenRenderer {
                 screen.cols(),
                 rows,
                 layout.regions().stream()
-                        .map(r -> new RenderedScreen.Region(r.id(), r.bounds()))
-                        .toList());
+                        .map(r -> new RenderedScreen.Region(r.id(), r.bounds(), r.reachable()))
+                        .toList(),
+                layout.cursor());
     }
 
     /**
@@ -85,10 +86,18 @@ public final class ScreenRenderer {
         return engine.layout(view, viewport.bounds()).screen().plainText();
     }
 
-    /** Focus regions in paint order, for pointer and focus tests. */
+    /** The cursor this layout resolves to a screen cell, for caret and corner-case tests. */
+    public java.util.Optional<Cursor> cursor(View<?> view, Viewport viewport) {
+        return engine.layout(view, viewport.bounds()).cursor();
+    }
+
+    /**
+     * Focus regions in paint order, each with the rectangle it was painted in and whether pointer
+     * input can still reach it: a layer a modal covers is painted, but cannot be pointed at.
+     */
     public List<RenderedScreen.Region> regions(View<?> view, Viewport viewport) {
         return engine.layout(view, viewport.bounds()).regions().stream()
-                .map(region -> new RenderedScreen.Region(region.id(), region.bounds()))
+                .map(region -> new RenderedScreen.Region(region.id(), region.bounds(), region.reachable()))
                 .toList();
     }
 

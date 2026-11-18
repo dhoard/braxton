@@ -41,24 +41,36 @@ import java.util.concurrent.locks.ReentrantLock;
 public final class Mailbox {
 
     /** One item in the hand-off queue. */
-    public sealed interface Envelope permits AppMessage, Input, Close {}
+    public sealed interface Envelope permits AppMessage, Input, Close, Resume, Quit {}
 
     /** An application message produced by routing, a command, or a source.
      *
      * @param payload the application message value
      * @param origin the scope that produced it, or null for the root
      * @param valid whether it may still be delivered when the owner takes it
+     * @param afterApply what to run once the transition it causes has committed, or a no-op
      */
-    public record AppMessage(Object payload, ScopeManager.Origin origin, java.util.function.BooleanSupplier valid)
+    public record AppMessage(
+            Object payload, ScopeManager.Origin origin, java.util.function.BooleanSupplier valid, Runnable afterApply)
             implements Envelope {
         private static final java.util.function.BooleanSupplier ALWAYS = () -> true;
+        private static final Runnable NOTHING = () -> {};
+
+        public AppMessage {
+            valid = valid == null ? ALWAYS : valid;
+            afterApply = afterApply == null ? NOTHING : afterApply;
+        }
 
         public AppMessage(Object payload) {
-            this(payload, null, ALWAYS);
+            this(payload, null, ALWAYS, NOTHING);
         }
 
         public AppMessage(Object payload, ScopeManager.Origin origin) {
-            this(payload, origin, ALWAYS);
+            this(payload, origin, ALWAYS, NOTHING);
+        }
+
+        public AppMessage(Object payload, ScopeManager.Origin origin, java.util.function.BooleanSupplier valid) {
+            this(payload, origin, valid, NOTHING);
         }
     }
 
@@ -73,6 +85,37 @@ public final class Mailbox {
      * @param result how the run ended
      */
     public record Close(ExitResult result) implements Envelope {}
+
+    /**
+     * A request to end the run gracefully, from outside the runtime.
+     *
+     * <p>It is a request rather than a stop so the session can still refuse it: the owner presents a
+     * pending frame and returns through the ordinary exit and cleanup path. Forced termination does
+     * not use this envelope, because it may not wait for the owner at all.</p>
+     *
+     * @param status the exit status the run reports when the request is accepted
+     */
+    public record Quit(int status) implements Envelope {}
+
+    /**
+     * Owner-thread work a producer asked for, such as submitting the next step of a sequence.
+     *
+     * <p>An effect that finishes on a timer or task thread cannot interpret the rest of a sequence
+     * itself: submission touches state only the owner may change. It enqueues this envelope instead,
+     * after the message it produced, so the owner submits the next step in the same order the
+     * message was delivered.</p>
+     *
+     * @param action the work to run on the owner thread
+     */
+    public record Resume(Runnable action) implements Envelope {
+
+        /**
+         * Rejects a null action.
+         */
+        public Resume {
+            if (action == null) throw new IllegalArgumentException("action is required");
+        }
+    }
 
     /** Largest millisecond timeout that still converts to nanoseconds without overflowing. */
     private static final long MAX_WAIT_MILLIS = Long.MAX_VALUE / 1_000_000L;

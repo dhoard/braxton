@@ -25,12 +25,16 @@ public final class NativeLoadProbe {
         SymbolLookup symbols = (SymbolLookup) field.get(null);
         var abi = Linker.nativeLinker().downcallHandle(symbols.find("bt_abi").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT));
-        if ((int) abi.invokeExact() != 1) throw new AssertionError("invalid native ABI");
+        // The ABI this build speaks, read from the class that refuses any other one.
+        var required = NativeTerminal.class.getDeclaredField("REQUIRED_ABI");
+        required.setAccessible(true);
+        int expected = required.getInt(null);
+        if ((int) abi.invokeExact() != expected) throw new AssertionError("invalid native ABI");
         System.out.println("LOADED");
         System.out.flush();
         System.in.read();
         // Keep and use the handle after another application/version has loaded its binary.
-        if ((int) abi.invokeExact() != 1) throw new AssertionError("native ABI changed while loaded");
-        System.out.println("ABI 1");
+        if ((int) abi.invokeExact() != expected) throw new AssertionError("native ABI changed while loaded");
+        System.out.println("ABI " + expected);
     }
 }

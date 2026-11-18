@@ -32,8 +32,10 @@ import java.util.List;
  * @param cols the number of columns
  * @param cells the cells of each row, in paint order
  * @param regions the focus regions declared while painting, in paint order
+ * @param cursor the cursor the layout resolved, in screen cells, or empty when none is shown
  */
-public record RenderedScreen(int rows, int cols, List<List<Cell>> cells, List<Region> regions) {
+public record RenderedScreen(
+        int rows, int cols, List<List<Cell>> cells, List<Region> regions, java.util.Optional<Cursor> cursor) {
     public record Cell(String text, Style style, String link, int columns, boolean continuation) {
         public Cell {
             java.util.Objects.requireNonNull(text, "text");
@@ -48,16 +50,47 @@ public record RenderedScreen(int rows, int cols, List<List<Cell>> cells, List<Re
         }
     }
 
-    public record Region(ElementId id, Rect bounds) {
+    /**
+     * One focusable element's painted rectangle, in paint order.
+     *
+     * @param id the focus identity that declared the region
+     * @param bounds the rectangle it was painted in
+     * @param reachable whether pointer input can reach it: false for a layer a modal covers, which
+     *     is painted but can no longer be pointed at
+     */
+    public record Region(ElementId id, Rect bounds, boolean reachable) {
         public Region {
             java.util.Objects.requireNonNull(id, "id");
             java.util.Objects.requireNonNull(bounds, "bounds");
         }
+
+        /**
+         * A reachable region: the shape every region had before pointer input existed.
+         *
+         * @param id the focus identity that declared the region
+         * @param bounds the rectangle it was painted in
+         */
+        public Region(ElementId id, Rect bounds) {
+            this(id, bounds, true);
+        }
+    }
+
+    /**
+     * A snapshot with no cursor, for callers that only read cells.
+     *
+     * @param rows the number of rows
+     * @param cols the number of columns
+     * @param cells the cells of each row, in paint order
+     * @param regions the focus regions declared while painting, in paint order
+     */
+    public RenderedScreen(int rows, int cols, List<List<Cell>> cells, List<Region> regions) {
+        this(rows, cols, cells, regions, java.util.Optional.empty());
     }
 
     public RenderedScreen {
         cells = cells.stream().map(List::copyOf).toList();
         regions = List.copyOf(regions);
+        cursor = cursor == null ? java.util.Optional.empty() : cursor;
         if (rows < 0 || cols < 0 || cells.size() != rows || cells.stream().anyMatch(r -> r.size() != cols)) {
             throw new IllegalArgumentException("snapshot dimensions do not match cells");
         }

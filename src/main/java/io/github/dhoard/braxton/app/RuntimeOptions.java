@@ -24,15 +24,18 @@ package io.github.dhoard.braxton.app;
 
 import io.github.dhoard.braxton.clipboard.ClipboardConfig;
 import io.github.dhoard.braxton.input.InputOptions;
+import io.github.dhoard.braxton.style.ColorProfile;
 import java.time.Duration;
 
 /**
- * Immutable limits and input/presentation choices for one application run.
+ * Immutable limits, control and input/presentation choices for one application run.
  *
  * <p>Defaults are the documented numbers, not hidden constants: a 4,096-entry mailbox, 64
  * concurrent one-shot effects (tasks and delays together), 64 ongoing sources, 4,096 active
- * components including the root, a child depth of 64, 1,024 local dispatches per turn, and a
- * two-second shutdown grace period. Producers outside the runtime thread block while the mailbox
+ * components including the root, a child depth of 64, 1,024 local dispatches per turn, a
+ * {@link ColorProfile#AUTO negotiated} colour profile, a 60 frames-per-second presentation ceiling,
+ * no message filter, failures reported through {@link ExitResult}, and a two-second shutdown grace
+ * period. Producers outside the runtime thread block while the mailbox
  * holds {@code mailboxCapacity} entries. The runtime thread's own deliveries are counted
  * separately against the same capacity, because that thread cannot wait for itself. The component and dispatch limits bound a hostile or
  * accidentally cyclic hierarchy instead of allowing it to allocate or spin without end.</p>
@@ -46,6 +49,15 @@ import java.time.Duration;
  * @param clipboard the clipboard policy for the session
  * @param terminal the presentation modes requested from the terminal
  * @param input the input decoding limits
+ * @param colorProfile the colour profile to render with, or {@link ColorProfile#AUTO} to negotiate
+ *     one from the terminal and the environment
+ * @param messageFilter the optional filter every delivered message passes through, or null for none
+ * @param fps the frames-per-second ceiling presentations are paced to, between {@value #MIN_FPS} and
+ *     {@value #MAX_FPS}
+ * @param propagateFailure whether a failed run throws its failure after cleanup instead of returning
+ *     it in the {@link ExitResult}
+ * @param installShutdownHook whether the run installs the JVM shutdown hook that restores the
+ *     terminal; false only for a host that owns restoration itself
  */
 public record RuntimeOptions(
         Duration shutdownGrace,
@@ -57,7 +69,12 @@ public record RuntimeOptions(
         int maxLocalDispatchesPerTurn,
         ClipboardConfig clipboard,
         TerminalOptions terminal,
-        InputOptions input) {
+        InputOptions input,
+        ColorProfile colorProfile,
+        MessageFilter messageFilter,
+        int fps,
+        boolean propagateFailure,
+        boolean installShutdownHook) {
 
     public static final int DEFAULT_MAX_COMPONENTS = 4_096;
     public static final int DEFAULT_MAX_COMPONENT_DEPTH = 64;
@@ -66,6 +83,114 @@ public record RuntimeOptions(
     public static final int DEFAULT_MAX_EFFECTS = 64;
     public static final int DEFAULT_MAX_SUBSCRIPTIONS = 64;
     public static final Duration DEFAULT_SHUTDOWN_GRACE = Duration.ofSeconds(2);
+    /** The colour profile a session negotiates when the application does not choose one. */
+    public static final ColorProfile DEFAULT_COLOR_PROFILE = ColorProfile.AUTO;
+
+    /** The slowest presentation ceiling a session accepts: one frame per second. */
+    public static final int MIN_FPS = 1;
+
+    /** The fastest presentation ceiling a session accepts. */
+    public static final int MAX_FPS = 240;
+
+    /** The presentation ceiling a session paces to when the application does not choose one. */
+    public static final int DEFAULT_FPS = 60;
+
+    /**
+     * The options as they were before command ordering and application control became configurable.
+     *
+     * <p>Kept so an existing caller compiles unchanged; it negotiates the colour profile, filters
+     * nothing, paces at {@value #DEFAULT_FPS} frames per second, reports failures through the
+     * {@link ExitResult} and installs its own shutdown hook, which is what every earlier release
+     * did.</p>
+     *
+     * @param shutdownGrace how long shutdown waits for running effect tasks
+     * @param mailboxCapacity the producer envelope bound and the owner delivery bound
+     * @param maxConcurrentEffects the bound on tasks and delays that have not completed
+     * @param maxSubscriptions the bound on live ongoing sources
+     * @param maxComponents the bound on active components, including the root
+     * @param maxComponentDepth the bound on child nesting depth
+     * @param maxLocalDispatchesPerTurn the bound on owner-local messages in one turn
+     * @param clipboard the clipboard policy for the session
+     * @param terminal the presentation modes requested from the terminal
+     * @param input the input decoding limits
+     * @param colorProfile the colour profile to render with, or {@link ColorProfile#AUTO} to negotiate
+     *     one from the terminal and the environment
+     */
+    public RuntimeOptions(
+            Duration shutdownGrace,
+            int mailboxCapacity,
+            int maxConcurrentEffects,
+            int maxSubscriptions,
+            int maxComponents,
+            int maxComponentDepth,
+            int maxLocalDispatchesPerTurn,
+            ClipboardConfig clipboard,
+            TerminalOptions terminal,
+            InputOptions input,
+            ColorProfile colorProfile) {
+        this(
+                shutdownGrace,
+                mailboxCapacity,
+                maxConcurrentEffects,
+                maxSubscriptions,
+                maxComponents,
+                maxComponentDepth,
+                maxLocalDispatchesPerTurn,
+                clipboard,
+                terminal,
+                input,
+                colorProfile,
+                null,
+                DEFAULT_FPS,
+                false,
+                true);
+    }
+
+    /**
+     * The options as they were before the colour profile became configurable.
+     *
+     * <p>Kept so an existing caller compiles unchanged; it negotiates the colour profile, which is
+     * what every earlier release did.</p>
+     *
+     * @param shutdownGrace how long shutdown waits for running effect tasks
+     * @param mailboxCapacity the producer envelope bound and the owner delivery bound
+     * @param maxConcurrentEffects the bound on tasks and delays that have not completed
+     * @param maxSubscriptions the bound on live ongoing sources
+     * @param maxComponents the bound on active components, including the root
+     * @param maxComponentDepth the bound on child nesting depth
+     * @param maxLocalDispatchesPerTurn the bound on owner-local messages in one turn
+     * @param clipboard the clipboard policy for the session
+     * @param terminal the presentation modes requested from the terminal
+     * @param input the input decoding limits
+     */
+    public RuntimeOptions(
+            Duration shutdownGrace,
+            int mailboxCapacity,
+            int maxConcurrentEffects,
+            int maxSubscriptions,
+            int maxComponents,
+            int maxComponentDepth,
+            int maxLocalDispatchesPerTurn,
+            ClipboardConfig clipboard,
+            TerminalOptions terminal,
+            InputOptions input) {
+        this(
+                shutdownGrace,
+                mailboxCapacity,
+                maxConcurrentEffects,
+                maxSubscriptions,
+                maxComponents,
+                maxComponentDepth,
+                maxLocalDispatchesPerTurn,
+                clipboard,
+                terminal,
+                input,
+                DEFAULT_COLOR_PROFILE,
+                null,
+                DEFAULT_FPS,
+                false,
+                true);
+    }
 
     public RuntimeOptions {
         shutdownGrace = shutdownGrace == null ? DEFAULT_SHUTDOWN_GRACE : shutdownGrace;
@@ -89,9 +214,16 @@ public record RuntimeOptions(
         if (maxComponents < 1 || maxComponentDepth < 1 || maxLocalDispatchesPerTurn < 1) {
             throw new IllegalArgumentException("component and dispatch limits must be positive");
         }
+        if (fps < MIN_FPS || fps > MAX_FPS) {
+            // The presentation ceiling is a documented range, not a free number: below one frame a
+            // second the session is not interactive, and above the maximum the pacing interval is
+            // shorter than a terminal can present.
+            throw new IllegalArgumentException("fps must be between " + MIN_FPS + " and " + MAX_FPS + ": " + fps);
+        }
         clipboard = clipboard == null ? ClipboardConfig.defaults() : clipboard;
         terminal = terminal == null ? TerminalOptions.DEFAULT : terminal;
         input = input == null ? InputOptions.DEFAULT : input;
+        colorProfile = colorProfile == null ? DEFAULT_COLOR_PROFILE : colorProfile;
     }
 
     public static RuntimeOptions defaults() {
@@ -105,7 +237,156 @@ public record RuntimeOptions(
                 DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
                 ClipboardConfig.defaults(),
                 TerminalOptions.DEFAULT,
-                InputOptions.DEFAULT);
+                InputOptions.DEFAULT,
+                DEFAULT_COLOR_PROFILE,
+                null,
+                DEFAULT_FPS,
+                false,
+                true);
+    }
+
+    /**
+     * The same options with another colour profile.
+     *
+     * <p>{@link ColorProfile#AUTO} negotiates; any other value is honoured as given, including one the
+     * terminal may not render. The runtime re-encodes every frame after a profile change, so nothing
+     * painted with the previous profile survives.</p>
+     *
+     * @param value the profile to render with; null negotiates
+     * @return the new options
+     */
+    public RuntimeOptions withColorProfile(ColorProfile value) {
+        return new RuntimeOptions(
+                shutdownGrace,
+                mailboxCapacity,
+                maxConcurrentEffects,
+                maxSubscriptions,
+                maxComponents,
+                maxComponentDepth,
+                maxLocalDispatchesPerTurn,
+                clipboard,
+                terminal,
+                input,
+                value == null ? DEFAULT_COLOR_PROFILE : value,
+                messageFilter,
+                fps,
+                propagateFailure,
+                installShutdownHook);
+    }
+
+    /**
+     * The same options with another message filter.
+     *
+     * @param value the filter every delivered message passes through; null for none
+     * @return the new options
+     * @see MessageFilter
+     */
+    public RuntimeOptions withMessageFilter(MessageFilter value) {
+        return new RuntimeOptions(
+                shutdownGrace,
+                mailboxCapacity,
+                maxConcurrentEffects,
+                maxSubscriptions,
+                maxComponents,
+                maxComponentDepth,
+                maxLocalDispatchesPerTurn,
+                clipboard,
+                terminal,
+                input,
+                colorProfile,
+                value,
+                fps,
+                propagateFailure,
+                installShutdownHook);
+    }
+
+    /**
+     * The same options with another presentation ceiling.
+     *
+     * <p>A session still presents input, resize and orderly-exit frames immediately; the ceiling is
+     * the minimum gap between the frames application changes share, and a slower ceiling coalesces
+     * more of them into one frame of the latest state.</p>
+     *
+     * @param value frames per second, between {@value #MIN_FPS} and {@value #MAX_FPS}
+     * @return the new options
+     */
+    public RuntimeOptions withFps(int value) {
+        return new RuntimeOptions(
+                shutdownGrace,
+                mailboxCapacity,
+                maxConcurrentEffects,
+                maxSubscriptions,
+                maxComponents,
+                maxComponentDepth,
+                maxLocalDispatchesPerTurn,
+                clipboard,
+                terminal,
+                input,
+                colorProfile,
+                messageFilter,
+                value,
+                propagateFailure,
+                installShutdownHook);
+    }
+
+    /**
+     * The same options, rethrowing a failure after cleanup instead of returning it.
+     *
+     * <p>Cleanup has already run when the failure is thrown, so the terminal, effects and sources
+     * are in the state an ordinary failed run leaves them in; only the report changes. A run started
+     * through {@link Application#start} cannot throw to its caller, so it reports the same cause in
+     * the {@link ProgramResult} instead.</p>
+     *
+     * @param value whether a failed run throws its failure instead of returning it
+     * @return the new options
+     */
+    public RuntimeOptions withFailurePropagation(boolean value) {
+        return new RuntimeOptions(
+                shutdownGrace,
+                mailboxCapacity,
+                maxConcurrentEffects,
+                maxSubscriptions,
+                maxComponents,
+                maxComponentDepth,
+                maxLocalDispatchesPerTurn,
+                clipboard,
+                terminal,
+                input,
+                colorProfile,
+                messageFilter,
+                fps,
+                value,
+                installShutdownHook);
+    }
+
+    /**
+     * The same options with or without the run's own shutdown hook.
+     *
+     * <p>The hook restores the terminal when the JVM is terminated while the session still owns it. A
+     * host that owns restoration - an embedder that already restores its own terminal - turns it off
+     * with this option; nothing else changes, and the ordinary exit path still restores the
+     * terminal.</p>
+     *
+     * @param value whether the run installs the JVM shutdown hook
+     * @return the new options
+     */
+    public RuntimeOptions withShutdownHook(boolean value) {
+        return new RuntimeOptions(
+                shutdownGrace,
+                mailboxCapacity,
+                maxConcurrentEffects,
+                maxSubscriptions,
+                maxComponents,
+                maxComponentDepth,
+                maxLocalDispatchesPerTurn,
+                clipboard,
+                terminal,
+                input,
+                colorProfile,
+                messageFilter,
+                fps,
+                propagateFailure,
+                value);
     }
 
     public RuntimeOptions withComponentLimits(int count, int depth, int dispatches) {
@@ -119,7 +400,12 @@ public record RuntimeOptions(
                 dispatches,
                 clipboard,
                 terminal,
-                input);
+                input,
+                colorProfile,
+                messageFilter,
+                fps,
+                propagateFailure,
+                installShutdownHook);
     }
 
     public RuntimeOptions withInput(InputOptions value) {
@@ -133,7 +419,12 @@ public record RuntimeOptions(
                 maxLocalDispatchesPerTurn,
                 clipboard,
                 terminal,
-                value);
+                value,
+                colorProfile,
+                messageFilter,
+                fps,
+                propagateFailure,
+                installShutdownHook);
     }
 
     public RuntimeOptions withTerminal(TerminalOptions value) {
@@ -147,7 +438,12 @@ public record RuntimeOptions(
                 maxLocalDispatchesPerTurn,
                 clipboard,
                 value,
-                input);
+                input,
+                colorProfile,
+                messageFilter,
+                fps,
+                propagateFailure,
+                installShutdownHook);
     }
 
     public RuntimeOptions withClipboard(ClipboardConfig value) {
@@ -161,7 +457,12 @@ public record RuntimeOptions(
                 maxLocalDispatchesPerTurn,
                 value,
                 terminal,
-                input);
+                input,
+                colorProfile,
+                messageFilter,
+                fps,
+                propagateFailure,
+                installShutdownHook);
     }
 
     public RuntimeOptions withLimits(int mailbox, int effects, int subscriptions) {
@@ -175,6 +476,11 @@ public record RuntimeOptions(
                 maxLocalDispatchesPerTurn,
                 clipboard,
                 terminal,
-                input);
+                input,
+                colorProfile,
+                messageFilter,
+                fps,
+                propagateFailure,
+                installShutdownHook);
     }
 }

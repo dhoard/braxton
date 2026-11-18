@@ -22,24 +22,42 @@
 
 package io.github.dhoard.braxton.internal.clipboard;
 
+import io.github.dhoard.braxton.clipboard.ClipboardSelection;
 import io.github.dhoard.braxton.internal.text.Graphemes;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
- * OSC 52 clipboard encoding.
+ * OSC 52 clipboard encoding and decoding.
  *
  * <p>An OSC 52 write is {@code ESC ] 52 ; <selection> ; <base64 UTF-8> BEL}. The BEL terminator is
  * used because every mainstream OSC 52 implementation accepts it and it avoids embedding another
- * ESC byte in a tmux passthrough payload.</p>
+ * ESC byte in a tmux passthrough payload. A read is the same command with {@code ?} in place of the
+ * payload; the terminal answers with the payload it holds.</p>
  *
  * <p>There is no acknowledgement in the protocol. A caller can know that a sequence was written,
  * never that a terminal or tmux actually placed the text on the system clipboard.</p>
+ *
+ * <p>Decoding is strict in both steps, because a reply is the one place terminal bytes become text an
+ * application may paste. Only the basic base64 alphabet with correct padding is accepted, and the
+ * decoded bytes must be well-formed UTF-8 with no malformed or unmappable sequence. A reply that
+ * fails either check is reported as invalid and none of it reaches the application.</p>
  */
 public final class Osc52 {
 
     /** The default clipboard selection: the system clipboard. */
     public static final String CLIPBOARD_SELECTION = "c";
+
+    /** The OSC command number that reads and writes a clipboard. */
+    public static final int CODE = 52;
+
+    /** The payload a read sends in place of the text. */
+    private static final String READ_MARKER = "?";
 
     private static final char ESC = '\u001b';
     private static final char BEL = '\u0007';
@@ -76,6 +94,135 @@ public final class Osc52 {
     }
 
     /**
+     * Encodes {@code text} for the requested selection, truncating it on a grapheme-cluster boundary
+     * when it exceeds {@code maxBytes}.
+     *
+     * @param selection the selection to write; a missing selection writes the system clipboard
+     * @param text the text to encode; {@code null} is treated as empty
+     * @param maxBytes maximum UTF-8 payload size
+     */
+    public static Encoded encode(ClipboardSelection selection, String text, int maxBytes) {
+        return encode(text, selection == null ? CLIPBOARD_SELECTION : String.valueOf(selection.code()), maxBytes);
+    }
+
+    /**
+     * The request sequence for one selection's clipboard: {@code ESC ] 52 ; <selection> ; ? BEL}.
+     *
+     * <p>The terminal answers with the payload it holds, or not at all. Nothing else is written, so a
+     * session that never reads a clipboard writes nothing.</p>
+     *
+     * @param selection the selection to ask about; a missing selection reads the system clipboard
+     */
+    public static String request(ClipboardSelection selection) {
+        return PREFIX + (selection == null ? CLIPBOARD_SELECTION : String.valueOf(selection.code())) + ";" + READ_MARKER
+                + BEL;
+    }
+
+    /**
+     * Decodes one OSC 52 reply payload.
+     *
+     * @param selection the selection the session asked about
+     * @param data the reply's data, exactly as the decoder framed it: {@code <selection>;<payload>}
+     * @param maxBytes the largest decoded payload accepted
+     * @return the decoded outcome, never null
+     */
+    public static Decoded decode(ClipboardSelection selection, String data, int maxBytes) {
+        ClipboardSelection asked = selection == null ? ClipboardSelection.SYSTEM : selection;
+        int limit = Math.max(0, maxBytes);
+        String reply = data == null ? "" : data;
+        int separator = reply.indexOf(';');
+        if (separator < 0) {
+            return new Decoded.Invalid("the reply does not name a selection");
+        }
+        String name = reply.substring(0, separator);
+        if (name.length() > 1) {
+            return new Decoded.Invalid("the reply names more than one selection");
+        }
+        // An omitted selection is the protocol's default, which is the system clipboard. It matches
+        // only a session that asked about the system clipboard.
+        ClipboardSelection reported =
+                name.isEmpty() ? ClipboardSelection.SYSTEM : ClipboardSelection.of(name.charAt(0));
+        if (reported == null) {
+            return new Decoded.Invalid("the reply names no known selection");
+        }
+        if (reported != asked) {
+            return new Decoded.Invalid("the reply names the " + reported.token() + " selection");
+        }
+        String payload = reply.substring(separator + 1);
+        if (payload.equals(READ_MARKER)) {
+            // The terminal understood the question and cannot answer it.
+            return new Decoded.Refused();
+        }
+        if (payload.isEmpty()) {
+            // An empty selection: a successful read that reported no text.
+            return new Decoded.Text("", 0);
+        }
+        if (payload.length() > encodedLength(limit)) {
+            // Refused before allocating anything for a payload that cannot fit the limit anyway.
+            return new Decoded.Oversize(limit);
+        }
+        if (payload.length() % 4 != 0) {
+            // Base64 is written in whole four-character groups, padding included. Java's decoder
+            // would accept a short final group, but every conforming encoder - and so every
+            // terminal - pads, and a payload that is not what the protocol defines is not text this
+            // library can vouch for.
+            return new Decoded.Invalid("the payload is not padded base64");
+        }
+        byte[] bytes;
+        try {
+            bytes = Base64.getDecoder().decode(payload);
+        } catch (IllegalArgumentException notBase64) {
+            return new Decoded.Invalid("the payload is not base64");
+        }
+        if (bytes.length > limit) {
+            // The encoded bound is a whole group of three, so a payload that fits the bound can still
+            // decode to more bytes than the limit allows.
+            return new Decoded.Oversize(limit);
+        }
+        CharsetDecoder decoder = StandardCharsets.UTF_8
+                .newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        try {
+            CharBuffer text = decoder.decode(ByteBuffer.wrap(bytes));
+            return new Decoded.Text(text.toString(), bytes.length);
+        } catch (CharacterCodingException notUtf8) {
+            return new Decoded.Invalid("the payload is not UTF-8");
+        }
+    }
+
+    /**
+     * The selection field of a reply's data: everything before the first {@code ;}.
+     *
+     * <p>It is how a framed reply is attributed to the selection it answers for, without decoding the
+     * payload - including a reply the decoder refused to buffer in full.</p>
+     *
+     * @param data the reply's data or its leading characters
+     * @return the selection field, or an empty string when the data has no separator
+     */
+    public static String selectionField(String data) {
+        String reply = data == null ? "" : data;
+        int separator = reply.indexOf(';');
+        return separator < 0 ? "" : reply.substring(0, separator);
+    }
+
+    /**
+     * The largest payload that can encode {@code maxBytes} decoded bytes, excluding the selection
+     * field.
+     *
+     * <p>Base64 encodes three bytes as four characters, so the bound is one whole group of three
+     * rounded up. The bound is exact in one direction only: any payload no longer than this may
+     * still decode to more than {@code maxBytes} bytes, which the decoded-length check catches.</p>
+     *
+     * @param maxBytes the decoded byte limit
+     * @return the encoded character bound
+     */
+    public static int encodedLength(int maxBytes) {
+        int limit = Math.max(0, maxBytes);
+        return 4 * ((limit + 2) / 3);
+    }
+
+    /**
      * Encodes {@code text} for the requested selection.
      *
      * @param text clipboard text; {@code null} is treated as empty
@@ -108,6 +255,66 @@ public final class Osc52 {
             sequence = sequence == null ? "" : sequence;
             text = text == null ? "" : text;
             byteLength = Math.max(0, byteLength);
+        }
+    }
+
+    /**
+     * What one OSC 52 reply payload said.
+     *
+     * <p>Every outcome is a fact about the reply rather than an exception: a terminal that declines and
+     * one that answers with text it cannot vouch for are both ordinary answers to the same
+     * question.</p>
+     */
+    public sealed interface Decoded {
+
+        /**
+         * The text the terminal reported.
+         *
+         * @param text the decoded text, empty when the selection is empty
+         * @param byteLength the UTF-8 length of {@code text}
+         */
+        record Text(String text, int byteLength) implements Decoded {
+
+            /**
+             * Treats missing text as empty.
+             */
+            public Text {
+                text = text == null ? "" : text;
+                byteLength = Math.max(0, byteLength);
+            }
+        }
+
+        /** The terminal understood the question and cannot answer it. */
+        record Refused() implements Decoded {}
+
+        /**
+         * The payload could not be believed.
+         *
+         * @param detail what was wrong with it
+         */
+        record Invalid(String detail) implements Decoded {
+
+            /**
+             * Treats a missing detail as empty.
+             */
+            public Invalid {
+                detail = detail == null ? "" : detail;
+            }
+        }
+
+        /**
+         * The payload decoded to more than the limit allows.
+         *
+         * @param limitBytes the decoded byte limit that was exceeded
+         */
+        record Oversize(int limitBytes) implements Decoded {
+
+            /**
+             * Rejects a negative limit.
+             */
+            public Oversize {
+                limitBytes = Math.max(0, limitBytes);
+            }
         }
     }
 

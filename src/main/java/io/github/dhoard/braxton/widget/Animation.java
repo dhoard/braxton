@@ -25,21 +25,36 @@ package io.github.dhoard.braxton.widget;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
+import java.util.List;
 
 /**
  * Time-driven animation frames.
  *
  * <p>Frames are pure functions of the runtime's monotonic clock, so there is no per-widget timer,
  * thread, or executor. A view subscribes to ticks and passes the current time in.</p>
+ *
+ * <p>The methods here are the original fixed animations: the four-diamond {@link #spinner} and the
+ * {@link #shimmer} highlight. A spinner whose frames, cadence or style the application chooses is
+ * {@link Spinner}, which is also a component that owns its own interval; both select a frame with
+ * the same {@link Spinner#frameIndex} arithmetic, so the two cannot disagree about which frame a
+ * given time belongs to.</p>
  */
 public final class Animation {
 
-    private static final String[] SPINNER = {"\u25C7", "\u25C8", "\u25C6", "\u25C8"};
+    /** The legacy spinner's frames: four diamonds rehearsed in a quarter-second cadence. */
+    private static final List<String> SPINNER = List.of("\u25C7", "\u25C8", "\u25C6", "\u25C8");
+
+    /** How long one legacy spinner frame lasts, in nanoseconds. */
+    private static final long SPINNER_STEP_NANOS = 250_000_000L;
 
     private Animation() {}
 
     /**
      * A four-frame spinner advancing every 250 ms.
+     *
+     * <p>This is the original fixed spinner, kept identical for the callers that already use it:
+     * four diamond frames on a quarter-second cadence. Use {@link Spinner} for frames, cadence or
+     * style the application chooses.</p>
      *
      * @param nowNanos the current monotonic time, in nanoseconds
      * @param startedNanos the time the animation started, in nanoseconds
@@ -47,9 +62,8 @@ public final class Animation {
      * @return the frame for that time
      */
     public static StyledText spinner(long nowNanos, long startedNanos, Style style) {
-        long elapsedMillis = Math.max(0, (nowNanos - startedNanos) / 1_000_000L);
-        int frame = Math.floorMod(elapsedMillis / 250L, SPINNER.length);
-        return StyledText.of(SPINNER[frame], style);
+        String frame = Spinner.frameAt(SPINNER, SPINNER_STEP_NANOS, Spinner.elapsed(startedNanos, nowNanos));
+        return StyledText.of(frame, style);
     }
 
     /**
@@ -85,6 +99,6 @@ public final class Animation {
      * @return the frame count
      */
     public static int spinnerFrames() {
-        return SPINNER.length;
+        return SPINNER.size();
     }
 }

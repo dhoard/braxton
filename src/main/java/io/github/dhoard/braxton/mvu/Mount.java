@@ -39,6 +39,15 @@ import java.util.function.Supplier;
  * parent, so it is dispatched in the parent's scope and still reaches it when the same update
  * unmounts the child. Upward outputs stay values the parent decides about.</p>
  *
+ * <p>A mount is active while the parent declares its {@link #tree} node, whether or not the parent
+ * paints its {@link #view}. That is the keep-alive policy a page behind a tab or a pane behind a
+ * switch relies on: the child keeps its model, its scoped element ids and its subscriptions while
+ * another child is painted, so returning to it finds the same draft and a timer that is still
+ * running. Declaring no node is the explicit unmount: the child's scoped subscriptions and commands
+ * are cancelled, its element ids are released, and a later remount starts from {@link #initialize}
+ * again. Nothing is kept alive implicitly - the declaration is the whole policy, and a parent that
+ * stops declaring a node has decided to end that child.</p>
+ *
  * @param <P> the parent model type
  * @param <Msg> the parent message type
  * @param <Out> the parent output type

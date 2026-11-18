@@ -159,6 +159,21 @@ public final class Screen {
         }
     }
 
+    /**
+     * Replaces one cell's style, keeping its text, link and continuation flag.
+     *
+     * <p>Restyling is not painting: no half of a wide glyph is cleared and no column changes
+     * hands. A frame that marks a cell it has already painted uses this, so marking a caret cannot
+     * eat the glyph it sits on.</p>
+     */
+    public void restyle(int row, int col, Style style) {
+        if (!inside(row, col)) {
+            return;
+        }
+        Cell cell = cells[index(row, col)];
+        cells[index(row, col)] = new Cell(cell.text(), style == null ? Style.NONE : style, cell.link());
+    }
+
     /** A style with no background picks up the background already painted in the cell. */
     private Style inheritBackground(int row, int col, Style style) {
         Style safe = style == null ? Style.NONE : style;

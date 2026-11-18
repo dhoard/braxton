@@ -37,22 +37,30 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 /**
- * The packaging contract the README states for the shipped artifact: the bytecode target and
- * the absence of third-party references in the core.
+ * The packaging contract the README states for the shipped artifact: the bytecode target and the
+ * closed set of packages the core may reference.
  *
- * <p>{@code ArchitectureTest} checks the same rule over the source tree. This checks it over the
- * compiled classes the artifact is built from, so an undeclared dependency arriving without an import (a
- * generated source, a renamed package, a transitive type named in a signature) is still caught, and
- * it pins the documented bytecode version to what the build actually emits.</p>
+ * <p>The core references the JDK modules it uses, Braxton itself, and the one declared runtime
+ * dependency its markdown renderer is built on. Nothing else: a new library, a transitive type named
+ * in a signature or a generated type has to be added here deliberately, which is what keeps the
+ * artifact's documented dependency list true.</p>
+ *
+ * <p>{@code ArchitectureTest} checks the source rules that back this up. This checks the compiled
+ * classes the artifact is built from, so an undeclared dependency arriving without an import is
+ * still caught, and it pins the documented bytecode version to what the build actually emits.</p>
  */
 class PackagingContractTest {
 
     /** The README: "the build targets bytecode 69" (Java 25). */
     private static final int DOCUMENTED_MAJOR_VERSION = 69;
 
-    /** Packages the core may reference: the JDK modules it uses and Braxton itself. */
-    private static final List<String> ALLOWED_REFERENCES =
-            List.of("java/", "javax/", "org/w3c/", "org/xml/", "io/github/dhoard/");
+    /**
+     * Packages the core may reference: the JDK modules it uses, Braxton itself, and the CommonMark
+     * parser and its official extensions, which {@code Markdown} renders through and which no public
+     * API names.
+     */
+    private static final List<String> ALLOWED_REFERENCES = List.of(
+            "java/", "javax/", "org/w3c/", "org/xml/", "org/commonmark/", "org/nibor/autolink/", "io/github/dhoard/");
 
     private static final String CORE_ROOT = "io/github/dhoard/braxton/";
 
@@ -71,7 +79,7 @@ class PackagingContractTest {
     }
 
     @Test
-    void theCoreReferencesOnlyJdkAndOwnedCode() throws IOException, URISyntaxException {
+    void theCoreReferencesOnlyTheJdkOwnedCodeAndItsDeclaredParser() throws IOException, URISyntaxException {
         List<Path> classes = coreClasses();
         assertThat(classes).as("the core compiled for this run").isNotEmpty();
         for (Path path : classes) {
@@ -172,5 +180,32 @@ class PackagingContractTest {
 
     private static int readUnsigned(byte[] code, int at) {
         return ((code[at] & 0xFF) << 8) | (code[at + 1] & 0xFF);
+    }
+
+    /**
+     * The showcase the README documents is in the artifact, beside the core.
+     *
+     * <p>The parity examples live under {@code examples.parity}, outside the core's package, so the
+     * reference rules above do not cover them. This is the packaging half of the showcase's
+     * contract: the launcher's two public entry points are compiled into the same output tree the
+     * jar is built from, and the one resource a mounted phase demo reads is packaged with it.</p>
+     */
+    @Test
+    void theShowcaseAndItsResourcesArePackagedWithTheCore() throws IOException, URISyntaxException {
+        Path root = Path.of(Application.class
+                .getProtectionDomain()
+                .getCodeSource()
+                .getLocation()
+                .toURI());
+        for (String name : List.of(
+                "examples/parity/Showcase.class",
+                "examples/parity/SceneCatalog.class",
+                "examples/parity/WorkspaceDemo.class",
+                "examples/parity/WorkspaceDemo$Scene.class")) {
+            assertThat(root.resolve(name)).as("packaged %s", name).exists();
+        }
+        assertThat(PackagingContractTest.class.getResource("/examples/parity/markdown.md"))
+                .as("the projected document the markdown demo mounts")
+                .isNotNull();
     }
 }

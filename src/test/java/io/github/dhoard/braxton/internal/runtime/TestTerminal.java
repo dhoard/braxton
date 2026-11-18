@@ -54,6 +54,18 @@ public final class TestTerminal implements AutoCloseable {
     private volatile Size size;
     private final java.util.concurrent.atomic.AtomicLong resizeEpoch = new java.util.concurrent.atomic.AtomicLong();
     private volatile Runnable resizeCallback = () -> {};
+    private volatile Runnable onRelease = () -> {};
+    private volatile Runnable onReacquire = () -> {};
+    private volatile Runnable onSuspend = () -> {};
+    private volatile boolean foreground = true;
+    private volatile IOException releaseFailure;
+    private volatile IOException reacquireFailure;
+    private volatile IOException suspendFailure;
+    private final java.util.concurrent.atomic.AtomicInteger releases = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger reacquires =
+            new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger suspends = new java.util.concurrent.atomic.AtomicInteger();
+    private volatile Terminal.State state = Terminal.State.ACTIVE;
 
     public TestTerminal() {
         this(new Size(24, 80));
@@ -144,6 +156,34 @@ public final class TestTerminal implements AutoCloseable {
 
             public void enterRawMode() {}
 
+            public Terminal.State state() {
+                return state;
+            }
+
+            public void release() throws IOException {
+                if (releaseFailure != null) throw releaseFailure;
+                releases.incrementAndGet();
+                state = Terminal.State.RELEASED;
+                onRelease.run();
+            }
+
+            public void reacquire() throws IOException {
+                if (reacquireFailure != null) throw reacquireFailure;
+                reacquires.incrementAndGet();
+                state = Terminal.State.ACTIVE;
+                onReacquire.run();
+            }
+
+            public boolean foreground() {
+                return foreground;
+            }
+
+            public void suspend() throws IOException {
+                if (suspendFailure != null) throw suspendFailure;
+                suspends.incrementAndGet();
+                onSuspend.run();
+            }
+
             public long resizeEpoch() {
                 return resizeEpoch.get();
             }
@@ -157,6 +197,7 @@ public final class TestTerminal implements AutoCloseable {
                 input.end();
                 reader.close();
                 closed = true;
+                state = Terminal.State.CLOSED;
                 if (closeFailure != null) throw closeFailure;
             }
         };
@@ -216,6 +257,53 @@ public final class TestTerminal implements AutoCloseable {
 
     public void signalResize() {
         resizeCallback.run();
+    }
+
+    /** Runs inside {@code release()}, before the runtime continues, so a test can inspect the state. */
+    public void onRelease(Runnable observer) {
+        onRelease = observer;
+    }
+
+    /** Runs inside {@code reacquire()}, before the runtime continues. */
+    public void onReacquire(Runnable observer) {
+        onReacquire = observer;
+    }
+
+    /** Runs inside {@code suspend()}: the window in which the session is stopped. */
+    public void onSuspend(Runnable observer) {
+        onSuspend = observer;
+    }
+
+    public void failRelease(IOException failure) {
+        releaseFailure = failure;
+    }
+
+    public void failReacquire(IOException failure) {
+        reacquireFailure = failure;
+    }
+
+    public void failSuspend(IOException failure) {
+        suspendFailure = failure;
+    }
+
+    public void setForeground(boolean value) {
+        foreground = value;
+    }
+
+    public int releases() {
+        return releases.get();
+    }
+
+    public int reacquires() {
+        return reacquires.get();
+    }
+
+    public int suspends() {
+        return suspends.get();
+    }
+
+    public Terminal.State state() {
+        return state;
     }
 
     public String outputText() {

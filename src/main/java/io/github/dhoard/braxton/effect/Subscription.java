@@ -22,6 +22,7 @@
 
 package io.github.dhoard.braxton.effect;
 
+import io.github.dhoard.braxton.app.TerminalFacts;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.mvu.ComponentPath;
 import java.time.Duration;
@@ -70,6 +71,7 @@ public sealed interface Subscription<Msg> {
             case Interval<Msg> interval ->
                 new Interval<>(interval.id().scoped(path), interval.period(), interval.onTick());
             case Resize<Msg> resize -> new Resize<>(resize.id().scoped(path), resize.onResize());
+            case Facts<Msg> facts -> new Facts<>(facts.id().scoped(path), facts.onFacts());
             case Source<Msg> source ->
                 new Source<>(source.id().scoped(path), source.configuration(), source.start(), source.mapper());
         };
@@ -142,6 +144,14 @@ public sealed interface Subscription<Msg> {
     /**
      * Emits a message after every {@code period}; the payload is the emission time in nanos.
      *
+     * <p>The period is a monotonic duration, not a wall-clock deadline: it keeps its cadence across a
+     * session that released its terminal for a child process or a suspend. What pauses with the
+     * terminal is publishing - a tick that elapses while somebody else owns the screen is recorded
+     * once per interval, and a resume delivers one tick for each interval that had one, so an
+     * application sees its period continue rather than a burst of queued ticks. A {@link Source} keeps
+     * emitting: its values come from code the session does not schedule, and dropping one would lose a
+     * fact the application never hears about again.</p>
+     *
      * @param id the source identity, scoped by the owning mount
      * @param period the interval between emissions; must be positive and fit in nanoseconds
      * @param onTick maps the emission time in nanoseconds to a message, or to null to decline it
@@ -204,6 +214,40 @@ public sealed interface Subscription<Msg> {
         public <Msg2> Subscription<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
             Objects.requireNonNull(mapper, "mapper");
             return new Resize<>(id, size -> mapMessage(onResize.apply(size), mapper));
+        }
+    }
+
+    /**
+     * Emits the session's terminal facts when they start and whenever they change.
+     *
+     * <p>A colour profile or a reported background colour is a property of the session, not of any
+     * component, so this is how a component learns one it did not ask for. The current facts arrive
+     * once when the source starts, which is also the only emission before anything changes; a
+     * declared source that stays declared is not re-emitted for an unchanged fact.</p>
+     *
+     * @param id the source identity, scoped by the owning mount
+     * @param onFacts maps the facts to a message, or to null to decline them
+     * @param <Msg> the component message type this source emits
+     */
+    record Facts<Msg>(SubscriptionId id, Function<TerminalFacts, Msg> onFacts) implements Subscription<Msg> {
+
+        /**
+         * Rejects a null identity or mapper.
+         */
+        public Facts {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(onFacts, "onFacts");
+        }
+
+        @Override
+        public Object configuration() {
+            return "terminal-facts";
+        }
+
+        @Override
+        public <Msg2> Subscription<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
+            return new Facts<>(id, facts -> mapMessage(onFacts.apply(facts), mapper));
         }
     }
 
@@ -284,6 +328,18 @@ public sealed interface Subscription<Msg> {
 
     static <Msg> Subscription<Msg> resize(SubscriptionId id, Function<Size, Msg> onResize) {
         return new Resize<>(id, onResize);
+    }
+
+    /**
+     * Emits the session's terminal facts when they start and whenever they change.
+     *
+     * @param <Msg> the component message type
+     * @param id the source identity, scoped by the owning mount
+     * @param onFacts maps the facts to a message
+     * @return the source
+     */
+    static <Msg> Subscription<Msg> facts(SubscriptionId id, Function<TerminalFacts, Msg> onFacts) {
+        return new Facts<>(id, onFacts);
     }
 
     static <Msg> Subscription<Msg> source(

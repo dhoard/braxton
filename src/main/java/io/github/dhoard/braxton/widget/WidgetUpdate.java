@@ -22,7 +22,9 @@
 
 package io.github.dhoard.braxton.widget;
 
+import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.mvu.Update;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
@@ -39,6 +41,10 @@ import java.util.function.UnaryOperator;
  * <p>Keeping the rule here rather than in each widget means the three widgets cannot disagree about
  * it, and the null contract is stated once: both the model and the message are required, and the
  * reduction runs only after both have been checked.</p>
+ *
+ * <p>A widget that has to return a command derives it from the reduced state through {@code
+ * commands}: a countdown's timestamp request is a property of being armed, not of the gesture that
+ * armed it, so the two rules cannot drift apart either.</p>
  */
 final class WidgetUpdate {
 
@@ -54,15 +60,39 @@ final class WidgetUpdate {
      */
     static <M, Msg, O> Update<M, Msg, O> settled(
             M model, Msg message, Function<Msg, WidgetResult<M, O>> reduce, UnaryOperator<M> refocus) {
+        return settled(model, message, reduce, refocus, state -> Command.none());
+    }
+
+    /**
+     * Applies {@code reduce} to {@code message} and returns the inert command the reduced state
+     * requires.
+     *
+     * @param model the incoming model; required
+     * @param message the message being applied; required
+     * @param reduce the widget's reducer, bound to {@code model}
+     * @param refocus re-applies the incoming focus to the reduced state
+     * @param commands derives the command the reduced model requires
+     */
+    static <M, Msg, O> Update<M, Msg, O> settled(
+            M model,
+            Msg message,
+            Function<Msg, WidgetResult<M, O>> reduce,
+            UnaryOperator<M> refocus,
+            Function<M, Command<Msg>> commands) {
         Objects.requireNonNull(model, "model");
         Objects.requireNonNull(message, "message");
+        Objects.requireNonNull(commands, "commands");
         WidgetResult<M, O> result = reduce.apply(message);
-        M next = refocus.apply(result.state());
+        M reduced = refocus.apply(result.state());
         // An action that changed nothing keeps the incoming instance: the view is a pure function of
-        // the model, so the runtime's unchanged-reference repaint rule stays meaningful.
-        if (next.equals(model)) {
-            next = model;
-        }
-        return result.intent() == null ? Update.next(next) : Update.emit(next, result.intent());
+        // the model, so the runtime's unchanged-reference repaint rule stays meaningful. It issues
+        // nothing either, because a command derived from a state that did not move is the same work
+        // the previous message already asked for.
+        boolean unchanged = reduced.equals(model);
+        M next = unchanged ? model : reduced;
+        Command<Msg> command = unchanged ? Command.none() : Objects.requireNonNull(commands.apply(next), "command");
+        return result.intent() == null
+                ? Update.next(next, command)
+                : new Update<>(next, command, List.of(result.intent()));
     }
 }

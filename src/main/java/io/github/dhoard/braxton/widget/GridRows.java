@@ -52,6 +52,32 @@ final class GridRows {
     private GridRows() {}
 
     /**
+     * The columns one cell needs: its widest line, with tab stops expanded the way the row is
+     * painted.
+     *
+     * <p>A cell that paints one row needs the columns of that row; one that paints several needs as
+     * many as its widest one, because the grid pads the cell to one width for all of them. Expansion
+     * is {@link TabStops}'s, so a measured column and a displayed column cannot disagree about where
+     * a tab stop is. This is the measurement {@link Table} and {@link DataTable} share; a table that
+     * flattens a cell to one row first measures through it too, and so charges the same columns the
+     * same way.</p>
+     *
+     * @param cell the cell to measure; null is empty
+     * @return the columns it occupies, never negative
+     */
+    static int widest(StyledText cell) {
+        if (cell == null || cell.isEmpty()) {
+            return 0;
+        }
+        StyledText expanded = TabStops.expand(cell);
+        int width = 0;
+        for (String line : expanded.plainText().split("\n", -1)) {
+            width = Math.max(width, TextMeasure.columns(line));
+        }
+        return width;
+    }
+
+    /**
      * The cells a row has painted so far, kept as the one cluster a following cell can join: the
      * trailing cluster of the row as it is painted, and the columns that cluster occupies.
      */

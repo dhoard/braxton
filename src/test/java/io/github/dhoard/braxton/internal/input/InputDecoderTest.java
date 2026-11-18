@@ -28,6 +28,7 @@ import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.InputOptions;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.Modifiers;
+import io.github.dhoard.braxton.input.TerminalReply;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -472,15 +473,19 @@ class InputDecoderTest {
     }
 
     @Test
-    void wheelEventsAreMappedAndOtherMouseEventsIgnored() throws IOException {
-        assertThat(((InputEvent.KeyInput) read("\u001B[<64;10;5M").orElseThrow()).key())
-                .isEqualTo(Key.WHEEL_UP);
-        assertThat(read("\u001B[<0;10;5M")).isEmpty();
+    void mouseReportsDecodeToPointerEventsRatherThanKeys() throws IOException {
+        InputEvent event = read("\u001B[<64;10;5M").orElseThrow();
+        assertThat(event).isInstanceOf(InputEvent.PointerInput.class);
+        assertThat(((InputEvent.PointerInput) event).pointer().button())
+                .isEqualTo(io.github.dhoard.braxton.input.PointerButton.WHEEL_UP);
+        // A press is a report of its own now: it is routed to the element under it rather than
+        // dropped, and it is never a keystroke.
+        assertThat(read("\u001B[<0;10;5M").orElseThrow()).isInstanceOf(InputEvent.PointerInput.class);
     }
 
     @Test
-    void ignoredMouseEventsDoNotLookLikeEndOfInput() throws IOException {
-        ByteAtATime stream = new ByteAtATime("\u001B[<0;10;5M\u001B[<0;10;5ma".getBytes(StandardCharsets.UTF_8));
+    void ignoredMouseReportsDoNotLookLikeEndOfInput() throws IOException {
+        ByteAtATime stream = new ByteAtATime("\u001B[<0;10;0M\u001B[<0;10;0Ma".getBytes(StandardCharsets.UTF_8));
         InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(stream));
         InputEvent.KeyInput key = (InputEvent.KeyInput) decoder.read().orElseThrow();
         assertThat(key.text()).isEqualTo("a");
@@ -500,12 +505,14 @@ class InputDecoderTest {
 
     @Test
     void skippedSequencesLeaveTheFollowingInputIntact() throws IOException {
-        // An unsupported CSI with modifiers, an unknown numeric CSI, an X10 click whose three
-        // payload bytes must be consumed, and an SGR click are all skipped; the printable input,
-        // the paste and the text after it must arrive unchanged and in order.
-        InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(
-                new ByteAtATime("\u001B[1;5A\u001B[99~\u001B[M!!!\u001B[<0;10;5Mx\u001B[200~p\u001B[201~y"
-                        .getBytes(StandardCharsets.UTF_8))));
+        // A CSI with modifiers that names no key, an unknown numeric CSI, an X10 report whose three
+        // payload bytes must be consumed even though they name no cell, and a malformed SGR report
+        // are all skipped; the printable input, the paste and the text after it must arrive
+        // unchanged and in order.
+        InputDecoder decoder =
+                new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(
+                        "\u001B[1;5E\u001B[99;5~\u001B[99~\u001B[M\u0000\u0000\u0000\u001B[<0;10;0Mx\u001B[200~p\u001B[201~y"
+                                .getBytes(StandardCharsets.UTF_8))));
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("x");
         assertThat(decoder.read().orElseThrow()).isEqualTo(new InputEvent.PasteInput("p"));
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("y");
@@ -607,5 +614,101 @@ class InputDecoderTest {
                                 new ByteArrayInputStream(new byte[0])))
                         .read())
                 .isEmpty();
+    }
+
+    // ── replies to queries ──────────────────────────────────────────────────
+
+    /** The framed reply one event carries, or a failure when the event is not a reply. */
+    private static TerminalReply reply(String bytes) throws IOException {
+        InputEvent event = read(bytes).orElseThrow();
+        assertThat(event).isInstanceOf(InputEvent.TerminalReplyInput.class);
+        return ((InputEvent.TerminalReplyInput) event).reply();
+    }
+
+    @Test
+    void anOscColourReplyIsFramedWithEitherTerminator() throws IOException {
+        assertThat(reply("\u001B]11;rgb:1010/2020/3030\u0007"))
+                .isEqualTo(new TerminalReply.OperatingSystem(11, "rgb:1010/2020/3030"));
+        assertThat(reply("\u001B]11;rgb:1010/2020/3030\u001B\\"))
+                .as("ST terminates an OSC exactly as BEL does")
+                .isEqualTo(new TerminalReply.OperatingSystem(11, "rgb:1010/2020/3030"));
+    }
+
+    @Test
+    void anOscPayloadNeverArrivesAsText() throws IOException {
+        InputDecoder decoder = new InputDecoder(
+                TestReaders.utf8(new ByteAtATime("\u001B]52;c;aGVsbG8=\u0007x".getBytes(StandardCharsets.UTF_8))));
+        assertThat(decoder.read().orElseThrow())
+                .as("the clipboard reply is framed, so its base64 payload is not typed")
+                .isEqualTo(new InputEvent.TerminalReplyInput(new TerminalReply.OperatingSystem(52, "c;aGVsbG8=")));
+        assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text())
+                .as("the keystroke after the reply is still a keystroke")
+                .isEqualTo("x");
+    }
+
+    @Test
+    void aDeviceControlReplyCarriesItsHeaderAndData() throws IOException {
+        assertThat(reply("\u001BP>|xterm(390)\u001B\\"))
+                .as("XTVERSION")
+                .isEqualTo(new TerminalReply.DeviceControl(">|", "xterm(390)"));
+        assertThat(reply("\u001BP1+r5463=54727565436F6C6F72\u001B\\"))
+                .as("a termcap capability the terminal has")
+                .isEqualTo(new TerminalReply.DeviceControl("1+r", "5463=54727565436F6C6F72"));
+        assertThat(reply("\u001BP0+r524742\u001B\\"))
+                .as("a termcap capability the terminal does not have")
+                .isEqualTo(new TerminalReply.DeviceControl("0+r", "524742"));
+    }
+
+    @Test
+    void aControlReplyIsFramedWithoutBeingInterpreted() throws IOException {
+        assertThat(reply("\u001B[4;9R")).isEqualTo(new TerminalReply.Control("4;9", 'R'));
+        assertThat(reply("\u001B[?2004;1$y")).isEqualTo(new TerminalReply.Control("?2004;1$", 'y'));
+    }
+
+    @Test
+    void theIntroducerOfAnUnfinishedReplyStaysTheKeystrokeItWas() throws IOException {
+        assertThat(((InputEvent.KeyInput) read("\u001B]").orElseThrow()).key())
+                .as("a lone ESC ] is still Alt+]")
+                .isEqualTo(Key.of("]").with(Modifiers.ALT));
+        InputEvent paste = read("\u001B]x").orElseThrow();
+        assertThat(paste)
+                .as("a byte that cannot begin an OSC leaves the pair a keystroke")
+                .isInstanceOf(InputEvent.KeyInput.class);
+        assertThat(((InputEvent.KeyInput) paste).key()).isEqualTo(Key.of("]").with(Modifiers.ALT));
+
+        assertThat(((InputEvent.KeyInput) read("\u001BP").orElseThrow()).key())
+                .as("a lone ESC P is still Alt+P")
+                .isEqualTo(Key.of("p").with(Modifiers.ALT));
+    }
+
+    @Test
+    void aStringReplyThatNeverEndsIsBoundedAndDropped() throws IOException {
+        StringBuilder overlong = new StringBuilder("\u001B]11;");
+        overlong.append("0".repeat(InputDecoder.MAX_REPLY_CHARACTERS + 16));
+        overlong.append("\u0007z");
+        InputDecoder decoder = new InputDecoder(
+                TestReaders.utf8(new ByteAtATime(overlong.toString().getBytes())));
+
+        InputEvent after = decoder.read().orElseThrow();
+        assertThat(after)
+                .as("an over-long reply is consumed and dropped, so the key after it still arrives")
+                .isInstanceOf(InputEvent.KeyInput.class);
+        assertThat(((InputEvent.KeyInput) after).text()).isEqualTo("z");
+    }
+
+    @Test
+    void aCancelledStringReplyDeliversNothing() throws IOException {
+        InputDecoder decoder = new InputDecoder(
+                TestReaders.utf8(new ByteAtATime("\u001B]11;rgb:0/0/0\u0018z".getBytes(StandardCharsets.UTF_8))));
+        assertThat(decoder.read().orElseThrow())
+                .as("CAN cancels the string, so nothing is reported for it")
+                .isEqualTo(InputEvent.KeyInput.of(Key.of("z"), "z"));
+    }
+
+    @Test
+    void aReplyRequestBodyThatIsNotADocumentedShapeIsNotAReply() throws IOException {
+        assertThat(read("\u001B[1;2Rx").orElseThrow(IllegalStateException::new))
+                .as("a cursor-shaped report is framed; what it means is the runtime's decision")
+                .isEqualTo(new InputEvent.TerminalReplyInput(new TerminalReply.Control("1;2", 'R')));
     }
 }

@@ -64,6 +64,23 @@ Distributed under the Unicode License V3. The full license text is included
 with the distribution at META-INF/braxton/unicode-16.0.0/LICENSE.txt.
 
 ================================================================================
+RUNTIME DEPENDENCY (NOT BUNDLED)
+================================================================================
+
+CommonMark Java 0.32.0
+Copyright (c) 2015-2026, Robin Stocker and contributors
+BSD 2-Clause License - https://github.com/commonmark/commonmark-java/blob/main/LICENSE.txt
+
+The modules `commonmark`, `commonmark-ext-gfm-tables`, `commonmark-ext-gfm-strikethrough`,
+`commonmark-ext-task-list-items` and `commonmark-ext-autolink` are the parser behind the
+`Markdown` widget. They are not included in the Braxton jar; a launcher places them on the
+runtime classpath beside it, which is what `target/showcase-lib` is for.
+
+`commonmark-ext-autolink` depends on Autolink 0.12.0
+Copyright (c) 2015-2024, Robin Stocker
+MIT License - https://github.com/robinst/autolink-java
+
+================================================================================
 OPTIONAL EXAMPLE DEPENDENCY (NOT BUNDLED)
 ================================================================================
 

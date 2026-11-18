@@ -348,6 +348,24 @@ class EffectRunnerTest {
     }
 
     @Test
+    void aTimestampRequestDeliversTheRuntimeClockOnceWithoutRegisteringAnEffect() throws Exception {
+        RuntimeServices clock = new RuntimeServices(() -> 42_000_000L, Runnable::run, timers, message -> {});
+        EffectRunner<String> runner = new EffectRunner<>(mailbox, clock, clipboard, 0);
+        runner.bindOwner(Thread.currentThread());
+        runner.interpret(Command.monotonicTime(reading -> "now:" + reading));
+        assertThat(nextMessage()).isEqualTo("now:42000000");
+        assertThat(mailbox.size()).as("exactly one reading").isZero();
+        assertThat(timers.pending()).as("an immediate read schedules nothing").isZero();
+        assertThat(runner.quitRequested()).isFalse();
+    }
+
+    @Test
+    void aTimestampRequestThatDeclinesItsReadingDeliversNothing() {
+        runner.interpret(Command.monotonicTime(reading -> null));
+        assertThat(mailbox.size()).isZero();
+    }
+
+    @Test
     void timersWithNoPendingWorkReportZero() {
         assertThat(timers.pending()).isZero();
         assertThat(Timers.system()).isNotNull();

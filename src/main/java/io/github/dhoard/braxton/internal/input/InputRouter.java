@@ -25,6 +25,8 @@ package io.github.dhoard.braxton.internal.input;
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +49,13 @@ import java.util.Optional;
  * does not own focus contributes neither its local bindings nor its input handler, even when that
  * element is the scope itself (a single-widget view used as the root, or as the topmost modal
  * layer).</p>
+ *
+ * <p>Only an activating key event - a press or a repeat - runs bindings, a focused element's input
+ * handler, or text insertion. A key release carries the same key, modifiers and associated text as
+ * the press it ends, so deciding by kind is what keeps a key-up from firing a shortcut or typing a
+ * second character. Releases and the terminal's own notifications reach the ancestor interceptors,
+ * which are the full-event hook; they are enough for an application that wants to observe them.
+ * </p>
  */
 public final class InputRouter {
 
@@ -57,13 +66,19 @@ public final class InputRouter {
         if (root == null || event == null) {
             return Optional.empty();
         }
-        View<Msg> scope = modalScope(root);
+        // Presentation wrappers reserve nothing, paint nothing of their own and consume nothing, so
+        // routing starts inside them: a root that declares its terminal intent around the scene is
+        // still the scene as far as a key is concerned.
+        View<Msg> scope = modalScope(unwrap(root));
         List<View<Msg>> path = focusPath(scope);
         if (path == null) {
             path = List.of(scope);
         }
+        // A release reports the press's content but is not that press; nothing a key does on the
+        // way down may run on the way up.
+        boolean activating = !(event instanceof InputEvent.KeyInput key) || key.activates();
 
-        if (event instanceof InputEvent.KeyInput keyInput) {
+        if (event instanceof InputEvent.KeyInput keyInput && activating) {
             Optional<Msg> captured = matchCapture(path, keyInput.key());
             if (captured.isPresent()) {
                 return captured;
@@ -76,7 +91,7 @@ public final class InputRouter {
         }
 
         View.Focused<Msg> focused = focusedNode(path);
-        if (focused != null) {
+        if (focused != null && activating) {
             if (event instanceof InputEvent.KeyInput keyInput) {
                 Optional<Msg> local = match(focused.bindings(), keyInput.key());
                 if (local.isPresent()) {
@@ -89,11 +104,132 @@ public final class InputRouter {
             }
         }
 
-        Optional<Msg> bubble = matchBubble(path, event);
-        if (bubble.isPresent()) {
-            return bubble;
+        if (activating) {
+            Optional<Msg> bubble = matchBubble(path, event);
+            if (bubble.isPresent()) {
+                return bubble;
+            }
         }
         return Optional.empty();
+    }
+
+    /**
+     * The path a pointer report's observers are offered it on.
+     *
+     * <p>A report that hit an element is observed from the root of the tree down to that element, so
+     * an observer wrap around the whole application sees pointer input wherever it lands - including
+     * inside a modal layer, which is a route of its own for keys but not for a report that has
+     * already been hit-tested. A report that hit nothing is observed from the root down to the
+     * topmost modal scope, and then along that scope's focus path, which is where a key with nothing
+     * focused would go.</p>
+     *
+     * @param root the view the frame was painted from
+     * @param target the element the report hit, or null when it hit none
+     * @param <Msg> the root message type
+     * @return the path, at least one element
+     */
+    static <Msg> List<View<Msg>> observerPath(View<Msg> root, ElementId target) {
+        if (target != null) {
+            List<View<Msg>> path = pathTo(root, target);
+            if (path != null) {
+                return path;
+            }
+        }
+        View<Msg> scope = modalScope(root);
+        List<View<Msg>> ancestors = identityPath(root, scope);
+        if (ancestors == null) {
+            return List.of(root);
+        }
+        List<View<Msg>> within = focusPath(scope);
+        if (within == null || within.size() < 2) {
+            return ancestors;
+        }
+        List<View<Msg>> path = new ArrayList<>(ancestors);
+        path.addAll(within.subList(1, within.size()));
+        return List.copyOf(path);
+    }
+
+    /** The path from a root to one of its subtrees, compared by identity, or null. */
+    private static <Msg> List<View<Msg>> identityPath(View<Msg> root, View<Msg> target) {
+        if (root == target) {
+            List<View<Msg>> path = new ArrayList<>(8);
+            path.add(root);
+            return path;
+        }
+        if (root instanceof View.Sized<Msg> sized) {
+            List<View<Msg>> built = identityPath(sized.build().apply(Size.EMPTY), target);
+            if (built != null) {
+                List<View<Msg>> path = new ArrayList<>(built.size() + 1);
+                path.add(root);
+                path.addAll(built);
+                return path;
+            }
+        }
+        for (View<Msg> child : root.children()) {
+            List<View<Msg>> found = identityPath(child, target);
+            if (found != null) {
+                List<View<Msg>> path = new ArrayList<>(found.size() + 1);
+                path.add(root);
+                path.addAll(found);
+                return path;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The last path to an element with this focus identity, in paint order.
+     *
+     * <p>A focus identity is meant to be unique within a scope, and a mount scopes the identities of
+     * the component it owns, so the first match is normally the only one. Taking the last is what
+     * keeps a duplicated identity resolving to the element painted on top, which is the one a
+     * pointer could actually have hit.</p>
+     *
+     * @param root the view the frame was painted from
+     * @param id the focus identity to find
+     * @param <Msg> the root message type
+     * @return the path, or null when no element declares that identity
+     */
+    static <Msg> List<View<Msg>> pathTo(View<Msg> root, ElementId id) {
+        List<View<Msg>> found = new ArrayList<>();
+        pathTo(root, id, new ArrayList<>(), found);
+        return found.isEmpty() ? null : found;
+    }
+
+    private static <Msg> void pathTo(View<Msg> view, ElementId id, List<View<Msg>> path, List<View<Msg>> found) {
+        path.add(view);
+        if (view instanceof View.Focused<Msg> focused && focused.id().equals(id)) {
+            found.clear();
+            found.addAll(path);
+        }
+        if (view instanceof View.Sized<Msg> sized) {
+            pathTo(sized.build().apply(Size.EMPTY), id, path, found);
+        }
+        for (View<Msg> child : view.children()) {
+            pathTo(child, id, path, found);
+        }
+        path.remove(path.size() - 1);
+    }
+
+    /**
+     * Every message the ancestor interceptors of a path report for one event, outermost first.
+     *
+     * <p>This is the pointer observer hook: a report always reaches the element under it, so its
+     * observers add messages instead of consuming it.</p>
+     *
+     * @param path the path to the target, or to the scope when nothing was hit
+     * @param event the event to offer
+     * @param <Msg> the message type
+     * @return the messages, empty when no interceptor reported one
+     */
+    static <Msg> List<Msg> observe(List<View<Msg>> path, InputEvent event) {
+        List<Msg> messages = new ArrayList<>(1);
+        for (View<Msg> node : path) {
+            if (node instanceof View.Keyed<Msg> keyed) {
+                keyed.intercept().handle(event).ifPresent(messages::add);
+            }
+        }
+        return messages;
     }
 
     /** Restricts routing to the topmost modal layer declared anywhere in the tree. */
@@ -121,6 +257,27 @@ public final class InputRouter {
         return null;
     }
 
+    /**
+     * The same view with the pure-presentation wrappers removed.
+     *
+     * <p>{@link View.CursorAt} and {@link View.Presentation} carry intent, not structure: neither
+     * changes what a key does or where a caret goes, and both are documented as transparent to
+     * layout. Routing treats them the same way, so wrapping a scene in a session intent cannot stop
+     * the scene's own bindings from matching when nothing is focused.</p>
+     */
+    private static <Msg> View<Msg> unwrap(View<Msg> view) {
+        View<Msg> current = view;
+        while (true) {
+            if (current instanceof View.Presentation<Msg> presented) {
+                current = presented.child();
+            } else if (current instanceof View.CursorAt<Msg> cursor) {
+                current = cursor.child();
+            } else {
+                return current;
+            }
+        }
+    }
+
     /** Path from the scope to the focused element, or null when nothing is focused. */
     private static <Msg> List<View<Msg>> focusPath(View<Msg> scope) {
         return findFocus(scope, new ArrayList<>());
@@ -130,6 +287,15 @@ public final class InputRouter {
         path.add(view);
         if (view instanceof View.Focused<Msg> focused && focused.focused()) {
             return path;
+        }
+        if (view instanceof View.Sized<Msg> sized) {
+            // A size-aware subtree has no child until it is given a geometry, so routing builds it
+            // for an empty one: the structure a handler and its bindings live in does not depend on
+            // the size, and a layout already asks the same builder for zero columns while measuring.
+            List<View<Msg>> built = findFocus(sized.build().apply(Size.EMPTY), path);
+            if (built != null) {
+                return built;
+            }
         }
         for (View<Msg> child : view.children()) {
             List<View<Msg>> found = findFocus(child, path);

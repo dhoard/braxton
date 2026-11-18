@@ -17,10 +17,87 @@ public interface specifications, without consulting third-party implementation s
 - [Monotonic time](https://pubs.opengroup.org/onlinepubs/9799919799/functions/clock_gettime.html)
 - [Signal actions](https://man7.org/linux/man-pages/man2/sigaction.2.html)
 - [POSIX asynchronous signal safety](https://pubs.opengroup.org/onlinepubs/9799919799/functions/V2_chap02.html)
+- [POSIX terminal session and foreground process group](https://pubs.opengroup.org/onlinepubs/9799919799/functions/tcgetpgrp.html)
+  and [job-control signals](https://pubs.opengroup.org/onlinepubs/9799919799/functions/tcsetpgrp.html)
+  — `tcgetpgrp`/`getpgrp` for "is this group the terminal's foreground", and `SIGTSTP`/`SIGCONT`
+  with the rule that a stop signal is discarded for an orphaned process group. Consulted 2026-11-16.
+- [POSIX kill](https://pubs.opengroup.org/onlinepubs/9799919799/functions/kill.html) — `kill(0, sig)`
+  addresses the caller's process group, which is what a foreground job stop means.
 - [Terminal dimensions](https://man7.org/linux/man-pages/man2/TIOCGWINSZ.2const.html)
 - [Java 25 FFM](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/foreign/package-summary.html)
 - Target operating-system C headers for declarations, layouts and constants, including the
   [Apple terminal ioctl declarations](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/ttycom.h).
+
+The Java keyboard decoder (`internal/input/InputDecoder.java`) is documented separately from the C
+service above. It was written against these public protocol specifications, not against another
+toolkit's implementation:
+
+- [Kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) — the `CSI ... u` key
+  form and its modifier, event-type, alternate-key and associated-text fields; the progressive
+  enhancement flags; the `CSI = flags ; mode u`, `CSI > flags u`, `CSI < number u` and `CSI ? u`
+  query/push/pop sequences; and the functional-key number table. Revision consulted 2026-11-16; the
+  protocol has no version number, so the page itself is the reference.
+- The same specification's functional-key encoding and default-parameter rules were rechecked
+  on 2026-11-17 for F2's parameterless `CSI Q` form: when modifiers are absent, the functional
+  letter form omits both parameters. The decoder accepts this form alongside `SS3 Q`, `CSI 12 ~`
+  and parameterized reports. A user-requested comparison with Bubble Tea's cached Ultraviolet
+  key table identified this missing form; the correction follows the public protocol rule and
+  does not copy or translate toolkit implementation code.
+- [xterm control sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html) — extended mode
+  1004 focus reporting (`CSI ? 1004 h`/`l`) and its `CSI I`/`CSI O` notifications; SGR mouse and
+  legacy CSI/SS3 functional-key forms, which the decoder already handled.
+
+The Java cursor presenter (`internal/render/CursorPresenter.java` and the cursor sequences in
+`AnsiEncoder`) is documented against the same control-sequence reference:
+
+- [xterm control sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html) — `CSI Ps SP q`
+  Set Cursor Style (DECSCUSR), including xterm's steady and bar parameters (`Ps` 2, 4 and 6) beyond
+  the VT520 table; `CSI ? 25 h`/`l` cursor visibility; `CSI Ps ; Ps H` absolute positioning; and the
+  dynamic-colour controls `OSC 12 ; Pt ST` (text cursor colour, specified as for `XParseColor`, which
+  is why the emitted form is `rgb:rr/gg/bb`) and `OSC 112 ST` (reset text cursor colour). Revision
+  consulted 2026-11-16.
+
+The Java terminal-query engine (`internal/runtime/TerminalQueries.java`) and the reply framing in
+`internal/input/InputDecoder.java` are documented against these public specifications:
+
+- [xterm control sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html) — Device Status
+  Report (`CSI 6 n`) and its `CSI Pl ; Pc R` answer; DECRQM (`CSI ? Ps $ p`) and its
+  `CSI ? Ps ; Pm $ y` answer with the documented values 0-4; XTVERSION (`CSI > Ps q`) and its
+  `DCS > | text ST` answer; XTGETTCAP (`DCS + q Pt ST`) and its `DCS 1 + r Pt ST` /
+  `DCS 0 + r Pt ST` answers, where `Pt` is `hex name [= hex value]`; and the dynamic-colour reports
+  `OSC 10`, `OSC 11` and `OSC 12`, whose answer is an X11 colour specification or `?`. Strings are
+  terminated by `ST` or `BEL`; `CAN` and `SUB` cancel them. Consulted 2026-11-16; the page carries
+  no stable revision marker, so the date is the record.
+- [X11 `XParseColor`](https://www.x.org/releases/X11R7.7/doc/man/man3/XParseColor.3.xhtml) — the
+  `rgb:<red>/<green>/<blue>` form with one to four hexadecimal digits per channel, and the `#RGB`,
+  `#RRGGBB` and `#RRRRGGGGBBBB` forms. A short channel is scaled to eight bits.
+- [no-color.org](https://no-color.org/) — `NO_COLOR`, when present and not an empty string, disables
+  colour output whatever its value.
+
+The Java terminal presenter (`internal/runtime/TerminalPresenter.java` and the presentation
+sequences in `AnsiEncoder`) and the program-status query are documented against these public
+specifications:
+
+- [xterm control sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html) — `OSC 2 ; Pt ST`
+  (window title); XTPUSHTITLE/XTPOPTITLE (`CSI 22 ; Ps t` and `CSI 23 ; Ps t`) for saving and
+  restoring the title a session replaced; the dynamic-colour controls `OSC 10`, `OSC 11` and
+  `OSC 12` and their reset forms `OSC 110`, `OSC 111` and `OSC 112`; and the taskbar progress form
+  `OSC 9 ; 4 ; state ; value`. Revision consulted 2026-11-16; the page carries no stable revision
+  marker, so the date is the record.
+- [Program Status Protocol](https://www.superlogical.com/rex/docs/build/program-status) — revision
+  0.4, dated 2026-10-10 in its own revision history: `OSC 7501 ; pairs ST` with the `key=value`
+  grammar and the value character set, the states `idle`, `working`, `done`, `blocked`, `error` and
+  the non-state `clear`, the blocked kinds `permission`, `question` and `auth`, base64 UTF-8 for
+  `title` and `msg`, the record id grammar and depth, feature detection
+  `OSC 7501 ; ? ST` with its `states=` and `kinds=` lists and their fixed defaults, and the limits a
+  report must respect (4096-byte sequence, 16-byte key, 2732/2048-byte `msg`, 256/192-byte `title`,
+  32-byte `app`, 128-byte id). This library writes `ST` as the string terminator, as the
+  specification allows, and bounds every field before it is encoded.
+
+The query allowlist is deliberately closed: `RGB`, `Tc`, `TN`, `Co` and `Ms`. Every other termcap
+name is refused by `TerminalQuery.Termcap`, so no reply can be interpreted for a capability whose
+meaning this project has not decided. `RGB` and `Tc` are the two boolean capabilities that mean
+"24-bit colour"; a terminal that answers either one widens the session's colour profile.
 
 The sibling Bubble Tea project's README was consulted for general MVU behavior and its
 `go.mod` for dependency boundaries. Its implementation files were not used. Braxton retains
@@ -28,7 +105,22 @@ its own typed component tree, views, routing, effects, subscriptions and runtime
 This provenance record describes this replacement; it does not certify a formally separated
 clean-room process or retrospectively establish provenance for all existing project files.
 
-The ABI version is 2 (ABI 2 replaced `bt_write` with `bt_write_some`). `bt_open` duplicates the attached input descriptor and reopens the
+The ABI version is 3. ABI 2 replaced `bt_write` with `bt_write_some`; ABI 3 added
+`bt_release`, `bt_reacquire`, `bt_foreground` and `bt_suspend`. `bt_release` restores the input
+configuration `bt_raw` changed and marks the context released: `bt_read` then reports no input and
+`bt_write_some` fails with `EBUSY`, because the terminal belongs to a child process or to the shell.
+Releasing twice is defined, and `bt_reacquire` re-enters raw mode. `bt_foreground` answers 1 when the
+calling process group is the terminal's foreground group, 0 when it is not (including a terminal that
+is nobody's controlling terminal) and `-errno` when the device cannot be inspected. `bt_suspend`
+requires a released context - a session stopped in raw mode would hand the shell a terminal whose
+settings contradict its screen - refuses a group that is not in the foreground with `EPERM`, sends
+`SIGTSTP` to its own process group and returns once `SIGCONT` has been observed. The continue
+notification is a lock-free counter bumped by a process-wide handler that saves and restores the
+previous `SIGCONT` action; the waiting side polls it, so the notification is not lost to whichever
+thread the kernel chooses. The wait is bounded in running time, not wall time: a job stopped for an
+hour still resumes without spending the bound. `bt_close` is defined in every state: a released
+context is already in the user's configuration, so only its descriptors and the context are given
+back. The ABI 2 behaviour below is unchanged. `bt_open` duplicates the attached input descriptor and reopens the
 output terminal with a private nonblocking open file description, snapshots input terminal
 state and returns an opaque context. The reopened output is checked against the original
 character device's device/inode identity; symlinks are rejected. The terminal device path must
@@ -192,6 +284,33 @@ comparison ignores `PENDIN`, which Darwin's line discipline sets when a non-cano
 returns to canonical mode; that bit is kernel bookkeeping for retyping pending input rather than
 a saved attribute, and no raw-mode restore can reproduce it. Every other attribute field is still
 compared exactly, and the mask is empty on Linux. Linux ARM64 remains unverified on any host.
+
+## Parity acceptance (phase 24)
+
+The reference-to-phase record is `examples/parity/PARITY.md`: it pins the Bubble Tea checkout
+(`6b30ecf3280d88d949dcc916bb91fc5e9d56f667`) and the versions its own `examples/go.mod` pins
+(Bubbles 2.1.0, Lip Gloss 2.0.3, Glamour 2.0.0), maps every reference example to the phase, demo,
+deterministic test and terminal scenario that covers it, and names the deliberate differences
+(network access, clipboard transport, markdown dialect, the inline region, Windows, canvas-style
+applications). `ParityAcceptanceTest` reads that file and fails when a row names a demo, test or
+scenario that does not exist.
+
+`examples.parity.Showcase` is the one packaged entry point: a catalog that mounts each phase's own
+scene component and returns to the list. Its own scenario is phase `24`, and `--parity-all` runs
+every phase's scenario and packaged launch together.
+
+Linux x86_64, Corretto 25.0.3 (the host recorded above): `./build.sh` passes, and
+`python3 tools/terminal/verify_terminal.py --parity-all --repeat 10 --pending-escape --harness`
+passes the whole native battery plus all 24 parity scenarios and all 24 packaged demo launches in
+one invocation, including the showcase's catalog mount/return and composed workspace. The
+showcase's packaged launch is verified with the library's own runtime dependencies beside the jar
+and no example-only jar on the classpath.
+
+Two showcase behaviours are deliberate and are not platform claims: the catalog asks for
+`MouseMode.CELL_MOTION` for every mounted scene, and phase 23's durable lines are a defined no-op
+while the showcase owns the alternate screen (phase `23`'s own scenario is where they are
+verified). macOS ARM64 and Linux ARM64 have not been re-run for this phase; the phase's own PTY
+scenario is the platform-independent part, and it is the same code on every host.
 
 ## Hardening follow-up (reference b3af6afb5b)
 

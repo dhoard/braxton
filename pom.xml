@@ -48,6 +48,7 @@
 
         <!-- Dependency versions -->
         <assertj-core.version>3.27.7</assertj-core.version>
+        <commonmark.version>0.32.0</commonmark.version>
         <gson.version>2.15.0</gson.version>
         <jmh.version>1.37</jmh.version>
         <junit.version>6.1.3</junit.version>
@@ -107,6 +108,31 @@
                 <version>${gson.version}</version>
             </dependency>
             <dependency>
+                <groupId>org.commonmark</groupId>
+                <artifactId>commonmark</artifactId>
+                <version>${commonmark.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.commonmark</groupId>
+                <artifactId>commonmark-ext-autolink</artifactId>
+                <version>${commonmark.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.commonmark</groupId>
+                <artifactId>commonmark-ext-gfm-strikethrough</artifactId>
+                <version>${commonmark.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.commonmark</groupId>
+                <artifactId>commonmark-ext-gfm-tables</artifactId>
+                <version>${commonmark.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.commonmark</groupId>
+                <artifactId>commonmark-ext-task-list-items</artifactId>
+                <version>${commonmark.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.openjdk.jmh</groupId>
                 <artifactId>jmh-core</artifactId>
                 <version>${jmh.version}</version>
@@ -129,6 +155,32 @@
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
             <optional>true</optional>
+        </dependency>
+        <!--
+          Markdown rendering is CommonMark plus the official GFM extension modules. The parser stays
+          behind `internal.markdown`, so no parser type reaches a public API or a consumer's compile
+          classpath beyond the declared runtime dependency. All five artifacts are one release train
+          and are pinned together.
+        -->
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark-ext-autolink</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark-ext-gfm-strikethrough</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark-ext-gfm-tables</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark-ext-task-list-items</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

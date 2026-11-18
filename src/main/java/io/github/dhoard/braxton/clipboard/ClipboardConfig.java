@@ -32,6 +32,9 @@ package io.github.dhoard.braxton.clipboard;
  *   <li>{@code braxton.clipboard.enabled} — {@code false} disables OSC 52 emission</li>
  *   <li>{@code braxton.clipboard.maxPayloadBytes} — UTF-8 byte limit for one OSC 52 write</li>
  *   <li>{@code braxton.clipboard.maxInternalChars} — in-process clipboard buffer limit</li>
+ *   <li>{@code braxton.clipboard.readEnabled} — {@code false} refuses to ask the terminal for
+ *       its clipboard</li>
+ *   <li>{@code braxton.clipboard.maxReadPayloadBytes} — decoded byte limit for one OSC 52 read</li>
  *   <li>{@code braxton.clipboard.tmux} — {@code auto}, {@code direct}, {@code tmux_native},
  *       {@code tmux_passthrough}, or {@code off}</li>
  * </ul>
@@ -44,17 +47,24 @@ public final class ClipboardConfig {
     /** Default bound for the in-process clipboard buffer (1 Mi chars). */
     public static final int DEFAULT_MAX_INTERNAL_CHARS = 1_048_576;
 
+    /** Default maximum decoded payload for a single OSC 52 read (1 MiB). */
+    public static final int DEFAULT_MAX_READ_PAYLOAD_BYTES = 1_048_576;
+
     public static final TmuxStrategy DEFAULT_TMUX_STRATEGY = TmuxStrategy.AUTO;
 
     private final boolean osc52Enabled;
     private final int maxPayloadBytes;
     private final int maxInternalChars;
+    private final boolean terminalReadsEnabled;
+    private final int maxReadPayloadBytes;
     private final TmuxStrategy tmuxStrategy;
 
     private ClipboardConfig(Builder builder) {
         this.osc52Enabled = builder.osc52Enabled;
         this.maxPayloadBytes = Math.max(1, builder.maxPayloadBytes);
         this.maxInternalChars = Math.max(1, builder.maxInternalChars);
+        this.terminalReadsEnabled = builder.terminalReadsEnabled;
+        this.maxReadPayloadBytes = Math.max(1, builder.maxReadPayloadBytes);
         this.tmuxStrategy = builder.tmuxStrategy == null ? DEFAULT_TMUX_STRATEGY : builder.tmuxStrategy;
     }
 
@@ -74,6 +84,8 @@ public final class ClipboardConfig {
                 .osc52Enabled(osc52Enabled)
                 .maxPayloadBytes(maxPayloadBytes)
                 .maxInternalChars(maxInternalChars)
+                .terminalReadsEnabled(terminalReadsEnabled)
+                .maxReadPayloadBytes(maxReadPayloadBytes)
                 .tmuxStrategy(tmuxStrategy);
     }
 
@@ -86,6 +98,9 @@ public final class ClipboardConfig {
         builder.osc52Enabled(booleanProperty("braxton.clipboard.enabled", true));
         builder.maxPayloadBytes(integerProperty("braxton.clipboard.maxPayloadBytes", DEFAULT_MAX_PAYLOAD_BYTES));
         builder.maxInternalChars(integerProperty("braxton.clipboard.maxInternalChars", DEFAULT_MAX_INTERNAL_CHARS));
+        builder.terminalReadsEnabled(booleanProperty("braxton.clipboard.readEnabled", true));
+        builder.maxReadPayloadBytes(
+                integerProperty("braxton.clipboard.maxReadPayloadBytes", DEFAULT_MAX_READ_PAYLOAD_BYTES));
         builder.tmuxStrategy(TmuxStrategy.parse(property("braxton.clipboard.tmux"), DEFAULT_TMUX_STRATEGY));
         return builder.build();
     }
@@ -103,6 +118,39 @@ public final class ClipboardConfig {
     /** Maximum characters retained by the in-process clipboard buffer. */
     public int maxInternalChars() {
         return maxInternalChars;
+    }
+
+    /**
+     * Whether the session may ask the terminal for its clipboard.
+     *
+     * <p>Asking is already opt-in because it takes an explicit read command; this switch exists for a
+     * deployment that wants the question never asked at all. Turning it off does not affect copying,
+     * which keeps the in-process buffer as its dependable destination.</p>
+     */
+    public boolean terminalReadsEnabled() {
+        return terminalReadsEnabled;
+    }
+
+    /** Maximum decoded UTF-8 bytes accepted from one OSC 52 read. */
+    public int maxReadPayloadBytes() {
+        return maxReadPayloadBytes;
+    }
+
+    /**
+     * The largest reply that can encode {@link #maxReadPayloadBytes()} bytes.
+     *
+     * <p>Base64 encodes three bytes as four characters, so a decoded bound has an exact encoded
+     * bound: four characters per whole or partial group of three. The selection field and its
+     * separator are added on top, because the reply carries them inside the same string. The input
+     * decoder uses this as its framing bound for OSC 52, so a reply that could decode within the
+     * limit is never dropped before it can be checked.</p>
+     */
+    public int maxReadEncodedCharacters() {
+        // Computed as a long and saturated: a caller may configure an absurd byte limit, and a bound
+        // that wrapped negative would turn every reply into an oversize one instead of failing the
+        // comparison it exists for.
+        long encoded = 2L + 4L * ((maxReadPayloadBytes + 2L) / 3L);
+        return (int) Math.min(Integer.MAX_VALUE, encoded);
     }
 
     /** Transport strategy for OSC 52 writes. */
@@ -150,6 +198,8 @@ public final class ClipboardConfig {
         private boolean osc52Enabled = true;
         private int maxPayloadBytes = DEFAULT_MAX_PAYLOAD_BYTES;
         private int maxInternalChars = DEFAULT_MAX_INTERNAL_CHARS;
+        private boolean terminalReadsEnabled = true;
+        private int maxReadPayloadBytes = DEFAULT_MAX_READ_PAYLOAD_BYTES;
         private TmuxStrategy tmuxStrategy = DEFAULT_TMUX_STRATEGY;
 
         private Builder() {}
@@ -166,6 +216,16 @@ public final class ClipboardConfig {
 
         public Builder maxInternalChars(int chars) {
             this.maxInternalChars = Math.max(1, chars);
+            return this;
+        }
+
+        public Builder terminalReadsEnabled(boolean enabled) {
+            this.terminalReadsEnabled = enabled;
+            return this;
+        }
+
+        public Builder maxReadPayloadBytes(int bytes) {
+            this.maxReadPayloadBytes = Math.max(1, bytes);
             return this;
         }
 

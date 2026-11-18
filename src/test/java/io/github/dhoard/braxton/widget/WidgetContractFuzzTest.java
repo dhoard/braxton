@@ -33,6 +33,7 @@ import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Insets;
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
@@ -40,9 +41,11 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.View;
 import io.github.dhoard.braxton.view.Views;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -200,6 +203,81 @@ class WidgetContractFuzzTest {
                         .as("TableSelector view after %s", cell)
                         .isNotNull();
             }
+
+            DataTable.Config config = DataTable.Config.defaults()
+                    .withContent(dataContent(random))
+                    .withHeight(1 + random.nextInt(8))
+                    .withWidth(1 + random.nextInt(40));
+            DataTable widget = new DataTable(config);
+            DataTable.Model data = widget.init(new InitContext(VIEWPORT, null)).model();
+            for (int steps = 1 + random.nextInt(12); steps > 0; steps--) {
+                data = widget.update(data, dataMessage(random)).model();
+                assertThat(data.selection().row())
+                        .as(
+                                "DataTable moved to row %d of %d",
+                                data.selection().row(), data.content().rowCount())
+                        .isBetween(-1, Math.max(0, data.content().rowCount() - 1));
+                assertThat(data.selection().column())
+                        .as(
+                                "DataTable moved to column %d of %d",
+                                data.selection().column(), data.content().columnCount())
+                        .isBetween(-1, Math.max(0, data.content().columnCount() - 1));
+                int body = DataTable.bodyHeight(data, config);
+                assertThat(DataTable.top(data, config))
+                        .as(
+                                "DataTable window of %d rows in %d of %d",
+                                body, data.content().rowCount(), data.height())
+                        .isBetween(0, Math.max(0, data.content().rowCount() - body));
+                assertThat(DataTable.firstColumn(data, config))
+                        .as(
+                                "DataTable panned to %d of %d cells in %d",
+                                DataTable.firstColumn(data, config), DataTable.rowWidth(data), data.width())
+                        .isBetween(0, Math.max(0, DataTable.rowWidth(data) - data.width()));
+                View<DataTable.Msg> view = widget.view(data, new ViewContext(VIEWPORT));
+                assertThat(view).as("DataTable view after %s", data).isNotNull();
+                Screen painted =
+                        new LayoutEngine().layout(view, VIEWPORT.bounds()).screen();
+                for (int row = 0; row < painted.rows(); row++) {
+                    assertThat(TextMeasure.columns(painted.plainLine(row)))
+                            .as(
+                                    "DataTable at %s: row %d [%s] fills more than %d columns",
+                                    data, row, painted.plainLine(row), VIEWPORT.cols())
+                            .isLessThanOrEqualTo(VIEWPORT.cols());
+                }
+            }
+
+            FilePicker.Config pickerConfig = FilePicker.Config.defaults()
+                    .withDirectory(Path.of("/fixture"))
+                    .withRows(1 + random.nextInt(8))
+                    .withExtensions(random.nextBoolean() ? Set.of() : Set.of("txt"));
+            FilePicker picker = new FilePicker(pickerConfig);
+            FilePicker.Model picked = FilePicker.Model.of(Path.of("/fixture"), pickerEntries(random))
+                    .withRows(1 + random.nextInt(8));
+            for (int steps = 1 + random.nextInt(12); steps > 0; steps--) {
+                picked = picker.update(picked, pickerMessage(random)).model();
+                List<FilePicker.Entry> shown = FilePicker.shown(picked);
+                int entryRows = FilePicker.contentRows(picked, pickerConfig);
+                assertThat(FilePicker.selectedIndex(picked))
+                        .as("FilePicker selected %d of %d", FilePicker.selectedIndex(picked), shown.size())
+                        .isBetween(-1, Math.max(0, shown.size() - 1));
+                assertThat(FilePicker.top(picked, pickerConfig))
+                        .as(
+                                "FilePicker window of %d rows in %d of %d",
+                                entryRows, FilePicker.top(picked, pickerConfig), shown.size())
+                        .isBetween(0, Math.max(0, shown.size() - entryRows));
+                List<StyledText> painted = FilePicker.lines(picked, pickerConfig, VIEWPORT.cols());
+                assertThat(painted).as("FilePicker rows at %d", picked.rows()).hasSize(picked.rows());
+                for (int row = 0; row < painted.size(); row++) {
+                    assertThat(TextMeasure.columns(painted.get(row).plainText()))
+                            .as(
+                                    "FilePicker at %s: row %d [%s] fills more than %d columns",
+                                    picked, row, painted.get(row).plainText(), VIEWPORT.cols())
+                            .isLessThanOrEqualTo(VIEWPORT.cols());
+                }
+                assertThat(picker.view(picked, new ViewContext(VIEWPORT)))
+                        .as("FilePicker view after %s", picked)
+                        .isNotNull();
+            }
         }
     }
 
@@ -297,12 +375,96 @@ class WidgetContractFuzzTest {
         };
     }
 
+    /** The entries the picker is driven over: every awkward leaf the widgets share, as a name. */
+    private static List<FilePicker.Entry> pickerEntries(Random random) {
+        List<FilePicker.Entry> entries = new ArrayList<>();
+        for (int count = random.nextInt(9); count > 0; count--) {
+            String name = TEXTS[random.nextInt(TEXTS.length)] + (count % 2 == 0 ? "" : ".txt");
+            FilePicker.Kind kind = switch (random.nextInt(4)) {
+                case 0 -> FilePicker.Kind.DIRECTORY;
+                case 1 -> FilePicker.Kind.FILE;
+                case 2 -> FilePicker.Kind.OTHER;
+                default -> FilePicker.Kind.MISSING;
+            };
+            entries.add(new FilePicker.Entry(
+                    Path.of("/fixture").resolve(name),
+                    kind,
+                    random.nextInt(4096),
+                    random.nextBoolean() ? "rw-r--r--" : "",
+                    random.nextInt(4) == 0 ? "../somewhere" : "",
+                    kind == FilePicker.Kind.FILE,
+                    kind == FilePicker.Kind.DIRECTORY));
+        }
+        return List.copyOf(entries);
+    }
+
+    private static FilePicker.Msg pickerMessage(Random random) {
+        return switch (random.nextInt(13)) {
+            case 0 -> new FilePicker.Msg.Up();
+            case 1 -> new FilePicker.Msg.Down();
+            case 2 -> new FilePicker.Msg.PageUp();
+            case 3 -> new FilePicker.Msg.PageDown();
+            case 4 -> new FilePicker.Msg.First();
+            case 5 -> new FilePicker.Msg.Last();
+            case 6 -> new FilePicker.Msg.Open();
+            case 7 -> new FilePicker.Msg.Parent();
+            case 8 -> new FilePicker.Msg.Confirm();
+            case 9 -> new FilePicker.Msg.Cancel();
+            case 10 -> new FilePicker.Msg.ToggleHidden();
+            case 11 -> new FilePicker.Msg.ToggleHelp();
+            default -> new FilePicker.Msg.RowsChanged(random.nextInt(9));
+        };
+    }
+
     private static ScrollView.Content content(Random random) {
         List<StyledText> lines = new ArrayList<>();
         for (int count = random.nextInt(9); count > 0; count--) {
             lines.add(styled(random));
         }
         return ScrollView.Content.of(lines);
+    }
+
+    private static DataTable.Content dataContent(Random random) {
+        List<DataTable.Column> columns = new ArrayList<>();
+        for (int column = 0; column < 1 + random.nextInt(4); column++) {
+            int most = 4 + random.nextInt(8);
+            DataTable.Width width = switch (random.nextInt(3)) {
+                case 0 -> DataTable.Width.auto();
+                case 1 -> DataTable.Width.fixed(random.nextInt(most + 1));
+                default -> DataTable.Width.of(random.nextInt(most + 1), random.nextInt(most + 1), most);
+            };
+            columns.add(DataTable.Column.of("c" + column, TEXTS[random.nextInt(TEXTS.length)])
+                    .withWidth(width)
+                    .withAlignment(DataTable.Alignment.values()[random.nextInt(3)]));
+        }
+        List<DataTable.Row> rows = new ArrayList<>();
+        for (int count = random.nextInt(8); count > 0; count--) {
+            List<StyledText> cells = new ArrayList<>();
+            for (int cell = random.nextInt(columns.size() + 2); cell > 0; cell--) {
+                cells.add(styled(random));
+            }
+            rows.add(DataTable.Row.of("r" + rows.size(), cells));
+        }
+        return DataTable.Content.of(columns, rows);
+    }
+
+    private static DataTable.Msg dataMessage(Random random) {
+        return switch (random.nextInt(14)) {
+            case 0 -> new DataTable.Msg.Up();
+            case 1 -> new DataTable.Msg.Down();
+            case 2 -> new DataTable.Msg.Left();
+            case 3 -> new DataTable.Msg.Right();
+            case 4 -> new DataTable.Msg.PageUp();
+            case 5 -> new DataTable.Msg.PageDown();
+            case 6 -> new DataTable.Msg.HalfPageUp();
+            case 7 -> new DataTable.Msg.HalfPageDown();
+            case 8 -> new DataTable.Msg.Top();
+            case 9 -> new DataTable.Msg.Bottom();
+            case 10 -> new DataTable.Msg.PanLeft(1 + random.nextInt(4));
+            case 11 -> new DataTable.Msg.PanRight(1 + random.nextInt(4));
+            case 12 -> new DataTable.Msg.ToggleMode();
+            default -> new DataTable.Msg.Resized(1 + random.nextInt(8), 1 + random.nextInt(40));
+        };
     }
 
     private static List<String> options(Random random) {

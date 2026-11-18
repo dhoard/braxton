@@ -82,6 +82,7 @@ class TerminalKeySequenceTest {
             new Gesture("kcub1 (CSI form)", ESC + "[D", Key.LEFT),
             new Gesture("khome (CSI form)", ESC + "[H", Key.HOME),
             new Gesture("kend (CSI form)", ESC + "[F", Key.END),
+            new Gesture("kf2 (CSI form)", ESC + "[Q", Key.of("f2")),
             new Gesture("khome (xterm numeric)", ESC + "[1~", Key.HOME),
             new Gesture("kend (xterm numeric)", ESC + "[4~", Key.END));
 

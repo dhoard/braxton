@@ -22,8 +22,11 @@
 
 package io.github.dhoard.braxton.widget;
 
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.input.KeyAction;
+import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
@@ -92,10 +95,16 @@ import java.util.function.Function;
  *
  * <p>Focus is model data, exactly as in {@link Editor} and {@link Selector}: the application owns
  * it and sets it through {@link Model#withFocus}, and a reduction never changes it. The pane
- * declares one focus element around its rows and consumes only {@link #actionFor}'s gestures, so an
- * unfocused pane receives no keys, a focused one never takes text input, and Ctrl-/Alt-prefixed
- * gestures stay available to the parent. The pane paints no focus decoration: selection,
- * scrollbars and a focus indicator are the application's presentation choice.</p>
+ * declares one focus element around its rows and consumes only {@link #defaultKeys()}'s gestures -
+ * the same ones {@link #actionFor} maps - so an unfocused pane receives no keys, a focused one never
+ * takes text input, and Ctrl-/Alt-prefixed gestures stay available to the parent. The pane paints no
+ * focus decoration: selection, scrollbars and a focus indicator are the application's presentation
+ * choice.</p>
+ *
+ * <p>For logical lines the pane should wrap itself, a horizontal offset, gutters and highlighted
+ * ranges, use {@link TextViewport}: it is the richer counterpart of this pane over the same MVU
+ * contract. A {@code ScrollView} stays the cheap component for rows the application has already
+ * prepared, and its content contract is unchanged.</p>
  *
  * <p>This component has no semantic outputs; it is {@link Never}-typed, like any component whose
  * interactions are all state changes the parent can observe.</p>
@@ -434,15 +443,35 @@ public final class ScrollView implements Component<ScrollView.Model, ScrollView.
         if (key.modifiers().ctrl() || key.modifiers().alt()) {
             return Optional.empty();
         }
-        return switch (key.name()) {
-            case "up" -> Optional.of(new Msg.Up(1));
-            case "down" -> Optional.of(new Msg.Down(1));
-            case "pageup" -> Optional.of(new Msg.PageUp());
-            case "pagedown" -> Optional.of(new Msg.PageDown());
-            case "home" -> Optional.of(new Msg.Home());
-            case "end" -> Optional.of(new Msg.End());
-            default -> Optional.empty();
-        };
+        return defaultKeys().actionFor(key).map(KeyAction::message);
+    }
+
+    /**
+     * The gestures a vertical pane defines, as the one definition its routing and any help view
+     * read.
+     *
+     * <p>A pane maps the same six gestures {@link #actionFor} documents. Each one is declared with
+     * the shifted form of its key as well, because a binding matches a gesture exactly and Shift
+     * changes no meaning for these keys. Mouse wheels are deliberately absent: the step is an
+     * application policy, so an application binds {@code wheelup}/{@code wheeldown} in a parent
+     * scope. A pane can also be driven by a key map the application builds - the map is a value,
+     * not a registration - and the component routes this one itself.</p>
+     *
+     * @return the pane's gestures
+     */
+    public static KeyMap<Msg> defaultKeys() {
+        return KeyMap.of(KeyMap.group(
+                "Scroll",
+                KeyAction.<Msg>of("up", new Msg.Up(1), "\u2191", "up", "up", "shift+up"),
+                KeyAction.<Msg>of("down", new Msg.Down(1), "\u2193", "down", "down", "shift+down"),
+                KeyAction.<Msg>of("page-up", new Msg.PageUp(), "pgup", "page up", "pageup", "shift+pageup")
+                        .withCompact(false),
+                KeyAction.<Msg>of("page-down", new Msg.PageDown(), "pgdn", "page down", "pagedown", "shift+pagedown")
+                        .withCompact(false),
+                KeyAction.<Msg>of("home", new Msg.Home(), "home", "first row", "home", "shift+home")
+                        .withCompact(false),
+                KeyAction.<Msg>of("end", new Msg.End(), "end", "last row", "end", "shift+end")
+                        .withCompact(false)));
     }
 
     /** Applies one gesture. Never performs I/O and never mutates the input state. */
@@ -520,6 +549,15 @@ public final class ScrollView implements Component<ScrollView.Model, ScrollView.
         return (int) Math.max(0L, last);
     }
 
+    /** The pane's bindings, compiled into the message type the parent's view carries. */
+    private static <Message> List<Binding<Message>> bindings(Function<Msg, Message> map) {
+        List<Binding<Message>> bindings = new ArrayList<>();
+        for (Binding<Msg> binding : defaultKeys().bindings()) {
+            bindings.add(new Binding<>(binding.key(), map.apply(binding.message())));
+        }
+        return List.copyOf(bindings);
+    }
+
     private static <Message> View<Message> paint(Model state, boolean focused, Function<Msg, Message> map) {
         List<StyledText> window = visibleLines(state);
         List<View<Message>> rows = new ArrayList<>(window.size());
@@ -530,7 +568,6 @@ public final class ScrollView implements Component<ScrollView.Model, ScrollView.
             // instead, and the window keeps showing exactly the rows it scrolls by.
             rows.add(Views.fixed(1, Views.text(line)));
         }
-        return Views.focus(
-                ELEMENT, focused, List.of(), event -> actionFor(event).map(map), Views.column(rows));
+        return Views.focus(ELEMENT, focused, bindings(map), View.InputHandler.none(), Views.column(rows));
     }
 }

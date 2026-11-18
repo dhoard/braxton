@@ -26,9 +26,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.internal.render.LayoutEngine;
 import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.view.ScreenRenderer;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
@@ -163,6 +165,54 @@ class ProgressBarTest {
     }
 
     @Test
+    void theSharedFractionRendererClampsWhatItIsGiven() {
+        // The animated bar paints a normalized fraction through the same renderer as render(value,
+        // max); what that boundary does with a value off the scale is therefore part of both.
+        ProgressBar bar = ProgressBar.of(4);
+        assertThat(bar.renderFraction(0.5)).isEqualTo(bar.render(0.5, 1.0));
+        assertThat(bar.renderFraction(-2.0).plainText()).isEqualTo(INACTIVE.repeat(4));
+        assertThat(bar.renderFraction(2.0).plainText()).isEqualTo(ACTIVE.repeat(4));
+        assertThat(bar.renderFraction(Double.POSITIVE_INFINITY).plainText()).isEqualTo(ACTIVE.repeat(4));
+        assertThat(bar.renderFraction(Double.NaN).plainText())
+                .as("a fraction that is not a number fills nothing")
+                .isEqualTo(INACTIVE.repeat(4));
+        assertThat(ProgressBar.of(0).renderFraction(0.5)).isEqualTo(StyledText.empty());
+    }
+
+    @Test
+    void aGradedBlendedBarIsAssembledFromItsParts() {
+        ProgressBar bar = ProgressBar.of(6)
+                .fractional(true)
+                .icons("\u6F22", "\u65E5")
+                .buffer(1)
+                .blend(new Color(255, 0, 0), new Color(0, 0, 255))
+                .prepend(StyledText.plain("pre"))
+                .append(StyledText.plain("post"))
+                .showPercentage(true);
+
+        // Half of six cells is three whole cells: the label, one buffer between cells, the
+        // percentage and the trailing label all keep their own columns.
+        StyledText half = bar.render(0.5, 1.0);
+        assertThat(half.plainText()).isEqualTo("pre\u6F22 \u6F22 \u6F22 \u65E5 \u65E5 \u65E5 50%post");
+        assertThat(TextMeasure.columns(half.plainText())).isEqualTo(3 + 6 * 2 + 5 + 4 + 4);
+
+        // Seven twelfths is three whole cells and half of the fourth: the graded cell is the half
+        // block padded to the active icon's two columns, so the row keeps its painted width.
+        StyledText graded = bar.render(7.0 / 12.0, 1.0);
+        assertThat(graded.plainText()).isEqualTo("pre\u6F22 \u6F22 \u6F22 \u258C  \u65E5 \u65E5 58%post");
+        assertThat(TextMeasure.columns(graded.plainText()))
+                .as("a graded cell occupies the same columns as the icon it replaces")
+                .isEqualTo(3 + 6 * 2 + 5 + 4 + 4);
+
+        // The ramp is anchored to the bar: each filled cell carries its own position's colour.
+        assertThat(foregroundOf(graded, "\u6F22"))
+                .containsExactly(new Color(255, 0, 0), new Color(204, 0, 51), new Color(153, 0, 102));
+        assertThat(foregroundOf(graded, "\u258C "))
+                .as("the graded cell is on the ramp too")
+                .containsExactly(new Color(102, 0, 153));
+    }
+
+    @Test
     void randomValuesFillTheExpectedNumberOfCells() {
         Random random = new Random(211L);
         for (int iteration = 0; iteration < 5_000; iteration++) {
@@ -184,5 +234,16 @@ class ProgressBarTest {
                     .allMatch(INACTIVE::equals);
             assertThat(bar.columns(value, max)).as("iteration %d", iteration).isEqualTo(width);
         }
+    }
+
+    /** The foreground every span whose text is {@code content} carries. */
+    private static List<Color> foregroundOf(StyledText text, String content) {
+        List<Color> colors = new ArrayList<>();
+        for (StyledText.Span span : text.spans()) {
+            if (span.text().equals(content)) {
+                colors.add(span.style().foreground());
+            }
+        }
+        return colors;
     }
 }

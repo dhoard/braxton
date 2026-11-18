@@ -23,8 +23,11 @@
 package io.github.dhoard.braxton.internal.render;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.dhoard.braxton.layout.Rect;
+import io.github.dhoard.braxton.style.Color;
+import io.github.dhoard.braxton.style.ColorProfile;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
@@ -33,6 +36,68 @@ import org.junit.jupiter.api.Test;
 
 /** The encoder is the only place escape sequences are produced. */
 class AnsiEncoderTest {
+
+    @Test
+    void presentationSequencesRefuseAMissingValueAndCarryAnEmptyOne() {
+        assertThatThrownBy(() -> AnsiEncoder.defaultColor(10, null))
+                .as("a default colour needs a colour")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> AnsiEncoder.defaultColor(9, Color.WHITE))
+                .as("only the three configurable colours have a default form")
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("10, 11 or 12");
+        assertThatThrownBy(() -> AnsiEncoder.progress(null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> AnsiEncoder.programStatus(null)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(AnsiEncoder.title(null))
+                .as("no title is an empty OSC 2 payload, which clears it")
+                .isEqualTo("\u001B]2;\u001B\\");
+        assertThat(AnsiEncoder.title("")).isEqualTo(AnsiEncoder.title(null));
+    }
+
+    @Test
+    void relativeMovesWriteNothingToMoveNowhere() {
+        assertThat(AnsiEncoder.moveUp(3)).isEqualTo("\u001B[3A");
+        assertThat(AnsiEncoder.moveUp(0))
+                .as("a move of no lines is no sequence")
+                .isEmpty();
+        assertThat(AnsiEncoder.moveUp(-2)).isEmpty();
+        assertThat(AnsiEncoder.moveDown(2)).isEqualTo("\u001B[2B");
+        assertThat(AnsiEncoder.moveDown(0))
+                .as("a move of no lines is no sequence")
+                .isEmpty();
+        assertThat(AnsiEncoder.moveDown(-1)).isEmpty();
+        assertThat(AnsiEncoder.moveToColumn(4)).isEqualTo("\u001B[5G");
+        assertThat(AnsiEncoder.moveToColumn(0))
+                .as("the first column needs no sequence")
+                .isEmpty();
+        assertThat(AnsiEncoder.moveToColumn(-1)).isEmpty();
+    }
+
+    @Test
+    void rowContentCarriesTheStyledCellsOnly() {
+        Screen empty = new Screen(1, 4);
+        assertThat(AnsiEncoder.rowContent(empty, 0, ColorProfile.TRUECOLOR))
+                .as("a row that paints nothing has no content")
+                .isEmpty();
+        assertThat(AnsiEncoder.rowContent(new Screen(1, 0), 0, ColorProfile.TRUECOLOR))
+                .as("a zero-width row has no content")
+                .isEmpty();
+        Screen styled = new Screen(1, 4);
+        styled.put(0, 0, "a", Style.NONE.withUnderline(), null, 1);
+        styled.put(0, 2, "b", Style.NONE, null, 1);
+        assertThat(AnsiEncoder.rowContent(styled, 0, ColorProfile.TRUECOLOR))
+                .as("the gap between two painted cells stays a space, and the style is reset")
+                .isEqualTo("\u001B[4ma\u001B[0m b");
+        Screen wide = new Screen(1, 2);
+        wide.put(0, 0, "界", Style.NONE, null, 2);
+        assertThat(AnsiEncoder.rowContent(wide, 0, ColorProfile.TRUECOLOR))
+                .as("a wide glyph is painted once, with its continuation column left implicit")
+                .isEqualTo("界");
+        assertThat(AnsiEncoder.paintedEnd(wide, 0))
+                .as("the painted extent covers the continuation column")
+                .isEqualTo(2);
+        assertThat(AnsiEncoder.paintedEnd(empty, 0)).isZero();
+    }
 
     @Test
     void paintsBeforeClearingOnlyTheUnusedSuffix() {
@@ -330,5 +395,68 @@ class AnsiEncoderTest {
         String plain = AnsiEncoder.frame(screen, false);
         assertThat(plain).contains("x", "\u001b[1m").doesNotContain("38;2", "48;2");
         assertThat(AnsiEncoder.frame(screen, true)).contains("38;2", "48;2");
+    }
+
+    @Test
+    void sgrNamesAColourInTheProfileItIsEncodedFor() {
+        Style style = Style.fg(Colors.ERROR_400).withBold().withBackground(Colors.BLUE_400);
+        assertThat(AnsiEncoder.sgr(style, ColorProfile.TRUECOLOR))
+                .isEqualTo("\u001B[1;38;2;240;68;56;48;2;46;144;250m");
+        assertThat(AnsiEncoder.sgr(style, ColorProfile.ANSI256))
+                .as("a 256-colour session names palette indices, nearest first")
+                .isEqualTo("\u001B[1;38;5;" + Colors.nearestAnsi256(Colors.ERROR_400) + ";48;5;"
+                        + Colors.nearestAnsi256(Colors.BLUE_400) + "m");
+        assertThat(AnsiEncoder.sgr(style, ColorProfile.ANSI16))
+                .as("a 16-colour session uses the classic foreground and background codes")
+                .isEqualTo("\u001B[1;91;44m");
+        assertThat(AnsiEncoder.sgr(style, ColorProfile.NONE))
+                .as("losing colour keeps the attribute")
+                .isEqualTo("\u001B[1m");
+        assertThat(AnsiEncoder.sgr(style, ColorProfile.AUTO))
+                .as("an unresolved profile never encodes a frame; it encodes as truecolor")
+                .isEqualTo(AnsiEncoder.sgr(style, ColorProfile.TRUECOLOR));
+        assertThat(AnsiEncoder.sgr(style, null))
+                .as("a missing profile is the truecolor one the library has always emitted")
+                .isEqualTo(AnsiEncoder.sgr(style, ColorProfile.TRUECOLOR));
+        assertThat(AnsiEncoder.sgr(
+                        Style.NONE.withBold().withBackground(new Color(0x40, 0x00, 0x00)), ColorProfile.ANSI16))
+                .as("a dim background uses the dim background codes")
+                .isEqualTo("\u001B[1;41m");
+        assertThat(AnsiEncoder.sgr(Style.NONE.withBold().withBackground(Colors.ERROR_400), ColorProfile.ANSI16))
+                .as("a bright background uses the bright background codes")
+                .isEqualTo("\u001B[1;101m");
+        assertThat(AnsiEncoder.sgr(Style.NONE.withBold(), ColorProfile.ANSI256))
+                .as("a style with no colour asks the palette for nothing")
+                .isEqualTo("\u001B[1m");
+    }
+
+    @Test
+    void aFrameEncodedForANarrowerProfileUsesThatProfilesColourForm() {
+        Screen screen = new Screen(1, 2);
+        screen.put(0, 0, "x", Style.fg(Colors.ERROR_400), "https://example.com", 1);
+        String truecolor = AnsiEncoder.frame(screen, ColorProfile.TRUECOLOR);
+        String ansi256 = AnsiEncoder.frame(screen, ColorProfile.ANSI256);
+        String plain = AnsiEncoder.frame(screen, ColorProfile.NONE);
+
+        assertThat(truecolor).contains("38;2;240;68;56");
+        assertThat(ansi256).contains("38;5;").doesNotContain("38;2;");
+        assertThat(plain)
+                .as("a session without colour still writes the hyperlink")
+                .contains("\u001B]8;;https://example.com\u001B\\")
+                .doesNotContain("38;2;", "38;5;", "38;");
+    }
+
+    @Test
+    void theLegacyColourFlagIsTheTruecolorProfile() {
+        Screen screen = new Screen(1, 2);
+        screen.put(0, 0, "x", Style.fg(Colors.ERROR_400), null, 1);
+        assertThat(AnsiEncoder.frame(screen, true)).isEqualTo(AnsiEncoder.frame(screen, ColorProfile.TRUECOLOR));
+        assertThat(AnsiEncoder.frame(screen, false)).isEqualTo(AnsiEncoder.frame(screen, ColorProfile.NONE));
+        assertThat(AnsiEncoder.encodeRow(screen, 0, false))
+                .isEqualTo(AnsiEncoder.encodeRow(screen, 0, ColorProfile.NONE));
+        Screen none = new Screen(1, 2);
+        none.put(0, 0, "x", Style.NONE, null, 1);
+        assertThat(AnsiEncoder.diff(none, none, false)).isEmpty();
+        assertThat(AnsiEncoder.diff(null, screen, false)).isEqualTo(AnsiEncoder.frame(screen, ColorProfile.NONE));
     }
 }

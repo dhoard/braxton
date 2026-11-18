@@ -30,6 +30,27 @@ import java.io.PrintWriter;
 
 /** Internal services needed by the runtime; never part of the public MVU surface. */
 public interface Terminal extends Closeable {
+
+    /**
+     * Where an owned terminal is in the session's handoff lifecycle.
+     *
+     * <p>The two intermediate states exist so a transition that fails has somewhere to be observed
+     * and so a concurrent close can tell "not yet given back" from "gone". A terminal that never
+     * hands off is {@link #ACTIVE} from open to {@link #CLOSED}.</p>
+     */
+    enum State {
+        /** Owned by the session and available for reads, writes and mode changes. */
+        ACTIVE,
+        /** Being given back; the session is no longer allowed to use it. */
+        RELEASING,
+        /** Given back to the user or to a child process the session started. */
+        RELEASED,
+        /** Being taken back after a release. */
+        REACQUIRING,
+        /** Closed; every later operation fails and close is a no-op. */
+        CLOSED
+    }
+
     TimedReader reader();
 
     PrintWriter writer();
@@ -48,6 +69,60 @@ public interface Terminal extends Closeable {
     TerminalCapabilities capabilities();
 
     void enterRawMode() throws IOException;
+
+    /**
+     * The terminal's lifecycle state; {@link State#ACTIVE} when the session never hands it off.
+     *
+     * @return the current state
+     */
+    default State state() {
+        return State.ACTIVE;
+    }
+
+    /**
+     * Gives the terminal back: reads stop reporting session input and the input configuration the
+     * session changed is restored, so the user's own settings are in force while somebody else owns
+     * the terminal.
+     *
+     * <p>Only the owned POSIX terminal can do this. A supplied terminal (a test fixture, a stream)
+     * owns no device configuration, so releasing it is a no-op and the runtime's own state machine is
+     * the whole contract there.</p>
+     *
+     * @throws IOException when the configuration could not be restored
+     */
+    default void release() throws IOException {}
+
+    /**
+     * Takes the terminal back after {@link #release()}, re-entering the input configuration the
+     * session runs with.
+     *
+     * @throws IOException when the terminal could not be taken back, which is fatal for the run
+     */
+    default void reacquire() throws IOException {}
+
+    /**
+     * Whether this session's process group is the terminal's foreground group.
+     *
+     * <p>Job control belongs to the foreground group only; a supplied terminal has no process group
+     * of its own, so the answer is false and a suspend reports a typed refusal instead of stopping a
+     * process nobody can continue.</p>
+     *
+     * @return true when the session owns the terminal's foreground
+     */
+    default boolean foreground() {
+        return false;
+    }
+
+    /**
+     * Stops this session's process group until the job controller continues it, returning then.
+     *
+     * <p>Called only while the terminal is released, and only when {@link #foreground()} is true.</p>
+     *
+     * @throws IOException when job control is unavailable or the stop did not complete
+     */
+    default void suspend() throws IOException {
+        throw new IOException("this session has no job control");
+    }
 
     /**
      * Called when shutdown begins. From then on, output the terminal does not accept within the

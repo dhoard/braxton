@@ -25,6 +25,9 @@ package io.github.dhoard.braxton.widget;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.dhoard.braxton.input.InputEvent;
+import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.style.StyledText;
@@ -370,6 +373,32 @@ class ScrollViewStateTest {
         assertThat(new ScrollView.Model(Integer.MAX_VALUE, false, true, 10, huge).topLine())
                 .isEqualTo(Integer.MAX_VALUE - 10);
         assertThat(ScrollView.visibleLines(driver.model())).hasSize(10);
+    }
+
+    @Test
+    void theGestureMapIsTheOneDefinitionRoutingAndHelpRead() {
+        ScrollView view = new ScrollView(ScrollView.Config.defaults());
+        var driver = ComponentDriver.initialize(view, new InitContext(null, null));
+        driver.send(new Msg.ContentChanged(rows(20)));
+
+        for (KeyAction<Msg> action : ScrollView.defaultKeys().actions()) {
+            for (Key alias : action.aliases()) {
+                assertThat(ScrollView.actionFor(InputEvent.KeyInput.of(alias)))
+                        .as("%s maps the gesture %s its map binds", action.id(), alias)
+                        .contains(action.message());
+            }
+        }
+        // The shifted forms the map accepts are the ones the handler already accepted.
+        assertThat(ScrollView.actionFor(InputEvent.KeyInput.of(Key.parse("shift+down"))))
+                .contains(new Msg.Down(1));
+        // Ctrl and Alt stay the application's shortcut space, and text is not a scrolling gesture.
+        assertThat(ScrollView.actionFor(InputEvent.KeyInput.of(Key.parse("ctrl+down"))))
+                .isEmpty();
+        assertThat(ScrollView.actionFor(InputEvent.KeyInput.of(Key.parse("x"), "x")))
+                .isEmpty();
+        assertThat(ScrollView.defaultKeys().bindings())
+                .as("one binding a gesture, and every gesture reaches one message")
+                .isNotEmpty();
     }
 
     @Test

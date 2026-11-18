@@ -23,6 +23,7 @@
 package io.github.dhoard.braxton.style;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -114,5 +115,78 @@ class ColorsTest {
         assertThat(Colors.SUCCESS_400.hex()).isEqualTo("#17b26a");
         assertThat(Colors.BLUE_400.hex()).isEqualTo("#2e90fa");
         assertThat(Colors.TEAL_400.hex()).isEqualTo("#15b79e");
+    }
+
+    @Test
+    void theSixteenAnsiColoursAreTheXtermOnes() {
+        assertThat(Colors.ansi16(0).hex()).isEqualTo("#000000");
+        assertThat(Colors.ansi16(1).hex()).isEqualTo("#800000");
+        assertThat(Colors.ansi16(7).hex()).isEqualTo("#c0c0c0");
+        assertThat(Colors.ansi16(8).hex()).isEqualTo("#808080");
+        assertThat(Colors.ansi16(12).hex()).isEqualTo("#0000ff");
+        assertThat(Colors.ansi16(15).hex()).isEqualTo("#ffffff");
+        assertThatThrownBy(() -> Colors.ansi16(16)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Colors.ansi16(-1)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void theXtermPaletteIsTheCubeAndTheGreyRamp() {
+        assertThat(Colors.ansi256(16).hex()).isEqualTo("#000000");
+        assertThat(Colors.ansi256(17).hex()).isEqualTo("#00005f");
+        assertThat(Colors.ansi256(21).hex()).isEqualTo("#0000ff");
+        assertThat(Colors.ansi256(196).hex()).isEqualTo("#ff0000");
+        assertThat(Colors.ansi256(231).hex()).isEqualTo("#ffffff");
+        assertThat(Colors.ansi256(232).hex()).isEqualTo("#080808");
+        assertThat(Colors.ansi256(255).hex()).isEqualTo("#eeeeee");
+        assertThatThrownBy(() -> Colors.ansi256(256)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void everyPaletteEntryMapsToItself() {
+        for (int index = 16; index <= 0xFF; index++) {
+            assertThat(Colors.nearestAnsi256(Colors.ansi256(index)))
+                    .as("palette entry %d", index)
+                    .isEqualTo(index);
+        }
+        for (int index = 0; index < 16; index++) {
+            assertThat(Colors.nearestAnsi16(Colors.ansi16(index)))
+                    .as("ANSI colour %d", index)
+                    .isEqualTo(index);
+        }
+    }
+
+    @Test
+    void theNearestColourIsTheOneItLooksLike() {
+        assertThat(Colors.nearestAnsi16(Colors.BLUE_400))
+                .as("a mid blue maps to blue, not to the cyan a channel distance would pick")
+                .isEqualTo(4);
+        assertThat(Colors.nearestAnsi16(Colors.ERROR_400)).isEqualTo(9);
+        assertThat(Colors.nearestAnsi16(Color.WHITE)).isEqualTo(15);
+        assertThat(Colors.nearestAnsi16(Color.BLACK)).isIn(0);
+        assertThat(Colors.nearestAnsi256(Color.BLACK))
+                .as("the ANSI entries are never candidates, so black maps to the cube")
+                .isEqualTo(16);
+        assertThat(Colors.nearestAnsi256(Color.WHITE)).isEqualTo(231);
+        assertThat(Colors.nearestAnsi256(Colors.GRAY_500)).isBetween(232, 255);
+        // The same input always maps to the same entry, memoized or not.
+        assertThat(Colors.nearestAnsi256(Colors.TEAL_400)).isEqualTo(Colors.nearestAnsi256(Colors.TEAL_400));
+    }
+
+    @Test
+    void darknessIsOneRuleWithOneBoundary() {
+        assertThat(Colors.isDark(new Color(0x7f, 0x7f, 0x7f)))
+                .as("just below halfway")
+                .isTrue();
+        assertThat(Colors.isDark(new Color(0x80, 0x80, 0x80)))
+                .as("halfway exactly")
+                .isFalse();
+        assertThat(Colors.isDark(Color.BLACK)).isTrue();
+        assertThat(Colors.isDark(Color.WHITE)).isFalse();
+        assertThat(Colors.isDark(new Color(0x00, 0x00, 0xff)))
+                .as("blue carries little luma")
+                .isTrue();
+        assertThat(Colors.isDark(new Color(0xff, 0xff, 0x00)))
+                .as("yellow carries a lot")
+                .isFalse();
     }
 }

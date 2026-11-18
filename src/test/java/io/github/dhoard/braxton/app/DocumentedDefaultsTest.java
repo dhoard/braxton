@@ -27,7 +27,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.dhoard.braxton.clipboard.ClipboardConfig;
 import io.github.dhoard.braxton.input.InputOptions;
+import io.github.dhoard.braxton.internal.input.InputDecoder;
 import io.github.dhoard.braxton.internal.input.PasteDecoder;
+import io.github.dhoard.braxton.internal.runtime.TerminalQueries;
+import io.github.dhoard.braxton.style.ColorProfile;
+import io.github.dhoard.braxton.view.TerminalPresentation;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -67,6 +71,51 @@ class DocumentedDefaultsTest {
                 .as("local dispatch limit")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(defaults.shutdownGrace()).isEqualTo(Duration.ofSeconds(2));
+        assertThat(RuntimeOptions.DEFAULT_FPS).as("presentation ceiling").isEqualTo(60);
+        assertThat(RuntimeOptions.MIN_FPS).isEqualTo(1);
+        assertThat(RuntimeOptions.MAX_FPS).isEqualTo(240);
+        assertThat(defaults.fps()).isEqualTo(60);
+        assertThat(defaults.messageFilter())
+                .as("a session without a filter delivers every message")
+                .isNull();
+        assertThat(defaults.propagateFailure())
+                .as("a failure is reported through the exit result, not thrown")
+                .isFalse();
+        assertThat(defaults.installShutdownHook())
+                .as("the run restores the terminal on its own")
+                .isTrue();
+        assertThat(defaults.withFps(240).fps()).isEqualTo(240);
+        assertThatThrownBy(() -> defaults.withFps(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> defaults.withFps(241)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(defaults.withMessageFilter(message -> message).messageFilter())
+                .isNotNull();
+        assertThat(defaults.withFailurePropagation(true).propagateFailure()).isTrue();
+        assertThat(defaults.withShutdownHook(false).installShutdownHook()).isFalse();
+    }
+
+    @Test
+    void theDocumentedSessionIoDefaultsAreTheShippedOnes() {
+        IoOptions defaults = IoOptions.defaults();
+        assertThat(defaults.streamed())
+                .as("the default run uses the owned terminal")
+                .isFalse();
+        assertThat(defaults.input()).isNull();
+        assertThat(defaults.output()).isNull();
+        assertThat(defaults.renderer()).as("the default run paints frames").isTrue();
+        assertThat(defaults.diagnostics())
+                .as("the default run reports no diagnostics")
+                .isNull();
+        assertThat(defaults.environment())
+                .as("no environment override by default")
+                .isEmpty();
+        assertThat(IoOptions.DEFAULT_ROWS).isEqualTo(24);
+        assertThat(IoOptions.DEFAULT_COLUMNS).isEqualTo(80);
+        assertThat(defaults.size()).isEqualTo(new io.github.dhoard.braxton.layout.Size(24, 80));
+        assertThat(defaults.withSize(10, 40).size()).isEqualTo(new io.github.dhoard.braxton.layout.Size(10, 40));
+        assertThat(defaults.withRenderer(false).renderer()).isFalse();
+        assertThatThrownBy(() -> new IoOptions(new java.io.StringReader(""), null, null, null, true, null))
+                .as("half a stream pair is rejected")
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -88,5 +137,44 @@ class DocumentedDefaultsTest {
         assertThat(ClipboardConfig.DEFAULT_MAX_INTERNAL_CHARS)
                 .as("in-process buffer chars")
                 .isEqualTo(1_048_576);
+        assertThat(ClipboardConfig.DEFAULT_MAX_READ_PAYLOAD_BYTES)
+                .as("OSC 52 read payload bytes")
+                .isEqualTo(1_048_576);
+        assertThat(ClipboardConfig.defaults().terminalReadsEnabled())
+                .as("terminal clipboard reads")
+                .isTrue();
+        assertThat(ClipboardConfig.defaults().maxReadEncodedCharacters())
+                .as("OSC 52 read reply characters, with the selection field")
+                .isEqualTo(1_398_106);
+        assertThat(TerminalQueries.DEFAULT_TIMEOUT).as("query reply deadline").isEqualTo(Duration.ofSeconds(1));
+        assertThat(TerminalQueries.DEFAULT_MAX_OUTSTANDING).as("live queries").isEqualTo(16);
+        assertThat(InputDecoder.MAX_REPLY_CHARACTERS)
+                .as("reply payload characters")
+                .isEqualTo(4_096);
+        assertThat(InputDecoder.MAX_CLIPBOARD_REPLY_CHARACTERS)
+                .as("clipboard reply characters")
+                .isEqualTo(1_398_106);
+        assertThat(RuntimeOptions.DEFAULT_COLOR_PROFILE).as("colour profile").isEqualTo(ColorProfile.AUTO);
+        assertThat(TerminalPresentation.MAX_TITLE_BYTES)
+                .as("window title bytes")
+                .isEqualTo(4_096);
+        assertThat(TerminalPresentation.Status.MAX_ID_LENGTH)
+                .as("status record id characters")
+                .isEqualTo(128);
+        assertThat(TerminalPresentation.Status.MAX_ID_SEGMENT)
+                .as("status record id segment")
+                .isEqualTo(32);
+        assertThat(TerminalPresentation.Status.MAX_ID_DEPTH)
+                .as("status record id depth")
+                .isEqualTo(8);
+        assertThat(TerminalPresentation.Status.MAX_APP_LENGTH)
+                .as("program identifier characters")
+                .isEqualTo(32);
+        assertThat(TerminalPresentation.Status.MAX_STATUS_TITLE_BYTES)
+                .as("status record label bytes")
+                .isEqualTo(192);
+        assertThat(TerminalPresentation.Status.MAX_MESSAGE_BYTES)
+                .as("status record message bytes")
+                .isEqualTo(2_048);
     }
 }

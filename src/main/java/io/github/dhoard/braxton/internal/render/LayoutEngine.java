@@ -26,10 +26,12 @@ import io.github.dhoard.braxton.internal.text.Graphemes;
 import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Rect;
+import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
+import io.github.dhoard.braxton.view.Cursor;
 import io.github.dhoard.braxton.view.ElementId;
 import io.github.dhoard.braxton.view.View;
 import java.util.ArrayList;
@@ -37,6 +39,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Turns a {@link View} tree into a painted {@link Screen}.
@@ -48,19 +51,51 @@ import java.util.Objects;
  */
 public final class LayoutEngine {
 
-    /** One focusable element's painted rectangle, in paint order.
+    /**
+     * One focusable element's painted rectangle, in paint order.
      *
      * @param id the focus identity that declared this region
      * @param bounds the rectangle it was painted in
+     * @param reachable whether pointer input can reach it: false for a layer a modal covers, which
+     *     is painted but can no longer be pointed at
      */
-    public record Region(ElementId id, Rect bounds) {}
+    public record Region(ElementId id, Rect bounds, boolean reachable) {
 
-    /** The painted screen plus the focus regions declared while painting it.
+        /**
+         * A reachable region: the shape every region had before pointer input existed.
+         *
+         * @param id the focus identity that declared this region
+         * @param bounds the rectangle it was painted in
+         */
+        public Region(ElementId id, Rect bounds) {
+            this(id, bounds, true);
+        }
+    }
+
+    /** The painted screen, the focus regions declared while painting it, and its resolved cursor.
      *
      * @param screen the painted screen
      * @param regions the focus regions declared while painting it, in paint order
+     * @param cursor the winning cursor in screen cells, or empty when the tree declares none that
+     *     is eligible and visible where it sits
      */
-    public record Layout(Screen screen, List<Region> regions) {}
+    public record Layout(Screen screen, List<Region> regions, Optional<Cursor> cursor) {
+
+        /**
+         * A screen with no cursor, for callers that only paint.
+         *
+         * @param screen the painted screen
+         * @param regions the focus regions declared while painting it
+         */
+        public Layout(Screen screen, List<Region> regions) {
+            this(screen, regions, Optional.empty());
+        }
+
+        public Layout {
+            regions = List.copyOf(regions);
+            cursor = cursor == null ? Optional.empty() : cursor;
+        }
+    }
 
     private final WidthPolicy policy;
 
@@ -75,8 +110,158 @@ public final class LayoutEngine {
     public Layout layout(View<?> root, Rect bounds) {
         Screen screen = new Screen(bounds.rows(), bounds.cols());
         List<Region> regions = new ArrayList<>();
-        paint(root, screen, bounds, regions);
-        return new Layout(screen, List.copyOf(regions));
+        Paint paint = new Paint();
+        paint(root, screen, bounds, regions, paint);
+        // The winner is resolved once the tree is painted. A caret pointing at the second half of a
+        // wide glyph can only be recognized after the glyph is there, and a virtual cursor is a cell
+        // style, so it must not be repainted by a later layer that happens to cover the caret's cell.
+        Cursor cursor = paint.resolved(screen);
+        if (cursor != null) {
+            paintVirtualCursor(screen, cursor);
+        }
+        return new Layout(screen, List.copyOf(regions), Optional.ofNullable(cursor));
+    }
+
+    /**
+     * Paint-time cursor resolution: the focused element identities in scope, and where a placed
+     * cursor is recorded.
+     *
+     * <p>Entering a focused element branches only the focus scope: the placement slot is shared, so
+     * a cursor declared anywhere in the tree lands in the same place and the last one painted wins.
+     * A detached scope gets a slot of its own, which is how a covered layer's cursor is dropped
+     * instead of competing with the layer above it.</p>
+     */
+    private static final class Paint {
+        private final List<ElementId> focused;
+        private final Placement placement;
+        private final boolean reachable;
+
+        Paint() {
+            this(List.of(), new Placement(), true);
+        }
+
+        private Paint(List<ElementId> focused, Placement placement, boolean reachable) {
+            this.focused = focused;
+            this.placement = placement;
+            this.reachable = reachable;
+        }
+
+        /** The same placement slot inside one more focused element. */
+        Paint entering(ElementId id) {
+            List<ElementId> next = new ArrayList<>(focused.size() + 1);
+            next.addAll(focused);
+            next.add(id);
+            return new Paint(List.copyOf(next), placement, reachable);
+        }
+
+        /**
+         * A scope that keeps the focus context and discards whatever cursor it places.
+         *
+         * <p>It is also what a pointer can no longer reach: a modal layer covers the layers painted
+         * before it, so their regions are recorded as unreachable rather than removed - the frame is
+         * still what those layers painted, and only the hit test needs to know which of it can be
+         * pointed at.</p>
+         */
+        Paint detached() {
+            return new Paint(focused, new Placement(), false);
+        }
+
+        /** Whether the element being painted can still be reached by pointer input. */
+        boolean reachable() {
+            return reachable;
+        }
+
+        /** The winning cursor in screen cells, or null when nothing eligible was declared. */
+        Cursor resolved(Screen screen) {
+            return placement.resolve(screen);
+        }
+
+        void place(Cursor cursor, Rect clip) {
+            placement.record(cursor, clip);
+        }
+    }
+
+    /** Where the cursor painted so far is recorded; shared by every scope that can win. */
+    private static final class Placement {
+        private Cursor cursor;
+        private Rect clip;
+
+        void record(Cursor value, Rect visible) {
+            cursor = value;
+            clip = visible;
+        }
+
+        /**
+         * The placed cursor at the cell a terminal can address, or null when it is not visible.
+         *
+         * <p>A caret on the second half of a wide glyph moves to the glyph it is part of, which is
+         * the only cell a terminal cursor can be put on. That can put the cell outside the rectangle
+         * the caret is visible in, and a caret whose glyph starts beyond an ancestor's clip is not
+         * shown rather than pinned to the edge.</p>
+         */
+        Cursor resolve(Screen screen) {
+            if (cursor == null) {
+                return null;
+            }
+            int start = cursor.column();
+            while (start > 0 && screen.isContinuation(cursor.row(), start)) {
+                start--;
+            }
+            return clip.contains(cursor.row(), start) ? cursor.movedTo(cursor.row(), start) : null;
+        }
+    }
+
+    /**
+     * Resolves one declared cursor to a screen cell and records it as the placement to present.
+     *
+     * <p>The intent's row and column are local to {@code bounds}, the rectangle the declaring wrapper
+     * was given, so an ancestor's padding, frame or share of a split is already folded in. The cell
+     * has to be inside {@code clip} as well, which is what hides a caret the tree or the screen has
+     * clipped away instead of showing it at the edge. The cell is recorded as declared; whether it is
+     * a cell a terminal can address is settled once the tree is painted.</p>
+     */
+    private static void place(Cursor cursor, Rect bounds, Rect clip, Paint paint) {
+        if (!cursor.visible()) {
+            return;
+        }
+        if (cursor.owner().isPresent() && !paint.focused.contains(cursor.owner().get())) {
+            // The element that owns the caret is not the one that holds focus, so the caret is not
+            // the user's: showing it would put two carets on screen or a caret in a blurred field.
+            return;
+        }
+        long row = (long) bounds.row() + cursor.row();
+        long column = (long) bounds.col() + cursor.column();
+        if (row > Integer.MAX_VALUE || column > Integer.MAX_VALUE) {
+            return;
+        }
+        int targetRow = (int) row;
+        int targetColumn = (int) column;
+        if (!clip.contains(targetRow, targetColumn)) {
+            return;
+        }
+        paint.place(cursor.movedTo(targetRow, targetColumn), clip);
+    }
+
+    /**
+     * Marks the resolved cell for a virtual cursor so the caret is part of the frame itself.
+     *
+     * <p>The caret is reverse video over the cell it sits on, and the cell keeps its text and link,
+     * so the character under the caret stays readable. A blank cell gets a painted space, because a
+     * style without a glyph would show nothing at all. Content that is already reverse video - a
+     * selection, typically - looks unchanged under a virtual caret, which is the price of a marker
+     * that is one cell style.</p>
+     */
+    private static void paintVirtualCursor(Screen screen, Cursor cursor) {
+        if (cursor.strategy() != Cursor.Strategy.VIRTUAL) {
+            return;
+        }
+        Cell cell = screen.cell(cursor.row(), cursor.column());
+        Style style = cell.style().withInvert();
+        if (cell.text().isEmpty()) {
+            screen.put(cursor.row(), cursor.column(), " ", style, cell.link(), 1);
+        } else {
+            screen.restyle(cursor.row(), cursor.column(), style);
+        }
     }
 
     // ── measurement ──────────────────────────────────────────────────────────
@@ -118,6 +303,15 @@ public final class LayoutEngine {
                 int inner = intrinsicHeight(box.child(), Math.max(0, cols - frame), Math.max(0, maxRows - frame));
                 yield cappedSum(frame, inner, maxRows);
             }
+            // The supplied top row is always there; the bottom edge and the side insets come with
+            // the border, exactly as they do for a BorderBox.
+            case View.TopEdge<?> edge -> {
+                boolean visible = edge.border().isVisible();
+                int rows = visible ? 2 : 1;
+                int inner = intrinsicHeight(
+                        edge.child(), Math.max(0, cols - (visible ? 2 : 0)), Math.max(0, maxRows - rows));
+                yield cappedSum(rows, inner, maxRows);
+            }
             // The reservation is capped by the rows still available: a child cannot need more than
             // its parent offers, and the uncapped size would overflow the sums that accumulate it.
             case View.Fixed<?> fixed -> Math.min(fixed.size(), maxRows);
@@ -125,6 +319,12 @@ public final class LayoutEngine {
             case View.Overlay<?> overlay -> overlayHeight(overlay, cols, maxRows);
             case View.Keyed<?> keyed -> intrinsicHeight(keyed.child(), cols, maxRows);
             case View.Focused<?> focused -> intrinsicHeight(focused.child(), cols, maxRows);
+            case View.CursorAt<?> cursor -> intrinsicHeight(cursor.child(), cols, maxRows);
+            case View.Presentation<?> presentation -> intrinsicHeight(presentation.child(), cols, maxRows);
+            // The builder is asked for the container it is measured inside: the rows still
+            // available are the height it may claim, so a subtree that clamps its own height
+            // measures as the height it will paint rather than as the height it would like.
+            case View.Sized<?> sized -> intrinsicHeight(sized.build().apply(new Size(maxRows, cols)), cols, maxRows);
         };
     }
 
@@ -153,11 +353,23 @@ public final class LayoutEngine {
                                 + intrinsicWidth(
                                         box.child(),
                                         Math.max(0, maxCols - (box.border().isVisible() ? 2 : 0))));
+            case View.TopEdge<?> edge ->
+                Math.min(
+                        maxCols,
+                        (edge.border().isVisible() ? 2 : 0)
+                                + intrinsicWidth(
+                                        edge.child(),
+                                        Math.max(0, maxCols - (edge.border().isVisible() ? 2 : 0))));
             case View.Fixed<?> fixed -> Math.min(maxCols, fixed.size());
             case View.Grow<?> grow -> 0;
             case View.Overlay<?> overlay -> overlayWidth(overlay, maxCols);
             case View.Keyed<?> keyed -> intrinsicWidth(keyed.child(), maxCols);
             case View.Focused<?> focused -> intrinsicWidth(focused.child(), maxCols);
+            case View.CursorAt<?> cursor -> intrinsicWidth(cursor.child(), maxCols);
+            case View.Presentation<?> presentation -> intrinsicWidth(presentation.child(), maxCols);
+            // Width is asked for without a row budget, so the builder is given one it cannot reach.
+            case View.Sized<?> sized ->
+                intrinsicWidth(sized.build().apply(new Size(Integer.MAX_VALUE, maxCols)), maxCols);
         };
     }
 
@@ -369,7 +581,7 @@ public final class LayoutEngine {
 
     // ── painting ─────────────────────────────────────────────────────────────
 
-    private void paint(View<?> view, Screen screen, Rect bounds, List<Region> regions) {
+    private void paint(View<?> view, Screen screen, Rect bounds, List<Region> regions, Paint paint) {
         Rect clip = bounds.clip(new Rect(0, 0, screen.rows(), screen.cols()));
         if (clip.isEmpty()) {
             return;
@@ -378,26 +590,43 @@ public final class LayoutEngine {
             case View.Text<?> text -> paintText(text.text(), screen, clip);
             case View.Blank<?> blank -> {}
             case View.Fill<?> fill -> screen.fill(clip, fill.style());
-            case View.Column<?> column -> paintColumn(column, screen, clip, regions);
-            case View.Row<?> row -> paintRow(row, screen, clip, regions);
-            case View.Padding<?> padding -> paint(padding.child(), screen, clip.inset(padding.insets()), regions);
-            case View.BorderBox<?> box -> paintBorder(box, screen, clip, regions);
-            case View.Fixed<?> fixed -> paint(fixed.child(), screen, clip, regions);
-            case View.Grow<?> grow -> paint(grow.child(), screen, clip, regions);
+            case View.Column<?> column -> paintColumn(column, screen, clip, regions, paint);
+            case View.Row<?> row -> paintRow(row, screen, clip, regions, paint);
+            case View.Padding<?> padding ->
+                paint(padding.child(), screen, clip.inset(padding.insets()), regions, paint);
+            case View.BorderBox<?> box -> paintBorder(box, screen, clip, regions, paint);
+            case View.TopEdge<?> edge -> paintTopEdge(edge, screen, clip, regions, paint);
+            case View.Fixed<?> fixed -> paint(fixed.child(), screen, clip, regions, paint);
+            case View.Grow<?> grow -> paint(grow.child(), screen, clip, regions, paint);
             case View.Overlay<?> overlay -> {
-                for (int i = 0; i < overlay.layers().size(); i++) {
-                    paint(overlay.layers().get(i), screen, clip, regions);
+                List<? extends View<?>> layers = overlay.layers();
+                for (int i = 0; i < layers.size(); i++) {
+                    // A modal layer is a screen of its own: the layers it covers cannot place a
+                    // cursor, because the caret of what is behind a dialog is not the user's caret.
+                    boolean covered = overlay.modal() && i < layers.size() - 1;
+                    paint(layers.get(i), screen, clip, regions, covered ? paint.detached() : paint);
                 }
             }
-            case View.Keyed<?> keyed -> paint(keyed.child(), screen, clip, regions);
+            case View.Keyed<?> keyed -> paint(keyed.child(), screen, clip, regions, paint);
             case View.Focused<?> focused -> {
-                regions.add(new Region(focused.id(), clip));
-                paint(focused.child(), screen, clip, regions);
+                regions.add(new Region(focused.id(), clip, paint.reachable()));
+                paint(focused.child(), screen, clip, regions, focused.focused() ? paint.entering(focused.id()) : paint);
             }
+            case View.CursorAt<?> positioned -> {
+                place(positioned.cursor(), bounds, clip, paint);
+                paint(positioned.child(), screen, clip, regions, paint);
+            }
+            // Presentation is session state, not geometry: the wrapper paints its child in exactly
+            // the rectangle it was given.
+            case View.Presentation<?> presented -> paint(presented.child(), screen, clip, regions, paint);
+            // The allocated rectangle is the geometry the builder is asked about, so what it wraps
+            // and where it puts its caret agree with the cells it is painted into.
+            case View.Sized<?> sized ->
+                paint(sized.build().apply(new Size(bounds.rows(), bounds.cols())), screen, bounds, regions, paint);
         }
     }
 
-    private void paintColumn(View.Column<?> column, Screen screen, Rect bounds, List<Region> regions) {
+    private void paintColumn(View.Column<?> column, Screen screen, Rect bounds, List<Region> regions, Paint paint) {
         List<? extends View<?>> items = List.copyOf(column.items());
         if (items.isEmpty()) {
             return;
@@ -432,12 +661,12 @@ public final class LayoutEngine {
                 }
             }
             Rect childBounds = new Rect(row, col, height, Math.max(0, childCols));
-            paint(child, screen, childBounds, regions);
+            paint(child, screen, childBounds, regions, paint);
             row += height;
         }
     }
 
-    private void paintRow(View.Row<?> row, Screen screen, Rect bounds, List<Region> regions) {
+    private void paintRow(View.Row<?> row, Screen screen, Rect bounds, List<Region> regions, Paint paint) {
         List<? extends View<?>> items = List.copyOf(row.items());
         if (items.isEmpty()) {
             return;
@@ -464,7 +693,7 @@ public final class LayoutEngine {
                 };
             }
             Rect childBounds = new Rect(bounds.row() + offset, col, height, width);
-            paint(child, screen, childBounds, regions);
+            paint(child, screen, childBounds, regions, paint);
             col += width;
         }
     }
@@ -505,6 +734,10 @@ public final class LayoutEngine {
                 int frame = box.border().isVisible() ? 2 : 0;
                 yield Math.min(cols, frame + contentWidth(box.child(), Math.max(0, cols - frame)));
             }
+            case View.TopEdge<?> edge -> {
+                int frame = edge.border().isVisible() ? 2 : 0;
+                yield Math.min(cols, frame + contentWidth(edge.child(), Math.max(0, cols - frame)));
+            }
             // A Fixed reserves its size on a parent row's main axis, so that row is as wide as the
             // size and not as the content inside it; a column's cross axis unwraps it (crossAxis).
             case View.Fixed<?> fixed -> Math.min(cols, fixed.size());
@@ -512,6 +745,9 @@ public final class LayoutEngine {
             case View.Overlay<?> overlay -> overlayWidth(overlay, cols);
             case View.Keyed<?> keyed -> contentWidth(keyed.child(), cols);
             case View.Focused<?> focused -> contentWidth(focused.child(), cols);
+            case View.CursorAt<?> cursor -> contentWidth(cursor.child(), cols);
+            case View.Presentation<?> presentation -> contentWidth(presentation.child(), cols);
+            case View.Sized<?> sized -> contentWidth(sized.build().apply(new Size(Integer.MAX_VALUE, cols)), cols);
         };
     }
 
@@ -520,7 +756,9 @@ public final class LayoutEngine {
      * takes main-axis space from its parent, so neither wrapper's own measurement describes the
      * cross axis; only what the wrapper contains does. {@link View.Focused} and {@link View.Keyed}
      * are routing structure and reserve nothing, so they are transparent too: a routing wrapper
-     * must not change what the child it wraps measures on either axis.
+     * must not change what the child it wraps measures on either axis. {@link View.CursorAt} is
+     * pure presentation and is transparent for the same reason, and so is
+     * {@link View.Presentation}: a session-level intent is not geometry.
      */
     private static View<?> crossAxis(View<?> child) {
         View<?> content = child;
@@ -533,16 +771,20 @@ public final class LayoutEngine {
                 content = keyed.child();
             } else if (content instanceof View.Focused<?> focused) {
                 content = focused.child();
+            } else if (content instanceof View.CursorAt<?> cursor) {
+                content = cursor.child();
+            } else if (content instanceof View.Presentation<?> presented) {
+                content = presented.child();
             } else {
                 return content;
             }
         }
     }
 
-    private void paintBorder(View.BorderBox<?> box, Screen screen, Rect bounds, List<Region> regions) {
+    private void paintBorder(View.BorderBox<?> box, Screen screen, Rect bounds, List<Region> regions, Paint paint) {
         Border border = box.border();
         if (!border.isVisible()) {
-            paint(box.child(), screen, bounds, regions);
+            paint(box.child(), screen, bounds, regions, paint);
             return;
         }
         Style style = box.style();
@@ -577,7 +819,45 @@ public final class LayoutEngine {
         }
         Rect inner = new Rect(
                 bounds.row() + 1, bounds.col() + 1, Math.max(0, bounds.rows() - 2), Math.max(0, bounds.cols() - 2));
-        paint(box.child(), screen, inner, regions);
+        paint(box.child(), screen, inner, regions, paint);
+    }
+
+    /**
+     * Frames a child whose top row the caller builds, so a tab bar can join the content below it.
+     *
+     * <p>The row is painted from the frame's own columns and clipped to them: whatever the builder
+     * returns, it cannot paint outside the rectangle the layout gave the frame. The remaining edges
+     * are the border's, so the sides inset the child exactly as a {@link View.BorderBox} does.</p>
+     */
+    private void paintTopEdge(View.TopEdge<?> edge, Screen screen, Rect bounds, List<Region> regions, Paint paint) {
+        Border border = edge.border();
+        Style style = edge.style();
+        StyledText top = edge.top().apply(bounds.cols());
+        if (top != null && !top.isEmpty()) {
+            paintLine(top, screen, bounds.row(), bounds.col(), bounds.cols());
+        }
+        int innerRow = bounds.row() + 1;
+        int innerRows = Math.max(0, bounds.rows() - 1);
+        int innerCol = bounds.col();
+        int innerCols = bounds.cols();
+        if (border.isVisible() && bounds.rows() > 1) {
+            String horizontal = Border.glyph(border.horizontal());
+            String vertical = Border.glyph(border.vertical());
+            for (int row = innerRow; row < bounds.row() + bounds.rows() - 1; row++) {
+                putIfInside(screen, row, bounds.col(), vertical, style, 1);
+                putIfInside(screen, row, bounds.col() + bounds.cols() - 1, vertical, style, 1);
+            }
+            int bottom = bounds.row() + bounds.rows() - 1;
+            screen.put(bottom, bounds.col(), Border.glyph(border.bottomLeft()), style, null, 1);
+            screen.put(bottom, bounds.col() + bounds.cols() - 1, Border.glyph(border.bottomRight()), style, null, 1);
+            for (int col = bounds.col() + 1; col < bounds.col() + bounds.cols() - 1; col++) {
+                putIfInside(screen, bottom, col, horizontal, style, 1);
+            }
+            innerRows = Math.max(0, bounds.rows() - 2);
+            innerCol = bounds.col() + 1;
+            innerCols = Math.max(0, bounds.cols() - 2);
+        }
+        paint(edge.child(), screen, new Rect(innerRow, innerCol, innerRows, innerCols), regions, paint);
     }
 
     private static void putIfInside(Screen screen, int row, int col, String grapheme, Style style, int width) {

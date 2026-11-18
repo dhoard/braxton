@@ -24,9 +24,11 @@ package io.github.dhoard.braxton.view;
 
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
+import io.github.dhoard.braxton.input.PointerEvent;
 import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Insets;
+import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.mvu.ComponentPath;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
@@ -35,6 +37,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 
 /**
  * An immutable description of what to draw.
@@ -74,6 +77,9 @@ public sealed interface View<Msg> {
             case BorderBox<Msg> box ->
                 new BorderBox<>(
                         box.border(), box.title(), box.style(), box.child().scoped(path));
+            case TopEdge<Msg> edge ->
+                new TopEdge<>(
+                        edge.border(), edge.style(), edge.top(), edge.child().scoped(path));
             case Fixed<Msg> fixed -> new Fixed<>(fixed.size(), fixed.child().scoped(path));
             case Grow<Msg> grow -> new Grow<>(grow.weight(), grow.child().scoped(path));
             case Overlay<Msg> overlay ->
@@ -81,13 +87,21 @@ public sealed interface View<Msg> {
                         overlay.layers().stream().map(item -> item.scoped(path)).toList(), overlay.modal());
             case Keyed<Msg> keyed ->
                 new Keyed<>(keyed.capture(), keyed.intercept(), keyed.child().scoped(path), keyed.bubble());
+            case CursorAt<Msg> cursor ->
+                new CursorAt<>(cursor.cursor().scoped(path), cursor.child().scoped(path));
+            case Presentation<Msg> presentation ->
+                new Presentation<>(
+                        presentation.presentation(), presentation.child().scoped(path));
+            case Sized<Msg> sized ->
+                new Sized<>(size -> sized.build().apply(size).scoped(path));
             case Focused<Msg> focused ->
                 new Focused<>(
                         focused.id().scoped(path),
                         focused.focused(),
                         focused.bindings(),
                         focused.input(),
-                        focused.child().scoped(path));
+                        focused.child().scoped(path),
+                        focused.pointer());
         };
     }
 
@@ -108,6 +122,42 @@ public sealed interface View<Msg> {
         default <Msg2> InputHandler<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
             Objects.requireNonNull(mapper, "mapper");
             return event -> handle(event).map(mapper);
+        }
+    }
+
+    /**
+     * Handles one pointer report delivered to this element, returning a message when it is consumed.
+     *
+     * <p>The report arrives in the element's own coordinates: its row and column are counted from the
+     * top-left cell of the rectangle the element was painted in, so a widget never has to know where
+     * on screen it ended up. The second argument is that rectangle's size, which is what lets a
+     * handler map a cell onto its content without having been built for one particular width.</p>
+     *
+     * <p>A handler is built with the view, not with the frame: routing may build a size-aware
+     * subtree at zero columns just to find the handlers inside it. It must therefore derive its
+     * geometry from the size it is handed rather than from the size the subtree was built with.</p>
+     *
+     * @param <Msg> the message type this handler can produce
+     */
+    @FunctionalInterface
+    interface PointerHandler<Msg> {
+
+        /**
+         * Handles one report.
+         *
+         * @param event the report in this element's coordinates
+         * @param region the size of the rectangle it was painted in
+         * @return the message when the report is consumed
+         */
+        Optional<Msg> handle(PointerEvent event, Size region);
+
+        static <Msg> PointerHandler<Msg> none() {
+            return (event, region) -> Optional.empty();
+        }
+
+        default <Msg2> PointerHandler<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
+            return (event, region) -> handle(event, region).map(mapper);
         }
     }
 
@@ -299,6 +349,48 @@ public sealed interface View<Msg> {
     }
 
     /**
+     * Frames one child with a top edge supplied by the caller instead of drawn from the border.
+     *
+     * <p>A frame that joins something above it - a tab bar sitting on its content, a header row
+     * owned by a widget - cannot express that row as a {@link BorderBox} title, which is painted
+     * inside an unbroken edge. Here the whole top row is built from the width the frame is given, so
+     * the caller paints the corners, the horizontal run and any opening it needs, while the left,
+     * right and bottom edges and the child's inset stay the border's own.</p>
+     *
+     * <p>A frame reserves its top row, and one column per side plus one row for the bottom edge only
+     * when the border is visible, so a border that draws nothing leaves a header row above the child
+     * that it never inset. The builder is a pure function of the columns the row is painted into and
+     * is called once per measurement and once per paint; a row narrower than the columns offered is
+     * painted as built and a wider one is clipped, so the row can never paint past the frame.</p>
+     *
+     * @param border the characters used for the left, right and bottom edges
+     * @param style the style applied to those edges
+     * @param top builds the top row from the columns the frame was given; required
+     * @param child the framed child
+     * @param <Msg> the message type the child can produce
+     */
+    record TopEdge<Msg>(Border border, Style style, IntFunction<StyledText> top, View<Msg> child) implements View<Msg> {
+
+        public TopEdge {
+            border = border == null ? Border.SINGLE : border;
+            style = style == null ? Style.NONE : style;
+            Objects.requireNonNull(top, "top");
+            Objects.requireNonNull(child, "child");
+        }
+
+        @Override
+        public List<View<Msg>> children() {
+            return List.of(child);
+        }
+
+        @Override
+        public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
+            return new TopEdge<>(border, style, top, child.map(mapper));
+        }
+    }
+
+    /**
      * Reserves exactly {@code size} cells on the parent's main axis.
      *
      * @param size the reserved cells; never negative
@@ -426,17 +518,30 @@ public sealed interface View<Msg> {
 
     /**
      * Declares a focus target: its stable identity, whether it currently owns focus, its local key
-     * bindings, and the handler for events its bindings do not consume.
+     * bindings, the handler for events its bindings do not consume, and the handler for pointer
+     * reports.
+     *
+     * <p>The rectangle this element is painted in is also the region a pointer report is hit-tested
+     * against, which is what makes "the element under the pointer" and "the element that owns these
+     * keys" the same identity. A press inside the region makes this element the target of the
+     * gesture: the runtime keeps it captured until the release, so a drag that leaves the rectangle
+     * still belongs to it.</p>
      *
      * @param id the focus identity, scoped by the owning mount
      * @param focused whether this element currently owns focus
      * @param bindings the local key bindings, matched while focused
      * @param input the handler for events the bindings do not consume
      * @param child the wrapped subtree
+     * @param pointer the handler for pointer reports inside this element; never null
      * @param <Msg> the message type this element can produce
      */
     record Focused<Msg>(
-            ElementId id, boolean focused, List<Binding<Msg>> bindings, InputHandler<Msg> input, View<Msg> child)
+            ElementId id,
+            boolean focused,
+            List<Binding<Msg>> bindings,
+            InputHandler<Msg> input,
+            View<Msg> child,
+            PointerHandler<Msg> pointer)
             implements View<Msg> {
 
         public Focused {
@@ -444,7 +549,23 @@ public sealed interface View<Msg> {
             bindings = List.copyOf(bindings);
             input = input == null ? InputHandler.none() : input;
             Objects.requireNonNull(child, "child");
+            pointer = pointer == null ? PointerHandler.none() : pointer;
             requireUnique(bindings, "focus");
+        }
+
+        /**
+         * The same element with no pointer handler, the shape every element had before pointer
+         * input existed.
+         *
+         * @param id the focus identity
+         * @param focused whether this element currently owns focus
+         * @param bindings the local key bindings
+         * @param input the handler for events the bindings do not consume
+         * @param child the wrapped subtree
+         */
+        public Focused(
+                ElementId id, boolean focused, List<Binding<Msg>> bindings, InputHandler<Msg> input, View<Msg> child) {
+            this(id, focused, bindings, input, child, PointerHandler.none());
         }
 
         @Override
@@ -453,13 +574,137 @@ public sealed interface View<Msg> {
         }
 
         public Focused<Msg> withFocus(boolean value) {
-            return new Focused<>(id, value, bindings, input, child);
+            return new Focused<>(id, value, bindings, input, child, pointer);
         }
 
         @Override
         public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
             Objects.requireNonNull(mapper, "mapper");
-            return new Focused<>(id, focused, mapBindings(bindings, mapper), input.map(mapper), child.map(mapper));
+            return new Focused<>(
+                    id,
+                    focused,
+                    mapBindings(bindings, mapper),
+                    input.map(mapper),
+                    child.map(mapper),
+                    pointer.map(mapper));
+        }
+    }
+
+    /**
+     * Declares where the caret sits and how it looks, inside the subtree it wraps.
+     *
+     * <p>The cursor's row and column are local to this wrapper's painted rectangle, so nesting it
+     * under padding, a frame or a split pane is what moves the caret on screen. Layout resolves the
+     * intent to one screen cell: the topmost eligible cursor in paint order wins, a cursor whose
+     * {@link Cursor#owner() owner} is not the focused element is not eligible, and a position that
+     * is clipped away or off the screen is hidden. A modal layer is a screen of its own, so only
+     * its topmost layer's cursor can be shown.</p>
+     *
+     * <p>The wrapper is layout-transparent: it reserves no space and paints only its child, so
+     * adding a cursor never changes what the content measures or where it is painted.</p>
+     *
+     * @param cursor the immutable caret intent; required
+     * @param child the wrapped subtree
+     * @param <Msg> the message type the child can produce
+     */
+    record CursorAt<Msg>(Cursor cursor, View<Msg> child) implements View<Msg> {
+
+        public CursorAt {
+            Objects.requireNonNull(cursor, "cursor");
+            Objects.requireNonNull(child, "child");
+        }
+
+        @Override
+        public List<View<Msg>> children() {
+            return List.of(child);
+        }
+
+        @Override
+        public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
+            return new CursorAt<>(cursor, child.map(mapper));
+        }
+    }
+
+    /**
+     * Declares the frame's terminal presentation around the subtree it wraps.
+     *
+     * <p>A frame draws cells; this node says what the terminal itself should be while those cells are
+     * on screen - which screen buffer, whether the pointer, paste and focus reports are asked for, the
+     * window title, the terminal's default colours, a taskbar progress value and a program-status
+     * record. The value is {@link TerminalPresentation}, which is as terminal-free as any other view
+     * data: nothing here writes, and the runtime resolves it once per painted frame and writes only
+     * what changed.</p>
+     *
+     * <p>The intent belongs to the root of the tree: a frame may declare one presentation, and two
+     * different declarations are rejected rather than resolved by paint order, so no widget can change
+     * the window title or the screen buffer behind the application's back. The wrapper is
+     * layout-transparent like {@link CursorAt}: it reserves no space and paints only its child, so
+     * declaring a presentation never changes what the content measures or where it is painted.</p>
+     *
+     * <p>A {@link View.Sized} subtree is not part of the tree until layout offers it a size, so a
+     * declaration inside one is not seen: state the intent at the root.</p>
+     *
+     * @param presentation the session presentation this frame asks for; required
+     * @param child the wrapped subtree
+     * @param <Msg> the message type the child can produce
+     */
+    record Presentation<Msg>(TerminalPresentation presentation, View<Msg> child) implements View<Msg> {
+
+        public Presentation {
+            Objects.requireNonNull(presentation, "presentation");
+            Objects.requireNonNull(child, "child");
+        }
+
+        @Override
+        public List<View<Msg>> children() {
+            return List.of(child);
+        }
+
+        @Override
+        public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
+            return new Presentation<>(presentation, child.map(mapper));
+        }
+    }
+
+    /**
+     * A subtree whose shape depends on the geometry it is given.
+     *
+     * <p>A widget that wraps or clips its own content cannot describe it before it knows how much
+     * space it has, and the width it is painted at is decided by the ancestors it is placed in - a
+     * share of a split, the inside of a frame, what a {@link Grow} leaves over. This node closes
+     * that gap without giving the widget a terminal or a retained state: the builder is a pure
+     * function of a {@link Size}, so building, measuring and painting the same view remains a
+     * function of its inputs.</p>
+     *
+     * <p>Measurement offers the rows and columns still available and painting offers the rectangle
+     * actually allocated, so a subtree that clamps its own height measures as the height it will
+     * paint. A builder must not build another {@code Sized}: the geometry is offered once, which is
+     * what keeps a measurement from recursing.</p>
+     *
+     * <p>{@link #children()} is empty because the child does not exist until a size does;
+     * {@link #map} and {@link #scoped} therefore wrap the built subtree instead of transforming a
+     * child that is already there.</p>
+     *
+     * @param build the builder, called with the offered or allocated geometry; required
+     * @param <Msg> the message type the built subtree can produce
+     */
+    record Sized<Msg>(Function<Size, View<Msg>> build) implements View<Msg> {
+
+        public Sized {
+            Objects.requireNonNull(build, "build");
+        }
+
+        @Override
+        public List<View<Msg>> children() {
+            return List.of();
+        }
+
+        @Override
+        public <Msg2> View<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
+            return new Sized<>(size -> build.apply(size).map(mapper));
         }
     }
 

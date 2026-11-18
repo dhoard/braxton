@@ -22,6 +22,7 @@
 
 package io.github.dhoard.braxton.internal.runtime;
 
+import io.github.dhoard.braxton.app.TerminalFacts;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
 import io.github.dhoard.braxton.layout.Size;
@@ -65,6 +66,10 @@ public final class SubscriptionManager<Msg> {
         final long periodNanos;
         final java.util.function.BiConsumer<Object, java.util.function.BooleanSupplier> emitter;
         final Consumer<String> diagnostics;
+        final java.util.function.BooleanSupplier paused;
+        /** Whether a period elapsed while the session had released its terminal. */
+        final java.util.concurrent.atomic.AtomicBoolean tickPending = new java.util.concurrent.atomic.AtomicBoolean();
+
         private final Object timerLock = new Object();
         private long scheduleGeneration;
         private Timers.Handle handle;
@@ -75,13 +80,15 @@ public final class SubscriptionManager<Msg> {
                 Duration period,
                 Function<Long, Msg> mapper,
                 java.util.function.BiConsumer<Object, java.util.function.BooleanSupplier> emitter,
-                Consumer<String> diagnostics) {
+                Consumer<String> diagnostics,
+                java.util.function.BooleanSupplier paused) {
             super(id, period);
             this.timers = timers;
             this.mapper = new AtomicReference<>(mapper);
             this.periodNanos = Math.max(1L, period.toNanos());
             this.emitter = emitter;
             this.diagnostics = diagnostics;
+            this.paused = paused;
             scheduleNext();
         }
 
@@ -94,29 +101,16 @@ public final class SubscriptionManager<Msg> {
                 generation = ++scheduleGeneration;
             }
             Timers.Handle scheduled = timers.schedule(periodNanos, () -> {
-                Function<Long, Msg> current = mapper.get();
-                if (current == null) {
+                if (mapper.get() == null) {
                     return;
                 }
-                try {
-                    Msg message = current.apply(System.nanoTime());
-                    // Mapping runs on the source thread and can outlive removal,
-                    // so the source's lifetime is rechecked before publishing the
-                    // mapped value, not only before invoking application code. A
-                    // mapper refresh alone keeps this source live.
-                    if (message != null && mapper.get() != null) {
-                        emitter.accept(message, () -> mapper.get() != null);
-                    }
-                } catch (RuntimeException failure) {
-                    // A mapper is application code. Letting the failure escape
-                    // ends this tick chain while reconcile still keeps the
-                    // resource, which would leave a declared subscription
-                    // permanently dead and unreported, so the failure is reported
-                    // and the interval keeps ticking.
-                    diagnostics.accept("subscription "
-                            + id
-                            + " mapper threw "
-                            + failure.getClass().getSimpleName());
+                if (paused.getAsBoolean()) {
+                    // The period is a monotonic duration, so the chain keeps ticking; what it does
+                    // not do is publish while somebody else owns the terminal. One flag records
+                    // that a tick elapsed, so resume delivers one tick rather than a burst.
+                    tickPending.set(true);
+                } else {
+                    tick();
                 }
                 if (mapper.get() != null) {
                     scheduleNext();
@@ -134,6 +128,37 @@ public final class SubscriptionManager<Msg> {
             scheduled.cancel();
         }
 
+        /** Maps one elapsed period and publishes it, containing a throwing mapper. */
+        private void tick() {
+            Function<Long, Msg> current = mapper.get();
+            if (current == null) {
+                return;
+            }
+            try {
+                Msg message = current.apply(System.nanoTime());
+                // Mapping runs on the source thread and can outlive removal,
+                // so the source's lifetime is rechecked before publishing the
+                // mapped value, not only before invoking application code. A
+                // mapper refresh alone keeps this source live.
+                if (message != null && mapper.get() != null) {
+                    emitter.accept(message, () -> mapper.get() != null);
+                }
+            } catch (RuntimeException failure) {
+                // A mapper is application code. Letting the failure escape
+                // ends this tick chain while reconcile still keeps the
+                // resource, which would leave a declared subscription
+                // permanently dead and unreported, so the failure is reported
+                // and the interval keeps ticking.
+                diagnostics.accept("subscription " + id + " mapper threw "
+                        + failure.getClass().getSimpleName());
+            }
+        }
+
+        /** Claims the tick that elapsed while the session was released, if there was one. */
+        boolean takePendingTick() {
+            return tickPending.getAndSet(false);
+        }
+
         @Override
         void close() {
             Timers.Handle scheduled;
@@ -145,6 +170,20 @@ public final class SubscriptionManager<Msg> {
             if (scheduled != null) {
                 scheduled.cancel();
             }
+        }
+    }
+
+    private static final class FactsLive<Msg> extends Live {
+        final AtomicReference<Function<TerminalFacts, Msg>> mapper;
+
+        FactsLive(SubscriptionId id, Function<TerminalFacts, Msg> mapper) {
+            super(id, "terminal-facts");
+            this.mapper = new AtomicReference<>(mapper);
+        }
+
+        @Override
+        void close() {
+            mapper.set(null);
         }
     }
 
@@ -192,9 +231,19 @@ public final class SubscriptionManager<Msg> {
     }
 
     private ScopeManager scopes;
+    private java.util.function.Supplier<TerminalFacts> facts = () -> null;
 
     public void bindScopes(ScopeManager scopes) {
         this.scopes = scopes;
+    }
+
+    /**
+     * Binds the session facts a {@link Subscription.Facts} source publishes when it starts.
+     *
+     * @param facts the current facts, or a supplier that returns null before the session has any
+     */
+    public void bindFacts(java.util.function.Supplier<TerminalFacts> facts) {
+        this.facts = facts == null ? () -> null : facts;
     }
 
     private ScopeManager.Origin origin(SubscriptionId id) {
@@ -225,6 +274,9 @@ public final class SubscriptionManager<Msg> {
     private final Consumer<String> diagnostics;
     private final Map<SubscriptionId, Live> live = new java.util.LinkedHashMap<>();
     private final Object lock = new Object();
+    /** Whether the session has released its terminal, so interval ticks are coalesced. */
+    private volatile boolean paused;
+
     private boolean closed;
     private Thread owner = Thread.currentThread();
 
@@ -314,6 +366,8 @@ public final class SubscriptionManager<Msg> {
             ((IntervalLive<Msg>) interval).mapper.set(source.onTick());
         } else if (existing instanceof ResizeLive<?> resize && leaf instanceof Subscription.Resize<Msg> source) {
             ((ResizeLive<Msg>) resize).mapper.set(source.onResize());
+        } else if (existing instanceof FactsLive<?> facts && leaf instanceof Subscription.Facts<Msg> source) {
+            ((FactsLive<Msg>) facts).mapper.set(source.onFacts());
         } else if (existing instanceof ExternalLive<?> external && leaf instanceof Subscription.Source<Msg> source) {
             ((ExternalLive<Msg>) external).mapper.set(source.mapper());
         }
@@ -329,6 +383,7 @@ public final class SubscriptionManager<Msg> {
         return switch (leaf) {
             case Subscription.Interval<?> interval -> existing instanceof IntervalLive<?>;
             case Subscription.Resize<?> resize -> existing instanceof ResizeLive<?>;
+            case Subscription.Facts<?> facts -> existing instanceof FactsLive<?>;
             case Subscription.Source<?> source -> existing instanceof ExternalLive<?>;
             case Subscription.Batch<?> batch -> false;
             case Subscription.None<?> none -> false;
@@ -344,10 +399,24 @@ public final class SubscriptionManager<Msg> {
                     interval.period(),
                     interval.onTick(),
                     (message, valid) -> enqueue(message, origin, valid),
-                    diagnostics);
+                    diagnostics,
+                    () -> paused);
         }
         if (leaf instanceof Subscription.Resize<Msg> resize) {
             return new ResizeLive<>(resize.id(), resize.onResize());
+        }
+        if (leaf instanceof Subscription.Facts<Msg> declared) {
+            FactsLive<Msg> live = new FactsLive<>(declared.id(), declared.onFacts());
+            // The current facts are what a source that just started is about to know; a session that
+            // has none yet emits nothing until it does.
+            TerminalFacts current = facts.get();
+            if (current != null) {
+                Msg message = mapFacts(live, declared.onFacts(), current);
+                if (message != null) {
+                    enqueue(message, origin, () -> live.mapper.get() != null);
+                }
+            }
+            return live;
         }
         if (leaf instanceof Subscription.Source<Msg> source) {
             AtomicReference<Function<Object, Msg>> mapper = new AtomicReference<>(source.mapper());
@@ -375,6 +444,48 @@ public final class SubscriptionManager<Msg> {
         throw new IllegalArgumentException("unsupported subscription: " + leaf);
     }
 
+    /**
+     * Stops publishing interval ticks while the session has released its terminal.
+     *
+     * <p>The periods keep running: an interval is a monotonic duration, not a wall-clock deadline, so
+     * a stopped chain would report a different elapsed time than the clock did. What pauses is
+     * publishing: a tick that elapses now is recorded once per interval, and {@link #resume()}
+     * publishes one tick for each interval that had one. An application therefore sees the period it
+     * asked for continue across a handoff instead of a burst of queued ticks. External sources keep
+     * emitting: their values are produced by code the session does not schedule, and dropping one
+     * would lose a fact the application never hears about again.</p>
+     */
+    public void pause() {
+        paused = true;
+    }
+
+    /**
+     * Resumes publishing interval ticks and delivers one tick for each period that elapsed.
+     *
+     * <p>Called on the owner thread after the terminal has been taken back, so the coalesced ticks are
+     * enqueued in the same order as any other owner-side delivery.</p>
+     */
+    public void resume() {
+        paused = false;
+        List<Live> targets;
+        synchronized (lock) {
+            targets = new ArrayList<>(live.values());
+        }
+        for (Live source : targets) {
+            if (source instanceof IntervalLive<?> interval) {
+                deliverPendingTick(interval);
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void deliverPendingTick(IntervalLive<?> interval) {
+        if (!interval.takePendingTick()) {
+            return;
+        }
+        ((IntervalLive<Msg>) interval).tick();
+    }
+
     /** Called on the owner thread when a resize is measured. */
     public void notifyResize(Size size) {
         List<Live> targets;
@@ -396,6 +507,63 @@ public final class SubscriptionManager<Msg> {
                 }
             }
         }
+    }
+
+    /**
+     * Publishes a changed set of session facts to every live facts source.
+     *
+     * <p>Called on the owner thread when a fact changes - a colour profile upgraded by a capability
+     * reply, or a background colour reported for the first time - so a component that did not ask for
+     * the change still learns it.</p>
+     *
+     * @param current the facts in force
+     */
+    public void notifyFacts(TerminalFacts current) {
+        if (current == null) {
+            return;
+        }
+        List<Live> targets;
+        synchronized (lock) {
+            targets = new ArrayList<>(live.values());
+        }
+        for (Live source : targets) {
+            if (!(source instanceof FactsLive<?> live)) {
+                continue;
+            }
+            Function<TerminalFacts, Msg> mapper = mapperOf(live);
+            if (mapper == null) {
+                continue;
+            }
+            Msg message = mapFacts(live, mapper, current);
+            if (message != null) {
+                mailbox.enqueueFromOwner(
+                        new Mailbox.AppMessage(message, origin(source.id), () -> live.mapper.get() != null));
+            }
+        }
+    }
+
+    /**
+     * Maps one set of facts for the source that declared it, containing a throwing mapper.
+     *
+     * <p>Facts are mapped on the owner thread, so a throw is an application failure on a synchronous
+     * path and is reported with the source's structural path and the {@code SUBSCRIPTIONS} phase, as
+     * a resize mapper's is.</p>
+     */
+    private Msg mapFacts(Live source, Function<TerminalFacts, Msg> mapper, TerminalFacts current) {
+        try {
+            return mapper.apply(current);
+        } catch (RuntimeException failure) {
+            throw new ComponentFailure(
+                    source.id.path(),
+                    ComponentFailure.Phase.SUBSCRIPTIONS,
+                    "facts mapper threw " + failure.getClass().getSimpleName(),
+                    failure);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Function<TerminalFacts, Msg> mapperOf(FactsLive<?> live) {
+        return ((FactsLive<Msg>) live).mapper.get();
     }
 
     /**

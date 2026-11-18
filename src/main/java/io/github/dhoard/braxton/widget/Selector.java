@@ -23,7 +23,8 @@
 package io.github.dhoard.braxton.widget;
 
 import io.github.dhoard.braxton.input.InputEvent;
-import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.input.KeyAction;
+import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.InitContext;
@@ -54,6 +55,11 @@ import java.util.function.Function;
  * <p>Every option is one painted row, so the marker always names a whole option. A line break in an
  * option is painted as a space rather than splitting the row and pushing every later option down,
  * the same one-line rule {@link TableSelector} applies to its cells.</p>
+ *
+ * <p>The gestures this selector handles are a {@link KeyMap}: {@link #defaultKeys()} defines the
+ * defaults, {@link #keys()} is the definition a caller can render through {@link Help}, and the
+ * {@link #Selector(Config, KeyMap)} constructor replaces it. Removing or disabling an action removes
+ * the behavior it named rather than leaving a key that fires a message nothing handles.</p>
  */
 public final class Selector implements Component<Selector.Model, Selector.Msg, Selector.Output> {
 
@@ -119,9 +125,56 @@ public final class Selector implements Component<Selector.Model, Selector.Msg, S
     }
 
     private final Config config;
+    private final KeyMap<Msg> keys;
 
+    /**
+     * A selector with the default keys.
+     *
+     * @param config the rendering policy; required
+     */
     public Selector(Config config) {
+        this(config, defaultKeys());
+    }
+
+    /**
+     * A selector with its own keys.
+     *
+     * @param config the rendering policy; required
+     * @param keys the actions this selector handles, matched while it is focused; required
+     */
+    public Selector(Config config, KeyMap<Msg> keys) {
         this.config = Objects.requireNonNull(config, "config");
+        this.keys = Objects.requireNonNull(keys, "keys");
+    }
+
+    /**
+     * The default actions: up/down navigation, confirm and cancel.
+     *
+     * <p>They are the definition this widget routes and the definition {@link Help} renders, so a
+     * caller that remaps one action through {@link KeyMap#withAliases} changes both.</p>
+     * @return the default actions
+     */
+    public static KeyMap<Msg> defaultKeys() {
+        return KeyMap.of(
+                KeyMap.group(
+                        "Navigation",
+                        KeyAction.<Msg>of("up", new Msg.Up(), "\u2191", "move up", "up"),
+                        KeyAction.<Msg>of("down", new Msg.Down(), "\u2193", "move down", "down")),
+                KeyMap.group(
+                        "Actions",
+                        // A terminal reports Meta+Enter as ESC CR, which the decoder normalizes to
+                        // alt+enter; the name-only switch this replaced also accepted it.
+                        KeyAction.<Msg>of("confirm", new Msg.Confirm(), "enter", "choose", "enter", "alt+enter"),
+                        KeyAction.<Msg>of("cancel", new Msg.Cancel(), "esc", "cancel", "escape")));
+    }
+
+    /**
+     * The actions this selector handles.
+     *
+     * @return the key map
+     */
+    public KeyMap<Msg> keys() {
+        return keys;
     }
 
     @Override
@@ -143,6 +196,7 @@ public final class Selector implements Component<Selector.Model, Selector.Msg, S
                 model.focused(),
                 config.activeStyle(),
                 config.inactiveStyle(),
+                keys,
                 Function.identity());
     }
 
@@ -181,6 +235,7 @@ public final class Selector implements Component<Selector.Model, Selector.Msg, S
             boolean focused,
             Style activeStyle,
             Style inactiveStyle,
+            KeyMap<Msg> keys,
             Function<Msg, Message> map) {
         List<View<Message>> rows = new java.util.ArrayList<>();
         for (int i = 0; i < state.options().size(); i++) {
@@ -198,15 +253,7 @@ public final class Selector implements Component<Selector.Model, Selector.Msg, S
             if (!(event instanceof InputEvent.KeyInput key)) {
                 return Optional.empty();
             }
-            Key gesture = key.key();
-            Optional<Msg> action = switch (gesture.name()) {
-                case "up" -> Optional.of(new Msg.Up());
-                case "down" -> Optional.of(new Msg.Down());
-                case "enter" -> Optional.of(new Msg.Confirm());
-                case "escape" -> Optional.of(new Msg.Cancel());
-                default -> Optional.empty();
-            };
-            return action.map(map);
+            return keys.actionFor(key.key()).map(KeyAction::message).map(map);
         };
         return Views.focus(id, focused, List.of(), handler, list);
     }

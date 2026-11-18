@@ -26,11 +26,13 @@ import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Insets;
+import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 
 /** Terse factories for {@link View} values. */
 public final class Views {
@@ -234,6 +236,24 @@ public final class Views {
     }
 
     /**
+     * A frame whose top row the caller builds from the columns it is given.
+     *
+     * <p>Use it when something has to join the frame above it - a tab bar sitting on the content it
+     * selects - because a title is painted inside an unbroken edge and cannot open one. The left,
+     * right and bottom edges are the border's, and the child is inset like any framed child.</p>
+     *
+     * @param border the characters used for the edges that are drawn here
+     * @param style the style applied to those edges; null is no styling
+     * @param top builds the top row from the columns the frame was given; must occupy no more
+     * @param child the framed child
+     * @param <Msg> the message type the child produces
+     * @return a framed view with a supplied top row
+     */
+    public static <Msg> View<Msg> topEdge(Border border, Style style, IntFunction<StyledText> top, View<Msg> child) {
+        return new View.TopEdge<>(border, style, top, child);
+    }
+
+    /**
      * Exactly {@code size} cells on the parent's main axis.
      *
      * @param size the reserved cells; never negative
@@ -268,7 +288,6 @@ public final class Views {
         return new View.Grow<>(weight, child);
     }
 
-    /** A vertical gap of {@code rows} blank cells. */
     /**
      * A vertical gap of {@code rows} blank cells.
      *
@@ -308,7 +327,6 @@ public final class Views {
         return new View.Overlay<>(layers, modal);
     }
 
-    /** A modal overlay of {@code layer} on top of {@code base}. */
     /**
      * A modal layer over a base layer.
      *
@@ -390,7 +408,89 @@ public final class Views {
         return new View.Focused<>(id, focused, bindings, input, child);
     }
 
-    /** Maps a list of child views into a parent message type. */
+    /**
+     * A focus target that also handles pointer reports, with no key bindings of its own.
+     *
+     * @param id the focus identity, scoped by the owning mount
+     * @param focused whether the element currently owns focus
+     * @param pointer the handler for pointer reports inside this element; required
+     * @param child the wrapped subtree
+     * @param <Msg> the message type the child produces
+     * @return a focused view
+     */
+    public static <Msg> View<Msg> focus(
+            ElementId id, boolean focused, View.PointerHandler<Msg> pointer, View<Msg> child) {
+        return new View.Focused<>(id, focused, List.of(), View.InputHandler.none(), child, pointer);
+    }
+
+    /**
+     * A focus target with local bindings, an input handler and a pointer handler.
+     *
+     * @param id the focus identity, scoped by the owning mount
+     * @param focused whether the element currently owns focus
+     * @param bindings the local key bindings, matched while focused
+     * @param input the handler for events the bindings do not consume
+     * @param pointer the handler for pointer reports inside this element; required
+     * @param child the wrapped subtree
+     * @param <Msg> the message type the element produces
+     * @return a focused view
+     */
+    public static <Msg> View<Msg> focus(
+            ElementId id,
+            boolean focused,
+            List<Binding<Msg>> bindings,
+            View.InputHandler<Msg> input,
+            View.PointerHandler<Msg> pointer,
+            View<Msg> child) {
+        return new View.Focused<>(id, focused, bindings, input, child, pointer);
+    }
+
+    /**
+     * Places a caret inside a subtree.
+     *
+     * <p>The cursor's row and column are local to the rectangle this wrapper is painted in, and the
+     * resolved cell is shown only while it is visible there.</p>
+     *
+     * @param cursor the caret intent
+     * @param child the subtree the cursor sits in
+     * @param <Msg> the message type the child produces
+     * @return a cursor view
+     */
+    public static <Msg> View<Msg> cursor(Cursor cursor, View<Msg> child) {
+        return new View.CursorAt<>(cursor, child);
+    }
+
+    /**
+     * A subtree built from the geometry it is given.
+     *
+     * <p>For a widget that wraps or clips its own content: the builder is called with the rows and
+     * columns it is offered while it is measured, and with the rectangle it is allocated while it
+     * is painted.</p>
+     *
+     * @param build the builder, a pure function of the offered or allocated size
+     * @param <Msg> the message type the built subtree produces
+     * @return a size-aware view
+     */
+    public static <Msg> View<Msg> sized(Function<Size, View<Msg>> build) {
+        return new View.Sized<>(build);
+    }
+
+    /**
+     * Declares the frame's terminal presentation around a subtree.
+     *
+     * <p>Use it once, at the root of the view: the intent covers the whole session, so a frame may
+     * declare one and a second, different declaration is a structural failure instead of a value
+     * chosen by paint order.</p>
+     *
+     * @param presentation the session presentation the frame asks for; required
+     * @param child the wrapped subtree
+     * @param <Msg> the message type the child produces
+     * @return a presentation view
+     */
+    public static <Msg> View<Msg> presentation(TerminalPresentation presentation, View<Msg> child) {
+        return new View.Presentation<>(presentation, child);
+    }
+
     /**
      * Maps a list of child views into a parent message type.
      *

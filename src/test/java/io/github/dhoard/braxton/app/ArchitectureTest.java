@@ -44,7 +44,7 @@ class ArchitectureTest {
             List.of("utils/", "inputForm/", "Keyhandle/", "Text/", "automation/", "clipboard/");
 
     /**
-     * The nine implementation owners of the one-row policy in the cross-platform line-ending
+     * The ten implementation owners of the one-row policy in the cross-platform line-ending
      * design. Each must delegate conversion to {@code LineBreaks}; this list is explicit because a
      * test cannot discover an arbitrary future surface that reintroduces its own chain. {@code
      * SingleRow} is the widget layer's one-row entry point, so a widget that flattens only through
@@ -59,7 +59,8 @@ class ArchitectureTest {
             "io/github/dhoard/braxton/widget/Editor.java",
             "io/github/dhoard/braxton/widget/Selector.java",
             "io/github/dhoard/braxton/widget/SingleRow.java",
-            "io/github/dhoard/braxton/widget/Box.java");
+            "io/github/dhoard/braxton/widget/Box.java",
+            "io/github/dhoard/braxton/widget/Tabs.java");
 
     private static List<Path> sources() throws IOException {
         try (var paths = Files.walk(MAIN)) {

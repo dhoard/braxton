@@ -23,7 +23,8 @@
 package io.github.dhoard.braxton.widget;
 
 import io.github.dhoard.braxton.input.InputEvent;
-import io.github.dhoard.braxton.input.Key;
+import io.github.dhoard.braxton.input.KeyAction;
+import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Update;
@@ -54,6 +55,10 @@ import java.util.function.Function;
  * padded inside the row it is painted in, the rule {@link Table}, {@link Markup} and {@link Quote}
  * share, so a cell that opens with a cluster that has no base of its own cannot make one row of the
  * grid a different width from another.</p>
+ *
+ * <p>The gestures this selector handles are a {@link KeyMap}: {@link #defaultKeys()} defines the
+ * defaults, {@link #keys()} is the definition a caller can render through {@link Help}, and the
+ * {@link #TableSelector(Config, KeyMap)} constructor replaces it.</p>
  */
 public final class TableSelector implements Component<TableSelector.Model, TableSelector.Msg, TableSelector.Output> {
 
@@ -139,9 +144,54 @@ public final class TableSelector implements Component<TableSelector.Model, Table
     }
 
     private final Config config;
+    private final KeyMap<Msg> keys;
 
+    /**
+     * A table selector with the default keys.
+     *
+     * @param config the rendering policy; required
+     */
     public TableSelector(Config config) {
+        this(config, defaultKeys());
+    }
+
+    /**
+     * A table selector with its own keys.
+     *
+     * @param config the rendering policy; required
+     * @param keys the actions this selector handles, matched while it is focused; required
+     */
+    public TableSelector(Config config, KeyMap<Msg> keys) {
         this.config = Objects.requireNonNull(config, "config");
+        this.keys = Objects.requireNonNull(keys, "keys");
+    }
+
+    /**
+     * The default actions: four-way navigation, confirm and cancel.
+     *
+     * @return the default actions
+     */
+    public static KeyMap<Msg> defaultKeys() {
+        return KeyMap.of(
+                KeyMap.group(
+                        "Navigation",
+                        KeyAction.<Msg>of("up", new Msg.Up(), "\u2191", "move up", "up"),
+                        KeyAction.<Msg>of("down", new Msg.Down(), "\u2193", "move down", "down"),
+                        KeyAction.<Msg>of("left", new Msg.Left(), "\u2190", "move left", "left"),
+                        KeyAction.<Msg>of("right", new Msg.Right(), "\u2192", "move right", "right")),
+                KeyMap.group(
+                        "Actions",
+                        KeyAction.<Msg>of("confirm", new Msg.Confirm(), "enter", "choose", "enter", "alt+enter"),
+                        KeyAction.<Msg>of("cancel", new Msg.Cancel(), "esc", "cancel", "escape")));
+    }
+
+    /**
+     * The actions this selector handles.
+     *
+     * @return the key map
+     */
+    public KeyMap<Msg> keys() {
+        return keys;
     }
 
     @Override
@@ -164,6 +214,7 @@ public final class TableSelector implements Component<TableSelector.Model, Table
                 config.activeStyle(),
                 config.inactiveStyle(),
                 config.headerStyle(),
+                keys,
                 Function.identity());
     }
 
@@ -196,6 +247,7 @@ public final class TableSelector implements Component<TableSelector.Model, Table
             Style activeStyle,
             Style inactiveStyle,
             Style headerStyle,
+            KeyMap<Msg> keys,
             Function<Msg, Message> map) {
         List<String> header = expanded(state.header());
         int columns = header.size();
@@ -243,17 +295,7 @@ public final class TableSelector implements Component<TableSelector.Model, Table
             if (!(event instanceof InputEvent.KeyInput key)) {
                 return Optional.empty();
             }
-            Key gesture = key.key();
-            Optional<Msg> action = switch (gesture.name()) {
-                case "up" -> Optional.of(new Msg.Up());
-                case "down" -> Optional.of(new Msg.Down());
-                case "left" -> Optional.of(new Msg.Left());
-                case "right" -> Optional.of(new Msg.Right());
-                case "enter" -> Optional.of(new Msg.Confirm());
-                case "escape" -> Optional.of(new Msg.Cancel());
-                default -> Optional.empty();
-            };
-            return action.map(map);
+            return keys.actionFor(key.key()).map(KeyAction::message).map(map);
         };
         return Views.focus(id, focused, List.of(), handler, Views.column(lines));
     }

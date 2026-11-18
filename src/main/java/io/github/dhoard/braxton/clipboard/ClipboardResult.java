@@ -29,6 +29,11 @@ package io.github.dhoard.braxton.clipboard;
  * evidence that the terminal or tmux accepted the text: OSC 52 has no acknowledgement. The
  * in-process buffer remains the dependable destination.</p>
  *
+ * <p>The result describes one copy, not a clipboard: which selection was written is the value the
+ * caller passed to the command, and the two selections are independent destinations that this record
+ * does not describe. What a copy wrote is also not what a read returns - see
+ * {@link ClipboardReadResult} for the typed answer to asking the terminal what a selection holds.</p>
+ *
  * @param text the text actually stored in the in-process buffer, after any truncation
  * @param byteLength the UTF-8 length of {@code text}
  * @param truncated whether the in-process buffer or the OSC 52 payload limit removed text

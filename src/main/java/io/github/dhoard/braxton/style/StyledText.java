@@ -405,6 +405,99 @@ public final class StyledText {
     }
 
     /**
+     * The part of this content between two UTF-16 offsets, keeping each span's style and link.
+     *
+     * <p>A span that straddles either boundary is split there, so the styles of the returned value
+     * are exactly the styles of the content it shows. Offsets outside the content are clamped, and
+     * an empty result is {@link #empty()}. This is how a widget that shows a window of a value - a
+     * wrapped row, a panned field - paints the window without re-deriving what styled it.</p>
+     *
+     * <p>Offsets are text offsets, not cells: a caller that slices at a column boundary converts the
+     * column to an offset first, so a surrogate pair or a combining sequence is never cut in half.</p>
+     *
+     * @param start the first offset to keep
+     * @param end the offset just past the last one to keep
+     * @return the content in that range
+     */
+    public StyledText slice(int start, int end) {
+        int length = length();
+        int from = Math.max(0, Math.min(start, length));
+        int to = Math.max(from, Math.min(end, length));
+        if (from == 0 && to == length) {
+            return this;
+        }
+        if (from == to) {
+            return EMPTY;
+        }
+        List<Span> parts = new ArrayList<>();
+        int offset = 0;
+        for (Span span : spans()) {
+            int spanEnd = offset + span.text().length();
+            if (spanEnd > from && offset < to) {
+                int begin = Math.max(from, offset) - offset;
+                int stop = Math.min(to, spanEnd) - offset;
+                parts.add(new Span(span.text().substring(begin, stop), span.style(), span.link()));
+            }
+            offset = spanEnd;
+            if (offset >= to) {
+                break;
+            }
+        }
+        return parts.isEmpty() ? EMPTY : new StyledText(List.copyOf(parts));
+    }
+
+    /**
+     * This content with {@code style} merged over one UTF-16 range.
+     *
+     * <p>Each span the range covers keeps its own style and link, with {@code style} merged on top
+     * ({@link Style#merge}), and a span that straddles either boundary is split there. So a
+     * highlight cannot lose the styling the content already had, and it cannot restyle text outside
+     * the range it names. Empty and inverted ranges, a null style and a plain style all return this
+     * instance, because none of them can change how the content paints.</p>
+     *
+     * <p>Offsets are clamped to the content. A highlight range is a caller's UTF-16 range and is
+     * expected to fall on grapheme boundaries, which is the only way the result can style whole
+     * clusters.</p>
+     *
+     * @param start the first offset to style
+     * @param end the offset just past the last one to style
+     * @param style the style to merge over the range
+     * @return this content with that range restyled
+     */
+    public StyledText styled(int start, int end, Style style) {
+        if (style == null || style.isPlain() || !hasSpans) {
+            return this;
+        }
+        int length = length();
+        int from = Math.max(0, Math.min(start, length));
+        int to = Math.max(from, Math.min(end, length));
+        if (from == to) {
+            return this;
+        }
+        List<Span> parts = new ArrayList<>(spans().size() + 1);
+        int offset = 0;
+        for (Span span : spans()) {
+            int spanEnd = offset + span.text().length();
+            String text = span.text();
+            if (spanEnd <= from || offset >= to) {
+                parts.add(span);
+            } else {
+                int begin = Math.max(from, offset) - offset;
+                int stop = Math.min(to, spanEnd) - offset;
+                if (begin > 0) {
+                    parts.add(new Span(text.substring(0, begin), span.style(), span.link()));
+                }
+                parts.add(new Span(text.substring(begin, stop), span.style().merge(style), span.link()));
+                if (stop < text.length()) {
+                    parts.add(new Span(text.substring(stop), span.style(), span.link()));
+                }
+            }
+            offset = spanEnd;
+        }
+        return new StyledText(List.copyOf(parts));
+    }
+
+    /**
      * Removes trailing newline characters without disturbing styling.
      *
      * @return this content without trailing line breaks

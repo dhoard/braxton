@@ -40,6 +40,14 @@ import java.util.Locale;
 
 /** FFM adapter for Braxton's own POSIX ABI. Context close waits for active native calls. */
 public final class NativeTerminal implements Terminal {
+
+    /**
+     * The native ABI this Java side speaks; {@code src/main/native/terminal.c} answers it from
+     * {@code bt_abi}. An image that answers anything else is refused before a symbol is bound, so a
+     * stale extracted binary can never be called with the wrong signatures.
+     */
+    static final int REQUIRED_ABI = 3;
+
     private final Arena arena = Arena.ofShared();
     private final MemorySegment inputTransfer = arena.allocate(8192);
     private final MemorySegment outputTransfer = arena.allocate(8192);
@@ -57,6 +65,7 @@ public final class NativeTerminal implements Terminal {
     // read lock notices within one attempt and close is never held behind it for long.
     private volatile boolean outputBounded;
     private boolean closed;
+    private volatile State state = State.ACTIVE;
 
     public static String platform() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
@@ -158,6 +167,9 @@ public final class NativeTerminal implements Terminal {
         lifetime.readLock().lock();
         try {
             if (closed) return -1;
+            // A released terminal belongs to a child process or to the shell: reading it here would
+            // take that process's input, so the read reports nothing to read rather than waiting.
+            if (state != State.ACTIVE) return 0;
             int count = call(Library.READ, context, inputTransfer, capacity, (int) Math.min(100, timeoutMillis));
             if (count < -1) throw new IOException("terminal input failed (errno " + (-count - 2) + ")");
             if (count > 0) MemorySegment.copy(inputTransfer, ValueLayout.JAVA_BYTE, 0, bytes, 0, count);
@@ -172,6 +184,7 @@ public final class NativeTerminal implements Terminal {
         lifetime.readLock().lock();
         try {
             if (closed) throw new IOException("terminal closed");
+            if (state != State.ACTIVE) throw new IOException("terminal is released");
             while (length > 0) {
                 int count = Math.min(length, (int) outputTransfer.byteSize());
                 MemorySegment.copy(bytes, offset, outputTransfer, ValueLayout.JAVA_BYTE, 0, count);
@@ -222,9 +235,106 @@ public final class NativeTerminal implements Terminal {
         lifetime.writeLock().lock();
         try {
             if (closed) throw new IOException("terminal closed");
+            if (state != State.ACTIVE) throw new IOException("terminal is released");
             check(call(Library.RAW, context), "enter raw mode");
         } finally {
             lifetime.writeLock().unlock();
+        }
+    }
+
+    public State state() {
+        return state;
+    }
+
+    /**
+     * Gives the terminal back to the user's own configuration.
+     *
+     * <p>The transition is serialized against every read, write and mode change, so nothing can be
+     * in flight when the device stops belonging to the session. Releasing a released terminal is a
+     * no-op: a retried handoff does not disturb the child that already owns it.</p>
+     */
+    public void release() throws IOException {
+        lifetime.writeLock().lock();
+        try {
+            switch (state) {
+                case CLOSED -> throw new IOException("terminal closed");
+                case RELEASED -> {
+                    return;
+                }
+                case ACTIVE -> {
+                    state = State.RELEASING;
+                    try {
+                        check(call(Library.RELEASE, context), "release terminal");
+                    } catch (IOException | RuntimeException failure) {
+                        // The device configuration may not have been restored, but the session still
+                        // owns it: report the failure from the state it was actually left in.
+                        state = State.ACTIVE;
+                        throw failure;
+                    }
+                    state = State.RELEASED;
+                }
+                case RELEASING, REACQUIRING -> throw new IllegalStateException("terminal is " + state);
+            }
+        } finally {
+            lifetime.writeLock().unlock();
+        }
+    }
+
+    /**
+     * Takes the terminal back, re-entering raw mode.
+     *
+     * <p>A failure leaves the terminal released: the session cannot use a device whose configuration
+     * it could not restore, and the caller reports that as a fatal recovery error.</p>
+     */
+    public void reacquire() throws IOException {
+        lifetime.writeLock().lock();
+        try {
+            switch (state) {
+                case CLOSED -> throw new IOException("terminal closed");
+                case ACTIVE -> {
+                    return;
+                }
+                case RELEASED -> {
+                    state = State.REACQUIRING;
+                    try {
+                        check(call(Library.REACQUIRE, context), "reacquire terminal");
+                    } catch (IOException | RuntimeException failure) {
+                        state = State.RELEASED;
+                        throw failure;
+                    }
+                    state = State.ACTIVE;
+                }
+                case RELEASING, REACQUIRING -> throw new IllegalStateException("terminal is " + state);
+            }
+        } finally {
+            lifetime.writeLock().unlock();
+        }
+    }
+
+    public boolean foreground() {
+        lifetime.readLock().lock();
+        try {
+            if (state != State.ACTIVE && state != State.RELEASED) return false;
+            int answer = call(Library.FOREGROUND, context);
+            if (answer < 0)
+                throw new IllegalStateException("cannot inspect the terminal foreground (errno " + (-answer) + ")");
+            return answer == 1;
+        } catch (IOException problem) {
+            throw new IllegalStateException(problem);
+        } finally {
+            lifetime.readLock().unlock();
+        }
+    }
+
+    public void suspend() throws IOException {
+        lifetime.readLock().lock();
+        try {
+            if (closed) throw new IOException("terminal closed");
+            // The native layer refuses a terminal that is still the session's: a session stopped in
+            // raw mode would hand the shell a terminal whose settings contradict its screen.
+            check(call(Library.SUSPEND, context), "suspend the session");
+        } finally {
+            lifetime.readLock().unlock();
         }
     }
 
@@ -248,6 +358,7 @@ public final class NativeTerminal implements Terminal {
         try {
             if (closed) return;
             closed = true;
+            state = State.CLOSED;
             reader.close();
             try {
                 check(call(Library.CLOSE, context), "restore/close terminal");
@@ -287,6 +398,10 @@ public final class NativeTerminal implements Terminal {
         static final MethodHandle SIZE = bind("bt_size", ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS);
         static final MethodHandle CLOSE = bind("bt_close", ValueLayout.ADDRESS);
         static final MethodHandle RESIZE_EPOCH = bind("bt_resize_epoch");
+        static final MethodHandle RELEASE = bind("bt_release", ValueLayout.ADDRESS);
+        static final MethodHandle REACQUIRE = bind("bt_reacquire", ValueLayout.ADDRESS);
+        static final MethodHandle FOREGROUND = bind("bt_foreground", ValueLayout.ADDRESS);
+        static final MethodHandle SUSPEND = bind("bt_suspend", ValueLayout.ADDRESS);
 
         private static SymbolLookup load() {
             try {
@@ -296,7 +411,7 @@ public final class NativeTerminal implements Terminal {
                     MethodHandle abi = Linker.nativeLinker()
                             .downcallHandle(
                                     symbols.find("bt_abi").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
-                    if (call(abi) != 2) throw new IOException("unsupported Braxton native ABI");
+                    if (call(abi) != REQUIRED_ABI) throw new IOException("unsupported Braxton native ABI");
                     return symbols;
                 });
             } catch (IOException failure) {
