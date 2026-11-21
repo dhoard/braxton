@@ -35,9 +35,13 @@ package io.github.dhoard.braxton.widget;
  */
 interface WidgetResult<M, O> {
 
-    /** The state the reduction produced. */
+    /**
+     * The state the reduction produced.
+     */
     M state();
 
-    /** The intent to hand the application, or {@code null} when the reduction only changed state. */
+    /**
+     * The intent to hand the application, or {@code null} when the reduction only changed state.
+     */
     O intent();
 }

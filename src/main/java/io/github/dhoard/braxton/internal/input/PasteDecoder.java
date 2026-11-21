@@ -26,22 +26,60 @@ import io.github.dhoard.braxton.internal.terminal.TimedReader;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
-/** Bounded scalar-aware paste parsing. Overflow is drained through the marker or idle deadline. */
+/**
+ * Bounded scalar-aware paste parsing. Overflow is drained through the marker or idle deadline.
+ */
 public final class PasteDecoder {
+    /**
+     * The CSI body identifying the bracketed-paste opener.
+     */
     public static final String START_BODY = "200~";
+    /**
+     * The CSI body identifying the bracketed-paste terminator.
+     */
     public static final String END_BODY = "201~";
+    /**
+     * The default maximum admitted paste payload, in bytes.
+     */
     public static final int DEFAULT_MAX_BYTES = 1_048_576;
+    /**
+     * The default maximum paste idle interval, in milliseconds.
+     */
     public static final long DEFAULT_IDLE_TIMEOUT_MILLIS = 250L;
+
     private static final String END = "\u001b[201~";
 
+    /**
+     * The admitted paste text and its truncation and terminator flags.
+     *
+     * @param text the text to process
+     * @param truncated whether a configured bound truncated the payload
+     * @param terminated whether a complete paste terminator was read
+     */
     public record Result(String text, boolean truncated, boolean terminated) {}
 
     private PasteDecoder() {}
 
+    /**
+     * Reads a bracketed-paste payload after its start marker has been consumed.
+     *
+     * @param in the timed character reader
+     * @return the bounded payload and termination/truncation metadata
+     * @throws IOException if input or output fails
+     */
     public static Result read(TimedReader in) throws IOException {
         return read(in, DEFAULT_MAX_BYTES, DEFAULT_IDLE_TIMEOUT_MILLIS);
     }
 
+    /**
+     * Reads a bracketed-paste payload after its start marker has been consumed.
+     *
+     * @param in the timed character reader
+     * @param maxBytes the maximum payload length in UTF-8 bytes
+     * @param idleMillis the paste idle timeout in milliseconds
+     * @return the bounded payload and termination/truncation metadata
+     * @throws IOException if input or output fails
+     */
     public static Result read(TimedReader in, int maxBytes, long idleMillis) throws IOException {
         return read(new ScalarInput(in, 100), maxBytes, idleMillis);
     }

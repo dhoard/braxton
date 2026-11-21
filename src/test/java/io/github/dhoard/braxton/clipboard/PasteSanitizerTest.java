@@ -26,7 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-/** Artifact stripping removes whole escape sequences, including their intermediate bytes. */
+/**
+ * Artifact stripping removes whole escape sequences, including their intermediate bytes.
+ */
 class PasteSanitizerTest {
 
     /**
@@ -65,7 +67,9 @@ class PasteSanitizerTest {
         assertThat(PasteSanitizer.sanitize("a\uD800\u0301b")).isEqualTo("a\u0301b");
     }
 
-    /** A sequence cut off before its final byte still consumes everything it holds. */
+    /**
+     * A sequence cut off before its final byte still consumes everything it holds.
+     */
     @Test
     void anUnfinishedEscapeSequenceIsDroppedToTheEnd() {
         assertThat(PasteSanitizer.sanitize("a\u001B#")).isEqualTo("a");
@@ -86,7 +90,9 @@ class PasteSanitizerTest {
         assertThat(PasteSanitizer.plainText("a\r\nb")).isEqualTo("a\nb");
     }
 
-    /** A CR inside a discarded OSC/DCS payload must not become a visible line. */
+    /**
+     * A CR inside a discarded OSC/DCS payload must not become a visible line.
+     */
     @Test
     void aCrInsideADiscardedControlStringStaysDiscarded() {
         assertThat(PasteSanitizer.plainText("a\u001B]0;title\r\nstill-title\u0007b"))

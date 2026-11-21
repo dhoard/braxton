@@ -26,7 +26,7 @@ package io.github.dhoard.braxton.clipboard;
  * The observable result of a clipboard copy.
  *
  * <p>{@code systemWriteRequested} means an escape sequence was written. It is <strong>not</strong>
- * evidence that the terminal or tmux accepted the text: OSC 52 has no acknowledgement. The
+ * evidence that the terminal or tmux accepted the text: OSC 52 has no acknowledgment. The
  * in-process buffer remains the dependable destination.</p>
  *
  * <p>The result describes one copy, not a clipboard: which selection was written is the value the
@@ -51,17 +51,37 @@ public record ClipboardResult(
         boolean deduplicated,
         ClipboardPath path) {
 
+    /**
+     * Creates a {@code ClipboardResult} value.
+     *
+     * @param text the text actually stored in the in-process buffer, after any truncation
+     * @param byteLength the UTF-8 length of {@code text}
+     * @param truncated whether the in-process buffer or the OSC 52 payload limit removed text
+     * @param storedInternally whether the in-process buffer holds this copy
+     * @param systemWriteRequested whether an escape sequence was written; never proof of acceptance
+     * @param deduplicated whether an identical sequence was suppressed because it was already written
+     * @param path the transport path this copy used
+     */
     public ClipboardResult {
         text = text == null ? "" : text;
         byteLength = Math.max(0, byteLength);
         path = path == null ? ClipboardPath.NONE : path;
     }
 
+    /**
+     * Returns an empty clipboard result.
+     *
+     * @return an empty clipboard result
+     */
     public static ClipboardResult empty() {
         return new ClipboardResult("", 0, false, false, false, false, ClipboardPath.NONE);
     }
 
-    /** Whether the in-process buffer is the only reliable destination for this copy. */
+    /**
+     * Whether the in-process buffer is the only reliable destination for this copy.
+     *
+     * @return {@code true} if the in-process buffer is the only reliable destination for this copy; otherwise {@code false}
+     */
     public boolean internalOnly() {
         return path == ClipboardPath.INTERNAL_ONLY || path == ClipboardPath.NONE;
     }

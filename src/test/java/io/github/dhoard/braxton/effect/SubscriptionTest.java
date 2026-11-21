@@ -28,7 +28,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
-/** Subscription descriptors reject input the runtime cannot schedule. */
+/**
+ * Subscription descriptors reject input the runtime cannot schedule.
+ */
 class SubscriptionTest {
 
     @Test

@@ -1,6 +1,8 @@
 /* Development-only child: exercises ScrollView under an owned PTY/console with pyte. */
 package io.github.dhoard.braxton.tools;
 
+import io.github.dhoard.braxton.widget.Elements;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
@@ -18,8 +20,6 @@ import io.github.dhoard.braxton.mvu.OutputRoute;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
 import io.github.dhoard.braxton.widget.ScrollView;
 
 import java.util.ArrayList;
@@ -56,7 +56,9 @@ public final class ScrollViewProbe {
         record Quit() implements Msg {}
     }
 
-    /** Two panes, one allocation function, one focus decision. */
+    /**
+     * Two panes, one allocation function, one focus decision.
+     */
     private static final class TwoPanes implements Component<Model, Msg, Never> {
 
         private final Mount<Model, Msg, Never, ScrollView.Model, ScrollView.Msg, Never> log =
@@ -84,8 +86,12 @@ public final class ScrollViewProbe {
         @Override
         public Update<Model, Msg, Never> init(InitContext context) {
             Size size = new Size(context.viewport().rows(), context.viewport().cols());
-            Model model = new Model(log.initialize(context).model(),
-                    trace.initialize(context).model(), true, size);
+            // Focus is model data now: the pane that owns the keyboard says so in its own model.
+            Model model = new Model(
+                    log.initialize(context).model().withFocus(true),
+                    trace.initialize(context).model().withFocus(false),
+                    true,
+                    size);
             model = log.update(model, new ScrollView.Msg.ContentChanged(rows("L"))).model();
             model = trace.update(model, new ScrollView.Msg.ContentChanged(rows("T"))).model();
             return Update.next(allocate(model));
@@ -114,16 +120,29 @@ public final class ScrollViewProbe {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
-            return Views.keyed(
-                    List.of(Binding.of("tab", new Msg.ToggleFocus()),
-                            Binding.of("ctrl+c", new Msg.Quit())),
-                    Views.column(
-                            Views.row(
-                                    Views.fixed(PANE_COLS, log.view(model, context)),
-                                    Views.fixed(PANE_COLS, trace.view(model, context))),
-                            Views.text(focusRow(model))),
-                    List.of());
+        public Element<Msg> view(Model model, ViewContext context) {
+            return Elements.column(
+                            Elements.row(
+                                    Elements.fixed(PANE_COLS, log.view(model, context)),
+                                    Elements.fixed(PANE_COLS, trace.view(model, context))),
+                            Elements.text(focusRow(model)));
+        }
+
+        @Override
+        public java.util.List<Binding<Msg>> claims(Model model) {
+            java.util.List<Binding<Msg>> routes = new java.util.ArrayList<>(List.of(
+                    Binding.of("tab", new Msg.ToggleFocus()), Binding.of("ctrl+c", new Msg.Quit())));
+            // A pane is a mounted child, so the keys its own widget claims are the parent's too.
+            routes.addAll(log.claims(model));
+            routes.addAll(trace.claims(model));
+            return java.util.List.copyOf(routes);
+        }
+
+        @Override
+        public java.util.List<Binding<Msg>> bindings(Model model) {
+            java.util.List<Binding<Msg>> routes = new java.util.ArrayList<>(log.bindings(model));
+            routes.addAll(trace.bindings(model));
+            return java.util.List.copyOf(routes);
         }
 
         @Override
@@ -136,7 +155,9 @@ public final class ScrollViewProbe {
             return Subscription.resize(SubscriptionId.of("resize"), Msg.Resized::new);
         }
 
-        /** One allocation: both panes share the rows above the focus row. */
+        /**
+         * One allocation: both panes share the rows above the focus row.
+         */
         private Model allocate(Model model) {
             int rows = paneRows(model.size());
             Model next = log.update(model, new ScrollView.Msg.ViewportChanged(rows)).model();

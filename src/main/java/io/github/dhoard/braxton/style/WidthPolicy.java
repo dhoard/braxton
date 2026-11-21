@@ -30,14 +30,19 @@ package io.github.dhoard.braxton.style;
  * Unicode 16.0.0 table (East Asian wide/fullwidth plus emoji), with ambiguous-width characters
  * narrow. Terminals can disagree; an application may pass a different policy to the renderer and to
  * its own measurement calls.</p>
+ *
  * @param wideEmoji whether East Asian wide and emoji clusters occupy two columns
  */
 public record WidthPolicy(boolean wideEmoji) {
 
-    /** Pinned project policy: East Asian wide/fullwidth and emoji occupy two columns. */
+    /**
+     * Pinned project policy: East Asian wide/fullwidth and emoji occupy two columns.
+     */
     public static final WidthPolicy PINNED = new WidthPolicy(true);
 
-    /** Diagnostics/tests: every cluster occupies one column regardless of its code points. */
+    /**
+     * Diagnostics/tests: every cluster occupies one column regardless of its code points.
+     */
     public static final WidthPolicy ONE_COLUMN = new WidthPolicy(false);
 
     /**

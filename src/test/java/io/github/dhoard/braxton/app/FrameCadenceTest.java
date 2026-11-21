@@ -37,8 +37,8 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -79,9 +79,17 @@ class FrameCadenceTest {
                 return Update.next(next, next == 200 ? Command.batch(effect, Command.quit(7)) : effect);
             }
 
-            public View<String> view(Integer model, ViewContext context) {
+            public Element<String> view(Integer model, ViewContext context) {
                 views.incrementAndGet();
-                return Views.text("count=" + model);
+                return Elements.text("count=" + model);
+            }
+
+            /**
+             * The gestures this fixture answers, once no leaf has taken them.
+             */
+            @Override
+            public java.util.List<Binding<String>> claims(Integer model) {
+                return List.of(Binding.of(model == 0 ? "a" : "b", "quit"));
             }
 
             public Subscription<String> subscriptions(Integer model) {
@@ -107,7 +115,7 @@ class FrameCadenceTest {
         assertThat(views.get())
                 .as("a burst must not layout one screen per app message")
                 .isLessThan(100);
-        assertThat(terminal.outputText()).contains("count=200");
+        assertThat(terminal.screenText()).contains("count=200");
     }
 
     @Test
@@ -125,7 +133,7 @@ class FrameCadenceTest {
         }
         assertThat(owner.isAlive()).isFalse();
         assertThat(result.get().kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(terminal.outputText()).contains("count=1");
+        assertThat(terminal.screenText()).contains("count=1");
     }
 
     @Test
@@ -143,7 +151,7 @@ class FrameCadenceTest {
         }
         assertThat(owner.isAlive()).isFalse();
         assertThat(result.get().kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(terminal.outputText()).contains("count=1");
+        assertThat(terminal.screenText()).contains("count=1");
     }
 
     private static Component<Integer, String, Never> singleUpdate(CountDownLatch painted, CountDownLatch updated) {
@@ -159,11 +167,11 @@ class FrameCadenceTest {
                 return Update.next(1);
             }
 
-            public View<String> view(Integer model, ViewContext context) {
+            public Element<String> view(Integer model, ViewContext context) {
                 if (model == 1 && painted != null) {
                     painted.countDown();
                 }
-                return Views.text("count=" + model);
+                return Elements.text("count=" + model);
             }
 
             public Subscription<String> subscriptions(Integer model) {
@@ -197,9 +205,13 @@ class FrameCadenceTest {
                 return Update.next(model, Command.quit(9));
             }
 
-            public View<String> view(Integer model, ViewContext context) {
-                return Views.keyed(
-                        List.of(Binding.of(model == 0 ? "a" : "b", "quit")), Views.text("state=" + model), List.of());
+            public Element<String> view(Integer model, ViewContext context) {
+                return Elements.text("state=" + model);
+            }
+
+            @Override
+            public java.util.List<Binding<String>> claims(Integer model) {
+                return List.of(Binding.of(model == 0 ? "a" : "b", "quit"));
             }
 
             public Subscription<String> subscriptions(Integer model) {

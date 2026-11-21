@@ -29,6 +29,7 @@ import io.github.dhoard.braxton.style.Style;
  *
  * <p>{@code text} is empty for a continuation cell (the second column of a wide glyph) and for an
  * untouched cell.</p>
+ *
  * @param text the grapheme cluster painted here, or empty
  * @param style the style painted with it
  * @param link the hyperlink target, or null
@@ -37,12 +38,24 @@ public record Cell(String text, Style style, String link) {
 
     public static final Cell EMPTY = new Cell("", Style.NONE, null);
 
+    /**
+     * Creates a {@code Cell} value.
+     *
+     * @param text the grapheme cluster painted here, or empty
+     * @param style the style painted with it
+     * @param link the hyperlink target, or null
+     */
     public Cell {
         text = text == null ? "" : text;
         style = style == null ? Style.NONE : style;
         link = link == null || link.isBlank() ? null : link;
     }
 
+    /**
+     * Tests whether the cell text is empty.
+     *
+     * @return {@code true} if the cell text is empty; otherwise {@code false}
+     */
     public boolean isEmpty() {
         return text.isEmpty() && style.isPlain() && link == null;
     }

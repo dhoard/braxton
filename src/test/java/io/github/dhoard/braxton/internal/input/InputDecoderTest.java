@@ -39,11 +39,15 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-/** Terminal bytes become normalized events exactly once. */
+/**
+ * Terminal bytes become normalized events exactly once.
+ */
 @org.junit.jupiter.api.extension.ExtendWith(io.github.dhoard.braxton.internal.input.TestReaders.class)
 class InputDecoderTest {
 
-    /** Serves one byte per read so UTF-8 and escape sequences are genuinely split. */
+    /**
+     * Serves one byte per read so UTF-8 and escape sequences are genuinely split.
+     */
     private static final class ByteAtATime extends InputStream {
         private final byte[] data;
         private final int stallBefore;
@@ -55,7 +59,9 @@ class InputDecoderTest {
             this(data, -1, 0L);
         }
 
-        /** Waits {@code stallMillis} before serving byte {@code stallBefore}. */
+        /**
+         * Waits {@code stallMillis} before serving byte {@code stallBefore}.
+         */
         ByteAtATime(byte[] data, int stallBefore, long stallMillis) {
             this.data = data;
             this.stallBefore = stallBefore;
@@ -165,10 +171,10 @@ class InputDecoderTest {
         assertThat(lineFeed.key()).isEqualTo(Key.of("j", Modifiers.CTRL));
         assertThat(lineFeed.text()).isEmpty();
         assertThat(io.github.dhoard.braxton.widget.Editor.actionFor(
-                        lineFeed, io.github.dhoard.braxton.widget.Editor.Config.defaults()))
+                        lineFeed, io.github.dhoard.braxton.widget.EditorConfig.defaults()))
                 .contains(new io.github.dhoard.braxton.widget.Editor.Msg.Newline());
         assertThat(io.github.dhoard.braxton.widget.Editor.actionFor(
-                        enter, io.github.dhoard.braxton.widget.Editor.Config.defaults()))
+                        enter, io.github.dhoard.braxton.widget.EditorConfig.defaults()))
                 .as("only CR submits")
                 .contains(new io.github.dhoard.braxton.widget.Editor.Msg.Submit());
     }
@@ -347,7 +353,9 @@ class InputDecoderTest {
         }
     }
 
-    /** Skipping a C1 scalar must not end the stream or swallow the keystroke after it. */
+    /**
+     * Skipping a C1 scalar must not end the stream or swallow the keystroke after it.
+     */
     @Test
     void aC1ControlScalarDoesNotEndTheStream() throws IOException {
         InputDecoder decoder = new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(
@@ -403,7 +411,9 @@ class InputDecoderTest {
         }
     }
 
-    /** Dropping an ill-formed sequence must not swallow the character that follows it. */
+    /**
+     * Dropping an ill-formed sequence must not swallow the character that follows it.
+     */
     @Test
     void theCharacterAfterAnIllFormedSequenceIsStillDecoded() throws IOException {
         InputDecoder decoder = new InputDecoder(
@@ -419,7 +429,9 @@ class InputDecoderTest {
         assertThat(((InputEvent.KeyInput) decoder.read().orElseThrow()).text()).isEqualTo("x");
     }
 
-    /** U+FFFD is a character a terminal may really send; only ill-formed bytes are dropped. */
+    /**
+     * U+FFFD is a character a terminal may really send; only ill-formed bytes are dropped.
+     */
     @Test
     void aLiteralReplacementCharacterIsStillDecoded() throws IOException {
         InputEvent.KeyInput key = (InputEvent.KeyInput) read("\uFFFD").orElseThrow();
@@ -544,7 +556,9 @@ class InputDecoderTest {
                 .isEmpty();
     }
 
-    /** Key repeat while Meta+[ is held leaves several CSIs open; only the last one carries a key. */
+    /**
+     * Key repeat while Meta+[ is held leaves several CSIs open; only the last one carries a key.
+     */
     @Test
     void repeatedIncompleteCsiStillDeliversTheKeyThatFollows() throws IOException {
         InputDecoder decoder = new InputDecoder(
@@ -618,7 +632,9 @@ class InputDecoderTest {
 
     // ── replies to queries ──────────────────────────────────────────────────
 
-    /** The framed reply one event carries, or a failure when the event is not a reply. */
+    /**
+     * The framed reply one event carries, or a failure when the event is not a reply.
+     */
     private static TerminalReply reply(String bytes) throws IOException {
         InputEvent event = read(bytes).orElseThrow();
         assertThat(event).isInstanceOf(InputEvent.TerminalReplyInput.class);

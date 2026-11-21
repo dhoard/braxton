@@ -24,20 +24,22 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.dhoard.braxton.internal.render.LayoutEngine;
-import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.render.Canvas;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.RenderedScreen;
-import io.github.dhoard.braxton.view.ScreenRenderer;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.ElementTree;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** A quote keeps one width: a bar, a space, the expanded line, and padding to the widest line. */
+/**
+ * A quote keeps one width: a bar, a space, the expanded line, and padding to the widest line.
+ */
 class QuoteTest {
 
     private static final String BAR = "\u2502";
@@ -51,7 +53,9 @@ class QuoteTest {
                         assertThat(TextMeasure.columns(line.plainText())).isEqualTo(4));
     }
 
-    /** Tabs expand to the same four-column stops the text view paints, so the block stays square. */
+    /**
+     * Tabs expand to the same four-column stops the text view paints, so the block stays square.
+     */
     @Test
     void aTabIsExpandedBeforeTheWidthIsMeasured() {
         Quote quote = Quote.of().append(StyledText.plain("a\tb")).append("c");
@@ -104,10 +108,13 @@ class QuoteTest {
                     .containsExactly("a b x");
             // The painted grid and the measured height are the oracle: one appended line is one
             // row, and the bar's characters stay in the bar.
-            assertThat(new ScreenRenderer().plainLines(quote.view(), new Viewport(1, 40)))
+            assertThat(io.github.dhoard.braxton.testing.ElementScreen.render(quote.<String>element(), 1, 40)
+                            .lines())
                     .as("painted rows for bar %s", bar.replace("\n", "\\n").replace("\r", "\\r"))
                     .containsExactly("a b x");
-            assertThat(new LayoutEngine().intrinsicHeight(quote.view(), 40))
+            assertThat(io.github.dhoard.braxton.ui.ElementTree.measure(
+                                    quote.<String>element(), new io.github.dhoard.braxton.layout.Size(1, 40))
+                            .rows())
                     .as("measured rows for bar %s", bar.replace("\n", "\\n").replace("\r", "\\r"))
                     .isEqualTo(1);
         }
@@ -132,7 +139,7 @@ class QuoteTest {
                 .background(background);
         StyledText rendered = quote.render();
         List<StyledText.Span> spans = rendered.spans();
-        // The bar carries the border colour, so the background starts at the space after it.
+        // The bar carries the border color, so the background starts at the space after it.
         assertThat(spans.get(0).text()).isEqualTo(BAR);
         for (StyledText.Span span : spans.subList(1, spans.size())) {
             if (span.text().contains("\n")) {
@@ -154,7 +161,7 @@ class QuoteTest {
         assertThat(spans.get(0).style().foreground()).isEqualTo(border);
         for (StyledText.Span span : spans.subList(1, spans.size())) {
             assertThat(span.style().foreground())
-                    .as("border colour on [%s]", span.text())
+                    .as("border color on [%s]", span.text())
                     .isNull();
         }
     }
@@ -171,7 +178,9 @@ class QuoteTest {
                 .hasSize(2);
     }
 
-    /** Every rendered row has the same painted width, whatever the content holds. */
+    /**
+     * Every rendered row has the same painted width, whatever the content holds.
+     */
     @Test
     void everyRenderedRowHasTheSameWidth() {
         String[] atoms = {"a", "bc", " ", "\t", "\u65E5", "\uD83D\uDE00", "e\u0301", "\u2502"};
@@ -278,10 +287,12 @@ class QuoteTest {
             assertThat(width)
                     .as("block width for %s", show(content.plainText()))
                     .isEqualTo(4);
-            assertThat(new LayoutEngine().intrinsicWidth(quote.view(), width + 8))
+            assertThat(ElementTree.measure(quote.<String>element(), new Size(rows.size(), width + 8))
+                            .cols())
                     .as("width measured for %s", show(content.plainText()))
                     .isEqualTo(width);
-            RenderedScreen screen = new ScreenRenderer().screen(quote.view(), new Viewport(rows.size(), width + 2));
+            Canvas screen = ElementScreen.render(quote.<String>element(), rows.size(), width + 2)
+                    .canvas();
             assertThat(screen.rows())
                     .as("painted rows for %s", show(content.plainText()))
                     .isEqualTo(rows.size());
@@ -310,7 +321,7 @@ class QuoteTest {
     }
 
     /**
-     * The same invariant over content that opens lines with baseless clusters, as NFD-normalised
+     * The same invariant over content that opens lines with baseless clusters, as NFD-normalized
      * text and text copied out of a document do.
      */
     @Test
@@ -350,7 +361,8 @@ class QuoteTest {
                         .as("row %d of %s", line, expected)
                         .isEqualTo(width);
             }
-            RenderedScreen screen = new ScreenRenderer().screen(quote.view(), new Viewport(lines, width + 2));
+            Canvas screen = ElementScreen.render(quote.<String>element(), lines, width + 2)
+                    .canvas();
             assertThat(screen.rows()).as("painted rows of %s", expected).isEqualTo(lines);
             for (int row = 0; row < lines; row++) {
                 assertThat(paintedColumns(screen, row))
@@ -360,8 +372,10 @@ class QuoteTest {
         }
     }
 
-    /** Columns a painted row actually occupies: a wide cell counts two, its continuation none. */
-    private static int paintedColumns(RenderedScreen screen, int row) {
+    /**
+     * Columns a painted row actually occupies: a wide cell counts two, its continuation none.
+     */
+    private static int paintedColumns(Canvas screen, int row) {
         int columns = 0;
         for (int col = 0; col < screen.cols(); col++) {
             if (screen.isContinuation(row, col)) {
@@ -372,18 +386,22 @@ class QuoteTest {
         return columns;
     }
 
-    /** The last column a row paints in, so the block's edge has to land in one column. */
-    private static int lastPaintedColumn(RenderedScreen screen, int row) {
+    /**
+     * The last column a row paints in, so the block's edge has to land in one column.
+     */
+    private static int lastPaintedColumn(Canvas screen, int row) {
         for (int col = screen.cols() - 1; col >= 0; col--) {
-            if (screen.isContinuation(row, col) || !screen.cell(row, col).isEmpty()) {
+            if (screen.isContinuation(row, col) || !screen.cell(row, col).text().isEmpty()) {
                 return col;
             }
         }
         return -1;
     }
 
-    /** The cells a row was painted with, for a readable failure message. */
-    private static List<String> paintedCells(RenderedScreen screen, int row) {
+    /**
+     * The cells a row was painted with, for a readable failure message.
+     */
+    private static List<String> paintedCells(Canvas screen, int row) {
         List<String> cells = new ArrayList<>();
         for (int col = 0; col < screen.cols(); col++) {
             cells.add(
@@ -407,26 +425,14 @@ class QuoteTest {
     }
 
     @Test
-    void theBlockPaddingUsesThePinnedPolicyWhateverTheRendererPolicyIs() {
-        // Documented limitation: widget padding is measured with the pinned policy, so a renderer
-        // built with another policy clips and wraps differently but does not change the padding the
-        // widget already baked in. Pin that so making widgets policy-aware is a deliberate change.
+    void theBlockPaddingIsMeasuredWithTheWidgetsOwnPolicy() {
+        // The widget bakes its padding in at build time, so the columns it paints are the columns it
+        // measured: there is no renderer policy left for a caller to disagree with.
         Quote quote = Quote.of().append("\u65E5").append("ab");
-        java.util.List<String> pinned = new io.github.dhoard.braxton.view.ScreenRenderer()
-                .plainLines(quote.view(), new io.github.dhoard.braxton.layout.Viewport(2, 10));
-        java.util.List<String> oneColumn = new io.github.dhoard.braxton.view.ScreenRenderer(
-                        io.github.dhoard.braxton.style.WidthPolicy.ONE_COLUMN)
-                .plainLines(quote.view(), new io.github.dhoard.braxton.layout.Viewport(2, 10));
-        assertThat(oneColumn)
-                .as("the widget's own widths do not follow the renderer policy")
-                .isEqualTo(pinned);
-        assertThat(pinned.stream().map(TextMeasure::columns).distinct())
-                .as("under the pinned policy both rows are the same width")
+        java.util.List<String> painted =
+                ElementScreen.render(quote.<String>element(), 2, 10).lines();
+        assertThat(painted.stream().map(TextMeasure::columns).distinct())
+                .as("both rows are the same width")
                 .hasSize(1);
-        assertThat(oneColumn.stream()
-                        .map(line -> TextMeasure.columns(line, io.github.dhoard.braxton.style.WidthPolicy.ONE_COLUMN))
-                        .distinct())
-                .as("under a one-column policy the mixed row is short by the wide glyph")
-                .hasSize(2);
     }
 }

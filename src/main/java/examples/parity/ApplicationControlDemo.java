@@ -31,6 +31,7 @@ import io.github.dhoard.braxton.app.QuitRequest;
 import io.github.dhoard.braxton.app.RuntimeOptions;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
@@ -40,9 +41,8 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -73,47 +73,77 @@ import java.util.concurrent.TimeUnit;
  */
 public final class ApplicationControlDemo {
 
-    /** The row carrying progress, the sequence state and the quit guard. */
+    /**
+     * The row carrying progress, the sequence state and the quit guard.
+     */
     public static final int STATUS_ROW = 0;
 
-    /** The row carrying the confirmation prompt. */
+    /**
+     * The row carrying the confirmation prompt.
+     */
     public static final int PROMPT_ROW = 1;
 
-    /** The body row, which names the producer. */
+    /**
+     * The body row, which names the producer.
+     */
     public static final int BODY_ROW = 3;
 
-    /** How often the owned producer sends one progress message. */
+    /**
+     * How often the owned producer sends one progress message.
+     */
     public static final long PRODUCER_INTERVAL_MILLIS = 100L;
 
-    /** How many progress messages the producer sends before it stops on its own. */
+    /**
+     * How many progress messages the producer sends before it stops on its own.
+     */
     public static final int PRODUCER_TICKS = 200;
 
-    /** How long one sequence step takes, so the order is an order of execution and not of submission. */
+    /**
+     * How long one sequence step takes, so the order is an order of execution and not of submission.
+     */
     public static final Duration STEP_DELAY = Duration.ofMillis(80);
 
     private static final Style STATUS = Style.NONE.withBold();
 
     private ApplicationControlDemo() {}
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
-        /** One progress value, sent by the owned producer through the program handle. */
+        /**
+         * One progress value, sent by the owned producer through the program handle.
+         *
+         * @param value the progress value the producer sent
+         */
         record Progress(int value) implements Msg {}
 
-        /** Starts the demonstration sequence. */
+        /**
+         * Starts the demonstration sequence.
+         */
         record StartSequence() implements Msg {}
 
-        /** One sequence step finished, or one continuation committed. */
+        /**
+         * One sequence step finished, or one continuation committed.
+         *
+         * @param name the name to resolve
+         */
         record Mark(String name) implements Msg {}
 
-        /** Asks to quit; the guard decides whether the request is accepted. */
+        /**
+         * Asks to quit; the guard decides whether the request is accepted.
+         */
         record RequestQuit() implements Msg {}
 
-        /** Confirms the quit the prompt asked about. */
+        /**
+         * Confirms the quit the prompt asked about.
+         */
         record ConfirmQuit() implements Msg {}
 
-        /** Keeps the session running. */
+        /**
+         * Keeps the session running.
+         */
         record CancelQuit() implements Msg {}
     }
 
@@ -130,14 +160,20 @@ public final class ApplicationControlDemo {
     public record Model(
             int progress, int ticks, String sequence, List<String> order, boolean confirming, int gestures) {
 
-        /** Substitutes the starting values for anything missing. */
+        /**
+         * Substitutes the starting values for anything missing.
+         */
         public Model {
             sequence = sequence == null ? "idle" : sequence;
             order = order == null ? List.of() : List.copyOf(order);
             gestures = Math.max(0, gestures);
         }
 
-        /** The scene's starting state: nothing sent, nothing run, nothing asked. */
+        /**
+         * The scene's starting state: nothing sent, nothing run, nothing asked.
+         *
+         * @return the scene's starting state: nothing sent, nothing run, nothing asked
+         */
         public static Model start() {
             return new Model(-1, 0, "idle", List.of(), false, 0);
         }
@@ -164,13 +200,21 @@ public final class ApplicationControlDemo {
             return new Model(progress, ticks, sequence, order, value, gestures + 1);
         }
 
-        /** The order row's value, or {@code none} before the sequence ran. */
+        /**
+         * The order row's value, or {@code none} before the sequence ran.
+         *
+         * @return the comma-separated completion order, or {@code none}
+         */
         public String orderText() {
             return order.isEmpty() ? "none" : String.join(",", order);
         }
     }
 
-    /** The scene's own actions. */
+    /**
+     * The scene's own actions.
+     *
+     * @return the scene's own actions
+     */
     public static KeyMap<Msg> defaultKeys() {
         return KeyMap.of(
                 KeyMap.group(
@@ -192,6 +236,11 @@ public final class ApplicationControlDemo {
      */
     public static final class Guard implements MessageFilter {
 
+        /**
+         * Creates the guard with its default state.
+         */
+        public Guard() {}
+
         private volatile boolean confirmed;
 
         @Override
@@ -206,7 +255,11 @@ public final class ApplicationControlDemo {
             return message;
         }
 
-        /** Whether the quit has been confirmed. */
+        /**
+         * Whether the quit has been confirmed.
+         *
+         * @return {@code true} if the quit has been confirmed; otherwise {@code false}
+         */
         public boolean confirmed() {
             return confirmed;
         }
@@ -232,6 +285,11 @@ public final class ApplicationControlDemo {
         }
     }
 
+    /**
+     * Launches the interactive application control demo.
+     *
+     * @param args the command-line arguments
+     */
     public static void main(String[] args) {
         ExitResult result = run();
         if (result.failure() != null) {
@@ -262,7 +320,12 @@ public final class ApplicationControlDemo {
         });
     }
 
-    /** The status row's text, which is what a terminal verifier asserts. */
+    /**
+     * The status row's text, which is what a terminal verifier asserts.
+     *
+     * @param model the immutable model to inspect
+     * @return the status row's text, which is what a terminal verifier asserts
+     */
     public static String status(Model model) {
         return "progress=" + (model.progress() < 0 ? "-" : Integer.toString(model.progress()))
                 + " ticks=" + model.ticks()
@@ -271,12 +334,22 @@ public final class ApplicationControlDemo {
                 + " quit=" + (model.confirming() ? "confirm" : "guarded");
     }
 
-    /** The prompt row's text. */
+    /**
+     * The prompt row's text.
+     *
+     * @param model the immutable model to inspect
+     * @return the prompt row's text
+     */
     public static String prompt(Model model) {
         return model.confirming() ? "prompt=confirm press y to quit" : "prompt=none s sequence • q quit";
     }
 
-    /** The final model, as the line the demo prints once the terminal is its own again. */
+    /**
+     * The final model, as the line the demo prints once the terminal is its own again.
+     *
+     * @param model the immutable model to inspect
+     * @return the final model, as the line the demo prints once the terminal is its own again
+     */
     public static String summary(Model model) {
         if (model == null) {
             return "progress=- ticks=0 sequence=idle order=none";
@@ -286,13 +359,25 @@ public final class ApplicationControlDemo {
                 + " order=" + model.orderText();
     }
 
-    /** One exit result as a token, without any terminal output. */
+    /**
+     * One exit result as a token, without any terminal output.
+     *
+     * @param result the completed operation result
+     * @return one exit result as a token, without any terminal output
+     */
     public static String describe(ExitResult result) {
         return result.kind() + "/" + result.status();
     }
 
-    /** The demo scene: the producer's progress, the sequence and the guarded quit. */
+    /**
+     * The demo scene: the producer's progress, the sequence and the guarded quit.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final KeyMap<Msg> keys = defaultKeys();
 
@@ -314,25 +399,36 @@ public final class ApplicationControlDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
-            int width = context.viewport().cols();
-            return Views.onKeys(
-                    keys.bindings(),
-                    Views.focus(
-                            ElementId.of("control"),
-                            true,
-                            keys.bindings(),
-                            Scene::type,
-                            Views.column(
-                                    Views.text(status(model), STATUS),
-                                    Views.text(prompt(model), STATUS),
-                                    Views.gap(1),
-                                    Views.text("braxton application control producer=on", STATUS),
-                                    Views.gap(1),
-                                    Help.view(keys, false, width))));
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
         }
 
-        /** Types nothing: the scene's screen is a status board, not a field. */
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys.bindings();
+        }
+
+        /**
+         * The scene as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
+            int width = context.viewport().cols();
+            return Elements.column(
+                    Elements.text(status(model), STATUS),
+                    Elements.text(prompt(model), STATUS),
+                    Elements.spacer(1),
+                    Elements.text("braxton application control producer=on", STATUS),
+                    Elements.spacer(1),
+                    Help.element(keys, Help.Config.defaults(), false, width));
+        }
+
+        /**
+         * Types nothing: the scene's screen is a status board, not a field.
+         */
         private static Optional<Msg> type(InputEvent event) {
             return Optional.empty();
         }
@@ -341,7 +437,7 @@ public final class ApplicationControlDemo {
          * The demonstration sequence.
          *
          * <p>Each step starts only when the previous one has finished: the first task appends
-         * {@code a}, the delay delivers {@code tick-a} after {@value #STEP_DELAY}, and only then is the
+         * {@code a}, the delay delivers {@code tick-a} after {@link #STEP_DELAY}, and only then is the
          * second task submitted. The {@link Command.AfterUpdate} step is the continuation that waits for
          * the reducer, so {@code b-done} commits before {@code c} is submitted.</p>
          *

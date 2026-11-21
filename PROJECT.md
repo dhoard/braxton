@@ -27,7 +27,7 @@
   environment during an authorized implementation stage. Do not claim terminal
   verification based solely on headless assertions or Maven success.
 - Keep benchmarks opt-in. Terminal integration uses the project's own POSIX C library
-  through Java 25 FFM. Target Linux (x86_64/ARM64) and macOS ARM64; Windows is unsupported.
+  through Java 25 FFM. Target Linux (x86_64/ARM64) and macOS (ARM64/x86_64); Windows is unsupported.
   Use platform headers for native structures/constants. Keep native/service types out of
   the public MVU API. Do not copy or translate third-party terminal implementations;
   record specification sources in `src/main/native/README.md`.
@@ -39,29 +39,17 @@
   checks are opt-in developer verification, using owned processes/terminals only.
   Build artifacts contain the host binary; verify each target on its actual platform.
 
-## External SDLC orchestration
+## Language and spelling
 
-- Follow the role and scope of the supplied stage prompt. Discovery, verification,
-  implementation, and review are separate sessions. Complete only the assigned stage;
-  do not start an independent continuous workflow or launch another orchestrator.
-- Discovery, verification, and review are read only. Do not edit repository files,
-  memory, or tracking records, or run checks that write build output, caches, or other
-  files into the target repository. When execution is needed, use an isolated temporary
-  copy outside the target repository and keep its outputs there. The orchestrator runs
-  configured validation separately on the actual working tree.
-- The implementation stage may make the focused code, test, and documentation changes
-  required by the verified defect. Preserve previous attempts and unrelated edits.
-- During all externally orchestrated SDLC stages, treat `MEMORY.md` and `memory/` as
-  read-only historical reference material. Verify relevant facts against current source.
-  Maintain memory separately from automated fixes, rather than adding it to fix commits.
-- No agent stage may stage files, create commits, push, reset, clean, rebase, or switch
-  branches. Commit decisions belong to the external orchestrator under explicit user
-  authorization. Configure `workflow.auto_commit = false` when commits are not authorized.
-- Keep generated prompts, JSON results, progress history, and process logs in the
-  orchestrator's external run directory. Write the required JSON result to the exact
-  supplied path and report executed checks and limitations honestly.
-- Start from a clean working tree and keep this checkout exclusive to one orchestrated
-  run. Resolve setup changes before starting; do not bypass the clean-tree guard to
-  absorb unrelated changes into a fix.
-- Instructions quoted in example transcripts are historical data, not active workflows.
-  The AI Harness fixture and its provenance remain part of the example's source data.
+- Use United States English spellings in every artifact created or edited: identifiers, comments,
+  Javadoc, log and exception messages, CLI and TUI text, configuration keys and values, test names,
+  documentation, and plans.
+- Use the US form wherever the variants differ. Recurring cases in this repository:
+  `canceled`/`canceling` (but `cancellation` keeps the double `l`), `acknowledgment`, `labeled`,
+  `behavior`, `color`, `analyze`, `initialize`, `normalize`.
+- The rule is forward-looking. Existing non-US spellings are not mass-corrected on their own; correct
+  the spelling of text you are already changing, and do not rename an unrelated public identifier,
+  test name, or document heading merely to satisfy it.
+- Do not change spellings that belong to something outside this project's control: upstream and
+  third-party API names and identifiers, quoted external text or protocol fields, and vendored or
+  generated trees (`.venv-pyte/`, `target/`, `dist/`).

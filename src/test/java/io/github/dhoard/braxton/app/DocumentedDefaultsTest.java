@@ -31,7 +31,6 @@ import io.github.dhoard.braxton.internal.input.InputDecoder;
 import io.github.dhoard.braxton.internal.input.PasteDecoder;
 import io.github.dhoard.braxton.internal.runtime.TerminalQueries;
 import io.github.dhoard.braxton.style.ColorProfile;
-import io.github.dhoard.braxton.view.TerminalPresentation;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -154,7 +153,7 @@ class DocumentedDefaultsTest {
         assertThat(InputDecoder.MAX_CLIPBOARD_REPLY_CHARACTERS)
                 .as("clipboard reply characters")
                 .isEqualTo(1_398_106);
-        assertThat(RuntimeOptions.DEFAULT_COLOR_PROFILE).as("colour profile").isEqualTo(ColorProfile.AUTO);
+        assertThat(RuntimeOptions.DEFAULT_COLOR_PROFILE).as("color profile").isEqualTo(ColorProfile.AUTO);
         assertThat(TerminalPresentation.MAX_TITLE_BYTES)
                 .as("window title bytes")
                 .isEqualTo(4_096);

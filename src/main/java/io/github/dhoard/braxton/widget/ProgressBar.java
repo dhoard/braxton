@@ -27,8 +27,7 @@ import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,7 +41,7 @@ import java.util.List;
  * <p>A bar is normally a whole number of filled cells. Two opt-in refinements paint a finer
  * picture without changing that default: {@link #fractional(boolean)} stops the fill inside a cell
  * with an eighth-block glyph instead of rounding it to a whole one, and {@link #blend(Color, Color)}
- * colours the filled cells along a ramp from one colour to another. Both are off unless asked for,
+ * colors the filled cells along a ramp from one color to another. Both are off unless asked for,
  * so a bar that does not opt in paints exactly what it always painted.</p>
  *
  * <p>A bar counts cells, not columns. {@link #fractional(boolean)} pads a partial cell to the
@@ -51,14 +50,18 @@ import java.util.List;
  * width at the boundary, exactly as it does without a fractional fill, because that difference is
  * the caller's own icon choice.</p>
  *
- * <p>{@link AnimatedProgress} is the component that eases a bar towards a target over time; this
+ * <p>{@link AnimatedProgress} is the component that eases a bar toward a target over time; this
  * class remains the pure renderer both of them share.</p>
  */
 public final class ProgressBar {
 
-    /** The glyph a fractional fill stops on, indexed by eighths of a cell from one to eight. */
-    private static final List<String> FRACTIONAL_ICONS =
-            List.of("\u258F", "\u258E", "\u258D", "\u258C", "\u258B", "\u258A", "\u2589", "\u2588");
+    /**
+     * The glyph a fractional fill stops on, indexed by eighths of a cell from one to eight.
+     *
+     * <p>They are {@link BlockGlyphs}'s horizontal table rather than a second copy, so a bar's
+     * partial cell and a gauge's are the same glyph for the same fraction.</p>
+     */
+    private static final List<String> FRACTIONAL_ICONS = List.of(BlockGlyphs.PARTIAL);
 
     private final int width;
     private final int buffer;
@@ -190,10 +193,10 @@ public final class ProgressBar {
     }
 
     /**
-     * The same bar with different colours.
+     * The same bar with different colors.
      *
-     * @param active the colour of a filled cell
-     * @param inactive the colour of an empty cell
+     * @param active the color of a filled cell
+     * @param inactive the color of an empty cell
      * @return this builder
      */
     public ProgressBar colors(Color active, Color inactive) {
@@ -308,19 +311,19 @@ public final class ProgressBar {
     }
 
     /**
-     * The same bar with the filled cells blended from one colour to another.
+     * The same bar with the filled cells blended from one color to another.
      *
      * <p>The ramp is anchored to the bar rather than to the fill: cell {@code i} of {@code n} is
      * painted at {@code i / (n - 1)} of the way from {@code start} to {@code end}, whatever the
-     * fill is. A cell therefore keeps its colour as the fill grows, so an animated bar does not
+     * fill is. A cell therefore keeps its color as the fill grows, so an animated bar does not
      * shimmer while it moves, and the blend spans exactly as much of the ramp as the fill covers.
      * A bar of one cell is painted with {@code start}.</p>
      *
-     * <p>Either colour may be null, and a bar with a missing end has no blend at all - the filled
-     * cells keep the colour {@link #colors(Color, Color)} gave them.</p>
+     * <p>Either color may be null, and a bar with a missing end has no blend at all - the filled
+     * cells keep the color {@link #colors(Color, Color)} gave them.</p>
      *
-     * @param start the colour of the first cell, or null for no blend
-     * @param end the colour of the last cell, or null for no blend
+     * @param start the color of the first cell, or null for no blend
+     * @param end the color of the last cell, or null for no blend
      * @return this builder
      */
     public ProgressBar blend(Color start, Color end) {
@@ -408,7 +411,9 @@ public final class ProgressBar {
         return StyledText.concat(parts.toArray(StyledText[]::new));
     }
 
-    /** The style of one filled cell: the blend's colour at that cell, or the active style. */
+    /**
+     * The style of one filled cell: the blend's color at that cell, or the active style.
+     */
     private Style filledStyle(List<Color> ramp, int index, int cells) {
         if (ramp == null) {
             return activeStyle;
@@ -429,14 +434,15 @@ public final class ProgressBar {
     }
 
     /**
-     * A single-line view of the bar.
+     * The bar as a leaf of an element tree.
      *
+     * @param <Msg> the message type of the tree
      * @param value the completed amount
      * @param max the amount that fills the bar
-     * @return a text view holding the painted bar
+     * @return the element
      */
-    public View<Object> view(double value, double max) {
-        return Views.text(render(value, max));
+    public <Msg> Element<Msg> element(double value, double max) {
+        return RenderedText.of(cols -> render(value, max));
     }
 
     /**

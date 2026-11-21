@@ -25,6 +25,7 @@ package examples.parity;
 import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.layout.Border;
@@ -40,10 +41,11 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.Cursor;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Cursor;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import java.util.List;
 import java.util.Locale;
@@ -77,25 +79,38 @@ import java.util.Locale;
 public final class EditorDemo {
 
     private static final Style STATUS = Style.NONE.withBold();
+
     private static final Style FOCUSED_FRAME = Style.NONE.withBold();
     private static final Style TITLE = Style.NONE.withBold();
 
-    /** The background the row the caret is on is painted with. */
+    /**
+     * The background the row the caret is on is painted with.
+     */
     public static final Color CURSOR_LINE = new Color(0x2A, 0x2A, 0x3A);
 
-    /** The two drafts the scene starts with, so wrapping and a gutter are visible at once. */
+    /**
+     * The two drafts the scene starts with, so wrapping and a gutter are visible at once.
+     */
     public static final String LEFT_TEXT = "alpha beta gamma delta epsilon zeta eta theta iota";
 
-    /** The second starter draft. */
+    /**
+     * The second starter draft.
+     */
     public static final String RIGHT_TEXT = "one two three four five six seven eight nine ten";
 
-    /** The smallest height a dynamic height takes, in rows. */
+    /**
+     * The smallest height a dynamic height takes, in rows.
+     */
     public static final int MIN_ROWS = 2;
 
-    /** The largest height a dynamic height takes, in rows. */
+    /**
+     * The largest height a dynamic height takes, in rows.
+     */
     public static final int MAX_ROWS = 6;
 
-    /** The largest number of content rows a dynamic height counts. */
+    /**
+     * The largest number of content rows a dynamic height counts.
+     */
     public static final int MAX_CONTENT_ROWS = 40;
 
     private EditorDemo() {}
@@ -122,7 +137,11 @@ public final class EditorDemo {
             boolean placeholder,
             String last) {
 
-        /** The focused pane's model, which is the one that types. */
+        /**
+         * The focused pane's model, which is the one that types.
+         *
+         * @return the focused pane's model, which is the one that types
+         */
         public Editor.Model focused() {
             return leftFocused ? left : right;
         }
@@ -168,7 +187,9 @@ public final class EditorDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -193,22 +214,34 @@ public final class EditorDemo {
          */
         record Output(boolean left, Editor.Output value) implements Msg {}
 
-        /** Moves focus to the other pane. */
+        /**
+         * Moves focus to the other pane.
+         */
         record Next() implements Msg {}
 
-        /** Toggles the line-number gutter. */
+        /**
+         * Toggles the line-number gutter.
+         */
         record ToggleLineNumbers() implements Msg {}
 
-        /** Toggles a height that follows the content. */
+        /**
+         * Toggles a height that follows the content.
+         */
         record ToggleHeight() implements Msg {}
 
-        /** Cycles painted, native and virtual carets. */
+        /**
+         * Cycles painted, native and virtual carets.
+         */
         record CycleCursor() implements Msg {}
 
-        /** Toggles the placeholder an empty draft shows. */
+        /**
+         * Toggles the placeholder an empty draft shows.
+         */
         record TogglePlaceholder() implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -236,11 +269,20 @@ public final class EditorDemo {
                 KeyMap.group("General", KeyAction.<Msg>of("quit", new Msg.Quit(), "esc", "quit", "escape", "ctrl+c")));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
 
+    /**
+     * Launches the interactive editor demo.
+     *
+     * @param args the command-line arguments
+     */
     public static void main(String[] args) {
         ExitResult result = run();
         if (result.failure() != null) {
@@ -261,8 +303,8 @@ public final class EditorDemo {
      * @param cols the columns of the terminal, or zero when only the editing policy is needed
      * @return the policy
      */
-    public static Editor.Config config(Model model, int cols) {
-        Editor.Config base = Editor.Config.defaults()
+    public static EditorConfig config(Model model, int cols) {
+        EditorConfig base = EditorConfig.defaults()
                 .withVisibleLines(MAX_ROWS)
                 .withCursor(cursorPolicy(model.caret()))
                 .withPresentation(Editor.Presentation.plain()
@@ -290,8 +332,15 @@ public final class EditorDemo {
         };
     }
 
-    /** The demo scene: two mounted textareas, three status rows and the help lines. */
+    /**
+     * The demo scene: two mounted textareas, three status rows and the help lines.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final KeyMap<Msg> keys = defaultKeys();
 
@@ -342,30 +391,45 @@ public final class EditorDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
-            int cols = context.viewport().cols();
-            // The scene's gestures are matched before the focused editor's own map: the editor
-            // binds modified keys too, and the scene's toggles are what the user aimed at.
-            return Views.keyed(
-                    keys.bindings(),
-                    Views.column(
-                            Views.text(presentation(model, cols), STATUS),
-                            Views.text(paneStatus("left", model.left(), model, cols), STATUS),
-                            Views.text(paneStatus("right", model.right(), model, cols), STATUS),
-                            Views.text("last=" + model.last(), STATUS),
-                            Views.gap(1),
-                            Views.row(pane(true, model, context), pane(false, model, context)),
-                            Views.gap(1),
-                            Help.view(keys, false, cols)),
-                    List.of());
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
         }
 
-        /** One pane: the mounted editor inside a frame that marks which pane holds focus. */
-        private View<Msg> pane(boolean left, Model model, ViewContext context) {
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys.bindings();
+        }
+
+        /**
+         * The scene as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
+            int cols = context.viewport().cols();
+            // The scene's gestures are the ones no editor binds: the editor answers its own keys
+            // first, and only a gesture it declines reaches this map.
+            return Elements.column(
+                    Elements.text(presentation(model, cols), STATUS),
+                    Elements.text(paneStatus("left", model.left(), model, cols), STATUS),
+                    Elements.text(paneStatus("right", model.right(), model, cols), STATUS),
+                    Elements.text("last=" + model.last(), STATUS),
+                    Elements.spacer(1),
+                    Elements.row(pane(true, model, context), pane(false, model, context)),
+                    Elements.spacer(1),
+                    Help.element(keys, Help.Config.defaults(), false, cols));
+        }
+
+        /**
+         * One pane: the mounted editor inside a frame that marks which pane holds focus.
+         */
+        private Element<Msg> pane(boolean left, Model model, ViewContext context) {
             boolean focused = left == model.leftFocused();
-            return Views.grow(
+            return Elements.grow(
                     1,
-                    Views.border(
+                    Elements.frame(
                             Border.SINGLE,
                             StyledText.of(left ? "left" : "right", focused ? TITLE : Style.NONE),
                             focused ? FOCUSED_FRAME : Style.NONE,
@@ -380,7 +444,7 @@ public final class EditorDemo {
          * its identity, its lens and its routes are the same values every time.</p>
          */
         private Mount<Model, Msg, Never, Editor.Model, Editor.Msg, Editor.Output> mount(boolean left, Model model) {
-            Editor.Config config = config(model, 0);
+            EditorConfig config = config(model, 0);
             return Mount.of(
                     ComponentId.of(left ? "left" : "right"),
                     Editor.textarea(config),
@@ -391,7 +455,9 @@ public final class EditorDemo {
                     OutputRoute.toMessage(output -> new Msg.Output(left, output)));
         }
 
-        /** The presentation row: the policy the two panes are painted with. */
+        /**
+         * The presentation row: the policy the two panes are painted with.
+         */
         private static String presentation(Model model, int cols) {
             return "focus=" + (model.leftFocused() ? "left" : "right")
                     + " lines=" + (model.lineNumbers() ? "on" : "off")
@@ -401,7 +467,9 @@ public final class EditorDemo {
                     + " wrap=" + Math.max(1, cols / 2 - 2);
         }
 
-        /** One pane's row: its draft's length, the caret's offset and the rows it paints. */
+        /**
+         * One pane's row: its draft's length, the caret's offset and the rows it paints.
+         */
         private static String paneStatus(String name, Editor.Model pane, Model model, int cols) {
             int width = Math.max(1, cols / 2 - 2);
             return name + " len=" + pane.text().length()
@@ -409,7 +477,9 @@ public final class EditorDemo {
                     + " rows=" + Editor.visibleLineCount(pane, config(model, 0), width);
         }
 
-        /** What the scene last saw from an editor, as one token so a verifier can assert it. */
+        /**
+         * What the scene last saw from an editor, as one token so a verifier can assert it.
+         */
         private static Model describe(Model model, Msg.Output output) {
             String what = switch (output.value()) {
                 case Editor.Output.Submit submit -> "submit:" + submit.text().length();

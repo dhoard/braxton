@@ -28,15 +28,19 @@ import io.github.dhoard.braxton.internal.terminal.TimedReader;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.Never;
+import io.github.dhoard.braxton.terminal.Capabilities;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Owned stream fixture for the internal terminal contract. */
+/**
+ * Owned stream fixture for the internal terminal contract.
+ */
 public final class TestTerminal implements AutoCloseable {
     private final ScriptedInput input = new ScriptedInput();
     private final List<String> writes = Collections.synchronizedList(new ArrayList<>());
+    private final TerminalScreen screen = new TerminalScreen(24, 80);
     private final ByteArrayOutputStream output = new ByteArrayOutputStream();
     private final AtomicBoolean virtualRead = new AtomicBoolean();
     private volatile boolean closed;
@@ -73,6 +77,7 @@ public final class TestTerminal implements AutoCloseable {
 
     public TestTerminal(Size size) {
         this.size = size;
+        screen.resize(size.rows(), size.cols());
         OutputStream capture = new OutputStream() {
             public synchronized void write(int b) throws IOException {
                 if (outputFailure) throw outputError = new IOException("broken output");
@@ -89,6 +94,7 @@ public final class TestTerminal implements AutoCloseable {
                     if (output.size() > 0) {
                         String text = output.toString(StandardCharsets.UTF_8);
                         writes.add(text);
+                        screen.apply(text);
                         outputObserver.accept(text);
                         output.reset();
                     }
@@ -150,8 +156,8 @@ public final class TestTerminal implements AutoCloseable {
                 return TestTerminal.this.size;
             }
 
-            public TerminalCapabilities capabilities() {
-                return new TerminalCapabilities(true, true, true, true, "xterm-256color");
+            public Capabilities capabilities() {
+                return Capabilities.of(true, true, true, true, "xterm-256color");
             }
 
             public void enterRawMode() {}
@@ -249,6 +255,7 @@ public final class TestTerminal implements AutoCloseable {
 
     public void resize(Size size) {
         this.size = size;
+        screen.resize(size.rows(), size.cols());
     }
 
     public void advanceResizeEpoch() {
@@ -259,17 +266,23 @@ public final class TestTerminal implements AutoCloseable {
         resizeCallback.run();
     }
 
-    /** Runs inside {@code release()}, before the runtime continues, so a test can inspect the state. */
+    /**
+     * Runs inside {@code release()}, before the runtime continues, so a test can inspect the state.
+     */
     public void onRelease(Runnable observer) {
         onRelease = observer;
     }
 
-    /** Runs inside {@code reacquire()}, before the runtime continues. */
+    /**
+     * Runs inside {@code reacquire()}, before the runtime continues.
+     */
     public void onReacquire(Runnable observer) {
         onReacquire = observer;
     }
 
-    /** Runs inside {@code suspend()}: the window in which the session is stopped. */
+    /**
+     * Runs inside {@code suspend()}: the window in which the session is stopped.
+     */
     public void onSuspend(Runnable observer) {
         onSuspend = observer;
     }
@@ -304,6 +317,30 @@ public final class TestTerminal implements AutoCloseable {
 
     public Terminal.State state() {
         return state;
+    }
+
+    /**
+     * What the terminal shows after every write it was given.
+     *
+     * <p>This is the assertion a test wants when it asks whether a frame reached the terminal: a
+     * session writes the cells that changed rather than whole rows, so a line arrives once and its
+     * later values arrive as corrections. {@link #outputText()} is the transcript, which is what a
+     * test about the bytes themselves should read.</p>
+     *
+     * @return the visible text, one line per row with trailing blanks removed
+     */
+    public String screenText() {
+        return screen.text();
+    }
+
+    /**
+     * One row of {@link #screenText()}.
+     *
+     * @param row the row, counted from zero
+     * @return the visible text of that row, trailing blanks removed
+     */
+    public String screenLine(int row) {
+        return screen.line(row);
     }
 
     public String outputText() {

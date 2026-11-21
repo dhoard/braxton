@@ -28,16 +28,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import examples.parity.TabsDemo;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.ComponentId;
-import io.github.dhoard.braxton.mvu.ComponentPath;
 import io.github.dhoard.braxton.mvu.ComponentTree;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.ModelLens;
@@ -50,12 +49,13 @@ import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.InteractionRouter;
 import io.github.dhoard.braxton.widget.Countdown;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.RichList;
 import io.github.dhoard.braxton.widget.Tabs;
@@ -70,7 +70,7 @@ import org.junit.jupiter.api.Timeout;
 /**
  * Phase 16 acceptance: the tab bar's state, its painting, the composition it enables and the demo.
  *
- * <p>Every assertion is against public behaviour: the model a message produces, the output it
+ * <p>Every assertion is against public behavior: the model a message produces, the output it
  * reports, the rows a pure renderer paints, the focus regions a composed view declares, what a routed
  * key does, and what the demo's own scene reports on its status rows. The bar a test drives is the
  * shipped {@link Tabs}, the pages are the shipped {@link Editor}, {@link RichList} and
@@ -92,7 +92,9 @@ class ParityTabsTest {
     private static final List<Tabs.Tab> THREE =
             List.of(Tabs.Tab.of("a", "Alpha"), Tabs.Tab.of("b", "Beta"), Tabs.Tab.of("c", "Gamma"));
 
-    /** One tab in the middle, one disabled, one at each end. */
+    /**
+     * One tab in the middle, one disabled, one at each end.
+     */
     private static final List<Tabs.Tab> MIXED =
             List.of(Tabs.Tab.of("a", "Alpha"), Tabs.Tab.of("b", "Beta", false), Tabs.Tab.of("c", "Gamma"));
 
@@ -116,7 +118,9 @@ class ParityTabsTest {
         return new Tabs.Model(tabs, active, true);
     }
 
-    /** The composition's rows as painted text, each still padded to the width it was given. */
+    /**
+     * The composition's rows as painted text, each still padded to the width it was given.
+     */
     private static List<String> rows(Tabs.Model model, Tabs.Config config, int width, StyledText content) {
         return List.of(Tabs.render(model, config, width, content).plainText().split("\n", -1));
     }
@@ -129,17 +133,21 @@ class ParityTabsTest {
         return rows(model, null, width, content);
     }
 
-    /** A row padded to the width the composition was given, so an expected row states its width. */
+    /**
+     * A row padded to the width the composition was given, so an expected row states its width.
+     */
     private static String padded(String row, int width) {
         return row + " ".repeat(Math.max(0, width - TextMeasure.columns(row)));
     }
 
-    /** The composed view's rows as a terminal would paint them at a fixed viewport. */
-    private static List<String> lines(View<?> view, int rows, int cols) {
-        return new ScreenRenderer().plainLines(view, new Viewport(rows, cols));
+    /**
+     * The composed view's rows as a terminal would paint them at a fixed viewport.
+     */
+    private static List<String> lines(Element<?> view, int rows, int cols) {
+        return ElementScreen.render(view, rows, cols).lines();
     }
 
-    private static List<String> lines(View<?> view) {
+    private static List<String> lines(Element<?> view) {
         return lines(view, ROWS, COLS);
     }
 
@@ -148,21 +156,25 @@ class ParityTabsTest {
         return InputEvent.KeyInput.of(gesture, text(gesture));
     }
 
-    /** The characters a key press carries, as the decoder would report them. */
+    /**
+     * The characters a key press carries, as the decoder would report them.
+     */
     private static String text(Key gesture) {
         String name = gesture.name();
         return name.length() == 1 ? name : "space".equals(name) ? " " : "";
     }
 
-    private static Optional<Tabs.Msg> route(View<Tabs.Msg> view, String spec) {
-        return InputRouter.route(view, key(spec));
+    private static Optional<Tabs.Msg> route(Element<Tabs.Msg> view, String spec) {
+        return InteractionRouter.message(view, key(spec));
     }
 
     private static List<StyledText.Span> spans(StyledText text) {
         return text.spans();
     }
 
-    /** Every alias of a key map's actions, in declaration order. */
+    /**
+     * Every alias of a key map's actions, in declaration order.
+     */
     private static List<String> aliases(KeyMap<?> keys) {
         List<String> names = new ArrayList<>();
         for (KeyMap.Group<?> group : keys.groups()) {
@@ -195,12 +207,17 @@ class ParityTabsTest {
         return String.join("\n", painted(scene, model));
     }
 
-    /** What one key does to the demo, as the scene's own message. */
+    /**
+     * What one key does to the demo, as the scene's own message.
+     */
     private static Optional<TabsDemo.Msg> press(TabsDemo.Scene scene, TabsDemo.Model model, String spec) {
-        return InputRouter.route(scene.view(model, CONTEXT), key(spec));
+        return io.github.dhoard.braxton.testing.Routing.route(scene, model, CONTEXT, key(spec)).stream()
+                .findFirst();
     }
 
-    /** One scene message and everything the runtime would deliver after it. */
+    /**
+     * One scene message and everything the runtime would deliver after it.
+     */
     private static TabsDemo.Model deliver(
             TabsDemo.Scene scene, TabsDemo.Model model, TabsDemo.Msg message, long nowNanos) {
         ArrayDeque<TabsDemo.Msg> pending = new ArrayDeque<>();
@@ -230,14 +247,18 @@ class ParityTabsTest {
         }
     }
 
-    /** One routed key, applied with everything it dispatches. */
+    /**
+     * One routed key, applied with everything it dispatches.
+     */
     private static TabsDemo.Model typed(TabsDemo.Scene scene, TabsDemo.Model model, String spec) {
         Optional<TabsDemo.Msg> message = press(scene, model, spec);
         assertThat(message).as("key %s reaches the scene", spec).isPresent();
         return deliver(scene, model, message.orElseThrow());
     }
 
-    /** Every character of a text typed into the focused page. */
+    /**
+     * Every character of a text typed into the focused page.
+     */
     private static TabsDemo.Model typist(TabsDemo.Scene scene, TabsDemo.Model model, String text) {
         TabsDemo.Model state = model;
         for (int index = 0; index < text.length(); index++) {
@@ -250,7 +271,9 @@ class ParityTabsTest {
         return new TabsDemo.Msg.Show(id);
     }
 
-    /** The timer's reading as the runtime would deliver it at an absolute monotonic time. */
+    /**
+     * The timer's reading as the runtime would deliver it at an absolute monotonic time.
+     */
     private static TabsDemo.Msg tick(TabsDemo.Model model, long atMillis) {
         return new TabsDemo.Msg.Timer(new Countdown.Msg.Reading(model.timer().epoch(), atMillis * MILLIS));
     }
@@ -748,9 +771,10 @@ class ParityTabsTest {
         assertThat(model.tabs()).hasSize(3);
         assertThat(model.activeId()).isEqualTo("b");
         assertThat(page.plainText()).isEqualTo("body");
-        assertThat(Tabs.frame(model, null, Views.text(page)).children()).isNotEmpty();
+        assertThat(BAR.element(model, Elements.text(page), message -> message).children())
+                .isNotEmpty();
         assertThat(BAR.view(model, CONTEXT)).isNotNull();
-        assertThat(BAR.view(model, Views.text(page), message -> message).children())
+        assertThat(BAR.element(model, Elements.text(page), message -> message).children())
                 .hasSize(2);
     }
 
@@ -833,17 +857,14 @@ class ParityTabsTest {
         PagesScene scene = new PagesScene();
         Pages model =
                 scene.init(new InitContext(new Viewport(ROWS, COLS), null)).model();
-        List<io.github.dhoard.braxton.view.RenderedScreen.Region> regions =
-                new ScreenRenderer().regions(scene.view(model, CONTEXT), new Viewport(ROWS, COLS));
-        assertThat(regions)
-                .extracting(region -> region.id().path())
-                .as("the page is scoped by its mount, the composed bar keeps the root scope")
-                .containsExactly(ComponentPath.ROOT, ComponentPath.ROOT.append(ComponentId.of("notes")));
-        assertThat(regions.get(0).id().value()).isEqualTo("tabs");
-        assertThat(regions.get(1).id().value()).isEqualTo("input");
-        assertThat(regions.get(0).bounds().rows())
-                .as("the bar's own two rows are the focus target")
-                .isEqualTo(2);
+        var screen = io.github.dhoard.braxton.testing.ElementScreen.render(scene.view(model, CONTEXT), ROWS, COLS);
+        // Two editable targets and no more: the bar is one, the mounted page's field is the other.
+        // They are separate leaves, so a pointer or a tab reaches one of them at a time.
+        var focusables = io.github.dhoard.braxton.ui.InteractionRouter.focusables(screen.placement());
+        assertThat(focusables)
+                .as("the bar and the page are the two focus targets")
+                .hasSize(2);
+        assertThat(focusables.get(0)).isNotSameAs(focusables.get(1));
     }
 
     @Test
@@ -871,9 +892,12 @@ class ParityTabsTest {
         assertThat(model.todo().focused())
                 .as("a hidden page does not hold the keyboard")
                 .isFalse();
-        assertThat(new ScreenRenderer().regions(scene.view(model, CONTEXT), new Viewport(ROWS, COLS)))
-                .extracting(region -> region.id().path())
-                .containsExactly(ComponentPath.ROOT, ComponentPath.ROOT.append(ComponentId.of("notes")));
+        // Identity is structural: the visible page's field is one leaf, and the hidden page's field
+        // is not in the tree at all.
+        var screen = io.github.dhoard.braxton.testing.ElementScreen.render(scene.view(model, CONTEXT), ROWS, COLS);
+        assertThat(io.github.dhoard.braxton.ui.InteractionRouter.focusables(screen.placement()))
+                .as("the bar and the visible page take the keyboard, and the hidden page does not")
+                .hasSize(2);
     }
 
     @Test
@@ -902,7 +926,7 @@ class ParityTabsTest {
                 .extracting(ComponentTree.Node::id)
                 .containsExactly(ComponentId.of("bar"), ComponentId.of("notes"), ComponentId.of("todo"));
         assertThat(intervals(scene.subscriptions(model)))
-                .as("an unmounted page's interval is cancelled")
+                .as("an unmounted page's interval is canceled")
                 .isEmpty();
 
         model = scene.deliver(model, new PageMsg.RestoreClock());
@@ -1247,7 +1271,9 @@ class ParityTabsTest {
         }
     }
 
-    /** Every message the test composition handles. */
+    /**
+     * Every message the test composition handles.
+     */
     sealed interface PageMsg {
         record Bar(Tabs.Msg value) implements PageMsg {}
 
@@ -1278,11 +1304,15 @@ class ParityTabsTest {
         record CloseModal() implements PageMsg {}
     }
 
-    /** The composition's tabs: two editor pages and a timer. */
+    /**
+     * The composition's tabs: two editor pages and a timer.
+     */
     private static final List<Tabs.Tab> PAGES =
             List.of(Tabs.Tab.of("notes", "Notes"), Tabs.Tab.of("todo", "Todo"), Tabs.Tab.of("timer", "Timer"));
 
-    /** A bar over two editor pages and a timer, with an explicit mount policy and a modal layer. */
+    /**
+     * A bar over two editor pages and a timer, with an explicit mount policy and a modal layer.
+     */
     static final class PagesScene implements Component<Pages, PageMsg, Never> {
 
         static final String NOTES_DRAFT = "notes: ";
@@ -1292,7 +1322,7 @@ class ParityTabsTest {
         static final ViewContext VIEW = new ViewContext(new Viewport(ROWS, COLS));
 
         private final Tabs bar = new Tabs(null);
-        private final Editor editor = Editor.textarea(Editor.Config.defaults());
+        private final Editor editor = Editor.textarea(EditorConfig.defaults());
         private final Countdown countdown = new Countdown(Countdown.Config.of(TICKS));
         private final Mount<Pages, PageMsg, Never, Tabs.Model, Tabs.Msg, Tabs.Output> barMount = Mount.of(
                 ComponentId.of("bar"),
@@ -1437,32 +1467,62 @@ class ParityTabsTest {
         }
 
         @Override
-        public View<PageMsg> view(Pages model, ViewContext context) {
-            View<PageMsg> page = switch (model.bar().activeId()) {
+        public Element<PageMsg> view(Pages model, ViewContext context) {
+            Element<PageMsg> page = switch (model.bar().activeId()) {
                 case "notes" -> notesMount.view(model, context);
-                case "todo" -> model.keepTodo() ? todoMount.view(model, context) : Views.blank();
-                case "timer" -> model.keepClock() ? clockMount.view(model, context) : Views.blank();
-                default -> Views.blank();
+                case "todo" -> model.keepTodo() ? todoMount.view(model, context) : Elements.spacer();
+                case "timer" -> model.keepClock() ? clockMount.view(model, context) : Elements.spacer();
+                default -> Elements.spacer();
             };
-            View<PageMsg> composed = bar.view(model.bar(), page, PageMsg.Bar::new);
+            Element<PageMsg> composed = bar.element(model.bar(), page, PageMsg.Bar::new);
             if (!model.modal()) {
                 return composed;
             }
-            View<PageMsg> layer = Views.focus(
-                    ElementId.of("modal"),
-                    true,
-                    List.of(),
-                    event -> Optional.of(new PageMsg.CloseModal()),
-                    Views.border(Border.ROUNDED, StyledText.plain("modal"), Views.text("close me")));
-            return Views.modal(composed, layer);
+            Element<PageMsg> layer =
+                    Elements.frame(Border.ROUNDED, StyledText.plain("modal"), Style.NONE, Elements.text("close me"));
+            return Elements.stack(composed, Elements.modal(layer));
         }
 
-        /** One routed key, as the composition's own message. */
+        /**
+         * The gestures the frame answers before any leaf: the modal's own key while its layer is
+         * open, and the bar's keys otherwise. A modal layer is the whole route, so nothing under it
+         * is asked first.
+         */
+        @Override
+        public java.util.List<Binding<PageMsg>> claims(Pages model) {
+            if (model.modal()) {
+                return List.of(Binding.of("right", new PageMsg.CloseModal()));
+            }
+            return barMount.claims(model);
+        }
+
+        /**
+         * The gestures the composed pages answer once the frame has declined them.
+         */
+        @Override
+        public java.util.List<Binding<PageMsg>> bindings(Pages model) {
+            java.util.List<Binding<PageMsg>> routes = new ArrayList<>(barMount.bindings(model));
+            switch (model.bar().activeId()) {
+                case "notes" -> routes.addAll(notesMount.bindings(model));
+                case "todo" -> routes.addAll(todoMount.bindings(model));
+                case "timer" -> routes.addAll(clockMount.bindings(model));
+                default -> {}
+            }
+            return java.util.List.copyOf(routes);
+        }
+
+        /**
+         * One routed key, as the composition's own message.
+         */
         Optional<PageMsg> route(Pages model, String spec) {
-            return InputRouter.route(view(model, VIEW), key(spec));
+            // The runtime's own steps: claims, then the tree, then the last tier.
+            return io.github.dhoard.braxton.testing.Routing.route(this, model, VIEW, key(spec)).stream()
+                    .findFirst();
         }
 
-        /** One message and everything the runtime would deliver after it. */
+        /**
+         * One message and everything the runtime would deliver after it.
+         */
         Pages deliver(Pages model, PageMsg message) {
             ArrayDeque<PageMsg> pending = new ArrayDeque<>();
             pending.add(message);
@@ -1497,7 +1557,9 @@ class ParityTabsTest {
             }
         }
 
-        /** Exactly one element holds the keyboard: the bar, or the visible editor page. */
+        /**
+         * Exactly one element holds the keyboard: the bar, or the visible editor page.
+         */
         private static Pages focused(Pages model) {
             String active = model.bar().activeId();
             return new Pages(

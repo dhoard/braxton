@@ -41,7 +41,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
-/** Commands are inert descriptions with exactly-once, epoch-guarded interpretation. */
+/**
+ * Commands are inert descriptions with exactly-once, epoch-guarded interpretation.
+ */
 class EffectRunnerTest {
 
     private final Mailbox mailbox = new Mailbox(16);
@@ -60,6 +62,19 @@ class EffectRunnerTest {
         Mailbox.Envelope envelope = mailbox.poll(20);
         assertThat(envelope).isInstanceOf(Mailbox.AppMessage.class);
         return (String) ((Mailbox.AppMessage) envelope).payload();
+    }
+
+    @Test
+    void developerOverlayTogglesInSequenceOnTheOwnerWithoutProducingMessages() {
+        List<Boolean> choices = new ArrayList<>();
+        Thread owner = Thread.currentThread();
+        runner.bindDebugOverlay(enabled -> {
+            assertThat(Thread.currentThread()).isSameAs(owner);
+            choices.add(enabled);
+        });
+        runner.interpret(Command.sequence(Command.debugOverlay(true), Command.debugOverlay(false)));
+        assertThat(choices).containsExactly(true, false);
+        assertThat(mailbox.size()).isZero();
     }
 
     @Test
@@ -240,11 +255,11 @@ class EffectRunnerTest {
             assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
             asyncRunner.interpret(Command.cancel(EffectId.of("work")));
             assertThat(interrupted.await(5, TimeUnit.SECONDS))
-                    .as("cancelling a running task must interrupt its body")
+                    .as("canceling a running task must interrupt its body")
                     .isTrue();
             Thread.sleep(100L);
             assertThat(mailbox.size())
-                    .as("a cancelled task's result must not arrive")
+                    .as("a canceled task's result must not arrive")
                     .isZero();
         } finally {
             executor.shutdownNow();

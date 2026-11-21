@@ -27,23 +27,29 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
 import java.util.List;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** The editor's render window follows the caret and never paints more lines than it may. */
+/**
+ * The editor's render window follows the caret and never paints more lines than it may.
+ */
 class EditorWindowTest {
 
     private static final String FAMILY = "\uD83D\uDC68\u200D\uD83D\uDC69";
 
-    private static Editor.Config options(int visibleLines, int maxLength) {
-        return Editor.Config.defaults()
+    private static EditorConfig options(int visibleLines, int maxLength) {
+        return EditorConfig.defaults()
                 .withPrompt("> ", Style.NONE)
                 .withVisibleLines(visibleLines)
                 .withMaxLength(maxLength);
     }
 
-    /** Each line is two columns ("L0"), so line {@code i} starts at column 3 * i. */
+    /**
+     * Each line is two columns ("L0"), so line {@code i} starts at column 3 * i.
+     */
     private static String draftText(int lines) {
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < lines; i++) {
@@ -61,7 +67,7 @@ class EditorWindowTest {
         return new Editor.Model(text, position, position, 0);
     }
 
-    private static List<String> rendered(Editor.Model state, Editor.Config options) {
+    private static List<String> rendered(Editor.Model state, EditorConfig options) {
         StyledText rendered = Editor.render(state, options, true);
         return List.of(rendered.plainText().split("\n", -1));
     }
@@ -87,7 +93,7 @@ class EditorWindowTest {
     @Test
     void theWindowAlwaysContainsTheCaretAndPaintsNoMoreThanItMay() {
         for (int visibleLines = 1; visibleLines <= 4; visibleLines++) {
-            Editor.Config options = options(visibleLines, 1_000);
+            EditorConfig options = options(visibleLines, 1_000);
             for (int lines = 1; lines <= 8; lines++) {
                 for (int caret = 0; caret <= lines * 3; caret++) {
                     Editor.Model state = draft(lines, Math.min(caret, lines * 3));
@@ -108,7 +114,7 @@ class EditorWindowTest {
 
     @Test
     void theWindowScrollsDownWithTheCaretAndNeverBackwards() {
-        Editor.Config options = options(2, 1_000);
+        EditorConfig options = options(2, 1_000);
         int previousFirst = -1;
         for (int caretLine = 0; caretLine < 6; caretLine++) {
             List<String> painted = rendered(draft(6, caretLine * 3), options);
@@ -124,7 +130,7 @@ class EditorWindowTest {
 
     @Test
     void anEmptyOrSingleLineDraftPaintsOneLine() {
-        Editor.Config options = options(4, 1_000);
+        EditorConfig options = options(4, 1_000);
         assertThat(rendered(Editor.Model.empty(), options)).containsExactly("> " + Editor.CURSOR);
         assertThat(rendered(draft(1, 0), options)).isEqualTo(expected(0, 1, 0, 0));
         assertThat(rendered(draft(1, 1), options)).isEqualTo(expected(0, 1, 0, 1));
@@ -137,7 +143,7 @@ class EditorWindowTest {
 
     @Test
     void pastingAtTheLengthLimitKeepsWhatFitsAndWholeGraphemes() {
-        Editor.Config options = options(4, 4);
+        EditorConfig options = options(4, 4);
         Editor.Model filled = Editor.Model.of("abcd");
         io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> exact =
                 new Editor(options).update(filled, new Editor.Msg.Paste("wxyz"));
@@ -161,7 +167,7 @@ class EditorWindowTest {
 
     @Test
     void aSelectionIsReplacedByAPasteThatFitsInsideTheLimit() {
-        Editor.Config options = options(4, 6);
+        EditorConfig options = options(4, 6);
         Editor.Model selected = Editor.Model.of("abcdef").withSelection(1, 4);
         io.github.dhoard.braxton.mvu.Update<Editor.Model, Editor.Msg, Editor.Output> result =
                 new Editor(options).update(selected, new Editor.Msg.Paste("X"));
@@ -202,16 +208,18 @@ class EditorWindowTest {
         // must paint without exceeding the viewport and must keep the caret reachable - including a
         // width narrower than the prompt itself.
         Editor.Model state = Editor.Model.of("hello\nworld").withCaret(3).withSelection(1, 6);
-        io.github.dhoard.braxton.view.View<String> view = new Editor(
-                        Editor.Config.defaults().withPrompt(">  ", Style.NONE))
+        Element<String> view = new Editor(EditorConfig.defaults().withPrompt(">  ", Style.NONE))
                 .view(
                         (state).withFocus(true),
                         new io.github.dhoard.braxton.mvu.ViewContext(io.github.dhoard.braxton.layout.Viewport.EMPTY))
                 .map(action -> "msg");
         for (int width = 1; width <= 8; width++) {
             for (int rows = 1; rows <= 3; rows++) {
-                List<String> lines = new io.github.dhoard.braxton.view.ScreenRenderer()
-                        .plainLines(view, new io.github.dhoard.braxton.layout.Viewport(rows, width));
+                List<String> lines = ElementScreen.render(
+                                view,
+                                new io.github.dhoard.braxton.layout.Viewport(rows, width).rows(),
+                                new io.github.dhoard.braxton.layout.Viewport(rows, width).cols())
+                        .lines();
                 assertThat(lines).as("width %d rows %d", width, rows).hasSize(rows);
                 for (String line : lines) {
                     assertThat(io.github.dhoard.braxton.style.TextMeasure.columns(line))
@@ -220,14 +228,14 @@ class EditorWindowTest {
                 }
             }
         }
-        assertThat(Editor.render(state, Editor.Config.defaults().withPrompt(">  ", Style.NONE), true)
+        assertThat(Editor.render(state, EditorConfig.defaults().withPrompt(">  ", Style.NONE), true)
                         .plainText())
                 .as("the prompt is painted once, at the first visible line")
                 .startsWith(">  ")
                 .contains("\n");
-        String focused = Editor.render(Editor.Model.of("x"), Editor.Config.defaults(), true)
+        String focused = Editor.render(Editor.Model.of("x"), EditorConfig.defaults(), true)
                 .plainText();
-        String idle = Editor.render(Editor.Model.of("x"), Editor.Config.defaults(), false)
+        String idle = Editor.render(Editor.Model.of("x"), EditorConfig.defaults(), false)
                 .plainText();
         assertThat(idle).as("an unfocused editor paints only its text").isEqualTo("x");
         assertThat(focused)

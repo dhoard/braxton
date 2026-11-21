@@ -25,17 +25,18 @@ package io.github.dhoard.braxton.widget;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.render.Canvas;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.RenderedScreen;
-import io.github.dhoard.braxton.view.ScreenRenderer;
+import io.github.dhoard.braxton.testing.ElementScreen;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Markup styling tokens, the regular reset, and the table grid. */
+/**
+ * Markup styling tokens, the regular reset, and the table grid.
+ */
 class MarkupTest {
 
     private static Style spanStyle(String xml) {
@@ -68,7 +69,7 @@ class MarkupTest {
     @Test
     void regularClearsEveryFlagWhateverOrderItIsWrittenIn() {
         // The reset is applied once the whole list is read, so "regular" wins in either position
-        // while the colours it does not mention survive.
+        // while the colors it does not mention survive.
         for (String tokens : List.of("bold regular", "regular bold", "REGULAR Italic Underline")) {
             Style style = spanStyle(
                     "<root><span style=\"" + tokens + "\" color=\"#112233\"" + " bg-color=\"#445566\">x</span></root>");
@@ -128,7 +129,7 @@ class MarkupTest {
      * {@code li} outside a grid reaches {@code renderNode} and keeps them; inside its owning
      * container the renderer re-rendered the element's children with the container's own style, so
      * the attributes disappeared with no diagnostic and the text painted in the terminal default
-     * while the markup around it kept its colour.
+     * while the markup around it kept its color.
      */
     @Test
     void cellsAndItemsKeepTheirOwnAttributesInsideTheirContainer() {
@@ -154,8 +155,8 @@ class MarkupTest {
                     assertThat(cell.bold()).isTrue();
                 });
         // Painted, not just stored: the cell's first character carries its foreground.
-        RenderedScreen screen =
-                new ScreenRenderer().screen(io.github.dhoard.braxton.view.Views.text(table), new Viewport(1, 12));
+        Canvas screen = io.github.dhoard.braxton.testing.ElementScreen.render(Elements.text(table), 1, 12)
+                .canvas();
         assertThat(screen.cell(0, 0).text()).isEqualTo("r");
         assertThat(screen.cell(0, 0).style().foreground()).isEqualTo(red);
         assertThat(table.spans())
@@ -207,7 +208,9 @@ class MarkupTest {
                 .containsExactly("a   longer  ", "bb  c       ");
     }
 
-    /** The style of the spans whose text contains {@code needle}. */
+    /**
+     * The style of the spans whose text contains {@code needle}.
+     */
     private static Style styleOfSpanContaining(StyledText rendered, String needle) {
         List<StyledText.Span> matching = rendered.spans().stream()
                 .filter(span -> span.text().contains(needle))
@@ -252,8 +255,8 @@ class MarkupTest {
                         .isEqualTo(7));
         // Painted, the mark shares the cell of the gap before it, so the second cell's text still
         // starts in the column the other row starts its second cell in.
-        RenderedScreen screen =
-                new ScreenRenderer().screen(io.github.dhoard.braxton.view.Views.text(parsed), new Viewport(2, 12));
+        Canvas screen = io.github.dhoard.braxton.testing.ElementScreen.render(Elements.text(parsed), 2, 12)
+                .canvas();
         assertThat(paintedColumn(screen, 0, 'x'))
                 .as("second cell column of row 0, rows painted to %d columns", screen.cols())
                 .isEqualTo(paintedColumn(screen, 1, 'y'));
@@ -268,7 +271,8 @@ class MarkupTest {
     @Test
     void aListItemOpeningWithABaselessClusterHangsItsContinuationUnderItsText() {
         String selector = "<root><ul gap=\"0\" icon=\"*\"><li>\uFE0Fx<br/>y</li></ul></root>";
-        RenderedScreen starred = new ScreenRenderer().screen(Markup.view(selector), new Viewport(6, 24));
+        Canvas starred =
+                ElementScreen.render(Markup.<String>element(selector), 6, 24).canvas();
         assertThat(paintedColumn(starred, 0, 'x'))
                 .as("item text column, painted to %d columns", starred.cols())
                 .isEqualTo(paintedColumn(starred, 1, 'y'))
@@ -277,8 +281,9 @@ class MarkupTest {
         // the third column, one right of the two columns the icon measures on its own.
         assertThat(paintedColumn(starred, 0, 'x')).as("widened icon").isEqualTo(3);
 
-        RenderedScreen bulleted = new ScreenRenderer()
-                .screen(Markup.view("<root><ul><li>\uFE0Fx<br/>y</li></ul></root>"), new Viewport(6, 24));
+        Canvas bulleted = ElementScreen.render(
+                        Markup.<String>element("<root><ul><li>\uFE0Fx<br/>y</li></ul></root>"), 6, 24)
+                .canvas();
         assertThat(paintedColumn(bulleted, 0, 'x'))
                 .as("item text column of a default bullet, painted to %d columns", bulleted.cols())
                 .isEqualTo(paintedColumn(bulleted, 1, 'y'))
@@ -293,10 +298,11 @@ class MarkupTest {
      */
     @Test
     void aContinuationLineOpeningWithABaselessClusterHangsUnderItsItemText() {
-        RenderedScreen screen = new ScreenRenderer()
-                .screen(
-                        Markup.view("<root><ul gap=\"0\" icon=\"*\"><li>x<br/>\uFE0Fy</li></ul></root>"),
-                        new Viewport(6, 24));
+        Canvas screen = ElementScreen.render(
+                        Markup.<String>element("<root><ul gap=\"0\" icon=\"*\"><li>x<br/>\uFE0Fy</li></ul></root>"),
+                        6,
+                        24)
+                .canvas();
         assertThat(paintedColumn(screen, 0, 'x'))
                 .as("item text column, painted to %d columns", screen.cols())
                 .isEqualTo(paintedColumn(screen, 1, 'y'))
@@ -306,10 +312,12 @@ class MarkupTest {
         // it is the continuation line's selector that would widen that line's indent to three.
         assertThat(paintedColumn(screen, 0, 'x')).as("item text column").isEqualTo(2);
 
-        RenderedScreen both = new ScreenRenderer()
-                .screen(
-                        Markup.view("<root><ul gap=\"0\" icon=\"*\"><li>\uFE0Fa<br/>\uFE0Fb</li></ul></root>"),
-                        new Viewport(6, 24));
+        Canvas both = ElementScreen.render(
+                        Markup.<String>element(
+                                "<root><ul gap=\"0\" icon=\"*\"><li>\uFE0Fa<br/>\uFE0Fb</li></ul></root>"),
+                        6,
+                        24)
+                .canvas();
         assertThat(paintedColumn(both, 0, 'a'))
                 .as("item text column, painted to %d columns", both.cols())
                 .isEqualTo(paintedColumn(both, 1, 'b'))
@@ -324,10 +332,12 @@ class MarkupTest {
     @Test
     void aListItemOpeningWithANarrowBaselessClusterKeepsItsIndent() {
         for (String head : List.of("\u0301", "\u200D", "\uFE0E")) {
-            RenderedScreen screen = new ScreenRenderer()
-                    .screen(
-                            Markup.view("<root><ul gap=\"0\" icon=\"*\"><li>" + head + "x<br/>y</li></ul></root>"),
-                            new Viewport(6, 24));
+            Canvas screen = ElementScreen.render(
+                            Markup.<String>element(
+                                    "<root><ul gap=\"0\" icon=\"*\"><li>" + head + "x<br/>y</li></ul></root>"),
+                            6,
+                            24)
+                    .canvas();
             assertThat(paintedColumn(screen, 0, 'x'))
                     .as("item text column of head U+%04X, painted to %d columns", head.codePointAt(0), screen.cols())
                     .isEqualTo(paintedColumn(screen, 1, 'y'))
@@ -339,8 +349,10 @@ class MarkupTest {
         }
     }
 
-    /** The column {@code needle} was painted in on {@code row}, or -1 when it is not painted. */
-    private static int paintedColumn(RenderedScreen screen, int row, char needle) {
+    /**
+     * The column {@code needle} was painted in on {@code row}, or -1 when it is not painted.
+     */
+    private static int paintedColumn(Canvas screen, int row, char needle) {
         for (int column = 0; column < screen.cols(); column++) {
             if (screen.cell(row, column).text().indexOf(needle) >= 0) {
                 return column;
@@ -415,10 +427,12 @@ class MarkupTest {
         assertPaintedContinuationAlignsUnderTheItemText(carriageReturn, 'g', 'h');
     }
 
-    /** The painted first-line item text and the painted continuation text share one column. */
+    /**
+     * The painted first-line item text and the painted continuation text share one column.
+     */
     private static void assertPaintedContinuationAlignsUnderTheItemText(String xml, char item, char continuation) {
-        List<String> painted = new io.github.dhoard.braxton.view.ScreenRenderer()
-                .plainLines(Markup.view(xml), new io.github.dhoard.braxton.layout.Viewport(4, 24));
+        List<String> painted =
+                ElementScreen.render(Markup.<String>element(xml), 4, 24).lines();
         assertThat(painted.get(1).indexOf(continuation))
                 .as("continuation column in %s", painted)
                 .isEqualTo(painted.get(0).indexOf(item))

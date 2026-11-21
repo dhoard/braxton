@@ -46,7 +46,9 @@ import org.junit.jupiter.api.Test;
 @org.junit.jupiter.api.extension.ExtendWith(io.github.dhoard.braxton.internal.input.TestReaders.class)
 class TerminalKeySequenceTest {
 
-    /** One terminal gesture: the terminfo capability, the bytes, and the key it must become. */
+    /**
+     * One terminal gesture: the terminfo capability, the bytes, and the key it must become.
+     */
     private record Gesture(String capability, String sequence, Key key) {}
 
     private static final String ESC = "\u001B";
@@ -147,7 +149,9 @@ class TerminalKeySequenceTest {
         return new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8));
     }
 
-    /** Serves one byte per read, so a sequence really does arrive in pieces. */
+    /**
+     * Serves one byte per read, so a sequence really does arrive in pieces.
+     */
     private static final class ByteAtATime extends InputStream {
         private final byte[] data;
         private int index;

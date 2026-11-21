@@ -22,7 +22,8 @@
 
 package io.github.dhoard.braxton.input;
 
-/** Keyboard modifier state carried by a normalized input event.
+/**
+ * Keyboard modifier state carried by a normalized input event.
  *
  * @param ctrl whether Ctrl was held
  * @param alt whether Alt or Meta was held
@@ -30,29 +31,68 @@ package io.github.dhoard.braxton.input;
  */
 public record Modifiers(boolean ctrl, boolean alt, boolean shift) {
 
+    /**
+     * No modifier held.
+     */
     public static final Modifiers NONE = new Modifiers(false, false, false);
 
+    /**
+     * Control held.
+     */
     public static final Modifiers CTRL = new Modifiers(true, false, false);
+    /**
+     * Alt held.
+     */
     public static final Modifiers ALT = new Modifiers(false, true, false);
+    /**
+     * Shift held.
+     */
     public static final Modifiers SHIFT = new Modifiers(false, false, true);
 
+    /**
+     * Returns the same value with ctrl replaced.
+     *
+     * @param value the requested ctrl
+     * @return the value with the requested ctrl
+     */
     public Modifiers withCtrl(boolean value) {
         return new Modifiers(value, alt, shift);
     }
 
+    /**
+     * Returns the same value with alt replaced.
+     *
+     * @param value the requested alt
+     * @return the value with the requested alt
+     */
     public Modifiers withAlt(boolean value) {
         return new Modifiers(ctrl, value, shift);
     }
 
+    /**
+     * Returns the same value with shift replaced.
+     *
+     * @param value the requested shift
+     * @return the value with the requested shift
+     */
     public Modifiers withShift(boolean value) {
         return new Modifiers(ctrl, alt, value);
     }
 
+    /**
+     * Tests whether no modifier flag is set.
+     *
+     * @return {@code true} if no modifier flag is set; otherwise {@code false}
+     */
     public boolean none() {
         return !ctrl && !alt && !shift;
     }
 
-    /** Canonical {@code ctrl+alt+shift+} prefix, empty when no modifier is set. */
+    /**
+     * Canonical {@code ctrl+alt+shift+} prefix, empty when no modifier is set.
+     *
+     * @return the canonical modifier prefix, ending in {@code +}, or empty
+     */
     public String prefix() {
         StringBuilder text = new StringBuilder();
         if (ctrl) {

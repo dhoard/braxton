@@ -27,29 +27,31 @@ import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.layout.Border;
+import io.github.dhoard.braxton.layout.Rect;
+import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
+import io.github.dhoard.braxton.render.Surface;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
-import io.github.dhoard.braxton.view.Cursor;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Cursor;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.Widget;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 
 /**
  * Phase 03 parity demo: native and virtual cursor presentation.
@@ -75,24 +77,28 @@ import java.util.Optional;
  */
 public final class CursorDemo {
 
-    /** Each pane is this wide, so both fit an eighty-column terminal side by side. */
+    /**
+     * Each pane is this wide, so both fit an eighty-column terminal side by side.
+     */
     public static final int PANE_WIDTH = 40;
 
     private static final Style STATUS = Style.NONE.withBold();
+
     private static final Style FOCUSED_FRAME = Style.NONE.withBold();
     private static final Style FOCUSED_TITLE = Style.NONE.withBold();
 
-    /** The one colour the scene applies, so a terminal's own cursor colour is also restored. */
+    /**
+     * The one color the scene applies, so a terminal's own cursor color is also restored.
+     */
     public static final Color CARET_COLOR = new Color(0x1E, 0x90, 0xFF);
 
-    /** How often a virtual caret asks the scene for time; two ticks make one blink period. */
+    /**
+     * How often a virtual caret asks the scene for time; two ticks make one blink period.
+     */
     public static final Duration BLINK_TICK = Duration.ofMillis(250);
 
     private static final String LEFT_TEXT = "alpha beta\nwide \u754c glyph\nthird line";
     private static final String RIGHT_TEXT = "right pane\nsecondary\nlast line";
-
-    private static final ElementId LEFT = ElementId.of("left");
-    private static final ElementId RIGHT = ElementId.of("right");
 
     private CursorDemo() {}
 
@@ -114,12 +120,20 @@ public final class CursorDemo {
             this(text, 0, 0);
         }
 
-        /** The pane's lines. */
+        /**
+         * The pane's lines.
+         *
+         * @return the pane's lines
+         */
         public List<String> lines() {
             return List.of(text.split("\n", -1));
         }
 
-        /** The cells the caret's line occupies. */
+        /**
+         * The cells the caret's line occupies.
+         *
+         * @return the cells the caret's line occupies
+         */
         public int lineCells() {
             List<String> lines = lines();
             int index = Math.min(row, lines.size() - 1);
@@ -151,7 +165,7 @@ public final class CursorDemo {
      * @param strategy which presentation the panes ask for
      * @param shape the shape a native cursor takes
      * @param mode whether the caret blinks
-     * @param color the caret colour, or null for the terminal's own
+     * @param color the caret color, or null for the terminal's own
      * @param elapsedMillis the scene's own clock, advanced only while a virtual caret blinks
      */
     public record Model(
@@ -164,7 +178,11 @@ public final class CursorDemo {
             Color color,
             long elapsedMillis) {
 
-        /** The focused pane's caret, which is the one the cursor presents. */
+        /**
+         * The focused pane's caret, which is the one the cursor presents.
+         *
+         * @return the focused pane's caret, which is the one the cursor presents
+         */
         public Pane caret() {
             return leftFocused ? left : right;
         }
@@ -206,31 +224,52 @@ public final class CursorDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
-        /** Moves the focused pane's caret. */
+        /**
+         * Moves the focused pane's caret.
+         *
+         * @param rows the number of rows
+         * @param columns the number of columns
+         */
         record Move(int rows, int columns) implements Msg {}
 
-        /** Moves focus between the two panes. */
+        /**
+         * Moves focus between the two panes.
+         */
         record ToggleFocus() implements Msg {}
 
-        /** Switches between the terminal's cursor and a painted one. */
+        /**
+         * Switches between the terminal's cursor and a painted one.
+         */
         record ToggleStrategy() implements Msg {}
 
-        /** Cycles the shape a native cursor takes. */
+        /**
+         * Cycles the shape a native cursor takes.
+         */
         record CycleShape() implements Msg {}
 
-        /** Switches between a blinking and a steady caret. */
+        /**
+         * Switches between a blinking and a steady caret.
+         */
         record ToggleMode() implements Msg {}
 
-        /** Cycles the caret colour between the terminal's own and one the scene picks. */
+        /**
+         * Cycles the caret color between the terminal's own and one the scene picks.
+         */
         record CycleColor() implements Msg {}
 
-        /** One blink tick of the scene's own clock. */
+        /**
+         * One blink tick of the scene's own clock.
+         */
         record Tick() implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -246,7 +285,7 @@ public final class CursorDemo {
                         KeyAction.<Msg>of("toggle-strategy", new Msg.ToggleStrategy(), "m", "native/virtual", "m"),
                         KeyAction.<Msg>of("cycle-shape", new Msg.CycleShape(), "s", "cursor shape", "s"),
                         KeyAction.<Msg>of("toggle-mode", new Msg.ToggleMode(), "b", "blink/steady", "b"),
-                        KeyAction.<Msg>of("cycle-color", new Msg.CycleColor(), "c", "caret colour", "c")),
+                        KeyAction.<Msg>of("cycle-color", new Msg.CycleColor(), "c", "caret color", "c")),
                 KeyMap.group(
                         "Move",
                         KeyAction.<Msg>of("left", new Msg.Move(0, -1), "\u2190", "caret left", "left", "h"),
@@ -259,11 +298,20 @@ public final class CursorDemo {
                         KeyAction.<Msg>of("quit", new Msg.Quit(), "q", "quit", "q", "ctrl+c")));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
 
+    /**
+     * Launches the interactive cursor demo.
+     *
+     * @param args the command-line arguments
+     */
     public static void main(String[] args) {
         ExitResult result = run();
         if (result.failure() != null) {
@@ -272,8 +320,15 @@ public final class CursorDemo {
         System.exit(result.status());
     }
 
-    /** The demo scene: two panes, a status row and the help lines. */
+    /**
+     * The demo scene: two panes, a status row and the help lines.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final KeyMap<Msg> keys = defaultKeys();
 
@@ -325,46 +380,108 @@ public final class CursorDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
-            int width = context.viewport().cols();
-            View<Msg> panes = Views.row(
-                    Views.fixed(PANE_WIDTH, pane("left", LEFT, model.leftFocused(), model.left(), model)),
-                    Views.fixed(PANE_WIDTH, pane("right", RIGHT, !model.leftFocused(), model.right(), model)));
-            // The panes hold focus but consume nothing, so every gesture reaches the scene's own
-            // bindings: a cursor demo has no editing to do, and the keys are the demonstration.
-            return Views.onKeys(
-                    keys.bindings(),
-                    Views.column(
-                            Views.text(presentation(model), STATUS),
-                            Views.text(position(model), STATUS),
-                            Views.gap(1),
-                            panes,
-                            Views.gap(1),
-                            Help.view(keys, false, width)));
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
         }
 
         /**
-         * One pane: its text, its caret and its focus identity.
-         *
-         * <p>Both panes declare a cursor even though only one may be shown. The cursor is owned by
-         * the pane's focus identity, so focus - not paint order - decides which caret the terminal
-         * shows, and the panes cannot both claim it.</p>
+         * The gestures this scene answers once no widget has taken them.
          */
-        private static View<Msg> pane(String title, ElementId id, boolean focused, Pane pane, Model model) {
-            List<View<Msg>> lines = new ArrayList<>();
-            for (String line : pane.lines()) {
-                lines.add(Views.text(line));
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys.bindings();
+        }
+
+        /**
+         * The scene as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
+            int width = context.viewport().cols();
+            Element<Msg> panes = Elements.row(
+                    Elements.fixed(PANE_WIDTH, pane("left", model.leftFocused(), model.left(), model)),
+                    Elements.fixed(PANE_WIDTH, pane("right", !model.leftFocused(), model.right(), model)));
+            // The panes hold focus but consume nothing, so every gesture reaches the scene's own
+            // bindings: a cursor demo has no editing to do, and the keys are the demonstration.
+            return Elements.column(
+                    Elements.text(presentationRow(model), STATUS),
+                    Elements.text(position(model), STATUS),
+                    Elements.spacer(1),
+                    panes,
+                    Elements.spacer(1),
+                    Help.element(keys, Help.Config.defaults(), false, width));
+        }
+
+        /**
+         * One pane: the text it shows and the caret it places when it owns focus.
+         *
+         * <p>A caret is the widget's own answer, not a node beside it: the leaf that paints the lines
+         * is the leaf that knows where the caret belongs, so the frame, the text and the caret can
+         * never disagree about the rectangle. Only the focused pane answers, which is what makes the
+         * terminal's one caret follow focus rather than paint order.</p>
+         */
+        private static Element<Msg> pane(String title, boolean focused, Pane pane, Model model) {
+            Style frameStyle = focused ? FOCUSED_FRAME : Style.NONE;
+            StyledText heading = StyledText.of(title, focused ? FOCUSED_TITLE : Style.NONE);
+            Element<Msg> content = new Element.Leaf<PaneLeaf, Msg>(new PaneText(), new PaneLeaf(pane, focused, model));
+            return Elements.frame(Border.SINGLE, heading, frameStyle, content);
+        }
+
+        /**
+         * What a pane leaf paints and where its caret goes.
+         */
+        private record PaneLeaf(Pane pane, boolean focused, Model model) {}
+
+        /**
+         * A pane's lines as a leaf widget that answers for the caret it shows.
+         */
+        private static final class PaneText implements Widget<PaneLeaf, Msg> {
+
+            @Override
+            public Size measure(Size max, PaneLeaf model) {
+                int cols = 0;
+                for (String line : model.pane().lines()) {
+                    cols = Math.max(cols, TextMeasure.columns(line));
+                }
+                return new Size(Math.min(max.rows(), model.pane().lines().size()), Math.min(max.cols(), cols));
             }
-            Cursor cursor = cursor(model, pane).withOwner(id);
-            View<Msg> content = Views.cursor(cursor, Views.column(lines));
-            return Views.focus(
-                    id,
-                    focused,
-                    Views.border(
-                            Border.SINGLE,
-                            StyledText.of(title, focused ? FOCUSED_TITLE : Style.NONE),
-                            focused ? FOCUSED_FRAME : Style.NONE,
-                            content));
+
+            @Override
+            public void paint(Surface surface, Rect bounds, PaneLeaf model) {
+                List<String> lines = model.pane().lines();
+                for (int index = 0; index < lines.size() && index < bounds.rows(); index++) {
+                    surface.writeLine(
+                            bounds.row() + index,
+                            bounds.col(),
+                            bounds.cols(),
+                            StyledText.plain(lines.get(index)),
+                            WidthPolicy.PINNED);
+                }
+            }
+
+            @Override
+            public boolean focused(PaneLeaf model) {
+                return model.focused();
+            }
+
+            @Override
+            public io.github.dhoard.braxton.ui.Cursor cursor(Rect bounds, PaneLeaf model) {
+                if (!model.focused()) {
+                    return null;
+                }
+                Pane pane = model.pane();
+                Cursor caret = CursorDemo.Scene.cursor(model.model(), pane);
+                return new io.github.dhoard.braxton.ui.Cursor(
+                        io.github.dhoard.braxton.ui.Cursor.Shape.valueOf(
+                                caret.shape().name()),
+                        io.github.dhoard.braxton.ui.Cursor.Mode.valueOf(
+                                caret.mode().name()),
+                        io.github.dhoard.braxton.ui.Cursor.Strategy.valueOf(
+                                caret.strategy().name()),
+                        caret.color(),
+                        bounds.row() + pane.row(),
+                        bounds.col() + pane.column());
+            }
         }
 
         /**
@@ -374,14 +491,7 @@ public final class CursorDemo {
          * cell; a native caret is passed through unchanged and the terminal blinks it.</p>
          */
         private static Cursor cursor(Model model, Pane pane) {
-            return new Cursor(
-                            model.shape(),
-                            model.mode(),
-                            model.strategy(),
-                            model.color(),
-                            pane.row(),
-                            pane.column(),
-                            Optional.empty())
+            return new Cursor(model.shape(), model.mode(), model.strategy(), model.color(), pane.row(), pane.column())
                     .atTime(model.elapsedMillis());
         }
 
@@ -398,7 +508,7 @@ public final class CursorDemo {
          * at the scene's own clock. A native caret is always {@code cursor=visible} here, because the
          * terminal does its blinking.
          */
-        private static String presentation(Model model) {
+        private static String presentationRow(Model model) {
             return "strategy=" + lower(model.strategy())
                     + " shape=" + lower(model.shape())
                     + " mode=" + lower(model.mode())
@@ -407,7 +517,9 @@ public final class CursorDemo {
                     + " cursor=" + (cursor(model, model.caret()).visible() ? "visible" : "hidden");
         }
 
-        /** The position row: which pane holds focus, and where its caret is in cells. */
+        /**
+         * The position row: which pane holds focus, and where its caret is in cells.
+         */
         private static String position(Model model) {
             Pane caret = model.caret();
             return "focus=" + (model.leftFocused() ? "left" : "right") + " caret=" + caret.row() + ":" + caret.column();

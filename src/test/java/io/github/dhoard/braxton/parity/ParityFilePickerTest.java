@@ -29,7 +29,6 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.ComponentId;
 import io.github.dhoard.braxton.mvu.ComponentPath;
@@ -40,8 +39,10 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ScreenRenderer;
+import io.github.dhoard.braxton.testing.ElementScreen;
 import io.github.dhoard.braxton.widget.FilePicker;
+import io.github.dhoard.braxton.widget.FilePickerConfig;
+import io.github.dhoard.braxton.widget.FilePickerModel;
 import io.github.dhoard.braxton.widget.Help;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -57,7 +58,7 @@ import org.junit.jupiter.api.io.TempDir;
  * Phase 14 acceptance: entries and their metadata, listing through scoped effects, navigation and
  * rendering, and the demo scene.
  *
- * <p>Every assertion is against public behaviour: the state a message produces, the request and the
+ * <p>Every assertion is against public behavior: the state a message produces, the request and the
  * effect it asks for, the rows a width paints, and what a routed key does to the demo scene. The
  * fixtures are owned temporary directories, and the listing and validation tasks are run from the
  * command an update returned, so the tests exercise the shipped I/O path rather than a second copy
@@ -78,15 +79,15 @@ class ParityFilePickerTest {
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private static FilePicker.Config config(Path directory) {
-        return FilePicker.Config.defaults().withDirectory(directory).withRows(10);
+    private static FilePickerConfig config(Path directory) {
+        return FilePickerConfig.defaults().withDirectory(directory).withRows(10);
     }
 
     private static FilePicker picker(Path directory) {
         return new FilePicker(config(directory));
     }
 
-    private static FilePicker picker(FilePicker.Config config) {
+    private static FilePicker picker(FilePickerConfig config) {
         return new FilePicker(config);
     }
 
@@ -108,29 +109,31 @@ class ParityFilePickerTest {
         return List.copyOf(entries);
     }
 
-    private static FilePicker.Model model(FilePicker.Entry... entries) {
-        return FilePicker.Model.of(Path.of("/fixture"), List.of(entries));
+    private static FilePickerModel model(FilePicker.Entry... entries) {
+        return FilePickerModel.of(Path.of("/fixture"), List.of(entries));
     }
 
-    private static FilePicker.Model model(List<FilePicker.Entry> entries) {
-        return FilePicker.Model.of(Path.of("/fixture"), entries);
+    private static FilePickerModel model(List<FilePicker.Entry> entries) {
+        return FilePickerModel.of(Path.of("/fixture"), entries);
     }
 
-    /** A hand-built state with an explicit height, so a window's arithmetic is its own. */
-    private static FilePicker.Model model(int rows, List<FilePicker.Entry> entries) {
-        return FilePicker.Model.of(Path.of("/fixture"), entries).withRows(rows);
+    /**
+     * A hand-built state with an explicit height, so a window's arithmetic is its own.
+     */
+    private static FilePickerModel model(int rows, List<FilePicker.Entry> entries) {
+        return FilePickerModel.of(Path.of("/fixture"), entries).withRows(rows);
     }
 
-    private static Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> send(
-            FilePicker component, FilePicker.Model state, FilePicker.Msg message) {
+    private static Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> send(
+            FilePicker component, FilePickerModel state, FilePicker.Msg message) {
         return component.update(state, message);
     }
 
-    private static FilePicker.Model apply(FilePicker component, FilePicker.Model state, FilePicker.Msg message) {
+    private static FilePickerModel apply(FilePicker component, FilePickerModel state, FilePicker.Msg message) {
         return send(component, state, message).model();
     }
 
-    private static FilePicker.Model apply(FilePicker.Model state, FilePicker.Msg message) {
+    private static FilePickerModel apply(FilePickerModel state, FilePicker.Msg message) {
         return apply(picker(Path.of("/fixture")), state, message);
     }
 
@@ -168,39 +171,47 @@ class ParityFilePickerTest {
         }
     }
 
-    /** The one message a single update asked for. */
-    private static FilePicker.Msg ran(FilePicker component, FilePicker.Model state, FilePicker.Msg message) {
+    /**
+     * The one message a single update asked for.
+     */
+    private static FilePicker.Msg ran(FilePicker component, FilePickerModel state, FilePicker.Msg message) {
         List<FilePicker.Msg> messages = run(component.update(state, message).command());
         assertThat(messages).as("one effect message").hasSize(1);
         return messages.get(0);
     }
 
-    /** The state the picker reaches once the request one message started has answered. */
-    private static FilePicker.Model answered(FilePicker component, FilePicker.Model state, FilePicker.Msg message) {
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> update = component.update(state, message);
-        FilePicker.Model next = update.model();
+    /**
+     * The state the picker reaches once the request one message started has answered.
+     */
+    private static FilePickerModel answered(FilePicker component, FilePickerModel state, FilePicker.Msg message) {
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> update = component.update(state, message);
+        FilePickerModel next = update.model();
         for (FilePicker.Msg answer : run(update.command())) {
             next = component.update(next, answer).model();
         }
         return next;
     }
 
-    /** The state the picker is in before its first listing arrives. */
-    private static FilePicker.Model started(FilePicker component) {
+    /**
+     * The state the picker is in before its first listing arrives.
+     */
+    private static FilePickerModel started(FilePicker component) {
         return component.init(START).model();
     }
 
-    /** The state after the picker's own listing of the directory its definition names. */
-    private static FilePicker.Model loaded(FilePicker component) {
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> init = component.init(START);
-        FilePicker.Model next = init.model();
+    /**
+     * The state after the picker's own listing of the directory its definition names.
+     */
+    private static FilePickerModel loaded(FilePicker component) {
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> init = component.init(START);
+        FilePickerModel next = init.model();
         for (FilePicker.Msg message : run(init.command())) {
             next = component.update(next, message).model();
         }
         return next;
     }
 
-    private static FilePicker.Entry entry(FilePicker.Model state, String name) {
+    private static FilePicker.Entry entry(FilePickerModel state, String name) {
         return FilePicker.shown(state).stream()
                 .filter(candidate -> candidate.name().equals(name))
                 .findFirst()
@@ -211,20 +222,20 @@ class ParityFilePickerTest {
         return entries.stream().map(FilePicker.Entry::name).toList();
     }
 
-    private static List<String> painted(FilePicker component, FilePicker.Model state) {
+    private static List<String> painted(FilePicker component, FilePickerModel state) {
         return painted(component, state, SCREEN_ROWS, SCREEN_COLS);
     }
 
-    private static List<String> painted(FilePicker component, FilePicker.Model state, int rows, int cols) {
-        return new ScreenRenderer()
-                .plainLines(component.view(state, new ViewContext(new Viewport(rows, cols))), new Viewport(rows, cols));
+    private static List<String> painted(FilePicker component, FilePickerModel state, int rows, int cols) {
+        return ElementScreen.render(component.view(state, new ViewContext(new Viewport(rows, cols))), rows, cols)
+                .lines();
     }
 
-    private static List<StyledText> lines(FilePicker component, FilePicker.Model state, int width) {
+    private static List<StyledText> lines(FilePicker component, FilePickerModel state, int width) {
         return FilePicker.lines(state, component.config(), width);
     }
 
-    private static String row(FilePicker component, FilePicker.Model state, int index) {
+    private static String row(FilePicker component, FilePickerModel state, int index) {
         return painted(component, state).get(index).stripTrailing();
     }
 
@@ -233,8 +244,10 @@ class ParityFilePickerTest {
         return InputEvent.KeyInput.of(parsed, parsed.name());
     }
 
-    /** The first row of the picker's own screen that holds a phrase, or -1. */
-    private static int indexOf(FilePicker component, FilePicker.Model state, String phrase) {
+    /**
+     * The first row of the picker's own screen that holds a phrase, or -1.
+     */
+    private static int indexOf(FilePicker component, FilePickerModel state, String phrase) {
         List<String> rows = painted(component, state);
         for (int index = 0; index < rows.size(); index++) {
             if (rows.get(index).contains(phrase)) {
@@ -244,8 +257,9 @@ class ParityFilePickerTest {
         return -1;
     }
 
-    private static Optional<FilePicker.Msg> route(FilePicker component, FilePicker.Model state, String spec) {
-        return InputRouter.route(component.view(state, CONTEXT), key(spec));
+    private static Optional<FilePicker.Msg> route(FilePicker component, FilePickerModel state, String spec) {
+        return io.github.dhoard.braxton.testing.Routing.route(component, state, CONTEXT, key(spec)).stream()
+                .findFirst();
     }
 
     // ── R-01: entries, ordering, filters and links ──────────────────────────
@@ -258,7 +272,7 @@ class ParityFilePickerTest {
         Files.writeString(temp.resolve("apple.txt"), "a");
         Files.writeString(temp.resolve("Banana.txt"), "b");
         FilePicker component = picker(temp);
-        FilePicker.Model state = loaded(component);
+        FilePickerModel state = loaded(component);
         assertThat(names(FilePicker.shown(state)))
                 .containsExactly("Alpha", "beta", "apple.txt", "Banana.txt", "cherry.md");
         assertThat(state.request()).isInstanceOf(FilePicker.Request.Idle.class);
@@ -270,11 +284,11 @@ class ParityFilePickerTest {
     void theFirstListingIsTheOneThePickerAsksForWhenItStarts() throws IOException {
         Files.writeString(temp.resolve("notes.txt"), "n");
         FilePicker component = picker(temp);
-        FilePicker.Model before = started(component);
+        FilePickerModel before = started(component);
         assertThat(before.request()).isInstanceOf(FilePicker.Request.Loading.class);
         assertThat(before.entries()).isEmpty();
         assertThat(before.directory()).isEqualTo(temp);
-        FilePicker.Model after = loaded(component);
+        FilePickerModel after = loaded(component);
         assertThat(after.epoch()).isEqualTo(before.epoch());
         assertThat(names(FilePicker.shown(after))).containsExactly("notes.txt");
     }
@@ -284,10 +298,10 @@ class ParityFilePickerTest {
         Files.writeString(temp.resolve(".secret.txt"), "s");
         Files.writeString(temp.resolve("visible.txt"), "v");
         FilePicker component = picker(temp);
-        FilePicker.Model state = loaded(component);
+        FilePickerModel state = loaded(component);
         assertThat(names(state.entries())).containsExactly(".secret.txt", "visible.txt");
         assertThat(names(FilePicker.shown(state))).containsExactly("visible.txt");
-        FilePicker.Model shown = apply(component, state, new FilePicker.Msg.ToggleHidden());
+        FilePickerModel shown = apply(component, state, new FilePicker.Msg.ToggleHidden());
         assertThat(shown.hidden()).isTrue();
         assertThat(names(FilePicker.shown(shown))).containsExactly(".secret.txt", "visible.txt");
         assertThat(apply(component, shown, new FilePicker.Msg.ToggleHidden()).hidden())
@@ -300,10 +314,10 @@ class ParityFilePickerTest {
         Files.writeString(temp.resolve("a.txt"), "a");
         Files.writeString(temp.resolve("b.txt"), "b");
         FilePicker component = picker(temp);
-        FilePicker.Model state = apply(component, loaded(component), new FilePicker.Msg.ToggleHidden());
-        FilePicker.Model hidden = apply(component, state, new FilePicker.Msg.First());
+        FilePickerModel state = apply(component, loaded(component), new FilePicker.Msg.ToggleHidden());
+        FilePickerModel hidden = apply(component, state, new FilePicker.Msg.First());
         assertThat(hidden.selected()).isEqualTo(".secret.txt");
-        FilePicker.Model visible = apply(component, hidden, new FilePicker.Msg.ToggleHidden());
+        FilePickerModel visible = apply(component, hidden, new FilePicker.Msg.ToggleHidden());
         assertThat(visible.selected()).isEqualTo("a.txt");
         assertThat(FilePicker.selected(visible).map(FilePicker.Entry::name)).contains("a.txt");
     }
@@ -313,8 +327,8 @@ class ParityFilePickerTest {
         Files.writeString(temp.resolve("notes.txt"), "n");
         Files.writeString(temp.resolve("archive.bin"), "x");
         FilePicker component =
-                picker(FilePicker.Config.defaults().withDirectory(temp).withExtensions(".txt", "md"));
-        FilePicker.Model state = loaded(component);
+                picker(FilePickerConfig.defaults().withDirectory(temp).withExtensions(".txt", "md"));
+        FilePickerModel state = loaded(component);
         assertThat(entry(state, "notes.txt").selectable()).isTrue();
         assertThat(entry(state, "archive.bin").selectable())
                 .as("a disallowed extension is listed and refused")
@@ -328,7 +342,7 @@ class ParityFilePickerTest {
                 .as("a dot file has no extension")
                 .isFalse();
         assertThat(component.config().allows("Makefile")).isFalse();
-        assertThat(FilePicker.Config.defaults().allows("anything.bin"))
+        assertThat(FilePickerConfig.defaults().allows("anything.bin"))
                 .as("an empty set allows every regular file")
                 .isTrue();
     }
@@ -337,9 +351,9 @@ class ParityFilePickerTest {
     void confirmingADisabledFileIsRejectedWithoutChoosingIt() throws IOException {
         Files.writeString(temp.resolve("archive.bin"), "x");
         FilePicker component =
-                picker(FilePicker.Config.defaults().withDirectory(temp).withExtensions("txt"));
-        FilePicker.Model state = loaded(component);
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> update =
+                picker(FilePickerConfig.defaults().withDirectory(temp).withExtensions("txt"));
+        FilePickerModel state = loaded(component);
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> update =
                 component.update(state, new FilePicker.Msg.Confirm());
         assertThat(update.outputs())
                 .containsExactly(new FilePicker.Output.Rejected(
@@ -390,11 +404,11 @@ class ParityFilePickerTest {
         Files.createSymbolicLink(root.resolve("loop"), Path.of("."));
         Files.createSymbolicLink(root.resolve("escape"), outside);
         Files.createSymbolicLink(root.resolve("inside"), root.resolve("real"));
-        FilePicker component = picker(FilePicker.Config.defaults()
+        FilePicker component = picker(FilePickerConfig.defaults()
                 .withDirectory(root)
                 .withRoot(root)
                 .withSelectable(FilePicker.Kind.FILE, FilePicker.Kind.DIRECTORY));
-        FilePicker.Model state = loaded(component);
+        FilePickerModel state = loaded(component);
         assertThat(entry(state, "inside").navigable()).isTrue();
         assertThat(entry(state, "inside").selectable())
                 .as("a directory policy selects it")
@@ -417,8 +431,8 @@ class ParityFilePickerTest {
         Files.createDirectory(root.resolve("real"));
         Files.createSymbolicLink(root.resolve("docs"), root.resolve("real"));
         FilePicker component = picker(
-                FilePicker.Config.defaults().withDirectory(root).withRoot(root).withFollowLinks(false));
-        FilePicker.Model state = loaded(component);
+                FilePickerConfig.defaults().withDirectory(root).withRoot(root).withFollowLinks(false));
+        FilePickerModel state = loaded(component);
         assertThat(entry(state, "docs").link()).isTrue();
         assertThat(entry(state, "docs").kind()).isEqualTo(FilePicker.Kind.DIRECTORY);
         assertThat(entry(state, "docs").navigable()).isFalse();
@@ -429,7 +443,7 @@ class ParityFilePickerTest {
     void aDanglingLinkIsListedAsMissingAndIsNeverChosen() throws IOException {
         Files.createSymbolicLink(temp.resolve("gone.txt"), temp.resolve("nothing-here.txt"));
         FilePicker component = picker(temp);
-        FilePicker.Model state = loaded(component);
+        FilePickerModel state = loaded(component);
         FilePicker.Entry gone = entry(state, "gone.txt");
         assertThat(gone.kind()).isEqualTo(FilePicker.Kind.MISSING);
         assertThat(gone.selectable()).isFalse();
@@ -443,8 +457,8 @@ class ParityFilePickerTest {
     void aDirectoryPolicyMakesDirectoriesChoosableAndStillNavigable() throws IOException {
         Files.createDirectory(temp.resolve("docs"));
         FilePicker component =
-                picker(FilePicker.Config.defaults().withDirectory(temp).withSelectable(FilePicker.Kind.DIRECTORY));
-        FilePicker.Model state = loaded(component);
+                picker(FilePickerConfig.defaults().withDirectory(temp).withSelectable(FilePicker.Kind.DIRECTORY));
+        FilePickerModel state = loaded(component);
         assertThat(entry(state, "docs").selectable()).isTrue();
         assertThat(entry(state, "docs").navigable()).isTrue();
         assertThat(FilePicker.keys(state).action("open").orElseThrow().enabled())
@@ -464,8 +478,8 @@ class ParityFilePickerTest {
         Files.writeString(temp.resolve("\u00e4rger.txt"), "a");
         Files.writeString(temp.resolve("zebra.txt"), "z");
         FilePicker component =
-                picker(FilePicker.Config.defaults().withDirectory(temp).withExtensions("txt"));
-        FilePicker.Model state = loaded(component);
+                picker(FilePickerConfig.defaults().withDirectory(temp).withExtensions("txt"));
+        FilePickerModel state = loaded(component);
         // Ordering is case-insensitive by code point and never by locale collation, so a name that
         // ends in an umlaut sorts where its character does.
         assertThat(names(FilePicker.shown(state))).containsExactly("caf\u00e9.txt", "zebra.txt", "\u00e4rger.txt");
@@ -479,7 +493,7 @@ class ParityFilePickerTest {
         // where "display the path safely" is proven rather than assumed.
         Files.writeString(temp.resolve("red\u001b[31m.txt"), "x");
         FilePicker component = picker(temp);
-        FilePicker.Model state = loaded(component);
+        FilePickerModel state = loaded(component);
         String painted = String.join("\n", painted(component, state));
         assertThat(painted).doesNotContain("\u001b");
         assertThat(painted).contains("red[31m.txt");
@@ -488,12 +502,11 @@ class ParityFilePickerTest {
 
     @Test
     void aConfigurationRejectsAnEmptyMaximumAndNormalizesExtensions() {
-        FilePicker.Config config =
-                FilePicker.Config.defaults().withMaxEntries(0).withExtensions("TXT", ".Md", " ", null);
+        FilePickerConfig config = FilePickerConfig.defaults().withMaxEntries(0).withExtensions("TXT", ".Md", " ", null);
         assertThat(config.maxEntries()).isEqualTo(1);
         assertThat(config.extensions()).containsExactlyInAnyOrder(".txt", ".md");
         assertThat(config.selectable()).containsExactly(FilePicker.Kind.FILE);
-        assertThat(FilePicker.Config.defaults().directory()).isEqualTo(Path.of(""));
+        assertThat(FilePickerConfig.defaults().directory()).isEqualTo(Path.of(""));
     }
 
     // ── R-02: requests, epochs and revalidation ─────────────────────────────
@@ -503,15 +516,15 @@ class ParityFilePickerTest {
         Files.createDirectory(temp.resolve("one"));
         Files.createDirectory(temp.resolve("two"));
         FilePicker component = picker(temp);
-        FilePicker.Model state = loaded(component);
+        FilePickerModel state = loaded(component);
         long epoch = state.epoch();
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> stale = component.update(
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> stale = component.update(
                 state,
                 new FilePicker.Msg.Listed(
                         epoch - 1, temp.resolve("two"), null, List.of(file("stale.txt", true)), false));
         assertThat(stale.model()).isSameAs(state);
         assertThat(stale.command()).isEqualTo(Command.none());
-        FilePicker.Model fresh = component
+        FilePickerModel fresh = component
                 .update(state, new FilePicker.Msg.Listed(epoch, temp, temp, List.of(file("fresh.txt", true)), false))
                 .model();
         assertThat(names(FilePicker.shown(fresh))).containsExactly("fresh.txt");
@@ -521,15 +534,15 @@ class ParityFilePickerTest {
     void rapidNavigationKeepsOnlyTheLastRequest() throws IOException {
         Files.createDirectory(temp.resolve("one"));
         FilePicker component =
-                picker(FilePicker.Config.defaults().withDirectory(temp).withRoot(temp));
-        FilePicker.Model state = loaded(component);
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> opening =
+                picker(FilePickerConfig.defaults().withDirectory(temp).withRoot(temp));
+        FilePickerModel state = loaded(component);
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> opening =
                 component.update(state, new FilePicker.Msg.Open());
-        FilePicker.Model openingState = opening.model();
+        FilePickerModel openingState = opening.model();
         assertThat(openingState.epoch()).isEqualTo(state.epoch() + 1);
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> again =
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> again =
                 component.update(openingState, new FilePicker.Msg.Reload());
-        FilePicker.Model current = again.model();
+        FilePickerModel current = again.model();
         assertThat(current.epoch()).isEqualTo(openingState.epoch() + 1);
         // The first request answers late: its epoch is no longer the state's, so it changes nothing.
         FilePicker.Msg late = ran(component, state, new FilePicker.Msg.Open());
@@ -542,7 +555,7 @@ class ParityFilePickerTest {
     void everyRequestRegistersUnderOneReplaceableTaskId() throws IOException {
         Files.writeString(temp.resolve("notes.txt"), "n");
         FilePicker component = picker(temp);
-        FilePicker.Model state = loaded(component);
+        FilePickerModel state = loaded(component);
         assertThat(component.update(state, new FilePicker.Msg.Reload()).command())
                 .isInstanceOfSatisfying(
                         Command.Task.class, task -> assertThat(task.id()).isEqualTo(EffectId.of("listing")));
@@ -556,8 +569,8 @@ class ParityFilePickerTest {
     void aFailedListingKeepsTheLastListingAndCanBeRetried() throws IOException {
         Files.writeString(temp.resolve("kept.txt"), "k");
         FilePicker component = picker(temp);
-        FilePicker.Model state = loaded(component);
-        FilePicker.Model failed = component
+        FilePickerModel state = loaded(component);
+        FilePickerModel failed = component
                 .update(state, new FilePicker.Msg.Failed(state.epoch(), temp, "permission denied: " + temp))
                 .model();
         assertThat(names(FilePicker.shown(failed))).containsExactly("kept.txt");
@@ -567,7 +580,7 @@ class ParityFilePickerTest {
         int columns = SCREEN_COLS + TextMeasure.columns(temp.toString());
         assertThat(painted(component, failed, SCREEN_ROWS, columns))
                 .anySatisfy(line -> assertThat(line).contains("permission denied: " + temp, "r to retry"));
-        FilePicker.Model retried = answered(component, failed, new FilePicker.Msg.Reload());
+        FilePickerModel retried = answered(component, failed, new FilePicker.Msg.Reload());
         assertThat(retried.request()).isInstanceOf(FilePicker.Request.Idle.class);
         assertThat(retried.notice()).isEmpty();
     }
@@ -592,14 +605,14 @@ class ParityFilePickerTest {
     void aVanishedEntryIsRejectedWhenTheChoiceIsChecked() throws IOException {
         Path notes = Files.writeString(temp.resolve("notes.txt"), "n");
         FilePicker component =
-                picker(FilePicker.Config.defaults().withDirectory(temp).withExtensions("txt"));
-        FilePicker.Model state = loaded(component);
+                picker(FilePickerConfig.defaults().withDirectory(temp).withExtensions("txt"));
+        FilePickerModel state = loaded(component);
         Files.delete(notes);
         FilePicker.Msg checked = ran(component, state, new FilePicker.Msg.Confirm());
         assertThat(checked)
                 .isEqualTo(new FilePicker.Msg.Validated(
                         state.epoch(), state.directory().resolve("notes.txt"), FilePicker.Reason.MISSING));
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> update = component.update(state, checked);
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> update = component.update(state, checked);
         assertThat(update.outputs())
                 .containsExactly(new FilePicker.Output.Rejected(
                         temp.toRealPath().resolve("notes.txt"), FilePicker.Reason.MISSING));
@@ -610,8 +623,8 @@ class ParityFilePickerTest {
     void anEntryReplacedByADirectoryIsRejectedWhenTheChoiceIsChecked() throws IOException {
         Path notes = Files.writeString(temp.resolve("notes.txt"), "n");
         FilePicker component =
-                picker(FilePicker.Config.defaults().withDirectory(temp).withExtensions("txt"));
-        FilePicker.Model state = loaded(component);
+                picker(FilePickerConfig.defaults().withDirectory(temp).withExtensions("txt"));
+        FilePickerModel state = loaded(component);
         Files.delete(notes);
         Files.createDirectory(notes);
         assertThat(ran(component, state, new FilePicker.Msg.Confirm()))
@@ -623,8 +636,8 @@ class ParityFilePickerTest {
     void anEntryReplacedUnderTheSameNameIsChosen() throws IOException {
         Path notes = Files.writeString(temp.resolve("notes.txt"), "first");
         FilePicker component =
-                picker(FilePicker.Config.defaults().withDirectory(temp).withExtensions("txt"));
-        FilePicker.Model state = loaded(component);
+                picker(FilePickerConfig.defaults().withDirectory(temp).withExtensions("txt"));
+        FilePickerModel state = loaded(component);
         Files.delete(notes);
         Files.writeString(notes, "a different body, same name");
         FilePicker.Msg checked = ran(component, state, new FilePicker.Msg.Confirm());
@@ -637,11 +650,11 @@ class ParityFilePickerTest {
 
     @Test
     void aCheckThatAnswersForAnOldRequestChangesNothing() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(8));
-        FilePicker.Model state = model(file("notes.txt", true)).withEpoch(4L);
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(8));
+        FilePickerModel state = model(file("notes.txt", true)).withEpoch(4L);
         FilePicker.Msg stale =
                 new FilePicker.Msg.Validated(3L, state.directory().resolve("notes.txt"), null);
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> update = component.update(state, stale);
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> update = component.update(state, stale);
         assertThat(update.model()).isSameAs(state);
         assertThat(update.outputs()).isEmpty();
     }
@@ -652,8 +665,8 @@ class ParityFilePickerTest {
             Files.writeString(temp.resolve("file-" + index + ".txt"), "x");
         }
         FilePicker component =
-                picker(FilePicker.Config.defaults().withDirectory(temp).withMaxEntries(3));
-        FilePicker.Model state = loaded(component);
+                picker(FilePickerConfig.defaults().withDirectory(temp).withMaxEntries(3));
+        FilePickerModel state = loaded(component);
         assertThat(state.entries()).hasSize(3);
         assertThat(state.truncated()).isTrue();
         assertThat(indexOf(component, state, "truncated at 3")).isGreaterThanOrEqualTo(0);
@@ -663,8 +676,8 @@ class ParityFilePickerTest {
     void aListingCanBeReadTwiceAndTheSecondReadIsClean() throws IOException {
         Files.writeString(temp.resolve("a.txt"), "a");
         FilePicker component = picker(temp);
-        FilePicker.Model state = loaded(component);
-        FilePicker.Model again = answered(component, state, new FilePicker.Msg.Reload());
+        FilePickerModel state = loaded(component);
+        FilePickerModel again = answered(component, state, new FilePicker.Msg.Reload());
         assertThat(again.request()).isInstanceOf(FilePicker.Request.Idle.class);
         assertThat(names(FilePicker.shown(again))).containsExactly("a.txt");
         assertThat(again.selected()).isEqualTo("a.txt");
@@ -674,10 +687,10 @@ class ParityFilePickerTest {
     void aListingInterruptedBeforeItStartsPublishesNothing() throws IOException {
         Files.writeString(temp.resolve("a.txt"), "a");
         FilePicker component = picker(temp);
-        FilePicker.Model state = loaded(component);
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> reload =
+        FilePickerModel state = loaded(component);
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> reload =
                 component.update(state, new FilePicker.Msg.Reload());
-        FilePicker.Model loading = reload.model();
+        FilePickerModel loading = reload.model();
         Thread.currentThread().interrupt();
         List<FilePicker.Msg> messages;
         try {
@@ -688,12 +701,11 @@ class ParityFilePickerTest {
         assertThat(messages).hasSize(1);
         FilePicker.Msg.Failed failed = (FilePicker.Msg.Failed) messages.get(0);
         assertThat(failed.message())
-                .isEqualTo(
-                        "cancelled: listing interrupted: " + state.directory().toRealPath());
+                .isEqualTo("canceled: listing interrupted: " + state.directory().toRealPath());
         // The interrupted request is the one this state asked for, so a reader still waiting sees
         // the failure; a state that has moved on has a newer epoch and this changes nothing.
         assertThat(component.update(loading, failed).model().request()).isInstanceOf(FilePicker.Request.Failed.class);
-        FilePicker.Model newer = loading.withEpoch(loading.epoch() + 1);
+        FilePickerModel newer = loading.withEpoch(loading.epoch() + 1);
         assertThat(component.update(newer, failed).model()).isSameAs(newer);
     }
 
@@ -701,9 +713,9 @@ class ParityFilePickerTest {
 
     @Test
     void movingTheSelectionKeepsItInsideTheWindow() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(6));
-        FilePicker.Model state = model(6, entries(20));
-        FilePicker.Model last = state;
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(6));
+        FilePickerModel state = model(6, entries(20));
+        FilePickerModel last = state;
         for (int index = 0; index < 20; index++) {
             last = apply(component, last, new FilePicker.Msg.Down());
             int top = FilePicker.top(last, component.config());
@@ -722,14 +734,14 @@ class ParityFilePickerTest {
 
     @Test
     void aPageMovesTheSelectionAndTheWindowByOneWindow() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(6));
-        FilePicker.Model state = model(6, entries(20));
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(6));
+        FilePickerModel state = model(6, entries(20));
         int content = FilePicker.contentRows(state, component.config());
         assertThat(content).isEqualTo(3);
-        FilePicker.Model page = apply(component, state, new FilePicker.Msg.PageDown());
+        FilePickerModel page = apply(component, state, new FilePicker.Msg.PageDown());
         assertThat(FilePicker.selectedIndex(page)).isEqualTo(content);
         assertThat(FilePicker.top(page, component.config())).isEqualTo(content);
-        FilePicker.Model back = apply(component, page, new FilePicker.Msg.PageUp());
+        FilePickerModel back = apply(component, page, new FilePicker.Msg.PageUp());
         assertThat(FilePicker.selectedIndex(back)).isEqualTo(0);
         assertThat(FilePicker.top(back, component.config())).isEqualTo(0);
     }
@@ -739,21 +751,21 @@ class ParityFilePickerTest {
         Files.createDirectory(temp.resolve("docs"));
         Files.writeString(temp.resolve("notes.txt"), "n");
         FilePicker component =
-                picker(FilePicker.Config.defaults().withDirectory(temp).withRoot(temp));
-        FilePicker.Model root = apply(component, loaded(component), new FilePicker.Msg.First());
+                picker(FilePickerConfig.defaults().withDirectory(temp).withRoot(temp));
+        FilePickerModel root = apply(component, loaded(component), new FilePicker.Msg.First());
         assertThat(root.selected()).isEqualTo("docs");
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> opened =
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> opened =
                 component.update(root, new FilePicker.Msg.Open());
         assertThat(((FilePicker.Request.Loading) opened.model().request()).target())
                 .isEqualTo(root.directory().resolve("docs"));
-        FilePicker.Model inside =
+        FilePickerModel inside =
                 component.update(opened.model(), run(opened.command()).get(0)).model();
         assertThat(inside.directory()).isEqualTo(root.directory().resolve("docs"));
         assertThat(inside.entries()).isEmpty();
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> up =
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> up =
                 component.update(inside, new FilePicker.Msg.Parent());
         assertThat(((FilePicker.Request.Loading) up.model().request()).target()).isEqualTo(root.directory());
-        FilePicker.Model back =
+        FilePickerModel back =
                 component.update(up.model(), run(up.command()).get(0)).model();
         assertThat(back.directory()).isEqualTo(root.directory());
         assertThat(back.selected()).isEqualTo("docs");
@@ -765,17 +777,17 @@ class ParityFilePickerTest {
         Path root = Files.createDirectory(temp.resolve("root"));
         Files.createDirectory(root.resolve("docs"));
         FilePicker fromRoot =
-                picker(FilePicker.Config.defaults().withDirectory(root).withRoot(root));
-        FilePicker.Model rootState = loaded(fromRoot);
+                picker(FilePickerConfig.defaults().withDirectory(root).withRoot(root));
+        FilePickerModel rootState = loaded(fromRoot);
         assertThat(FilePicker.keys(rootState).action("parent").orElseThrow().enabled())
                 .as("the configured root has no parent inside the boundary")
                 .isFalse();
-        FilePicker.Model blocked = apply(fromRoot, rootState, new FilePicker.Msg.Parent());
+        FilePickerModel blocked = apply(fromRoot, rootState, new FilePicker.Msg.Parent());
         assertThat(blocked.request()).as("no request leaves the root").isInstanceOf(FilePicker.Request.Idle.class);
         assertThat(blocked.notice()).isEqualTo("at the root");
         FilePicker fromDocs = picker(
-                FilePicker.Config.defaults().withDirectory(root.resolve("docs")).withRoot(root));
-        FilePicker.Model docs = loaded(fromDocs);
+                FilePickerConfig.defaults().withDirectory(root.resolve("docs")).withRoot(root));
+        FilePickerModel docs = loaded(fromDocs);
         assertThat(FilePicker.keys(docs).action("parent").orElseThrow().enabled())
                 .as("a directory above the root is reachable")
                 .isTrue();
@@ -783,9 +795,9 @@ class ParityFilePickerTest {
 
     @Test
     void confirmingADirectoryEntersItWhenOnlyFilesAreSelectable() {
-        FilePicker component = picker(FilePicker.Config.defaults().withDirectory(Path.of("/fixture")));
-        FilePicker.Model state = model(directory("docs"), file("notes.txt", true));
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> update =
+        FilePicker component = picker(FilePickerConfig.defaults().withDirectory(Path.of("/fixture")));
+        FilePickerModel state = model(directory("docs"), file("notes.txt", true));
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> update =
                 component.update(state, new FilePicker.Msg.Confirm());
         assertThat(update.outputs()).isEmpty();
         assertThat(update.model().request()).isInstanceOf(FilePicker.Request.Loading.class);
@@ -793,13 +805,13 @@ class ParityFilePickerTest {
 
     @Test
     void anEmptyDirectoryHasNothingSelectedAndRefusesToChoose() {
-        FilePicker component = picker(FilePicker.Config.defaults());
-        FilePicker.Model state = model();
+        FilePicker component = picker(FilePickerConfig.defaults());
+        FilePickerModel state = model();
         assertThat(FilePicker.selected(state)).isEmpty();
         assertThat(FilePicker.selectedIndex(state)).isEqualTo(-1);
         assertThat(FilePicker.keys(state).action("confirm").orElseThrow().enabled())
                 .isFalse();
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> update =
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> update =
                 component.update(state, new FilePicker.Msg.Confirm());
         assertThat(update.outputs()).isEmpty();
         assertThat(update.command()).isEqualTo(Command.none());
@@ -808,8 +820,8 @@ class ParityFilePickerTest {
 
     @Test
     void anEmptyDirectoryPaintsItsEmptyState() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(6));
-        FilePicker.Model state = model(6, List.of());
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(6));
+        FilePickerModel state = model(6, List.of());
         List<String> rows = lines(component, state, 40).stream()
                 .map(StyledText::plainText)
                 .map(String::stripTrailing)
@@ -823,9 +835,9 @@ class ParityFilePickerTest {
 
     @Test
     void thePathRowKeepsTheEndOfALongPath() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(1));
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(1));
         Path deep = Path.of("/home/reader/projects/braxton/src/main/java/widget");
-        FilePicker.Model state = FilePicker.Model.of(deep, List.of());
+        FilePickerModel state = FilePickerModel.of(deep, List.of());
         String narrow = lines(component, state, 20).get(0).plainText();
         assertThat(TextMeasure.columns(narrow)).isLessThanOrEqualTo(20);
         assertThat(narrow).startsWith(FilePicker.ELLIPSIS);
@@ -835,8 +847,8 @@ class ParityFilePickerTest {
 
     @Test
     void everyRowStaysInsideTheWidthItIsGiven() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(8));
-        FilePicker.Model state = model(
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(8));
+        FilePickerModel state = model(
                 8,
                 List.of(
                         directory("a directory with a very long name indeed"),
@@ -855,8 +867,8 @@ class ParityFilePickerTest {
 
     @Test
     void aPickerShorterThanItsOwnChromePaintsExactlyTheRowsItWasGiven() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(4));
-        FilePicker.Model state = model(List.of(file("notes.txt", true), file("other.txt", true)));
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(4));
+        FilePickerModel state = model(List.of(file("notes.txt", true), file("other.txt", true)));
         for (int rows = 0; rows <= 5; rows++) {
             List<StyledText> painted = lines(component, state.withRows(rows), 40);
             assertThat(painted).as("rows " + rows).hasSize(rows);
@@ -869,7 +881,7 @@ class ParityFilePickerTest {
 
     @Test
     void aZeroHeightPickerPaintsNothing() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(4));
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(4));
         assertThat(lines(component, model(file("a.txt", true)).withRows(0), 80)).isEmpty();
         assertThat(painted(component, model(file("a.txt", true)).withRows(0), 4, 80))
                 .hasSizeLessThanOrEqualTo(4);
@@ -877,15 +889,15 @@ class ParityFilePickerTest {
 
     @Test
     void helpShowsTheGesturesThisStateHandles() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(8));
-        FilePicker.Model state = model(directory("docs"), file("notes.txt", true));
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(8));
+        FilePickerModel state = model(directory("docs"), file("notes.txt", true));
         String compact = Help.render(FilePicker.keys(state), false, 200).plainText();
         assertThat(compact).contains("open directory").contains("choose").contains("cancel");
         assertThat(Help.render(FilePicker.keys(state), true, 400).plainText()).contains("hidden files");
         String nothing = Help.render(FilePicker.keys(model()), false, 200).plainText();
         assertThat(nothing).doesNotContain("open directory");
         assertThat(nothing).doesNotContain("page up");
-        FilePicker.Model expanded = apply(component, state, new FilePicker.Msg.ToggleHelp());
+        FilePickerModel expanded = apply(component, state, new FilePicker.Msg.ToggleHelp());
         assertThat(Help.render(FilePicker.keys(expanded), true, 400).lines()).hasSizeGreaterThan(1);
         assertThat(FilePicker.contentRows(expanded, component.config()))
                 .isLessThan(FilePicker.contentRows(state, component.config()));
@@ -893,8 +905,8 @@ class ParityFilePickerTest {
 
     @Test
     void theStatusRowReportsTheRequestInFlightAndTheNoticeOfTheLastGesture() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(6));
-        FilePicker.Model loading = new FilePicker.Model(
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(6));
+        FilePickerModel loading = new FilePickerModel(
                 Path.of("/fixture"),
                 null,
                 List.of(file("notes.txt", true)),
@@ -909,12 +921,12 @@ class ParityFilePickerTest {
                 false,
                 "");
         assertThat(indexOf(component, loading, "loading /fixture/docs")).isEqualTo(4);
-        FilePicker.Model top = apply(
+        FilePickerModel top = apply(
                 component,
                 model(6, List.of(file("notes.txt", true))).withDirectory(Path.of("/")),
                 new FilePicker.Msg.Parent());
         assertThat(indexOf(component, top, "at the root")).isEqualTo(4);
-        FilePicker.Model hidden = model(6, List.of(file(".dot.txt", true))).withHidden(false);
+        FilePickerModel hidden = model(6, List.of(file(".dot.txt", true))).withHidden(false);
         assertThat(indexOf(component, hidden, "0 entries of 1"))
                 .as("hidden entries are counted")
                 .isEqualTo(4);
@@ -922,10 +934,10 @@ class ParityFilePickerTest {
 
     @Test
     void theSelectionIsPaintedWithTheMarkerAndTheTheme() {
-        FilePicker component = picker(FilePicker.Config.defaults()
+        FilePicker component = picker(FilePickerConfig.defaults()
                 .withRows(5)
                 .withTheme(FilePicker.Theme.of(Style.NONE.withBold(), Style.NONE.withItalic())));
-        FilePicker.Model state = model(5, List.of(directory("docs"), file("notes.txt", true)));
+        FilePickerModel state = model(5, List.of(directory("docs"), file("notes.txt", true)));
         List<String> rows = lines(component, state, 40).stream()
                 .map(StyledText::plainText)
                 .map(String::stripTrailing)
@@ -938,8 +950,8 @@ class ParityFilePickerTest {
 
     @Test
     void aDisabledEntryIsPaintedLikeEveryOtherEntry() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(5));
-        FilePicker.Model state = model(file("archive.bin", false));
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(5));
+        FilePickerModel state = model(file("archive.bin", false));
         assertThat(lines(component, state, 40).get(1).plainText())
                 .startsWith(FilePicker.MARKER + "archive.bin")
                 .endsWith("rw-r--r--  10B");
@@ -947,8 +959,8 @@ class ParityFilePickerTest {
 
     @Test
     void aNarrowTerminalDropsTheMetadataBeforeItCutsTheName() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(4));
-        FilePicker.Model state = model(file("notes.txt", true));
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(4));
+        FilePickerModel state = model(file("notes.txt", true));
         assertThat(lines(component, state, 40).get(1).plainText())
                 .isEqualTo(FilePicker.MARKER + "notes.txt" + " ".repeat(15) + "rw-r--r--  10B");
         assertThat(lines(component, state, 12).get(1).plainText()).isEqualTo(FilePicker.MARKER + "notes.txt");
@@ -957,8 +969,8 @@ class ParityFilePickerTest {
 
     @Test
     void anUnfocusedPickerStillMarksItsSelectionAndRoutesNothing() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(5));
-        FilePicker.Model state = model(file("notes.txt", true)).withFocus(false);
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(5));
+        FilePickerModel state = model(file("notes.txt", true)).withFocus(false);
         assertThat(row(component, state, 1)).startsWith(FilePicker.MARKER);
         assertThat(route(component, state, "down")).isEmpty();
         assertThat(FilePicker.keys(state).action("down").orElseThrow().enabled())
@@ -968,8 +980,8 @@ class ParityFilePickerTest {
 
     @Test
     void thePickerRoutesItsOwnKeysAndNothingElse() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(8));
-        FilePicker.Model state = model(directory("docs"), file("notes.txt", true));
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(8));
+        FilePickerModel state = model(directory("docs"), file("notes.txt", true));
         assertThat(route(component, state, "down")).contains(new FilePicker.Msg.Down());
         assertThat(route(component, state, "enter")).contains(new FilePicker.Msg.Confirm());
         assertThat(route(component, state, "escape")).contains(new FilePicker.Msg.Cancel());
@@ -986,8 +998,8 @@ class ParityFilePickerTest {
 
     @Test
     void theViewIsAPureFunctionOfTheModel() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(8));
-        FilePicker.Model state = model(directory("docs"), file("notes.txt", true));
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(8));
+        FilePickerModel state = model(directory("docs"), file("notes.txt", true));
         List<String> first = painted(component, state);
         assertThat(painted(component, state)).isEqualTo(first);
         assertThat(state).isEqualTo(model(directory("docs"), file("notes.txt", true)));
@@ -996,8 +1008,8 @@ class ParityFilePickerTest {
 
     @Test
     void aMessageThatChangesNothingKeepsTheIncomingInstance() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(8));
-        FilePicker.Model state = model(directory("docs"), file("notes.txt", true));
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(8));
+        FilePickerModel state = model(directory("docs"), file("notes.txt", true));
         assertThat(apply(component, state, new FilePicker.Msg.Up())).isSameAs(state);
         assertThat(apply(component, state, new FilePicker.Msg.First())).isSameAs(state);
         assertThat(apply(component, state, new FilePicker.Msg.RowsChanged(state.rows())))
@@ -1011,9 +1023,9 @@ class ParityFilePickerTest {
 
     @Test
     void thePickerReportsCancellationWithoutChangingTheDirectory() {
-        FilePicker component = picker(FilePicker.Config.defaults().withRows(8));
-        FilePicker.Model state = model(file("notes.txt", true));
-        Update<FilePicker.Model, FilePicker.Msg, FilePicker.Output> update =
+        FilePicker component = picker(FilePickerConfig.defaults().withRows(8));
+        FilePickerModel state = model(file("notes.txt", true));
+        Update<FilePickerModel, FilePicker.Msg, FilePicker.Output> update =
                 component.update(state, new FilePicker.Msg.Cancel());
         assertThat(update.outputs()).containsExactly(new FilePicker.Output.Cancelled());
         assertThat(update.model()).isSameAs(state);
@@ -1026,7 +1038,9 @@ class ParityFilePickerTest {
         return new FilePickerDemo.Scene(root);
     }
 
-    /** The demo initialized against an owned fixture, with its picker's first listing applied. */
+    /**
+     * The demo initialized against an owned fixture, with its picker's first listing applied.
+     */
     private static FilePickerDemo.Model started(FilePickerDemo.Scene scene) {
         Update<FilePickerDemo.Model, FilePickerDemo.Msg, Never> init = scene.init(START);
         return pump(scene, init.model(), run(init.command()));
@@ -1057,12 +1071,18 @@ class ParityFilePickerTest {
     }
 
     private static FilePickerDemo.Model send(FilePickerDemo.Scene scene, FilePickerDemo.Model state, String spec) {
-        Optional<FilePickerDemo.Msg> message = InputRouter.route(scene.view(state, CONTEXT), key(spec));
+        Optional<FilePickerDemo.Msg> message =
+                io.github.dhoard.braxton.testing.Routing.route(scene, state, CONTEXT, key(spec)).stream()
+                        .findFirst();
         return apply(scene, state, message.orElseThrow(() -> new AssertionError("no message for " + spec)));
     }
 
     private static List<String> demoRows(FilePickerDemo.Scene scene, FilePickerDemo.Model state) {
-        return new ScreenRenderer().plainLines(scene.view(state, CONTEXT), CONTEXT.viewport());
+        return ElementScreen.render(
+                        scene.view(state, CONTEXT),
+                        CONTEXT.viewport().rows(),
+                        CONTEXT.viewport().cols())
+                .lines();
     }
 
     private static String demoRow(FilePickerDemo.Scene scene, FilePickerDemo.Model state, int index) {
@@ -1089,8 +1109,9 @@ class ParityFilePickerTest {
             assertThat(model.picker().root()).isEqualTo(root.toRealPath());
             String path = root.toRealPath().toString();
             Viewport viewport = new Viewport(SCREEN_ROWS, Math.max(SCREEN_COLS, TextMeasure.columns(path)));
-            assertThat(new ScreenRenderer()
-                            .plainLines(scene.view(model, new ViewContext(viewport)), viewport)
+            assertThat(ElementScreen.render(
+                                    scene.view(model, new ViewContext(viewport)), viewport.rows(), viewport.cols())
+                            .lines()
                             .get(2)
                             .stripTrailing())
                     .isEqualTo(path);
@@ -1151,7 +1172,8 @@ class ParityFilePickerTest {
                 loop = send(scene, loop, "down");
             }
             assertThat(send(scene, loop, "enter").last()).isEqualTo("rejected-/loop-link");
-            assertThat(InputRouter.route(scene.view(loop, CONTEXT), key("right")))
+            assertThat(io.github.dhoard.braxton.testing.Routing.route(scene, loop, CONTEXT, key("right")).stream()
+                            .findFirst())
                     .as("a looping link offers no way into it")
                     .isEmpty();
             assertThat(loop.picker().directory()).isEqualTo(root.toRealPath());
@@ -1216,7 +1238,7 @@ class ParityFilePickerTest {
             assertThat(names(FilePicker.shown(shown.picker()))).contains(".config.txt", ".hidden.txt");
             assertThat(demoRow(scene, shown, 0)).contains("entries=9 shown=9").contains("hidden=on");
             FilePickerDemo.Model cancelled = send(scene, shown, "escape");
-            assertThat(cancelled.last()).isEqualTo("cancelled");
+            assertThat(cancelled.last()).isEqualTo("canceled");
         } finally {
             FilePickerDemo.remove(root);
         }

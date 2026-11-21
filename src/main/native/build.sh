@@ -14,12 +14,9 @@ case $(uname -m) in
     arm64|aarch64) arch=aarch64 ;;
     *) echo 'Braxton native builds require x86_64 or ARM64' >&2; exit 1 ;;
 esac
-if [ "$platform" = macos ] && [ "$arch" != aarch64 ]; then
-    echo 'Braxton supports macOS ARM64 only' >&2; exit 1
-fi
 destination="$output_dir/META-INF/braxton/native/$platform-$arch"
 mkdir -p "$destination"
-"${CC:-cc}" -std=c11 -O2 -Wall -Wextra -Werror -Wpedantic -fPIC "$shared" \
+"${CC:-cc}" -std=c11 -O2 -Wall -Wextra -Werror -Wpedantic -fPIC -pthread "$shared" \
     "$source_dir/terminal.c" -o "$destination/libbraxton.$extension"
 
 printf '%s\n' "$version" > "$destination/version.txt"

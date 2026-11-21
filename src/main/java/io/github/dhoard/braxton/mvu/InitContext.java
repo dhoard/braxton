@@ -22,25 +22,31 @@
 
 package io.github.dhoard.braxton.mvu;
 
-import io.github.dhoard.braxton.app.TerminalCapabilities;
 import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.terminal.Capabilities;
 
 /**
  * Immutable terminal facts captured before pure initialization. Application data belongs in the
  * component definition, not here.
  *
  * <p>A null value is the documented headless default: a null viewport becomes
- * {@link Viewport#EMPTY} and null capabilities become {@link TerminalCapabilities#PLAIN}, so a
+ * {@link Viewport#EMPTY} and null capabilities become {@link Capabilities#PLAIN}, so a
  * component can be initialized in a test without a terminal. {@link ViewContext} deliberately has
  * no such default because a view always has a viewport to lay out for.</p>
  *
  * @param viewport the startup terminal geometry, or null for {@link Viewport#EMPTY}
  * @param capabilities the detected terminal capabilities, or null for
- *     {@link TerminalCapabilities#PLAIN}
+ *     {@link Capabilities#PLAIN}
  */
-public record InitContext(Viewport viewport, TerminalCapabilities capabilities) {
+public record InitContext(Viewport viewport, Capabilities capabilities) {
+    /**
+     * Creates a {@code InitContext} value.
+     *
+     * @param viewport the startup terminal geometry, or null for {@link Viewport#EMPTY}
+     * @param capabilities the detected terminal capabilities, or null for {@link Capabilities#PLAIN}
+     */
     public InitContext {
         viewport = viewport == null ? Viewport.EMPTY : viewport;
-        capabilities = capabilities == null ? TerminalCapabilities.PLAIN : capabilities;
+        capabilities = capabilities == null ? Capabilities.PLAIN : capabilities;
     }
 }

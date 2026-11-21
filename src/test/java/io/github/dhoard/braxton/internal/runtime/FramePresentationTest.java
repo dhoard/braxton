@@ -38,8 +38,8 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -51,7 +51,9 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-/** Frame boundaries and failure state, using owned terminal output streams. */
+/**
+ * Frame boundaries and failure state, using owned terminal output streams.
+ */
 @Timeout(10)
 class FramePresentationTest {
     private static final String BEGIN = "\u001b[?2026h";
@@ -67,9 +69,9 @@ class FramePresentationTest {
                 return Update.next(1, Command.quit());
             }
 
-            public View<String> view(Integer model, ViewContext context) {
+            public Element<String> view(Integer model, ViewContext context) {
                 prepare.run();
-                return Views.text("ready");
+                return Elements.text("ready");
             }
 
             public Subscription<String> subscriptions(Integer model) {
@@ -88,9 +90,10 @@ class FramePresentationTest {
     }
 
     private static Object field(RuntimeLoop<?, ?> loop, String name) throws Exception {
-        var field = RuntimeLoop.class.getDeclaredField(name);
+        Object target = name.equals("stopping") ? field(loop, "terminalIo") : loop;
+        var field = target.getClass().getDeclaredField(name);
         field.setAccessible(true);
-        return field.get(loop);
+        return field.get(target);
     }
 
     private static boolean ffmModuleHasNativeAccess() {
@@ -105,12 +108,13 @@ class FramePresentationTest {
 
     private static void invoke(RuntimeLoop<?, ?> loop, String name, String argument) {
         try {
-            var method = RuntimeLoop.class.getDeclaredMethod(name, String.class);
+            RuntimeTerminal terminal = (RuntimeTerminal) field(loop, "terminalIo");
+            var method = RuntimeTerminal.class.getDeclaredMethod(name, String.class);
             method.setAccessible(true);
-            method.invoke(loop, argument);
+            method.invoke(terminal, argument);
         } catch (InvocationTargetException failure) {
             throw (RuntimeException) failure.getCause();
-        } catch (ReflectiveOperationException failure) {
+        } catch (Exception failure) {
             throw new AssertionError(failure);
         }
     }
@@ -132,7 +136,7 @@ class FramePresentationTest {
     }
 
     private static Component<Integer, String, Never> liveProgram(
-            java.util.function.Function<Viewport, View<String>> view) {
+            java.util.function.Function<Viewport, Element<String>> view) {
         return new Component<>() {
             public Update<Integer, String, Never> init(InitContext context) {
                 return Update.next(0, Command.none());
@@ -142,7 +146,7 @@ class FramePresentationTest {
                 return Update.next(model);
             }
 
-            public View<String> view(Integer model, ViewContext context) {
+            public Element<String> view(Integer model, ViewContext context) {
                 Viewport viewport = context.viewport();
                 return view.apply(viewport);
             }
@@ -163,10 +167,10 @@ class FramePresentationTest {
                     return Update.next(model);
                 }
 
-                public View<String> view(Integer model, ViewContext context) {
+                public Element<String> view(Integer model, ViewContext context) {
                     Viewport viewport = context.viewport();
                     seen.set(viewport);
-                    return Views.text("x".repeat(viewport.cols()));
+                    return Elements.text("x".repeat(viewport.cols()));
                 }
             };
             var loop = new RuntimeLoop<>(p, RuntimeOptions.defaults(), fixture.terminal(), RuntimeServices.system());
@@ -308,8 +312,8 @@ class FramePresentationTest {
     void anInputReaderRuntimeFailureIsReportedInsteadOfHanging() {
         try (var fixture = new TestTerminal()) {
             fixture.failInput(new IllegalStateException("reader boom"));
-            var result =
-                    TestTerminal.run(liveProgram(viewport -> Views.text("ready")), RuntimeOptions.defaults(), fixture);
+            var result = TestTerminal.run(
+                    liveProgram(viewport -> Elements.text("ready")), RuntimeOptions.defaults(), fixture);
             assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
             assertThat(result.failure()).hasMessage("reader boom");
             assertThat(fixture.isOpen()).isFalse();
@@ -320,8 +324,8 @@ class FramePresentationTest {
     void anInputReaderIoFailureIsReportedInsteadOfHanging() {
         try (var fixture = new TestTerminal()) {
             fixture.failInputWith(new java.io.IOException("reader io"));
-            var result =
-                    TestTerminal.run(liveProgram(viewport -> Views.text("ready")), RuntimeOptions.defaults(), fixture);
+            var result = TestTerminal.run(
+                    liveProgram(viewport -> Elements.text("ready")), RuntimeOptions.defaults(), fixture);
             assertThat(result.kind()).isEqualTo(ExitResult.Kind.FAILURE);
             assertThat(result.failure()).hasMessage("reader io");
             assertThat(fixture.isOpen()).isFalse();
@@ -330,7 +334,7 @@ class FramePresentationTest {
 
     @Test
     void aSecondRuntimeCannotClaimTheConsole() throws Exception {
-        var owned = RuntimeLoop.class.getDeclaredField("OWNED");
+        var owned = RuntimeTerminal.class.getDeclaredField("OWNED");
         owned.setAccessible(true);
         var claimed = (AtomicBoolean) owned.get(null);
         Assumptions.assumeFalse(claimed.get(), "another test claimed the console");
@@ -348,7 +352,7 @@ class FramePresentationTest {
     void anExternallyClosedMailboxEndsTheLoopCleanly() throws Exception {
         try (var fixture = new TestTerminal()) {
             var loop = new RuntimeLoop<>(
-                    liveProgram(viewport -> Views.text("ready")),
+                    liveProgram(viewport -> Elements.text("ready")),
                     RuntimeOptions.defaults(),
                     fixture.terminal(),
                     RuntimeServices.system());
@@ -372,7 +376,7 @@ class FramePresentationTest {
     void aDeadInputReaderWithoutABufferedEventFailsInsteadOfHanging() throws Exception {
         try (var fixture = new TestTerminal()) {
             var loop = new RuntimeLoop<>(
-                    liveProgram(viewport -> Views.text("ready")),
+                    liveProgram(viewport -> Elements.text("ready")),
                     RuntimeOptions.defaults(),
                     fixture.terminal(),
                     RuntimeServices.system());
@@ -411,7 +415,7 @@ class FramePresentationTest {
     void aResizeNotificationRepaintsEvenWhenTheFinalDimensionsAreUnchanged() throws Exception {
         try (var fixture = new TestTerminal()) {
             var loop = new RuntimeLoop<>(
-                    liveProgram(viewport -> Views.text("pinned header")),
+                    liveProgram(viewport -> Elements.text("pinned header")),
                     RuntimeOptions.defaults(),
                     fixture.terminal(),
                     RuntimeServices.system());
@@ -442,7 +446,7 @@ class FramePresentationTest {
     void aWindowChangeSignalResizesAndRepaintsTheNewViewport() throws Exception {
         try (var fixture = new TestTerminal()) {
             var loop = new RuntimeLoop<>(
-                    liveProgram(viewport -> Views.text(viewport.rows() + "x" + viewport.cols())),
+                    liveProgram(viewport -> Elements.text(viewport.rows() + "x" + viewport.cols())),
                     RuntimeOptions.defaults(),
                     fixture.terminal(),
                     RuntimeServices.system());
@@ -468,7 +472,7 @@ class FramePresentationTest {
             var diagnostics = new java.util.concurrent.CopyOnWriteArrayList<String>();
             var services = RuntimeServices.system().withDiagnostics(diagnostics::add);
             var loop = new RuntimeLoop<>(
-                    liveProgram(viewport -> Views.text(viewport.rows() + "x" + viewport.cols())),
+                    liveProgram(viewport -> Elements.text(viewport.rows() + "x" + viewport.cols())),
                     RuntimeOptions.defaults(),
                     fixture.terminal(),
                     services);
@@ -538,11 +542,11 @@ class FramePresentationTest {
     @Test
     void uncheckedKeepsRuntimeAndErrorIdentityAndWrapsCheckedFailures() {
         var runtime = new IllegalStateException("runtime");
-        assertThat(RuntimeLoop.unchecked(runtime)).isSameAs(runtime);
-        assertThatThrownBy(() -> RuntimeLoop.unchecked(new AssertionError("error")))
+        assertThat(RuntimeTerminal.unchecked(runtime)).isSameAs(runtime);
+        assertThatThrownBy(() -> RuntimeTerminal.unchecked(new AssertionError("error")))
                 .isInstanceOf(AssertionError.class)
                 .hasMessage("error");
-        assertThat(RuntimeLoop.unchecked(new java.io.IOException("checked")))
+        assertThat(RuntimeTerminal.unchecked(new java.io.IOException("checked")))
                 .isInstanceOf(IllegalStateException.class)
                 .hasCauseInstanceOf(java.io.IOException.class);
     }

@@ -26,7 +26,9 @@ import io.github.dhoard.braxton.mvu.ComponentId;
 import io.github.dhoard.braxton.mvu.ComponentPath;
 import java.util.Objects;
 
-/** A validated local identity. Mounting adds a structural path, never a string namespace. */
+/**
+ * A validated local identity. Mounting adds a structural path, never a string namespace.
+ */
 public final class SubscriptionId {
     private final String value;
     private final ComponentPath path;
@@ -36,19 +38,40 @@ public final class SubscriptionId {
         this.path = Objects.requireNonNull(path, "path");
     }
 
+    /**
+     * Creates a {@code SubscriptionId} value.
+     *
+     * @param value the identifier text, which must not be blank
+     * @return the validated local subscription identity
+     */
     public static SubscriptionId of(String value) {
         return new SubscriptionId(value, ComponentPath.ROOT);
     }
 
+    /**
+     * Returns the current value.
+     *
+     * @return the current value
+     */
     public String value() {
         return value;
     }
 
+    /**
+     * Returns the component scope path.
+     *
+     * @return the component scope path
+     */
     public ComponentPath path() {
         return path;
     }
 
-    /** Composition operation used by mounts; prepends a structural scope. */
+    /**
+     * Composition operation used by mounts; prepends a structural scope.
+     *
+     * @param prefix the component path prefix
+     * @return composition operation used by mounts; prepends a structural scope
+     */
     public SubscriptionId scoped(ComponentPath prefix) {
         return new SubscriptionId(value, path.prepend(prefix));
     }

@@ -184,7 +184,9 @@ class ValueInvariantExhaustiveTest {
         }
     }
 
-    /** The cells both rectangles hold, found by walking the first one. */
+    /**
+     * The cells both rectangles hold, found by walking the first one.
+     */
     private static List<int[]> sharedCells(Rect first, Rect second) {
         List<int[]> shared = new ArrayList<>();
         for (int row = first.row(); row < first.row() + first.rows(); row++) {

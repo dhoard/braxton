@@ -24,13 +24,11 @@ package examples.harness.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.dhoard.braxton.app.TerminalCapabilities;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.internal.input.InputDecoder;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.ComponentId;
@@ -38,16 +36,18 @@ import io.github.dhoard.braxton.mvu.ComponentPath;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.terminal.Capabilities;
+import io.github.dhoard.braxton.ui.InteractionRouter;
 import io.github.dhoard.braxton.widget.Editor;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-/** The harness program: seeding, submission, pacing, cancellation, limits, and intents. */
+/**
+ * The harness program: seeding, submission, pacing, cancellation, limits, and intents.
+ */
 @org.junit.jupiter.api.extension.ExtendWith(io.github.dhoard.braxton.internal.input.TestReaders.class)
 class HarnessTest {
 
@@ -108,7 +108,7 @@ class HarnessTest {
     @Test
     void initIsLoadingAndReturnsOneTaskCommand() {
         Update<Harness.Model, Harness.Msg, Never> transition =
-                program().init(new InitContext(new Viewport(24, 80), TerminalCapabilities.PLAIN));
+                program().init(new InitContext(new Viewport(24, 80), Capabilities.PLAIN));
         assertThat(transition.model().status()).isEqualTo(Session.Status.LOADING);
         assertThat(transition.command()).isInstanceOfSatisfying(Command.Scoped.class, scoped -> {
             assertThat(scoped.path()).isEqualTo(ComponentPath.ROOT.append(ComponentId.of("session")));
@@ -120,7 +120,7 @@ class HarnessTest {
     void entriesAreStampedWithTheProgramClock() {
         long time = 1_700_000_000_000L;
         Harness clocked = new Harness(HarnessTest::scripted, "~/braxton", List.of(), () -> time);
-        Harness.Model seeded = clocked.init(new InitContext(new Viewport(24, 80), TerminalCapabilities.PLAIN))
+        Harness.Model seeded = clocked.init(new InitContext(new Viewport(24, 80), Capabilities.PLAIN))
                 .model();
         assertThat(seeded.entries()).isNotEmpty();
         assertThat(seeded.entries())
@@ -150,7 +150,9 @@ class HarnessTest {
                         notice -> assertThat(notice.epochMillis()).isEqualTo(time));
     }
 
-    /** Runs one message through the supplied program, draining dispatch commands. */
+    /**
+     * Runs one message through the supplied program, draining dispatch commands.
+     */
     private static Update<Harness.Model, Harness.Msg, Never> update(
             Harness.Model state, Harness program, Harness.Msg message) {
         var pending = new java.util.ArrayDeque<Harness.Msg>();
@@ -407,7 +409,8 @@ class HarnessTest {
                 new ByteArrayInputStream(new byte[] {0x1B, 0x0D, 0x1B, 0x0D})));
         Harness.Model state = running.withDraft(Editor.Model.of("press 0"));
         InputEvent event = decoder.read().orElseThrow();
-        Harness.Msg message = InputRouter.route(HarnessView.view(state), event).orElseThrow();
+        Harness.Msg message =
+                InteractionRouter.message(HarnessView.view(state), event).orElseThrow();
         assertThat(message).isEqualTo(new Harness.Msg.ComposerMsg(new Editor.Msg.Submit()));
         state = update(state, message).model();
         assertThat(state.pending()).containsExactly("press 0");
@@ -415,7 +418,7 @@ class HarnessTest {
         // The queued prompt owns the composer until its turn starts, so the same gesture is
         // refused rather than queued twice.
         InputEvent second = decoder.read().orElseThrow();
-        assertThat(InputRouter.route(HarnessView.view(state.withDraft(Editor.Model.of("press 1"))), second))
+        assertThat(InteractionRouter.message(HarnessView.view(state.withDraft(Editor.Model.of("press 1"))), second))
                 .as("a queued prompt blocks further submissions")
                 .isEmpty();
 
@@ -540,10 +543,13 @@ class HarnessTest {
     @Test
     void aKeyTheComposerIgnoresStillCancelsThePendingCtrlC() {
         Harness.Model armed = ready().withQuitArmed(3_000_000_000L);
-        View<Harness.Msg> view = HarnessView.view(armed);
-        Optional<Harness.Msg> routed = InputRouter.route(view, InputEvent.KeyInput.of(Key.of("f1")));
-        assertThat(routed).as("any other key must reach the harness").isPresent();
-        Harness.Msg message = routed.orElseThrow();
+        List<Harness.Msg> routed = io.github.dhoard.braxton.testing.Routing.route(
+                new Harness(() -> HarnessTranscript.empty(List.of()), "~/braxton", List.of()),
+                armed,
+                new io.github.dhoard.braxton.mvu.ViewContext(new io.github.dhoard.braxton.layout.Viewport(24, 80)),
+                InputEvent.KeyInput.of(Key.of("f1")));
+        assertThat(routed).as("any other key must reach the harness").isNotEmpty();
+        Harness.Msg message = routed.get(0);
         assertThat(message).isInstanceOf(Harness.Msg.UnhandledKey.class);
         Harness.Model after = update(armed, message).model();
         assertThat(after.quitArmedUntilNanos()).isZero();
@@ -609,12 +615,16 @@ class HarnessTest {
         assertThat(painted(disarmed)).contains("Queue full (64)").doesNotContain("ctrl+c again to exit");
     }
 
-    /** Every painted row of the production view, joined, so assertions read the real screen. */
+    /**
+     * Every painted row of the production view, joined, so assertions read the real screen.
+     */
     private static String painted(Harness.Model state) {
         return String.join("\n", HarnessView.renderLines(state));
     }
 
-    /** The text of every entry of one kind the state holds, oldest first. */
+    /**
+     * The text of every entry of one kind the state holds, oldest first.
+     */
     private static List<String> texts(Harness.Model state, Class<? extends HarnessEntry> type) {
         return state.entries().stream()
                 .filter(type::isInstance)
@@ -629,7 +639,9 @@ class HarnessTest {
                 .toList();
     }
 
-    /** The transcript notices the state holds, oldest first. */
+    /**
+     * The transcript notices the state holds, oldest first.
+     */
     private static List<String> notices(Harness.Model state) {
         return state.entries().stream()
                 .filter(entry -> entry instanceof HarnessEntry.Notice)

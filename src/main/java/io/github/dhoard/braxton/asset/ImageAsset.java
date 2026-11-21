@@ -45,7 +45,9 @@ import javax.imageio.stream.ImageInputStream;
  */
 public final class ImageAsset {
 
-    /** Largest image, in pixels, that one asset may hold. */
+    /**
+     * Largest image, in pixels, that one asset may hold.
+     */
     private static final int MAX_PIXELS = 4_194_304;
 
     private final int width;
@@ -58,7 +60,12 @@ public final class ImageAsset {
         this.pixels = pixels;
     }
 
-    /** Copies a buffered image into an immutable asset. */
+    /**
+     * Copies a buffered image into an immutable asset.
+     *
+     * @param image the bounded immutable image asset
+     * @return an immutable copy of the buffered image
+     */
     public static ImageAsset of(BufferedImage image) {
         if (image == null) {
             throw new IllegalArgumentException("image is required");
@@ -72,6 +79,13 @@ public final class ImageAsset {
         return new ImageAsset(width, height, pixels);
     }
 
+    /**
+     * Loads and bounds an image from the supplied filesystem path.
+     *
+     * @param path the filesystem path
+     * @return the bounded decoded image asset
+     * @throws IOException if input or output fails
+     */
     public static ImageAsset load(Path path) throws IOException {
         if (path == null) {
             throw new IOException("image path is required");
@@ -117,20 +131,38 @@ public final class ImageAsset {
         }
     }
 
-    /** Whether an image of these dimensions is larger than one asset may hold. */
+    /**
+     * Whether an image of these dimensions is larger than one asset may hold.
+     */
     private static boolean exceedsLimit(int width, int height) {
         return width < 0 || height < 0 || (long) width * height > MAX_PIXELS;
     }
 
+    /**
+     * Returns the width in pixels.
+     *
+     * @return the width in pixels
+     */
     public int width() {
         return width;
     }
 
+    /**
+     * Returns the height in pixels.
+     *
+     * @return the height in pixels
+     */
     public int height() {
         return height;
     }
 
-    /** ARGB value at {@code (x, y)}. */
+    /**
+     * ARGB value at {@code (x, y)}.
+     *
+     * @param x the zero-based pixel column
+     * @param y the zero-based pixel row
+     * @return the packed ARGB pixel, or zero outside the image bounds
+     */
     public int argb(int x, int y) {
         if (x < 0 || y < 0 || x >= width || y >= height) {
             return 0;
@@ -138,7 +170,11 @@ public final class ImageAsset {
         return pixels[y * width + x];
     }
 
-    /** Immutable pixel copy, used by tests. */
+    /**
+     * Returns a defensive copy of the pixels in row-major order.
+     *
+     * @return a new ARGB array whose mutation cannot change this asset
+     */
     public int[] pixels() {
         return pixels.clone();
     }

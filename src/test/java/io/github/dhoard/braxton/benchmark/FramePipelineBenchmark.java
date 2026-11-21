@@ -25,7 +25,6 @@ package io.github.dhoard.braxton.benchmark;
 import io.github.dhoard.braxton.internal.render.AnsiEncoder;
 import io.github.dhoard.braxton.internal.render.Screen;
 import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.view.View;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -56,10 +55,7 @@ public class FramePipelineBenchmark {
     @Param({"24x80", "40x120"})
     public String viewport;
 
-    private final io.github.dhoard.braxton.internal.render.LayoutEngine engine =
-            new io.github.dhoard.braxton.internal.render.LayoutEngine();
-
-    private View<Object> root;
+    private io.github.dhoard.braxton.ui.Element<Object> root;
     private Viewport parsed;
     private Screen previous;
 
@@ -67,22 +63,33 @@ public class FramePipelineBenchmark {
     public void setup() {
         parsed = BenchViews.viewport(viewport);
         root = BenchViews.transcript(30, BenchCorpus.build("ascii", 240));
-        previous = engine.layout(root, parsed.bounds()).screen();
+        previous = frame(parsed);
     }
 
     @Benchmark
     public void paintFrame(Blackhole sink) {
-        sink.consume(engine.layout(root, parsed.bounds()).screen());
+        sink.consume(frame(parsed));
     }
 
     @Benchmark
     public void paintAndEncodeFrame(Blackhole sink) {
-        sink.consume(AnsiEncoder.frame(engine.layout(root, parsed.bounds()).screen(), true));
+        sink.consume(AnsiEncoder.frame(frame(parsed), true));
     }
 
     @Benchmark
     public void paintAndDiffFrame(Blackhole sink) {
-        sink.consume(
-                AnsiEncoder.diff(previous, engine.layout(root, parsed.bounds()).screen(), true));
+        sink.consume(AnsiEncoder.diff(previous, frame(parsed), true));
+    }
+
+    /**
+     * One frame: resolve the tree, then paint it into the cells the encoder reads.
+     */
+    private io.github.dhoard.braxton.internal.render.Screen frame(Viewport parsed) {
+        io.github.dhoard.braxton.ui.ElementTree.Placement<Object> placement =
+                io.github.dhoard.braxton.ui.ElementTree.layout(root, parsed.bounds());
+        io.github.dhoard.braxton.internal.render.Screen screen =
+                new io.github.dhoard.braxton.internal.render.Screen(parsed.rows(), parsed.cols());
+        io.github.dhoard.braxton.ui.ElementTree.paint(placement, screen);
+        return screen;
     }
 }

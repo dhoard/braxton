@@ -55,9 +55,9 @@ public final class Application {
     /**
      * Runs with the owned POSIX system terminal and default options.
      *
-     * @param program the root component; required
      * @param <M> the root model type
      * @param <Msg> the root message type
+     * @param program the root component; required
      * @return how the run ended; never null
      */
     public static <M, Msg> ExitResult run(Component<M, Msg, Never> program) {
@@ -71,10 +71,10 @@ public final class Application {
      * instead of returning it; the terminal, effects and sources are already in the state a failed run
      * leaves them in.</p>
      *
-     * @param program the root component; required
-     * @param options the immutable limits and presentation choices; required
      * @param <M> the root model type
      * @param <Msg> the root message type
+     * @param program the root component; required
+     * @param options the immutable limits and presentation choices; required
      * @return how the run ended; never null
      */
     public static <M, Msg> ExitResult run(Component<M, Msg, Never> program, RuntimeOptions options) {
@@ -89,10 +89,10 @@ public final class Application {
      * program runs in full - input decoding, commands, sources, the message filter and cleanup - and the
      * returned result is the same one the owned terminal reports.</p>
      *
-     * @param program the root component; required
-     * @param io where the session's bytes come from and go to; null for the owned terminal
      * @param <M> the root model type
      * @param <Msg> the root message type
+     * @param program the root component; required
+     * @param io where the session's bytes come from and go to; null for the owned terminal
      * @return how the run ended; never null
      */
     public static <M, Msg> ExitResult run(Component<M, Msg, Never> program, IoOptions io) {
@@ -102,11 +102,11 @@ public final class Application {
     /**
      * Runs with the supplied options and I/O endpoints.
      *
+     * @param <M> the root model type
+     * @param <Msg> the root message type
      * @param program the root component; required
      * @param options the immutable limits and presentation choices; null for the defaults
      * @param io where the session's bytes come from and go to; null for the owned terminal
-     * @param <M> the root model type
-     * @param <Msg> the root message type
      * @return how the run ended; never null
      */
     public static <M, Msg> ExitResult run(Component<M, Msg, Never> program, RuntimeOptions options, IoOptions io) {
@@ -119,9 +119,9 @@ public final class Application {
     /**
      * Starts the run on its own thread and returns the handle that controls it.
      *
-     * @param program the root component; required
      * @param <M> the root model type
      * @param <Msg> the root message type
+     * @param program the root component; required
      * @return a handle to the running program; never null
      */
     public static <M, Msg> ProgramHandle<M, Msg> start(Component<M, Msg, Never> program) {
@@ -131,10 +131,10 @@ public final class Application {
     /**
      * Starts the run on its own thread with the supplied I/O endpoints and environment.
      *
-     * @param program the root component; required
-     * @param io where the session's bytes come from and go to; null for the owned terminal
      * @param <M> the root model type
      * @param <Msg> the root message type
+     * @param program the root component; required
+     * @param io where the session's bytes come from and go to; null for the owned terminal
      * @return a handle to the running program; never null
      */
     public static <M, Msg> ProgramHandle<M, Msg> start(Component<M, Msg, Never> program, IoOptions io) {
@@ -149,10 +149,10 @@ public final class Application {
      * here, before the thread starts, so a message the caller sends immediately is delivered rather
      * than refused for a race it cannot observe.</p>
      *
-     * @param program the root component; required
-     * @param options the immutable limits and presentation choices; null for the defaults
      * @param <M> the root model type
      * @param <Msg> the root message type
+     * @param program the root component; required
+     * @param options the immutable limits and presentation choices; null for the defaults
      * @return a handle to the running program; never null
      */
     public static <M, Msg> ProgramHandle<M, Msg> start(Component<M, Msg, Never> program, RuntimeOptions options) {
@@ -162,11 +162,11 @@ public final class Application {
     /**
      * Starts the run on its own thread with the supplied options and I/O endpoints.
      *
+     * @param <M> the root model type
+     * @param <Msg> the root message type
      * @param program the root component; required
      * @param options the immutable limits and presentation choices; null for the defaults
      * @param io where the session's bytes come from and go to; null for the owned terminal
-     * @param <M> the root model type
-     * @param <Msg> the root message type
      * @return a handle to the running program; never null
      */
     public static <M, Msg> ProgramHandle<M, Msg> start(

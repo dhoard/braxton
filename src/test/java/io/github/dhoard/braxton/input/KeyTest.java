@@ -29,7 +29,9 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Key identity: normalization, parsing, comparison, and the modifier prefix. */
+/**
+ * Key identity: normalization, parsing, comparison, and the modifier prefix.
+ */
 class KeyTest {
 
     @Test

@@ -71,7 +71,9 @@ class PasteDecodeCostTest {
         return text.getBytes(StandardCharsets.UTF_8);
     }
 
-    /** Counts how often the decoder queries the stream, without changing what the stream holds. */
+    /**
+     * Counts how often the decoder queries the stream, without changing what the stream holds.
+     */
     private static final class CountingStream extends ByteArrayInputStream {
         int availabilityChecks;
         int singleByteReads;

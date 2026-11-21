@@ -26,7 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-/** Configuration from system properties degrades to defaults instead of failing startup. */
+/**
+ * Configuration from system properties degrades to defaults instead of failing startup.
+ */
 class ClipboardConfigTest {
 
     private static String withProperty(String name, String value, java.util.function.Supplier<String> body) {

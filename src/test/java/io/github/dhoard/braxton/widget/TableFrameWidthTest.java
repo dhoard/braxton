@@ -24,14 +24,14 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.dhoard.braxton.internal.render.LayoutEngine;
 import io.github.dhoard.braxton.layout.Border;
-import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.render.Canvas;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.RenderedScreen;
-import io.github.dhoard.braxton.view.ScreenRenderer;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.ElementTree;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -83,7 +83,9 @@ class TableFrameWidthTest {
         return text.append('"').toString();
     }
 
-    /** A two-column framed table whose first cell of the first row is {@code cell}. */
+    /**
+     * A two-column framed table whose first cell of the first row is {@code cell}.
+     */
     private static Table table(Border border, int buffer, String cell) {
         Table table = Table.of().buffer(buffer).border(border);
         table.row(StyledText.plain(cell), StyledText.plain("bb"));
@@ -95,7 +97,9 @@ class TableFrameWidthTest {
         return List.of(rendered.split("\n", -1));
     }
 
-    /** Every row a framed table renders, including its own top and bottom edges, keeps one width. */
+    /**
+     * Every row a framed table renders, including its own top and bottom edges, keeps one width.
+     */
     private static void assertFrameKeepsWidth(Border border, int buffer, String cell) {
         List<String> framed = rows(table(border, buffer, cell).render().plainText());
         assertThat(framed).as("cell %s buffer %d", show(cell), buffer).hasSize(4);
@@ -119,7 +123,9 @@ class TableFrameWidthTest {
         }
     }
 
-    /** Framing a table keeps the row it framed and adds one cell at each edge. */
+    /**
+     * Framing a table keeps the row it framed and adds one cell at each edge.
+     */
     @Test
     void framingATableWithABaselessCellKeepsItsRowsAndAddsOneCellPerEdge() {
         for (String cell : BASELESS) {
@@ -160,7 +166,9 @@ class TableFrameWidthTest {
         }
     }
 
-    /** Without a frame the rows still share one width. */
+    /**
+     * Without a frame the rows still share one width.
+     */
     @Test
     void everyRowOfAnUnframedTableSharesOneWidthWithABaselessCell() {
         for (String cell : BASELESS) {
@@ -182,7 +190,7 @@ class TableFrameWidthTest {
     /**
      * Cells a row was painted with; a wide cluster's second half is marked as a continuation.
      */
-    private static List<String> paintedCells(RenderedScreen screen, int row) {
+    private static List<String> paintedCells(Canvas screen, int row) {
         List<String> cells = new ArrayList<>();
         for (int col = 0; col < screen.cols(); col++) {
             cells.add(
@@ -201,7 +209,9 @@ class TableFrameWidthTest {
      */
     private static void assertFrameIsPaintedColumnByColumn(Table table, List<String> rendered) {
         int width = TextMeasure.columns(rendered.get(0));
-        RenderedScreen screen = new ScreenRenderer().screen(table.view(), new Viewport(rendered.size(), width));
+        Canvas screen = io.github.dhoard.braxton.testing.ElementScreen.render(
+                        table.<String>element(), rendered.size(), width)
+                .canvas();
         assertThat(screen.rows()).as("rows painted for %s", rendered).isEqualTo(rendered.size());
         Border border = FRAME;
         for (int row = 0; row < rendered.size(); row++) {
@@ -219,7 +229,8 @@ class TableFrameWidthTest {
                     .as("right edge of row %d of %s painted as %s", row, rendered, paintedCells(screen, row))
                     .isEqualTo(Border.glyph(edge));
         }
-        assertThat(new LayoutEngine().intrinsicHeight(table.view(), width))
+        assertThat(ElementTree.measure(table.<String>element(), new Size(rendered.size(), width))
+                        .rows())
                 .as("rows measured for %s", rendered)
                 .isEqualTo(rendered.size());
     }
@@ -234,7 +245,9 @@ class TableFrameWidthTest {
         }
     }
 
-    /** The reported content: the frame row lost the column its own top and bottom edges paid. */
+    /**
+     * The reported content: the frame row lost the column its own top and bottom edges paid.
+     */
     @Test
     void aFrameAroundACellThatOpensWithACombiningMarkCloses() {
         Table table = Table.of().border(Border.SINGLE);
@@ -248,7 +261,9 @@ class TableFrameWidthTest {
                         .isEqualTo(5));
     }
 
-    /** The second reported shape: a short row in the middle of a multi-row frame. */
+    /**
+     * The second reported shape: a short row in the middle of a multi-row frame.
+     */
     @Test
     void aFrameAroundRowsThatOpenWithBaselessClustersCloses() {
         Table table = Table.of().border(Border.SINGLE);
@@ -294,7 +309,7 @@ class TableFrameWidthTest {
         assertThat(lines.stream().map(TextMeasure::columns).distinct())
                 .as("rows %s", lines.stream().map(TableFrameWidthTest::show).toList())
                 .hasSize(1);
-        RenderedScreen screen = new ScreenRenderer().screen(table.view(), new Viewport(2, 8));
+        Canvas screen = ElementScreen.render(table.<String>element(), 2, 8).canvas();
         assertThat(paintedCells(screen, 0))
                 .as("cells painted for the ASCII row")
                 .containsExactly("a", "b", " ", " ", "c", "d", " ", " ");
@@ -320,7 +335,8 @@ class TableFrameWidthTest {
                 .as("framed rows")
                 .containsExactly("+--------+", "|ab  cd  |", "|" + "\u0301\uFE0F" + "  x    |", "+--------+");
         int width = TextMeasure.columns(framed.get(0));
-        RenderedScreen screen = new ScreenRenderer().screen(table.view(), new Viewport(framed.size(), width));
+        Canvas screen = ElementScreen.render(table.<String>element(), framed.size(), width)
+                .canvas();
         assertThat(paintedCells(screen, 1))
                 .as("cells painted for the ASCII row")
                 .containsExactly("|", "a", "b", " ", " ", "c", "d", " ", " ", "|");
@@ -370,7 +386,9 @@ class TableFrameWidthTest {
                         .isEqualTo(7));
     }
 
-    /** A cell with several lines keeps one width per row of the block it occupies. */
+    /**
+     * A cell with several lines keeps one width per row of the block it occupies.
+     */
     @Test
     void aMultiLineCellWithABaselessClusterKeepsEveryRowAtOneWidth() {
         for (String cell : List.of("\u0301\nbb", "a\n\uFE0Fx", "\u0301x\n\u65E5")) {
@@ -409,7 +427,7 @@ class TableFrameWidthTest {
         assertThat(lines.stream().map(TextMeasure::columns).distinct())
                 .as("rows %s", lines.stream().map(TableFrameWidthTest::show).toList())
                 .hasSize(1);
-        RenderedScreen screen = new ScreenRenderer().screen(table.view(), new Viewport(2, 10));
+        Canvas screen = ElementScreen.render(table.<String>element(), 2, 10).canvas();
         assertThat(paintedCells(screen, 0))
                 .as("cells painted for the ASCII row")
                 .containsExactly("a", "b", " ", " ", " ", "o", "n", "e", " ", " ");

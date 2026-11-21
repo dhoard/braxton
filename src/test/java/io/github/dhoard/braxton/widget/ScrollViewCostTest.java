@@ -29,7 +29,7 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.ScrollView.Msg;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -45,7 +45,9 @@ class ScrollViewCostTest {
     private static final int DOCUMENT = 100_000;
     private static final int WINDOW = 24;
 
-    /** What a snapshot was asked for: one row count and the rows themselves. */
+    /**
+     * What a snapshot was asked for: one row count and the rows themselves.
+     */
     private static final class Counter {
         private int countCalls;
         private int fetches;
@@ -201,14 +203,15 @@ class ScrollViewCostTest {
         ScrollView view = new ScrollView(new ScrollView.Config(WINDOW, false));
         ScrollView.Model state = new ScrollView.Model(0, false, true, WINDOW, new Document(new Counter(), DOCUMENT));
 
-        View<Msg> painted = view.view(state, CONTEXT);
-        List<View<Msg>> rows = painted.children().get(0).children();
+        Element<Msg> scene = view.view(state, CONTEXT);
+        List<Element<Msg>> rows = scene.children().get(0).children();
 
         assertThat(rows)
-                .as("one row view per visible row, and nothing per hidden row")
+                .as("one row element per visible row, and nothing per hidden row")
                 .hasSize(WINDOW);
-        assertThat(painted.children().get(0).children().get(0).children())
-                .as("each row is one fixed screen row wrapping one text row")
-                .hasSize(1);
+        assertThat(rows.get(0).sizing().isFixed())
+                .as("each row is one fixed screen row holding one text leaf")
+                .isTrue();
+        assertThat(rows.get(0)).isInstanceOf(Element.Leaf.class);
     }
 }

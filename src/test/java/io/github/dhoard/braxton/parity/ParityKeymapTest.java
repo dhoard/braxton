@@ -32,7 +32,6 @@ import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.input.Modifiers;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Update;
@@ -41,14 +40,16 @@ import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.InteractionRouter;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.Selector;
 import io.github.dhoard.braxton.widget.TableSelector;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -95,22 +96,20 @@ class ParityKeymapTest {
     }
 
     @Test
-    void routingThroughTheCompiledBindingsConsumesOneGestureOnce() {
-        View<String> view = Views.keyed(
-                navigation().bindings(),
-                Views.focus(
-                        ElementId.of("f"),
-                        true,
-                        List.of(),
-                        event -> Optional.of("handled:" + ((InputEvent.KeyInput) event).key()),
-                        Views.text("x")),
-                List.of());
+    void routingThroughTheCompiledBindingsAnswersOneGestureOnce() {
+        // An application's shortcuts are its own bindings, and they answer only a gesture the tree
+        // declined: a field that handles a key keeps it, and an alias the tree does not answer
+        // reaches the application's map exactly once.
+        Element<String> quiet = Elements.column(Elements.text("x"));
+        List<Binding<String>> bindings = navigation().bindings();
 
-        assertThat(InputRouter.route(view, gesture("up"))).contains("UP");
-        assertThat(InputRouter.route(view, gesture("k"))).contains("UP");
-        // An alias that already reported a message never also reaches the focused handler, and a
-        // gesture the map does not name still does.
-        assertThat(InputRouter.route(view, gesture("z"))).contains("handled:z");
+        assertThat(InteractionRouter.route(quiet, gesture("up"), List.of(), bindings))
+                .containsExactly("UP");
+        assertThat(InteractionRouter.route(quiet, gesture("k"), List.of(), bindings))
+                .containsExactly("UP");
+        // A gesture the map does not name reaches nobody.
+        assertThat(InteractionRouter.route(quiet, gesture("z"), List.of(), bindings))
+                .isEmpty();
     }
 
     @Test
@@ -333,23 +332,27 @@ class ParityKeymapTest {
     // ── R-03: widgets accept overridden actions and keep their defaults ──────
 
     private static Optional<Selector.Msg> selectorAction(Selector selector, Key key) {
-        return handler(selector.view(Selector.Model.of(List.of("a", "b")), new ViewContext(Viewport.EMPTY)))
-                .handle(InputEvent.KeyInput.of(key, ""));
+        List<Selector.Msg> produced = new ArrayList<>(1);
+        selector.onKey(InputEvent.KeyInput.of(key, ""), Selector.Model.of(List.of("a", "b")), produced::add);
+        return produced.stream().findFirst();
     }
 
     private static Optional<TableSelector.Msg> tableAction(TableSelector selector, Key key) {
         TableSelector.Model model = TableSelector.Model.of(List.of("h"), List.of(List.of("c")));
-        return handler(selector.view(model, new ViewContext(Viewport.EMPTY))).handle(InputEvent.KeyInput.of(key, ""));
+        List<TableSelector.Msg> produced = new ArrayList<>(1);
+        selector.onKey(InputEvent.KeyInput.of(key, ""), model, produced::add);
+        return produced.stream().findFirst();
     }
 
     private static Optional<Editor.Msg> editorAction(Editor editor, InputEvent event) {
-        return handler(editor.view(Editor.Model.of("ab"), new ViewContext(Viewport.EMPTY)))
-                .handle(event);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <Msg> View.InputHandler<Msg> handler(View<Msg> view) {
-        return ((View.Focused<Msg>) view).input();
+        List<Editor.Msg> produced = new ArrayList<>(1);
+        Editor.Model model = Editor.Model.of("ab");
+        if (event instanceof InputEvent.KeyInput key) {
+            editor.onKey(key, model, produced::add);
+        } else {
+            editor.onInput(event, model, produced::add);
+        }
+        return produced.stream().findFirst();
     }
 
     @Test
@@ -390,7 +393,7 @@ class ParityKeymapTest {
 
     @Test
     void anEditorKeepsItsDefaultShortcuts() {
-        Editor editor = new Editor(Editor.Config.defaults());
+        Editor editor = new Editor(EditorConfig.defaults());
         assertThat(editorAction(editor, InputEvent.KeyInput.of(Key.ENTER))).contains(new Editor.Msg.Submit());
         assertThat(editorAction(editor, InputEvent.KeyInput.of(Key.BACKSPACE))).contains(new Editor.Msg.Backspace());
         assertThat(editorAction(editor, InputEvent.KeyInput.of(Key.of("backspace", Modifiers.ALT))))
@@ -413,7 +416,7 @@ class ParityKeymapTest {
 
     @Test
     void anEditorActionWinsOverTheTextItsGestureCarries() {
-        Editor.Config config = Editor.Config.defaults();
+        EditorConfig config = EditorConfig.defaults();
         Editor remapped = new Editor(config, Editor.defaultKeys(config).withAliases("submit", "s"));
         assertThat(editorAction(remapped, new InputEvent.KeyInput(Key.of("s"), "s", 0L)))
                 .contains(new Editor.Msg.Submit());
@@ -432,7 +435,7 @@ class ParityKeymapTest {
         assertThat(Help.render(TableSelector.defaultKeys(), true, WIDE).plainText())
                 .isEqualTo("Navigation    \u2191 move up    \u2193 move down    \u2190 move left    \u2192 move right\n"
                         + "Actions    enter choose    esc cancel");
-        assertThat(Help.render(Editor.defaultKeys(Editor.Config.defaults()), false, WIDE)
+        assertThat(Help.render(Editor.defaultKeys(EditorConfig.defaults()), false, WIDE)
                         .plainText())
                 .isEqualTo("enter submit \u2022 alt+c copy \u2022 ctrl+v paste");
     }
@@ -441,13 +444,30 @@ class ParityKeymapTest {
 
     private static final ViewContext CONTEXT = new ViewContext(new Viewport(24, 80));
 
+    /**
+     * One event routed the way the runtime routes it: claims, tree, then the component's map.
+     */
+    private static Optional<KeymapHelpDemo.Msg> route(
+            io.github.dhoard.braxton.testing.ComponentDriver<
+                            KeymapHelpDemo.Model, KeymapHelpDemo.Msg, io.github.dhoard.braxton.mvu.Never>
+                    driver,
+            InputEvent event) {
+        return io.github.dhoard.braxton.testing.Routing.route(driver.component(), driver.model(), CONTEXT, event)
+                .stream()
+                .findFirst();
+    }
+
     private static ComponentDriver<KeymapHelpDemo.Model, KeymapHelpDemo.Msg, io.github.dhoard.braxton.mvu.Never>
             demo() {
         return ComponentDriver.initialize(new KeymapHelpDemo.Scene(), new InitContext(null, null));
     }
 
     private static List<String> lines(ComponentDriver<KeymapHelpDemo.Model, KeymapHelpDemo.Msg, ?> driver) {
-        return new ScreenRenderer().plainLines(driver.view(CONTEXT), CONTEXT.viewport());
+        return ElementScreen.render(
+                        driver.view(CONTEXT),
+                        CONTEXT.viewport().rows(),
+                        CONTEXT.viewport().cols())
+                .lines();
     }
 
     @Test
@@ -491,11 +511,11 @@ class ParityKeymapTest {
         String text = String.join("\n", screen);
         assertThat(text).contains("?/h toggle help").doesNotContain("remap help key");
 
-        // The remapped alias fires the same message, and the disabled action fires nothing.
-        View<KeymapHelpDemo.Msg> view = driver.view(CONTEXT);
-        assertThat(InputRouter.route(view, gesture("h"))).contains(new KeymapHelpDemo.Msg.ToggleHelp());
-        assertThat(InputRouter.route(view, gesture("?"))).contains(new KeymapHelpDemo.Msg.ToggleHelp());
-        assertThat(InputRouter.route(view, gesture("r"))).isEmpty();
+        // The remapped alias fires the same message, and the disabled action fires nothing. The
+        // scene declares its map, so the component is what the driver routes through.
+        assertThat(route(driver, gesture("h"))).contains(new KeymapHelpDemo.Msg.ToggleHelp());
+        assertThat(route(driver, gesture("?"))).contains(new KeymapHelpDemo.Msg.ToggleHelp());
+        assertThat(route(driver, gesture("r"))).isEmpty();
     }
 
     @Test
@@ -503,18 +523,27 @@ class ParityKeymapTest {
         var driver = demo();
 
         // Focus starts on the left selector.
-        assertThat(InputRouter.route(driver.view(CONTEXT), gesture("down")))
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(
+                                driver.component(), driver.model(), CONTEXT, gesture("down"))
+                        .stream()
+                        .findFirst())
                 .contains(new KeymapHelpDemo.Msg.Left(new Selector.Msg.Down()));
         driver.send(new KeymapHelpDemo.Msg.Left(new Selector.Msg.Down()));
         assertThat(lines(driver).get(0)).contains("left=beta").contains("right=alpha");
 
         // Tab moves focus; the same gesture now reaches the right selector and leaves the left one.
-        assertThat(InputRouter.route(driver.view(CONTEXT), gesture("tab")))
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(
+                                driver.component(), driver.model(), CONTEXT, gesture("tab"))
+                        .stream()
+                        .findFirst())
                 .contains(new KeymapHelpDemo.Msg.ToggleFocus());
         Update<KeymapHelpDemo.Model, KeymapHelpDemo.Msg, io.github.dhoard.braxton.mvu.Never> focused =
                 driver.send(new KeymapHelpDemo.Msg.ToggleFocus());
         assertThat(focused.model().leftFocused()).isFalse();
-        assertThat(InputRouter.route(driver.view(CONTEXT), gesture("down")))
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(
+                                driver.component(), driver.model(), CONTEXT, gesture("down"))
+                        .stream()
+                        .findFirst())
                 .contains(new KeymapHelpDemo.Msg.Right(new Selector.Msg.Down()));
         driver.send(new KeymapHelpDemo.Msg.Right(new Selector.Msg.Down()));
         assertThat(lines(driver).get(0))
@@ -528,7 +557,15 @@ class ParityKeymapTest {
     void theDemoQuitsOnItsQuitAction() {
         var driver = demo();
         assertThat(driver.send(new KeymapHelpDemo.Msg.Quit()).command()).isNotNull();
-        assertThat(InputRouter.route(driver.view(CONTEXT), gesture("q"))).contains(new KeymapHelpDemo.Msg.Quit());
-        assertThat(InputRouter.route(driver.view(CONTEXT), gesture("ctrl+c"))).contains(new KeymapHelpDemo.Msg.Quit());
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(
+                                driver.component(), driver.model(), CONTEXT, gesture("q"))
+                        .stream()
+                        .findFirst())
+                .contains(new KeymapHelpDemo.Msg.Quit());
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(
+                                driver.component(), driver.model(), CONTEXT, gesture("ctrl+c"))
+                        .stream()
+                        .findFirst())
+                .contains(new KeymapHelpDemo.Msg.Quit());
     }
 }

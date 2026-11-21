@@ -30,7 +30,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-/** Timer edges: a zero delay still runs, cancel is idempotent, and a zero delay cannot overflow. */
+/**
+ * Timer edges: a zero delay still runs, cancel is idempotent, and a zero delay cannot overflow.
+ */
 class TimerEdgeTest {
 
     @Test

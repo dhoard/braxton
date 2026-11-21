@@ -49,7 +49,9 @@ import org.junit.jupiter.api.Test;
  */
 class GraphemesPropertyTest {
 
-    /** Characters that keep text on the fast path, including the two controls it accepts. */
+    /**
+     * Characters that keep text on the fast path, including the two controls it accepts.
+     */
     private static final char[] SIMPLE_ALPHABET = {'a', ' ', '~', '\n', '\t'};
 
     /**
@@ -59,7 +61,9 @@ class GraphemesPropertyTest {
      */
     private static final String[] HARD_ALPHABET = {"a", "\u0301", "\u200D", "\uFE0F", "\u4E2D", "😀", "\r", "\n"};
 
-    /** Marks that may join the cluster before them and must never open more than one. */
+    /**
+     * Marks that may join the cluster before them and must never open more than one.
+     */
     private static final String[] MARKS = {"\u0301", "\u0308", "\u200D", "\uFE0F"};
 
     private static final int MAX_EXHAUSTIVE_LENGTH = 5;
@@ -158,7 +162,9 @@ class GraphemesPropertyTest {
                 .isEqualTo(clusters);
     }
 
-    /** Segmentation consumed through the streaming cursor rather than as a whole list. */
+    /**
+     * Segmentation consumed through the streaming cursor rather than as a whole list.
+     */
     private static List<String> iterateOneAtATime(String text) {
         List<String> clusters = new ArrayList<>();
         var iterator = Graphemes.iterate(text).iterator();
@@ -186,7 +192,9 @@ class GraphemesPropertyTest {
         return true;
     }
 
-    /** Every string of length 0..maxLen over {@code alphabet}, in a fixed order. */
+    /**
+     * Every string of length 0..maxLen over {@code alphabet}, in a fixed order.
+     */
     private static List<String> enumerate(char[] alphabet, int maxLen) {
         List<String> all = new ArrayList<>();
         all.add("");
@@ -204,7 +212,9 @@ class GraphemesPropertyTest {
         return all;
     }
 
-    /** Every string of length 0..maxLen over {@code alphabet}, where a piece may be a pair. */
+    /**
+     * Every string of length 0..maxLen over {@code alphabet}, where a piece may be a pair.
+     */
     private static List<String> enumerate(String[] alphabet, int maxLen) {
         List<String> all = new ArrayList<>();
         all.add("");

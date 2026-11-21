@@ -54,8 +54,8 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.ColorProfile;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -88,7 +88,9 @@ class ParityClipboardTest {
 
     private static final String PRIMARY_REQUEST = "\u001B]52;p;?\u0007";
 
-    /** The reply a terminal gives for the system clipboard, as the protocol writes it. */
+    /**
+     * The reply a terminal gives for the system clipboard, as the protocol writes it.
+     */
     private static String reply(ClipboardSelection selection, String text) {
         return "\u001B]52;" + selection.code() + ";"
                 + Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8)) + "\u0007";
@@ -234,7 +236,7 @@ class ParityClipboardTest {
                 TestReaders.utf8(new ByteArrayInputStream(overlong.toString().getBytes(StandardCharsets.UTF_8))));
         InputEvent after = decoder.read().orElseThrow();
         assertThat(((InputEvent.KeyInput) after).text())
-                .as("a colour report past the reply bound is consumed and dropped as before")
+                .as("a color report past the reply bound is consumed and dropped as before")
                 .isEqualTo("z");
     }
 
@@ -250,7 +252,9 @@ class ParityClipboardTest {
 
     // ── correlating replies ─────────────────────────────────────────────────
 
-    /** An engine wired to an owned timer, a recorded output and a delivered-answer list. */
+    /**
+     * An engine wired to an owned timer, a recorded output and a delivered-answer list.
+     */
     private static final class Engine {
         final ManualTimers timers = new ManualTimers();
         final List<String> written = new CopyOnWriteArrayList<>();
@@ -452,7 +456,9 @@ class ParityClipboardTest {
 
     // ── the per-session service ─────────────────────────────────────────────
 
-    /** A service over an owned environment, with every write recorded. */
+    /**
+     * A service over an owned environment, with every write recorded.
+     */
     private static final class Service {
         final List<String> written = new ArrayList<>();
         final ClipboardService clipboard;
@@ -556,7 +562,9 @@ class ParityClipboardTest {
 
     // ── the mounted runtime ─────────────────────────────────────────────────
 
-    /** A program that records every message the runtime delivers to it. */
+    /**
+     * A program that records every message the runtime delivers to it.
+     */
     private static Component<List<Object>, Object, Never> recorder(List<Object> messages, Command<Object> onInit) {
         return new Component<>() {
             @Override
@@ -574,8 +582,8 @@ class ParityClipboardTest {
             }
 
             @Override
-            public View<Object> view(List<Object> model, ViewContext context) {
-                return Views.text("ready");
+            public Element<Object> view(List<Object> model, ViewContext context) {
+                return Elements.text("ready");
             }
         };
     }
@@ -734,8 +742,8 @@ class ParityClipboardTest {
                 }
 
                 @Override
-                public View<Object> view(List<Object> model, ViewContext context) {
-                    return Views.text("ready");
+                public Element<Object> view(List<Object> model, ViewContext context) {
+                    return Elements.text("ready");
                 }
             };
             TestTerminal.run(program, clipboardOptions(direct()), fixture);
@@ -746,7 +754,9 @@ class ParityClipboardTest {
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
-    /** The base64 of raw bytes, which is how a malformed payload is built. */
+    /**
+     * The base64 of raw bytes, which is how a malformed payload is built.
+     */
     private static String base64(int... bytes) {
         byte[] raw = new byte[bytes.length];
         for (int index = 0; index < bytes.length; index++) {
@@ -759,7 +769,9 @@ class ParityClipboardTest {
         return Base64.getEncoder().encodeToString(bytes);
     }
 
-    /** One decoder over {@code bytes}, with an explicit clipboard framing bound. */
+    /**
+     * One decoder over {@code bytes}, with an explicit clipboard framing bound.
+     */
     private static InputDecoder decoder(String bytes, int maxClipboardReplyCharacters) {
         return new InputDecoder(
                 TestReaders.utf8(new ByteArrayInputStream(bytes.getBytes(StandardCharsets.UTF_8))),
@@ -768,7 +780,9 @@ class ParityClipboardTest {
                 maxClipboardReplyCharacters);
     }
 
-    /** The one frame {@code bytes} produces, read from a stream that may deliver it a byte at a time. */
+    /**
+     * The one frame {@code bytes} produces, read from a stream that may deliver it a byte at a time.
+     */
     private static TerminalReply frame(String bytes, boolean byteAtATime) throws IOException {
         InputStream input = byteAtATime
                 ? new Drip(bytes.getBytes(StandardCharsets.UTF_8))
@@ -779,7 +793,9 @@ class ParityClipboardTest {
         return ((InputEvent.TerminalReplyInput) event.get()).reply();
     }
 
-    /** A stream that hands out one byte per read, so framing cannot depend on a buffer boundary. */
+    /**
+     * A stream that hands out one byte per read, so framing cannot depend on a buffer boundary.
+     */
     private static final class Drip extends InputStream {
 
         private final byte[] bytes;

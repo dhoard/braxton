@@ -31,7 +31,9 @@ import io.github.dhoard.braxton.style.TextMeasure;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** Every rendered table row shares one width, bordered or not. */
+/**
+ * Every rendered table row shares one width, bordered or not.
+ */
 class TablePropertyTest {
 
     @Test

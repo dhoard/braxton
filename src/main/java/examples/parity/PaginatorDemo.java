@@ -25,6 +25,7 @@ package examples.parity;
 import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -37,8 +38,8 @@ import io.github.dhoard.braxton.mvu.OutputRoute;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.Paginator;
 import java.util.ArrayList;
@@ -66,16 +67,24 @@ public final class PaginatorDemo {
 
     private static final Style STATUS = Style.NONE.withBold();
 
-    /** The items the scene pages over: a static list, so nothing is read or fetched. */
+    /**
+     * The items the scene pages over: a static list, so nothing is read or fetched.
+     */
     public static final List<String> ITEMS = items(84);
 
-    /** The size of a page, in items. */
+    /**
+     * The size of a page, in items.
+     */
     public static final int PER_PAGE = Paginator.DEFAULT_PER_PAGE;
 
-    /** The rows the scene reserves for items, whatever the current page holds. */
+    /**
+     * The rows the scene reserves for items, whatever the current page holds.
+     */
     public static final int ITEM_ROWS = PER_PAGE;
 
-    /** The paginator's own actions, used for routing and for its help line. */
+    /**
+     * The paginator's own actions, used for routing and for its help line.
+     */
     public static final KeyMap<Paginator.Msg> PAGER_KEYS = Paginator.defaultKeys();
 
     private PaginatorDemo() {}
@@ -95,6 +104,15 @@ public final class PaginatorDemo {
      */
     public record Model(Paginator.Model pager, int selected, boolean numeric, boolean wrap, String last) {
 
+        /**
+         * Creates a {@code Model} value.
+         *
+         * @param pager the mounted paginator's own state
+         * @param selected the index of the selected item, or -1 when there are no items
+         * @param numeric whether the indicator paints the numeric label instead of dots
+         * @param wrap whether paging wraps at either end
+         * @param last what the scene last did
+         */
         public Model {
             pager = pager == null ? Paginator.Model.of(0, PER_PAGE) : pager;
             // The pager's count is a prefix of ITEMS, so a restored model cannot point the pages
@@ -139,7 +157,9 @@ public final class PaginatorDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -156,19 +176,29 @@ public final class PaginatorDemo {
          */
         record Select(int delta) implements Msg {}
 
-        /** Switches the indicator between dots and the numeric label. */
+        /**
+         * Switches the indicator between dots and the numeric label.
+         */
         record ToggleMode() implements Msg {}
 
-        /** Switches wrap-around paging on or off. */
+        /**
+         * Switches wrap-around paging on or off.
+         */
         record ToggleWrap() implements Msg {}
 
-        /** Removes one page's worth of items, down to zero. */
+        /**
+         * Removes one page's worth of items, down to zero.
+         */
         record RemovePage() implements Msg {}
 
-        /** Restores one page's worth of items, up to the whole list. */
+        /**
+         * Restores one page's worth of items, up to the whole list.
+         */
         record AddPage() implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -195,7 +225,11 @@ public final class PaginatorDemo {
                 KeyMap.group("General", KeyAction.<Msg>of("quit", new Msg.Quit(), "esc", "quit", "escape", "ctrl+c")));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
@@ -243,8 +277,15 @@ public final class PaginatorDemo {
         return List.copyOf(items);
     }
 
-    /** The paged list scene: status rows, the current page's items, the indicator and the help. */
+    /**
+     * The paged list scene: status rows, the current page's items, the indicator and the help.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final KeyMap<Msg> keys = defaultKeys();
 
@@ -275,27 +316,44 @@ public final class PaginatorDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
+        }
+
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys.bindings();
+        }
+
+        /**
+         * The scene as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
             int cols = context.viewport().cols();
-            List<View<Msg>> rows = new ArrayList<>();
+            List<Element<Msg>> rows = new ArrayList<>();
             // Status rows are one row each however narrow the terminal is: a wrapped diagnostic
             // would push the items and the indicator down and move what a verifier can assert.
-            rows.add(Views.fixed(1, Views.text(headline(model), STATUS)));
-            rows.add(Views.fixed(1, Views.text("last=" + model.last(), STATUS)));
-            rows.add(Views.gap(1));
+            rows.add(Elements.fixed(1, Elements.text(headline(model), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text("last=" + model.last(), STATUS)));
+            rows.add(Elements.spacer(1));
             for (int row = 0; row < ITEM_ROWS; row++) {
                 // One row per item as well: a long label is clipped, never wrapped into the next
                 // item's row or into the indicator's.
-                rows.add(Views.fixed(1, Views.text(itemRow(model, row), STATUS)));
+                rows.add(Elements.fixed(1, Elements.text(itemRow(model, row), STATUS)));
             }
-            rows.add(Views.gap(1));
-            rows.add(mount(model).view(model, context));
-            rows.add(Views.gap(1));
+            rows.add(Elements.spacer(1));
+            rows.add((mount(model).view(model, context)));
+            rows.add(Elements.spacer(1));
             // The pager's help is its own key map, mapped into the scene's message type: help and
             // routing read one definition, and the scene's actions get a second line.
-            rows.add(Help.<Paginator.Msg>view(PAGER_KEYS, false, cols).map(Msg.Pager::new));
-            rows.add(Help.view(keys, false, cols));
-            return Views.keyed(List.of(), Views.column(rows), keys.bindings());
+            rows.add(Help.<Paginator.Msg>element(PAGER_KEYS, Help.Config.defaults(), false, cols)
+                    .map(Msg.Pager::new));
+            rows.add(Help.element(keys, Help.Config.defaults(), false, cols));
+            return Elements.column(rows);
         }
 
         /**
@@ -331,7 +389,9 @@ public final class PaginatorDemo {
             return Update.next(moved.withLast("selected-" + selected));
         }
 
-        /** Removes or restores items, leaving the pager to clamp the page it was showing. */
+        /**
+         * Removes or restores items, leaving the pager to clamp the page it was showing.
+         */
         private Update<Model, Msg, Never> count(Model model, int delta) {
             int count = Math.max(0, Math.min(ITEMS.size(), model.pager().itemCount() + delta));
             Model next = mount(model)

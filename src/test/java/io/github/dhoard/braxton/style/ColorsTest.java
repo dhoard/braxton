@@ -33,12 +33,16 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** The documented palette is distinct data, and each numbered scale darkens as the number grows. */
+/**
+ * The documented palette is distinct data, and each numbered scale darkens as the number grows.
+ */
 class ColorsTest {
 
     private static final List<String> SCALES = List.of("GRAY_", "ERROR_", "WARNING_", "SUCCESS_");
 
-    /** The palette in declaration order, so a scale's numbers are compared in the order it lists. */
+    /**
+     * The palette in declaration order, so a scale's numbers are compared in the order it lists.
+     */
     private static Map<String, Color> palette() {
         Map<String, Color> palette = new LinkedHashMap<>();
         for (Field field : Colors.class.getDeclaredFields()) {
@@ -71,7 +75,9 @@ class ColorsTest {
         }
     }
 
-    /** A numbered scale is ordered light to dark, so the scale reads as a ramp in the examples. */
+    /**
+     * A numbered scale is ordered light to dark, so the scale reads as a ramp in the examples.
+     */
     @Test
     void eachNumberedScaleDarkensAsItsNumberGrows() {
         Map<String, Color> palette = palette();
@@ -106,7 +112,9 @@ class ColorsTest {
         }
     }
 
-    /** Anchors pin the documented values, so a re-typed palette shows up as a data change. */
+    /**
+     * Anchors pin the documented values, so a re-typed palette shows up as a data change.
+     */
     @Test
     void theDocumentedAnchorsKeepTheirValues() {
         assertThat(Colors.GRAY_400.hex()).isEqualTo("#717680");
@@ -150,7 +158,7 @@ class ColorsTest {
         }
         for (int index = 0; index < 16; index++) {
             assertThat(Colors.nearestAnsi16(Colors.ansi16(index)))
-                    .as("ANSI colour %d", index)
+                    .as("ANSI color %d", index)
                     .isEqualTo(index);
         }
     }

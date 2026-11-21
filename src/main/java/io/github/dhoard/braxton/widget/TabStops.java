@@ -43,12 +43,16 @@ import java.util.List;
  */
 final class TabStops {
 
-    /** Columns between stops, matching the layout engine's text wrapping. */
+    /**
+     * Columns between stops, matching the layout engine's text wrapping.
+     */
     static final int WIDTH = 4;
 
     private TabStops() {}
 
-    /** {@code text} with every tab replaced by spaces up to the next stop on its own line. */
+    /**
+     * {@code text} with every tab replaced by spaces up to the next stop on its own line.
+     */
     static StyledText expand(StyledText text) {
         String plain = text.plainText();
         if (plain.indexOf('\t') < 0) {

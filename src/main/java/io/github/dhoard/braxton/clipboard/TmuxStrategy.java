@@ -35,7 +35,9 @@ public enum TmuxStrategy {
      */
     AUTO,
 
-    /** Always write OSC 52 directly to the terminal, even inside tmux. */
+    /**
+     * Always write OSC 52 directly to the terminal, even inside tmux.
+     */
     DIRECT,
 
     /**
@@ -50,12 +52,16 @@ public enum TmuxStrategy {
      */
     TMUX_PASSTHROUGH,
 
-    /** Never emit an escape sequence; use only the in-process clipboard buffer. */
+    /**
+     * Never emit an escape sequence; use only the in-process clipboard buffer.
+     */
     OFF;
 
     /**
      * Parses a configuration value, accepting the enum name case-insensitively.
      *
+     * @param value the configuration value to parse
+     * @param fallback the value to use when resolution fails
      * @return the matching strategy, or {@code fallback} when the value is unknown
      */
     public static TmuxStrategy parse(String value, TmuxStrategy fallback) {

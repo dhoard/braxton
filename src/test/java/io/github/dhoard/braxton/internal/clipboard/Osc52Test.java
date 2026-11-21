@@ -34,7 +34,9 @@ import java.util.Locale;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** OSC 52 selection whitelisting, payload encoding, and cluster-safe truncation. */
+/**
+ * OSC 52 selection whitelisting, payload encoding, and cluster-safe truncation.
+ */
 class Osc52Test {
 
     private static final String FAMILY = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
@@ -151,7 +153,7 @@ class Osc52Test {
 
     @Test
     void aLimitThatRemovesEverythingStillBuildsASequenceAndTheServiceMustRefuseIt() {
-        // OSC 52 has no acknowledgement and an empty payload clears the clipboard, so the encoder
+        // OSC 52 has no acknowledgment and an empty payload clears the clipboard, so the encoder
         // reports the empty text honestly and the caller (ClipboardService.copy) refuses to write.
         Osc52.Encoded encoded = Osc52.encode("\u6F22", "c", 1);
         assertThat(encoded.text()).isEmpty();

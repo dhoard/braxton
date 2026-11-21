@@ -50,7 +50,9 @@ class KeyParseExhaustiveTest {
         "a", "z", "0", "9", "+", "enter", "tab", "space", "escape", "pageup", "wheeldown", "f1", "-", "[", "left"
     };
 
-    /** Modifier words a spec may name, in every order the parser has to accept. */
+    /**
+     * Modifier words a spec may name, in every order the parser has to accept.
+     */
     private static final String[] WORDS = {"ctrl", "control", "alt", "meta", "shift"};
 
     private static final String[] GARBAGE_ALPHABET = {"c", "t", "r", "l", "a", "+", "x", " "};
@@ -126,7 +128,9 @@ class KeyParseExhaustiveTest {
         return new Modifiers(ctrl, alt, shift);
     }
 
-    /** Every ordered run of zero to three modifier words, without repeating one. */
+    /**
+     * Every ordered run of zero to three modifier words, without repeating one.
+     */
     private static List<List<String>> wordCombinations() {
         List<List<String>> all = new ArrayList<>();
         all.add(List.of());
@@ -148,7 +152,9 @@ class KeyParseExhaustiveTest {
         return all;
     }
 
-    /** Every string of length 1..4 over the garbage alphabet. */
+    /**
+     * Every string of length 1..4 over the garbage alphabet.
+     */
     private static List<String> garbage() {
         List<String> all = new ArrayList<>();
         List<String> previous = List.of("");

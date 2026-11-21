@@ -31,7 +31,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
-/** The bounded hand-off between producers and the runtime owner. */
+/**
+ * The bounded hand-off between producers and the runtime owner.
+ */
 class MailboxTest {
 
     @Test

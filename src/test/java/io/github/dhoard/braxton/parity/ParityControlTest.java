@@ -40,7 +40,6 @@ import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.internal.clipboard.ClipboardService;
 import io.github.dhoard.braxton.internal.clipboard.TerminalEnvironment;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.internal.runtime.EffectRunner;
 import io.github.dhoard.braxton.internal.runtime.Mailbox;
 import io.github.dhoard.braxton.internal.runtime.ManualTimers;
@@ -63,10 +62,9 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.OutputRoute;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -92,7 +90,7 @@ import org.junit.jupiter.api.Timeout;
  *
  * <p>Four things are asserted against observable behavior. A {@link Command.Sequence} submits its next
  * step only when the previous one has finished, and its messages arrive in that order - proven with a
- * gated task, a delay step, a batch step, a cancelled step, a refused step and a removed scope, not
+ * gated task, a delay step, a batch step, a canceled step, a refused step and a removed scope, not
  * with timings. A {@link MessageFilter} can rewrite and drop the messages a session delivers and can
  * veto a graceful quit, while its own failure fails the run after cleanup. The frame ceiling is a
  * documented range and paces presentations. The packaged demo - the artifact the PTY scenario launches
@@ -107,33 +105,39 @@ class ParityControlTest {
 
     private static final Viewport VIEWPORT = new Viewport(8, 80);
     private static final String SCENE = "control";
-    /** One synchronized-output bracket start; a presented frame opens exactly one. */
+    /**
+     * One synchronized-output bracket start; a presented frame opens exactly one.
+     */
     private static final Pattern BEGIN = Pattern.compile(Pattern.quote("\u001b[?2026h"));
 
     private static final long WAIT_SECONDS = 10L;
 
-    /** Real timers and virtual-thread tasks: the runtime a program actually gets. */
+    /**
+     * Real timers and virtual-thread tasks: the runtime a program actually gets.
+     */
     private static RuntimeServices services() {
         return RuntimeServices.system()
                 .withEffectExecutor(
                         Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory()));
     }
 
-    /** The services a case needs when it supplies its own executor. */
+    /**
+     * The services a case needs when it supplies its own executor.
+     */
     private static RuntimeServices services(ExecutorService executor) {
         return RuntimeServices.system().withEffectExecutor(executor);
     }
 
     /**
-     * A one-row scene whose update is the test's own behaviour.
+     * A one-row scene whose update is the test's own behavior.
      *
-     * @param behaviour the command each message returns, or null for none
+     * @param behavior the command each message returns, or null for none
      * @param snapshots where to record every committed model, or null to skip
      * @param keys the key specs this scene binds, each delivering its own name
      * @return the program
      */
     private static Component<List<String>, String, Never> scene(
-            BiFunction<List<String>, String, Command<String>> behaviour, List<List<String>> snapshots, String... keys) {
+            BiFunction<List<String>, String, Command<String>> behavior, List<List<String>> snapshots, String... keys) {
         List<Binding<String>> bindings = new ArrayList<>();
         for (String key : keys) {
             bindings.add(new Binding<>(Key.of(key), key));
@@ -150,26 +154,31 @@ class ParityControlTest {
                 List<String> next = new ArrayList<>(model);
                 next.add(message);
                 List<String> recorded = List.copyOf(next);
-                Command<String> command = behaviour.apply(recorded, message);
+                Command<String> command = behavior.apply(recorded, message);
                 return command == null ? Update.next(recorded) : Update.next(recorded, command);
             }
 
             @Override
-            public View<String> view(List<String> model, ViewContext context) {
+            public Element<String> view(List<String> model, ViewContext context) {
                 if (snapshots != null) {
                     snapshots.add(List.copyOf(model));
                 }
-                return Views.focus(
-                        ElementId.of("scene"),
-                        true,
-                        frozen,
-                        View.InputHandler.none(),
-                        Views.text(SCENE + ":" + String.join(",", model)));
+                return Elements.text(SCENE + ":" + String.join(",", model));
+            }
+
+            /**
+             * The gestures this fixture answers, once no leaf has taken them.
+             */
+            @Override
+            public java.util.List<Binding<String>> claims(List<String> model) {
+                return frozen;
             }
         };
     }
 
-    /** Starts a loop on its own thread and feeds {@code key} once its first frame is painted. */
+    /**
+     * Starts a loop on its own thread and feeds {@code key} once its first frame is painted.
+     */
     private static Thread start(
             TestTerminal fixture,
             RuntimeLoop<List<String>, String> loop,
@@ -184,7 +193,9 @@ class ParityControlTest {
         return Thread.ofVirtual().start(() -> result.set(loop.run()));
     }
 
-    /** Waits until some committed model satisfies {@code condition}. */
+    /**
+     * Waits until some committed model satisfies {@code condition}.
+     */
     private static List<String> awaitModel(
             List<List<String>> snapshots, Predicate<List<String>> condition, String description)
             throws InterruptedException {
@@ -200,7 +211,9 @@ class ParityControlTest {
         throw new AssertionError(description + " did not happen; committed models: " + snapshots);
     }
 
-    /** The last model the program committed. */
+    /**
+     * The last model the program committed.
+     */
     private static List<String> last(List<List<String>> snapshots) {
         return snapshots.isEmpty() ? List.of() : snapshots.get(snapshots.size() - 1);
     }
@@ -467,7 +480,7 @@ class ParityControlTest {
 
             assertThat(result.get().kind()).isEqualTo(ExitResult.Kind.QUIT);
             assertThat(last(snapshots))
-                    .as("a cancelled step neither delivers nor lets the sequence continue")
+                    .as("a canceled step neither delivers nor lets the sequence continue")
                     .containsExactly("r", "q");
         }
     }
@@ -671,8 +684,8 @@ class ParityControlTest {
             }
 
             @Override
-            public View<String> view(Integer model, ViewContext context) {
-                return Views.text(SCENE + ":child:" + model);
+            public Element<String> view(Integer model, ViewContext context) {
+                return Elements.text(SCENE + ":child:" + model);
             }
         };
         Mount<List<Integer>, String, Never, Integer, String, Never> mount = Mount.of(
@@ -694,8 +707,8 @@ class ParityControlTest {
             }
 
             @Override
-            public View<String> view(List<Integer> model, ViewContext context) {
-                return Views.text(SCENE + ":parent:" + model);
+            public Element<String> view(List<Integer> model, ViewContext context) {
+                return Elements.text(SCENE + ":parent:" + model);
             }
 
             @Override
@@ -723,9 +736,9 @@ class ParityControlTest {
     @Test
     void theFrameCeilingIsADocumentedRangeAndPacesPresentations() {
         assertThat(RuntimeOptions.DEFAULT_FPS).isEqualTo(60);
-        assertThat(RuntimeLoop.frameIntervalNanos(1))
+        assertThat(RuntimeOptions.frameIntervalNanos(1))
                 .isEqualTo(Duration.ofSeconds(1L).toNanos());
-        assertThat(RuntimeLoop.frameIntervalNanos(240))
+        assertThat(RuntimeOptions.frameIntervalNanos(240))
                 .isEqualTo(Duration.ofSeconds(1L).toNanos() / 240L);
         assertThatThrownBy(() -> RuntimeOptions.defaults().withFps(0))
                 .as("below one frame a second")
@@ -735,7 +748,7 @@ class ParityControlTest {
                 .as("above the supported ceiling")
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("fps");
-        assertThatThrownBy(() -> RuntimeLoop.frameIntervalNanos(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> RuntimeOptions.frameIntervalNanos(0)).isInstanceOf(IllegalArgumentException.class);
         assertThat(RuntimeOptions.defaults().withFps(30).fps()).isEqualTo(30);
     }
 
@@ -773,8 +786,8 @@ class ParityControlTest {
             }
 
             @Override
-            public View<String> view(List<String> model, ViewContext context) {
-                return Views.text(SCENE + ":" + String.join(",", model));
+            public Element<String> view(List<String> model, ViewContext context) {
+                return Elements.text(SCENE + ":" + String.join(",", model));
             }
 
             @Override
@@ -824,13 +837,15 @@ class ParityControlTest {
 
     private static Optional<ApplicationControlDemo.Msg> route(ApplicationControlDemo.Model model, String spec) {
         Key gesture = Key.parse(spec);
-        return InputRouter.route(
-                demo().view(model, new ViewContext(VIEWPORT)), InputEvent.KeyInput.of(gesture, gesture.name()));
+        return io.github.dhoard.braxton.testing.Routing.route(
+                        demo(), model, new ViewContext(VIEWPORT), InputEvent.KeyInput.of(gesture, gesture.name()))
+                .stream()
+                .findFirst();
     }
 
     private static String row(ApplicationControlDemo.Model model, int index) {
-        return new ScreenRenderer()
-                .plainLines(demo().view(model, new ViewContext(VIEWPORT)), VIEWPORT)
+        return ElementScreen.render(demo().view(model, new ViewContext(VIEWPORT)), VIEWPORT.rows(), VIEWPORT.cols())
+                .lines()
                 .get(index)
                 .strip();
     }
@@ -907,7 +922,9 @@ class ParityControlTest {
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
-    /** A sequence step that reports its start, waits for {@code gate}, and delivers its own name. */
+    /**
+     * A sequence step that reports its start, waits for {@code gate}, and delivers its own name.
+     */
     private static Command<String> gated(String name, CountDownLatch gate, AtomicInteger started) {
         return Command.task(
                 EffectId.of(name),
@@ -920,12 +937,16 @@ class ParityControlTest {
                 failure -> "failed");
     }
 
-    /** A sequence step that completes at once and delivers its own name. */
+    /**
+     * A sequence step that completes at once and delivers its own name.
+     */
     private static Command<String> named(String name) {
         return Command.task(EffectId.of(name), () -> name, value -> value, failure -> "failed");
     }
 
-    /** Takes every envelope the interpreter produced, running owner work as it goes. */
+    /**
+     * Takes every envelope the interpreter produced, running owner work as it goes.
+     */
     private static List<String> pump(Mailbox mailbox) throws InterruptedException {
         List<String> messages = new ArrayList<>();
         Mailbox.Envelope envelope;
@@ -939,7 +960,9 @@ class ParityControlTest {
         return messages;
     }
 
-    /** A clipboard service with no terminal to talk to. */
+    /**
+     * A clipboard service with no terminal to talk to.
+     */
     private static ClipboardService clipboard() {
         return new ClipboardService(
                 ClipboardConfig.defaults(), new TerminalEnvironment(Map.of("TERM", "dumb")), text -> {});

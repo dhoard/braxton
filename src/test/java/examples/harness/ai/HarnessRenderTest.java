@@ -27,7 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Transcript text wrapping: widths, words, and indentation. */
+/**
+ * Transcript text wrapping: widths, words, and indentation.
+ */
 class HarnessRenderTest {
 
     @Test

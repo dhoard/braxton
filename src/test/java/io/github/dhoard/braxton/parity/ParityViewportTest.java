@@ -32,7 +32,6 @@ import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.KeyMap;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.internal.text.VisualRows;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.InitContext;
@@ -42,9 +41,8 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.RenderedScreen;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.TextViewport;
 import java.util.ArrayList;
@@ -56,7 +54,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Phase 12 acceptance: wrapping, panning, paging, gutters, highlights and the demo scene.
  *
- * <p>Every assertion is against public behaviour: the rows a window paints, the facts it reports for
+ * <p>Every assertion is against public behavior: the rows a window paints, the facts it reports for
  * them, the model a gesture produces, the cells a width receives and what a routed key does to the
  * demo scene. The component a test drives is the shipped {@code TextViewport}, and the scene a
  * verifier runs is the demo's own, so a mounted composition is the one an application writes rather
@@ -70,12 +68,16 @@ class ParityViewportTest {
 
     private static final int SCREEN_COLS = 80;
 
-    /** The cells one CJK glyph occupies under the pinned width policy. */
+    /**
+     * The cells one CJK glyph occupies under the pinned width policy.
+     */
     private static final String WIDE = "\u671d";
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    /** A wrapping, non-following viewport of one size, which is what most tests need. */
+    /**
+     * A wrapping, non-following viewport of one size, which is what most tests need.
+     */
     private static TextViewport.Config wrap(int rows, int columns) {
         return TextViewport.Config.defaults()
                 .withMode(TextViewport.Mode.WRAP)
@@ -84,7 +86,9 @@ class ParityViewportTest {
                 .withColumns(columns);
     }
 
-    /** A panning, non-following viewport of one size. */
+    /**
+     * A panning, non-following viewport of one size.
+     */
     private static TextViewport.Config pan(int rows, int columns) {
         return wrap(rows, columns).withMode(TextViewport.Mode.PAN);
     }
@@ -93,7 +97,9 @@ class ParityViewportTest {
         return new TextViewport(config);
     }
 
-    /** A state at the first row over {@code lines}. */
+    /**
+     * A state at the first row over {@code lines}.
+     */
     private static TextViewport.Model model(int rows, int columns, String... lines) {
         return new TextViewport.Model(0, 0, 0, false, true, rows, columns, content(lines), List.of(), -1);
     }
@@ -110,22 +116,26 @@ class ParityViewportTest {
         return view.update(state, message).model();
     }
 
-    /** The rows one window paints, as plain text. */
+    /**
+     * The rows one window paints, as plain text.
+     */
     private static List<String> painted(TextViewport.Model state, TextViewport.Config config) {
         return TextViewport.visible(state, config).stream()
                 .map(row -> row.text().plainText())
                 .toList();
     }
 
-    /** The same window through the production layout and renderer. */
+    /**
+     * The same window through the production layout and renderer.
+     */
     private static List<String> screen(TextViewport view, TextViewport.Model state, int rows, int cols) {
-        View<TextViewport.Msg> view1 = view.view(state, new ViewContext(new Viewport(rows, cols)));
-        return new ScreenRenderer().plainLines(view1, new Viewport(rows, cols));
+        Element<TextViewport.Msg> view1 = view.view(state, new ViewContext(new Viewport(rows, cols)));
+        return ElementScreen.render(view1, rows, cols).lines();
     }
 
-    private static RenderedScreen rendered(TextViewport view, TextViewport.Model state, int rows, int cols) {
-        View<TextViewport.Msg> view1 = view.view(state, new ViewContext(new Viewport(rows, cols)));
-        return new ScreenRenderer().screen(view1, new Viewport(rows, cols));
+    private static ElementScreen rendered(TextViewport view, TextViewport.Model state, int rows, int cols) {
+        Element<TextViewport.Msg> view1 = view.view(state, new ViewContext(new Viewport(rows, cols)));
+        return ElementScreen.render(view1, rows, cols);
     }
 
     private static InputEvent.KeyInput key(String spec) {
@@ -133,7 +143,9 @@ class ParityViewportTest {
         return InputEvent.KeyInput.of(Key.parse(spec));
     }
 
-    /** A key with the text a terminal reports for it, which is what types into the find field. */
+    /**
+     * A key with the text a terminal reports for it, which is what types into the find field.
+     */
     private static InputEvent.KeyInput typed(String text) {
         Key parsed = Key.parse(text);
         return InputEvent.KeyInput.of(parsed, text);
@@ -376,13 +388,13 @@ class ParityViewportTest {
                 0, 0, 0, false, true, 3, 5, TextViewport.Content.of(List.of(line)), List.of(), -1);
 
         TextViewport view = pane(config);
-        RenderedScreen screen = rendered(view, state, 3, 5);
+        ElementScreen screen = rendered(view, state, 3, 5);
 
-        assertThat(screen.plainLine(0)).isEqualTo("abcde");
-        assertThat(screen.plainLine(1)).isEqualTo("fgh");
-        assertThat(screen.cell(0, 2).style()).isEqualTo(Style.NONE);
-        assertThat(screen.cell(0, 4).style()).isEqualTo(bold);
-        assertThat(screen.cell(1, 0).style()).isEqualTo(bold);
+        assertThat(screen.line(0)).isEqualTo("abcde");
+        assertThat(screen.line(1)).isEqualTo("fgh");
+        assertThat(screen.canvas().style(0, 2)).isEqualTo(Style.NONE);
+        assertThat(screen.canvas().style(0, 4)).isEqualTo(bold);
+        assertThat(screen.canvas().style(1, 0)).isEqualTo(bold);
         assertThat(TextViewport.visible(state, config).get(1).text().spans())
                 .as("the link survives the slice it was cut by")
                 .anySatisfy(span -> assertThat(span.link()).isEqualTo("https://example.invalid"));
@@ -576,7 +588,7 @@ class ParityViewportTest {
         for (TextViewport.Mode mode : TextViewport.Mode.values()) {
             content.reset();
             TextViewport.Config config = wrap(20, 80).withMode(mode);
-            View<TextViewport.Msg> view = pane(config).view(state, CONTEXT);
+            Element<TextViewport.Msg> view = pane(config).view(state, CONTEXT);
             assertThat(view).isNotNull();
 
             assertThat(content.reads)
@@ -661,18 +673,18 @@ class ParityViewportTest {
                 List.of(highlight(0, 0, 3), highlight(0, 8, 11)),
                 1);
         TextViewport view = pane(config);
-        RenderedScreen screen = rendered(view, state, 1, 20);
+        ElementScreen screen = rendered(view, state, 1, 20);
 
-        assertThat(screen.plainLine(0)).isEqualTo("one two one");
-        assertThat(screen.cell(0, 0).style())
+        assertThat(screen.line(0)).isEqualTo("one two one");
+        assertThat(screen.canvas().style(0, 0))
                 .as("an inactive range is the match style")
                 .isEqualTo(match);
-        assertThat(screen.cell(0, 4).style()).isEqualTo(Style.NONE);
-        assertThat(screen.cell(0, 7).style()).isEqualTo(Style.NONE);
-        assertThat(screen.cell(0, 8).style())
+        assertThat(screen.canvas().style(0, 4)).isEqualTo(Style.NONE);
+        assertThat(screen.canvas().style(0, 7)).isEqualTo(Style.NONE);
+        assertThat(screen.canvas().style(0, 8))
                 .as("the active range is the selected style")
                 .isEqualTo(match.merge(selected));
-        assertThat(screen.cell(0, 10).style()).isEqualTo(match.merge(selected));
+        assertThat(screen.canvas().style(0, 10)).isEqualTo(match.merge(selected));
     }
 
     @Test
@@ -692,18 +704,18 @@ class ParityViewportTest {
                 List.of(highlight(0, 0, 6), highlight(0, 4, 10)),
                 1);
 
-        RenderedScreen screen = rendered(pane(config), state, 1, 20);
+        ElementScreen screen = rendered(pane(config), state, 1, 20);
 
         // The ranges are painted in publication order and the active one last, so the overlap keeps
         // the style of the range the reader is on and no later range can hide it.
-        assertThat(screen.plainLine(0)).isEqualTo("abcdefghij");
-        assertThat(screen.cell(0, 0).style())
+        assertThat(screen.line(0)).isEqualTo("abcdefghij");
+        assertThat(screen.canvas().style(0, 0))
                 .as("only the first range covers this cell")
                 .isEqualTo(match);
-        assertThat(screen.cell(0, 4).style())
+        assertThat(screen.canvas().style(0, 4))
                 .as("both ranges cover this cell, and the second is the active one")
                 .isEqualTo(match.merge(selected));
-        assertThat(screen.cell(0, 9).style()).isEqualTo(match.merge(selected));
+        assertThat(screen.canvas().style(0, 9)).isEqualTo(match.merge(selected));
     }
 
     @Test
@@ -714,14 +726,14 @@ class ParityViewportTest {
         TextViewport.Model state =
                 new TextViewport.Model(0, 0, 0, false, true, 1, 10, content(text), List.of(highlight(0, 1, 2)), -1);
 
-        RenderedScreen screen = rendered(pane(config), state, 1, 10);
+        ElementScreen screen = rendered(pane(config), state, 1, 10);
 
-        assertThat(screen.cell(0, 0).style()).isEqualTo(Style.NONE);
-        assertThat(screen.cell(0, 1).style()).as("the glyph's own cell").isEqualTo(match);
-        assertThat(screen.cell(0, 2).text())
+        assertThat(screen.canvas().style(0, 0)).isEqualTo(Style.NONE);
+        assertThat(screen.canvas().style(0, 1)).as("the glyph's own cell").isEqualTo(match);
+        assertThat(screen.canvas().text(0, 2))
                 .as("the glyph's second cell continues it")
                 .isEmpty();
-        assertThat(screen.cell(0, 3).style()).isEqualTo(Style.NONE);
+        assertThat(screen.canvas().style(0, 3)).isEqualTo(Style.NONE);
     }
 
     @Test
@@ -1023,11 +1035,15 @@ class ParityViewportTest {
         TextViewport.Model focused = model(2, 5, "a", "b", "c");
         TextViewport.Model unfocused = focused.withFocus(false);
 
-        assertThat(InputRouter.route(view.view(focused, CONTEXT), key("down"))).contains(new TextViewport.Msg.Down(1));
-        assertThat(InputRouter.route(view.view(unfocused, CONTEXT), key("down")))
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(view, focused, CONTEXT, key("down")).stream()
+                        .findFirst())
+                .contains(new TextViewport.Msg.Down(1));
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(view, unfocused, CONTEXT, key("down")).stream()
+                        .findFirst())
                 .isEmpty();
         // Ctrl- and Alt-prefixed gestures are the application's shortcut space.
-        assertThat(InputRouter.route(view.view(focused, CONTEXT), key("ctrl+down")))
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(view, focused, CONTEXT, key("ctrl+down")).stream()
+                        .findFirst())
                 .isEmpty();
     }
 
@@ -1050,7 +1066,8 @@ class ParityViewportTest {
     }
 
     private static Optional<ViewportDemo.Msg> route(ViewportDemo.Model state, InputEvent event) {
-        return InputRouter.route(demo().view(state, CONTEXT), event);
+        return io.github.dhoard.braxton.testing.Routing.route(demo(), state, CONTEXT, event).stream()
+                .findFirst();
     }
 
     private static ViewportDemo.Model send(ViewportDemo.Model state, String keySpec) {
@@ -1069,7 +1086,8 @@ class ParityViewportTest {
     }
 
     private static List<String> demoLines(ViewportDemo.Model state) {
-        return new ScreenRenderer().plainLines(demo().view(state, CONTEXT), new Viewport(SCREEN_ROWS, SCREEN_COLS));
+        return ElementScreen.render(demo().view(state, CONTEXT), SCREEN_ROWS, SCREEN_COLS)
+                .lines();
     }
 
     private static String demoRow(ViewportDemo.Model state, int row) {

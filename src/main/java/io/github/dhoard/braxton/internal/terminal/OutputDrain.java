@@ -37,14 +37,22 @@ import java.util.function.LongSupplier;
  * error, bad descriptor) fails at once.</p>
  */
 final class OutputDrain {
-    /** How long one native attempt may wait, and so how quickly a shutdown is noticed. */
+    /**
+     * How long one native attempt may wait, and so how quickly a shutdown is noticed.
+     */
     static final int ATTEMPT_MILLIS = 100;
-    /** A peer that accepts no byte for this long while running is treated as gone. */
+    /**
+     * A peer that accepts no byte for this long while running is treated as gone.
+     */
     static final long RUNNING_STALL_NANOS = 30_000_000_000L;
-    /** Once shutdown has begun, the stall limit restoration output is held to. */
+    /**
+     * Once shutdown has begun, the stall limit restoration output is held to.
+     */
     static final long SHUTDOWN_STALL_NANOS = 1_000_000_000L;
 
-    /** One bounded native attempt over {@code [offset, offset + length)} of the staged chunk. */
+    /**
+     * One bounded native attempt over {@code [offset, offset + length)} of the staged chunk.
+     */
     @FunctionalInterface
     interface Attempt {
         /**

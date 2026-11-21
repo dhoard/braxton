@@ -32,15 +32,28 @@ import java.util.function.Supplier;
  * @param nodes one node per declared child, in declaration order
  */
 public record ComponentTree(List<Node> nodes) {
+    /**
+     * Creates a {@code ComponentTree} value.
+     *
+     * @param nodes one node per declared child, in declaration order
+     */
     public ComponentTree {
         nodes = List.copyOf(Objects.requireNonNull(nodes, "nodes"));
     }
 
-    /** One declared child and, when reached, its own declaration. */
+    /**
+     * One declared child and, when reached, its own declaration.
+     */
     public static final class Node {
         private final ComponentId id;
         private final Supplier<ComponentTree> descendants;
 
+        /**
+         * Creates a {@code Node} value.
+         *
+         * @param id the local identity of the resource
+         * @param children the children in declaration order
+         */
         public Node(ComponentId id, ComponentTree children) {
             this(id, () -> children);
             Objects.requireNonNull(children, "children");
@@ -55,20 +68,40 @@ public record ComponentTree(List<Node> nodes) {
             return new Node(id, descendants);
         }
 
+        /**
+         * Returns the stable local identity of this declared child.
+         *
+         * @return the stable local identity of this declared child
+         */
         public ComponentId id() {
             return id;
         }
 
-        /** Pure declaration evaluated when this node is reached by bounded runtime traversal. */
+        /**
+         * Pure declaration evaluated when this node is reached by bounded runtime traversal.
+         *
+         * @return pure declaration evaluated when this node is reached by bounded runtime traversal
+         */
         public ComponentTree children() {
             return Objects.requireNonNull(descendants.get(), "children");
         }
     }
 
+    /**
+     * Returns an empty component tree.
+     *
+     * @return an empty component tree
+     */
     public static ComponentTree empty() {
         return new ComponentTree(List.of());
     }
 
+    /**
+     * Creates a {@code ComponentTree} value.
+     *
+     * @param nodes one node per declared child, in declaration order
+     * @return the immutable child declaration tree
+     */
     public static ComponentTree of(Node... nodes) {
         Objects.requireNonNull(nodes, "nodes");
         for (Node node : nodes) {

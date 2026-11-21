@@ -33,8 +33,7 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
@@ -85,7 +84,7 @@ import java.util.function.UnaryOperator;
  * </ul>
  *
  * <p>Every gesture the application sends increments {@link Model#epoch()}, which is what lets a
- * reading that belongs to an older run be recognised and dropped. A reading of a run that was
+ * reading that belongs to an older run be recognized and dropped. A reading of a run that was
  * stopped, reset or replaced therefore cannot move the displayed time.</p>
  *
  * <h2>Formatting</h2>
@@ -117,7 +116,9 @@ import java.util.function.UnaryOperator;
  */
 public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg, Never> {
 
-    /** How often a running stopwatch is asked to repaint unless a definition says otherwise. */
+    /**
+     * How often a running stopwatch is asked to repaint unless a definition says otherwise.
+     */
     public static final Duration DEFAULT_TICK_PERIOD = Duration.ofMillis(50);
 
     /**
@@ -128,10 +129,14 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
      */
     public static final long UNSET_ORIGIN = Long.MIN_VALUE;
 
-    /** The default formatter: {@code hh:mm:ss.mmm}, with hours widening for a longer run. */
+    /**
+     * The default formatter: {@code hh:mm:ss.mmm}, with hours widening for a longer run.
+     */
     public static final Formatter CLOCK = Stopwatch::clock;
 
-    /** The scoped identity of a running stopwatch's tick source. */
+    /**
+     * The scoped identity of a running stopwatch's tick source.
+     */
     private static final SubscriptionId TICK = SubscriptionId.of("tick");
 
     private static final long MILLIS_PER_SECOND = 1_000L;
@@ -140,7 +145,9 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
 
     private static final long MILLIS_PER_HOUR = 3_600_000L;
 
-    /** How the elapsed time of a stopwatch is written. */
+    /**
+     * How the elapsed time of a stopwatch is written.
+     */
     @FunctionalInterface
     public interface Formatter {
 
@@ -162,7 +169,7 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
      *
      * <p>A missing tick period, formatter or style is the default one. A tick period that is zero,
      * negative or too large to express in nanoseconds is rejected here rather than at mount time,
-     * because it would be a schedule the runtime cannot honour.</p>
+     * because it would be a schedule the runtime cannot honor.</p>
      *
      * @param tickPeriod how often a running stopwatch repaints; null is
      *     {@link #DEFAULT_TICK_PERIOD}
@@ -171,7 +178,9 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
      */
     public record Config(Duration tickPeriod, Formatter formatter, Style style) {
 
-        /** Rejects an unusable tick period and substitutes the defaults. */
+        /**
+         * Rejects an unusable tick period and substitutes the defaults.
+         */
         public Config {
             tickPeriod = checkedTickPeriod(tickPeriod);
             formatter = formatter == null ? CLOCK : formatter;
@@ -254,7 +263,9 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
      */
     public record Model(boolean running, long epoch, long accumulatedNanos, long originNanos, long nowNanos) {
 
-        /** Clamps a negative accumulated total to zero, so a watch can never run backwards. */
+        /**
+         * Clamps a negative accumulated total to zero, so a watch can never run backwards.
+         */
         public Model {
             accumulatedNanos = Math.max(0L, accumulatedNanos);
         }
@@ -323,7 +334,9 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
         }
     }
 
-    /** One lifecycle gesture or one runtime time reading. */
+    /**
+     * One lifecycle gesture or one runtime time reading.
+     */
     public sealed interface Msg {
 
         /**
@@ -341,7 +354,9 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
          */
         record Stop() implements Msg {}
 
-        /** Stops a running stopwatch and starts a stopped one: the whole gesture one key carries. */
+        /**
+         * Stops a running stopwatch and starts a stopped one: the whole gesture one key carries.
+         */
         record Toggle() implements Msg {}
 
         /**
@@ -365,7 +380,9 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
         record Reading(long epoch, long nowNanos) implements Msg {}
     }
 
-    /** A reduction result. A stopwatch has no semantic outputs, so the intent is always absent. */
+    /**
+     * A reduction result. A stopwatch has no semantic outputs, so the intent is always absent.
+     */
     private record Result(Model state, Never intent) implements WidgetResult<Model, Never> {}
 
     private final Config config;
@@ -491,19 +508,21 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
         }
         // The interval is only a repaint cadence: the elapsed time is derived from the origin, so one
         // late tick lands on the right value instead of replaying the ticks it missed. The epoch is
-        // captured so a tick mapped before a stop or reset is recognisable afterwards.
+        // captured so a tick mapped before a stop or reset is recognizable afterward.
         long epoch = model.epoch();
         return Subscription.interval(TICK, config.tickPeriod(), time -> new Msg.Reading(epoch, time));
     }
 
     @Override
-    public View<Msg> view(Model model, ViewContext context) {
+    public Element<Msg> view(Model model, ViewContext context) {
         Objects.requireNonNull(model, "model");
         Objects.requireNonNull(context, "context");
-        return Views.sized(size -> Views.text(render(model, config, size.cols())));
+        return RenderedText.<Msg>of(cols -> render(model, config, cols));
     }
 
-    /** The timestamp an armed run waits for: a run with no origin asks for exactly one. */
+    /**
+     * The timestamp an armed run waits for: a run with no origin asks for exactly one.
+     */
     private static Command<Msg> request(Model state) {
         if (!state.armed()) {
             return Command.none();
@@ -512,7 +531,9 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
         return Command.monotonicTime(time -> new Msg.Reading(epoch, time));
     }
 
-    /** Applies one lifecycle gesture or one time reading. Never performs I/O. */
+    /**
+     * Applies one lifecycle gesture or one time reading. Never performs I/O.
+     */
     private Result reduce(Model state, Msg message) {
         return switch (message) {
             case Msg.Start start -> start(state);
@@ -523,7 +544,9 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
         };
     }
 
-    /** Begins a run, keeping the time already accumulated, or does nothing when one is live. */
+    /**
+     * Begins a run, keeping the time already accumulated, or does nothing when one is live.
+     */
     private static Result start(Model state) {
         if (state.running()) {
             return new Result(state, null);
@@ -532,7 +555,9 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
                 new Model(true, state.epoch() + 1L, state.accumulatedNanos(), UNSET_ORIGIN, state.nowNanos()), null);
     }
 
-    /** Folds the current run into the accumulated total and drops the origin. */
+    /**
+     * Folds the current run into the accumulated total and drops the origin.
+     */
     private static Result stop(Model state) {
         if (!state.running()) {
             return new Result(state, null);
@@ -543,17 +568,23 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
                 new Model(false, state.epoch() + 1L, state.elapsedNanos(), UNSET_ORIGIN, state.nowNanos()), null);
     }
 
-    /** The one-key gesture: stop while running, start while stopped. */
+    /**
+     * The one-key gesture: stop while running, start while stopped.
+     */
     private Result toggle(Model state) {
         return state.running() ? stop(state) : start(state);
     }
 
-    /** Zeroes the elapsed time under a new epoch, keeping whether the watch is running. */
+    /**
+     * Zeroes the elapsed time under a new epoch, keeping whether the watch is running.
+     */
     private static Result reset(Model state) {
         return new Result(new Model(state.running(), state.epoch() + 1L, 0L, UNSET_ORIGIN, state.nowNanos()), null);
     }
 
-    /** One time reading: names the origin, measures the distance from it, or is ignored as stale. */
+    /**
+     * One time reading: names the origin, measures the distance from it, or is ignored as stale.
+     */
     private static Result read(Model state, Msg.Reading reading) {
         if (!state.running() || reading.epoch() != state.epoch()) {
             // A stopped run has nothing to measure, and a reading from another run can neither name
@@ -574,7 +605,9 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
         return new Result(new Model(true, state.epoch(), state.accumulatedNanos(), state.originNanos(), now), null);
     }
 
-    /** An elapsed duration or total, saturated to what a monotonic reading can carry. */
+    /**
+     * An elapsed duration or total, saturated to what a monotonic reading can carry.
+     */
     private static long nanos(Duration duration) {
         try {
             return duration.toNanos();
@@ -583,7 +616,9 @@ public final class Stopwatch implements Component<Stopwatch.Model, Stopwatch.Msg
         }
     }
 
-    /** A repaint cadence the runtime can schedule. */
+    /**
+     * A repaint cadence the runtime can schedule.
+     */
     private static Duration checkedTickPeriod(Duration tickPeriod) {
         if (tickPeriod == null) {
             return DEFAULT_TICK_PERIOD;

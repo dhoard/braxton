@@ -33,6 +33,7 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
@@ -42,9 +43,8 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -88,14 +88,20 @@ import java.util.function.Consumer;
  */
 public final class InlineIoDemo {
 
-    /** The packages the installer works through, in order. */
+    /**
+     * The packages the installer works through, in order.
+     */
     public static final List<String> PACKAGES =
             List.of("parser", "lexer", "runtime", "renderer", "widgets", "examples");
 
-    /** How long one package takes to install, so the live region is visibly repainted between prints. */
+    /**
+     * How long one package takes to install, so the live region is visibly repainted between prints.
+     */
     public static final Duration INSTALL_DELAY = Duration.ofMillis(120);
 
-    /** The text every interactive status row starts with, which the terminal verifier waits for. */
+    /**
+     * The text every interactive status row starts with, which the terminal verifier waits for.
+     */
     public static final String STATUS_HEADER = "packages=6";
 
     private static final Style STATUS = Style.NONE.withBold();
@@ -109,27 +115,45 @@ public final class InlineIoDemo {
      * owned terminal, the process's piped stdin and stdout, or a pair of local fixtures.</p>
      */
     public enum Mode {
-        /** The owned terminal's normal screen, with durable lines above a live region. */
+        /**
+         * The owned terminal's normal screen, with durable lines above a live region.
+         */
         INLINE,
-        /** Piped stdin as application data, renderer disabled, stdout for output. */
+        /**
+         * Piped stdin as application data, renderer disabled, stdout for output.
+         */
         PIPE,
-        /** Local fixtures and a string writer, renderer disabled. */
+        /**
+         * Local fixtures and a string writer, renderer disabled.
+         */
         HEADLESS
     }
 
-    /** Every message the installer handles. */
+    /**
+     * Every message the installer handles.
+     */
     public sealed interface Msg {
 
-        /** Installs the next package. */
+        /**
+         * Installs the next package.
+         */
         record Install() implements Msg {}
 
-        /** Starts installing everything that is left, one package at a time. */
+        /**
+         * Starts installing everything that is left, one package at a time.
+         */
         record InstallAll() implements Msg {}
 
-        /** One package finished; its name is what the durable line prints. */
+        /**
+         * One package finished; its name is what the durable line prints.
+         *
+         * @param name the name to resolve
+         */
         record Installed(String name) implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -143,24 +167,38 @@ public final class InlineIoDemo {
      */
     public record Model(int installed, String phase, boolean automatic, int steps) {
 
-        /** Substitutes the starting values for anything missing. */
+        /**
+         * Substitutes the starting values for anything missing.
+         */
         public Model {
             phase = phase == null ? "idle" : phase;
             installed = Math.max(0, Math.min(installed, PACKAGES.size()));
             steps = Math.max(0, steps);
         }
 
-        /** The scene's starting state. */
+        /**
+         * The scene's starting state.
+         *
+         * @return the scene's starting state
+         */
         public static Model start() {
             return new Model(0, "idle", false, 0);
         }
 
-        /** The package being installed, or null when everything is done. */
+        /**
+         * The package being installed, or null when everything is done.
+         *
+         * @return the package being installed, or null when everything is done
+         */
         public String current() {
             return installed < PACKAGES.size() ? PACKAGES.get(installed) : null;
         }
 
-        /** Whether every package is installed. */
+        /**
+         * Whether every package is installed.
+         *
+         * @return {@code true} if every package is installed; otherwise {@code false}
+         */
         public boolean complete() {
             return installed >= PACKAGES.size();
         }
@@ -176,7 +214,11 @@ public final class InlineIoDemo {
         }
     }
 
-    /** The interactive scene's bindings. */
+    /**
+     * The interactive scene's bindings.
+     *
+     * @return the interactive scene's bindings
+     */
     public static KeyMap<Msg> defaultKeys() {
         return KeyMap.of(
                 KeyMap.group(
@@ -224,7 +266,12 @@ public final class InlineIoDemo {
         return "final installed=" + model.installed() + " phase=" + model.phase() + " steps=" + model.steps();
     }
 
-    /** One exit result as a token, without any terminal output. */
+    /**
+     * One exit result as a token, without any terminal output.
+     *
+     * @param result the completed operation result
+     * @return one exit result as a token, without any terminal output
+     */
     public static String describe(ExitResult result) {
         return result.kind() + "/" + result.status();
     }
@@ -233,7 +280,6 @@ public final class InlineIoDemo {
      * Runs the demo in the mode the arguments name.
      *
      * @param args the launch arguments; none means {@link Mode#INLINE}
-     * @return the process exit status
      */
     public static void main(String[] args) {
         ExitResult result = run(mode(args));
@@ -291,7 +337,9 @@ public final class InlineIoDemo {
         };
     }
 
-    /** The interactive session: the owned terminal's normal screen. */
+    /**
+     * The interactive session: the owned terminal's normal screen.
+     */
     private static ExitResult runInline() {
         RuntimeOptions options =
                 RuntimeOptions.defaults().withTerminal(TerminalOptions.DEFAULT.withAlternateScreen(false));
@@ -300,7 +348,9 @@ public final class InlineIoDemo {
         return result;
     }
 
-    /** A piped session: stdin is data, stdout is durable output, nothing is painted. */
+    /**
+     * A piped session: stdin is data, stdout is durable output, nothing is painted.
+     */
     private static ExitResult runPipe() {
         try (BufferedReader input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
             ProgramResult<StreamModel> result =
@@ -315,7 +365,9 @@ public final class InlineIoDemo {
         }
     }
 
-    /** A headless session: local fixtures and a string writer. */
+    /**
+     * A headless session: local fixtures and a string writer.
+     */
     private static ExitResult runHeadless() {
         StringWriter output = new StringWriter();
         Reader input = new StringReader(String.join("\n", List.of("alpha", "beta", "gamma")) + "\n");
@@ -353,6 +405,11 @@ public final class InlineIoDemo {
      */
     public static final class Scene implements Component<Model, Msg, Never> {
 
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
+
         private final KeyMap<Msg> keys = defaultKeys();
 
         @Override
@@ -374,25 +431,36 @@ public final class InlineIoDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
-            int width = context.viewport().cols();
-            return Views.onKeys(
-                    keys.bindings(),
-                    Views.focus(
-                            ElementId.of("inline"),
-                            true,
-                            keys.bindings(),
-                            Scene::type,
-                            Views.column(
-                                    Views.text(status(model), STATUS),
-                                    Views.text(live(model), STATUS),
-                                    Views.gap(1),
-                                    Views.text("braxton inline output packages=6", STATUS),
-                                    Views.gap(1),
-                                    Help.view(keys, false, width))));
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
         }
 
-        /** Types nothing: the scene's screen is a status board, not a field. */
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys.bindings();
+        }
+
+        /**
+         * The scene as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
+            int width = context.viewport().cols();
+            return Elements.column(
+                    Elements.text(status(model), STATUS),
+                    Elements.text(live(model), STATUS),
+                    Elements.spacer(1),
+                    Elements.text("braxton inline output packages=6", STATUS),
+                    Elements.spacer(1),
+                    Help.element(keys, Help.Config.defaults(), false, width));
+        }
+
+        /**
+         * Types nothing: the scene's screen is a status board, not a field.
+         */
         private static Optional<Msg> type(InputEvent event) {
             return Optional.empty();
         }
@@ -436,16 +504,27 @@ public final class InlineIoDemo {
         }
     }
 
-    /** Every message the streaming scene handles. */
+    /**
+     * Every message the streaming scene handles.
+     */
     public sealed interface StreamMsg {
 
-        /** One line of application data arrived. */
+        /**
+         * One line of application data arrived.
+         *
+         * @param number the input line ordinal
+         * @param text the line of application data
+         */
         record Line(int number, String text) implements StreamMsg {}
 
-        /** The input ended. */
+        /**
+         * The input ended.
+         */
         record Eof() implements StreamMsg {}
 
-        /** Asks the session to end. */
+        /**
+         * Asks the session to end.
+         */
         record Quit() implements StreamMsg {}
     }
 
@@ -457,12 +536,18 @@ public final class InlineIoDemo {
      */
     public record StreamModel(List<String> lines, boolean finished) {
 
-        /** Substitutes the starting values for anything missing. */
+        /**
+         * Substitutes the starting values for anything missing.
+         */
         public StreamModel {
             lines = lines == null ? List.of() : List.copyOf(lines);
         }
 
-        /** The scene's starting state. */
+        /**
+         * The scene's starting state.
+         *
+         * @return the scene's starting state
+         */
         public static StreamModel start() {
             return new StreamModel(List.of(), false);
         }
@@ -540,10 +625,10 @@ public final class InlineIoDemo {
         }
 
         @Override
-        public View<StreamMsg> view(StreamModel model, ViewContext context) {
+        public Element<StreamMsg> view(StreamModel model, ViewContext context) {
             // A renderer-disabled session never paints this; the view still states what the model is,
             // because a view is a pure function of it and nothing here may depend on being drawn.
-            return Views.text(streamSummary(model), STATUS);
+            return Elements.text(streamSummary(model), STATUS);
         }
 
         /**

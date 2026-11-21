@@ -28,7 +28,9 @@ import io.github.dhoard.braxton.layout.Size;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Deterministic replay selection and the offline fallback. */
+/**
+ * Deterministic replay selection and the offline fallback.
+ */
 class HarnessMockTest {
 
     private static Harness.Model state(int replayIndex, List<HarnessTranscript.HarnessTurn> turns) {

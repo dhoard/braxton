@@ -41,6 +41,7 @@ import java.util.Objects;
  * is a different gesture, so an action must list each form it accepts. That keeps a map able to bind
  * {@code t} and {@code alt+t} to different actions without one shadowing the other.</p>
  *
+ * @param <Msg> the message type of the owning application or component
  * @param id the stable identity of the action within its map; never blank
  * @param aliases the gestures that trigger it, in display order
  * @param label the display label help shows for the aliases; blank means the aliases joined by "/"
@@ -48,7 +49,6 @@ import java.util.Objects;
  * @param message the message value the action produces; never null
  * @param compact whether compact help includes the action
  * @param enabled whether the action matches gestures and appears in help
- * @param <Msg> the message type of the owning application or component
  */
 public record KeyAction<Msg>(
         String id, List<Key> aliases, String label, String description, Msg message, boolean compact, boolean enabled) {
@@ -71,12 +71,12 @@ public record KeyAction<Msg>(
     /**
      * An enabled action shown in compact help, from parsed key specs.
      *
+     * @param <Msg> the message type
      * @param id the stable identity within the map
      * @param message the message the action produces
      * @param label the display label, or blank to derive it from the aliases
      * @param description the one-line description, or null for none
      * @param aliasSpecs the gestures, in {@link Key#parse} form
-     * @param <Msg> the message type
      * @return the action
      */
     public static <Msg> KeyAction<Msg> of(
@@ -87,12 +87,12 @@ public record KeyAction<Msg>(
     /**
      * An enabled action shown in compact help, from keys the caller already holds.
      *
+     * @param <Msg> the message type
      * @param id the stable identity within the map
      * @param message the message the action produces
      * @param label the display label, or blank to derive it from the aliases
      * @param description the one-line description, or null for none
      * @param aliases the gestures
-     * @param <Msg> the message type
      * @return the action
      */
     public static <Msg> KeyAction<Msg> of(String id, Msg message, String label, String description, List<Key> aliases) {

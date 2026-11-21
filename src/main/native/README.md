@@ -1,9 +1,18 @@
 # Native terminal service
 
 Braxton's native terminal service is original project code under the root MIT license.
-`terminal.c` implements only the POSIX operations needed by the MVU runtime. It is not a
+`terminal.c` implements the POSIX operations shared by the MVU runtime, low-level terminal API,
+and line editor. It is not a
 translation of another terminal library. Java calls an opaque context through FFM; the C
 compiler and target SDK supply platform layouts and constants.
+
+`NativeTerminal` owns Java lifecycle locking, handoff states, bounded output and error reporting.
+`FfmTerminalTransport` owns the opaque native context and its FFM arenas through the private
+`TerminalTransport` boundary. Default tests use an owned fake transport; they neither initialize
+the FFM library holder nor request native access. The opt-in PTY probes execute the packaged C ABI.
+Terminal capabilities are validated before acquiring the native context. Suspend registration uses
+temporary confined buffers because `bt_set_suspend_bytes` copies them before returning; changing
+presentation modes does not accumulate session-lifetime FFM allocations. Native ABI 5 is unchanged.
 
 The implementation was written against Braxton's existing runtime/parser tests and these
 public interface specifications, without consulting third-party implementation source:
@@ -53,8 +62,8 @@ The Java cursor presenter (`internal/render/CursorPresenter.java` and the cursor
 - [xterm control sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html) — `CSI Ps SP q`
   Set Cursor Style (DECSCUSR), including xterm's steady and bar parameters (`Ps` 2, 4 and 6) beyond
   the VT520 table; `CSI ? 25 h`/`l` cursor visibility; `CSI Ps ; Ps H` absolute positioning; and the
-  dynamic-colour controls `OSC 12 ; Pt ST` (text cursor colour, specified as for `XParseColor`, which
-  is why the emitted form is `rgb:rr/gg/bb`) and `OSC 112 ST` (reset text cursor colour). Revision
+  dynamic-color controls `OSC 12 ; Pt ST` (text cursor color, specified as for `XParseColor`, which
+  is why the emitted form is `rgb:rr/gg/bb`) and `OSC 112 ST` (reset text cursor color). Revision
   consulted 2026-11-16.
 
 The Java terminal-query engine (`internal/runtime/TerminalQueries.java`) and the reply framing in
@@ -64,15 +73,15 @@ The Java terminal-query engine (`internal/runtime/TerminalQueries.java`) and the
   Report (`CSI 6 n`) and its `CSI Pl ; Pc R` answer; DECRQM (`CSI ? Ps $ p`) and its
   `CSI ? Ps ; Pm $ y` answer with the documented values 0-4; XTVERSION (`CSI > Ps q`) and its
   `DCS > | text ST` answer; XTGETTCAP (`DCS + q Pt ST`) and its `DCS 1 + r Pt ST` /
-  `DCS 0 + r Pt ST` answers, where `Pt` is `hex name [= hex value]`; and the dynamic-colour reports
-  `OSC 10`, `OSC 11` and `OSC 12`, whose answer is an X11 colour specification or `?`. Strings are
+  `DCS 0 + r Pt ST` answers, where `Pt` is `hex name [= hex value]`; and the dynamic-color reports
+  `OSC 10`, `OSC 11` and `OSC 12`, whose answer is an X11 color specification or `?`. Strings are
   terminated by `ST` or `BEL`; `CAN` and `SUB` cancel them. Consulted 2026-11-16; the page carries
   no stable revision marker, so the date is the record.
 - [X11 `XParseColor`](https://www.x.org/releases/X11R7.7/doc/man/man3/XParseColor.3.xhtml) — the
   `rgb:<red>/<green>/<blue>` form with one to four hexadecimal digits per channel, and the `#RGB`,
   `#RRGGBB` and `#RRRRGGGGBBBB` forms. A short channel is scaled to eight bits.
 - [no-color.org](https://no-color.org/) — `NO_COLOR`, when present and not an empty string, disables
-  colour output whatever its value.
+  color output whatever its value.
 
 The Java terminal presenter (`internal/runtime/TerminalPresenter.java` and the presentation
 sequences in `AnsiEncoder`) and the program-status query are documented against these public
@@ -80,7 +89,7 @@ specifications:
 
 - [xterm control sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html) — `OSC 2 ; Pt ST`
   (window title); XTPUSHTITLE/XTPOPTITLE (`CSI 22 ; Ps t` and `CSI 23 ; Ps t`) for saving and
-  restoring the title a session replaced; the dynamic-colour controls `OSC 10`, `OSC 11` and
+  restoring the title a session replaced; the dynamic-color controls `OSC 10`, `OSC 11` and
   `OSC 12` and their reset forms `OSC 110`, `OSC 111` and `OSC 112`; and the taskbar progress form
   `OSC 9 ; 4 ; state ; value`. Revision consulted 2026-11-16; the page carries no stable revision
   marker, so the date is the record.
@@ -97,7 +106,7 @@ specifications:
 The query allowlist is deliberately closed: `RGB`, `Tc`, `TN`, `Co` and `Ms`. Every other termcap
 name is refused by `TerminalQuery.Termcap`, so no reply can be interpreted for a capability whose
 meaning this project has not decided. `RGB` and `Tc` are the two boolean capabilities that mean
-"24-bit colour"; a terminal that answers either one widens the session's colour profile.
+"24-bit color"; a terminal that answers either one widens the session's color profile.
 
 The sibling Bubble Tea project's README was consulted for general MVU behavior and its
 `go.mod` for dependency boundaries. Its implementation files were not used. Braxton retains
@@ -105,8 +114,14 @@ its own typed component tree, views, routing, effects, subscriptions and runtime
 This provenance record describes this replacement; it does not certify a formally separated
 clean-room process or retrospectively establish provenance for all existing project files.
 
-The ABI version is 3. ABI 2 replaced `bt_write` with `bt_write_some`; ABI 3 added
-`bt_release`, `bt_reacquire`, `bt_foreground` and `bt_suspend`. `bt_release` restores the input
+The ABI version is 5. ABI 2 replaced `bt_write` with `bt_write_some`; ABI 3 added
+`bt_release`, `bt_reacquire`, `bt_foreground` and `bt_suspend`; ABI 4 reads input from the
+controlling terminal and uses `select` for `/dev/tty` readiness on macOS; ABI 5 added
+`bt_set_suspend_bytes` and `bt_resume_epoch` for external `SIGTSTP`/`SIGCONT`. The `SIGTSTP`
+handler is async-signal-safe: it only writes one byte to a self-pipe. A helper thread restores the
+original termios, writes the preregistered restore bytes, stops the process group, waits for the
+`SIGCONT` notification, then re-enters raw mode, writes the preregistered resume bytes and bumps the
+resume epoch the Java runtime polls for a full repaint. `bt_release` restores the input
 configuration `bt_raw` changed and marks the context released: `bt_read` then reports no input and
 `bt_write_some` fails with `EBUSY`, because the terminal belongs to a child process or to the shell.
 Releasing twice is defined, and `bt_reacquire` re-enters raw mode. `bt_foreground` answers 1 when the
@@ -120,16 +135,20 @@ previous `SIGCONT` action; the waiting side polls it, so the notification is not
 thread the kernel chooses. The wait is bounded in running time, not wall time: a job stopped for an
 hour still resumes without spending the bound. `bt_close` is defined in every state: a released
 context is already in the user's configuration, so only its descriptors and the context are given
-back. The ABI 2 behaviour below is unchanged. `bt_open` duplicates the attached input descriptor and reopens the
+back. The ABI 2 behavior below is unchanged. `bt_open` opens `/dev/tty` for input and reopens the
 output terminal with a private nonblocking open file description, snapshots input terminal
-state and returns an opaque context. The reopened output is checked against the original
+state and returns an opaque context. A supplied input descriptor is used only when it is itself
+a TTY and no controlling terminal is available; redirected stdin is never consumed by the session,
+so the application can still read its piped data. If neither source is a terminal, `bt_open` fails
+with `ENXIO` or `ENOTTY`. On macOS readiness uses `select` because `poll` on `/dev/tty` is not
+reliable there; Linux uses `poll`. The reopened output is checked against the original
 character device's device/inode identity; symlinks are rejected. The terminal device path must
 be accessible for reopening. Failure happens before raw mode or application output modes are
 entered. Unlike setting `O_NONBLOCK` on a duplicate, reopening does not change the caller's
-stdout flags (duplicates share those flags). `bt_raw` applies raw mode. `bt_read` polls for a
+stdout flags (duplicates share those flags). `bt_raw` applies raw mode. `bt_read` waits for a
 bounded interval and reads into a caller-owned buffer. `bt_write_some` makes one bounded attempt: it returns the number of bytes the terminal
 accepted, `0` when nothing was accepted within the caller's timeout (or the wait was interrupted),
-or `-errno` on failure. `POLLHUP`/`POLLERR` map to `EIO` and `POLLNVAL` to `EBADF`. Retry and stall
+or `-errno` on failure. A hangup or invalid descriptor maps to `EIO` or `EBADF`. Retry and stall
 policy live in Java (`OutputDrain`), which knows how much progress has been made and whether
 shutdown has begun. Attempts wait at most 100 ms. Output fails only when the terminal accepts no
 bytes at all for the stall limit: 30 seconds while running, and the shorter of that and one second
@@ -159,12 +178,14 @@ The script emits `version.txt` beside the binary, and the same Maven execution r
 SHA-256 as `libbraxton.so.sha256` (`libbraxton.dylib.sha256` on macOS). Shaded consumers must retain
 the binary and both metadata files. It requires
 a C11 compiler (`CC` selects the compiler executable), Linux libc development headers or the
-macOS ARM64 SDK. Warnings are errors. Darwin gates `SIGWINCH` behind `_DARWIN_C_SOURCE` even at
+macOS SDK for the host architecture (ARM64 or Intel). Warnings are errors. Darwin gates `SIGWINCH` behind `_DARWIN_C_SOURCE` even at
 `_POSIX_C_SOURCE 200809L`, so `terminal.c` defines that macro before its first system include;
 the guard is inert on Linux. No JNI headers, downloaded native libraries, generated
 bindings or platform structure offsets are needed. The resulting jar contains the current
 host binary only. Build independently on each target; do not publish one host jar as universal.
-Linux x86_64 verification does not prove macOS ARM64 compilation or execution.
+Linux x86_64 verification does not prove compilation or execution on macOS ARM64 or Intel macOS.
+The portability gate cross-compiles both macOS architectures; native execution still needs a host
+of each architecture.
 
 Native code must be exercised with owned PTYs through `tools/terminal/verify_terminal.py`.
 The default Maven tests use owned streams, with native access disabled.
@@ -306,7 +327,7 @@ one invocation, including the showcase's catalog mount/return and composed works
 showcase's packaged launch is verified with the library's own runtime dependencies beside the jar
 and no example-only jar on the classpath.
 
-Two showcase behaviours are deliberate and are not platform claims: the catalog asks for
+Two showcase behaviors are deliberate and are not platform claims: the catalog asks for
 `MouseMode.CELL_MOTION` for every mounted scene, and phase 23's durable lines are a defined no-op
 while the showcase owns the alternate screen (phase `23`'s own scenario is where they are
 verified). macOS ARM64 and Linux ARM64 have not been re-run for this phase; the phase's own PTY
@@ -321,3 +342,43 @@ and a congested writer. The Java probe uses an explicit PTY/parent handshake rat
 sleep. Run `python3 tools/terminal/verify_native_lifecycle.py target/braxton-0.1.0.jar`.
 The earlier macOS evidence above predates this change; the new output-open/deadline behavior
 has **not** been verified on macOS ARM64 or Linux ARM64.
+
+
+## Image protocol specifications
+
+The Java `image` package encodes image output using these protocol specifications; it does not
+copy a terminal's implementation or add native dependencies:
+
+- [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/): direct RGBA data,
+  base64 payloads in chunks of at most 4,096 characters, transmit-and-display and quiet replies.
+- [iTerm2 inline images](https://iterm2.com/documentation-images.html): OSC 1337 inline PNG data,
+  pixel dimensions and an explicit inline flag, without file-transfer names or paths.
+- [DEC VT330/340 graphics manual, chapter 14](https://vt100.net/docs/vt3xx-gp/chapter14.html):
+  six-pixel vertical groups, raster attributes, RGB color definitions, repeats and band movement.
+  Braxton's modern Sixel output uses a 216-color cube.
+- [XTerm control sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html): primary
+  device-attributes feature 4 identifies Sixel support.
+
+`ImageOutputProbe` and the opt-in pyte verifier check the low-level session's half-block pixels,
+alpha compositing and NO_COLOR behavior. Native graphics payloads are independently decoded by
+TTY-free tests; pyte does not verify actual Kitty, iTerm2 or Sixel raster presentation.
+
+## Competitive refactor verification (2026-11-20)
+
+The current Java lifecycle facade and private FFM transport were exercised on Linux x86_64
+with the packaged native ABI 5. `./build.sh` passes 2,642 default tests without a test-JVM native
+access flag or TTY. Total coverage is 92.12% line and 81.12% branch; the terminal-internal package
+has 81.53% line coverage, now enforced at 80% alongside the aggregate floors.
+
+`verify_terminal.py --parity-all --repeat 10 --pending-escape --harness` reports 106 passes and
+zero failures. `verify_native_lifecycle.py` passes slow/frozen output, raw input, size, concurrent
+close, resize-handler ownership, restoration, release/reacquire, Java handoff, job control,
+redirected stdin and external stop checks. `verify_native_extraction.py` passes packaged fallback,
+concurrent first starts, version coexistence and temporary cleanup. Its loader probe now targets
+the private holder in `FfmTerminalTransport`; no process terminal is opened by that probe.
+
+`tools/verify_portability.sh` compiles Linux x86_64/ARM64 and macOS ARM64/x86_64 with warnings as
+errors and finds no forbidden platform APIs. These results establish current cross-compilation,
+not runtime verification on macOS or Linux ARM64. The older macOS ARM64 evidence above predates
+this refactor. Physical graphics presentation in Kitty, iTerm2 and Sixel terminals remains a
+separate visual check; automated image tests decode and inspect their payloads.

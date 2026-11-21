@@ -26,6 +26,7 @@ import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -39,9 +40,9 @@ import io.github.dhoard.braxton.mvu.OutputRoute;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Countdown;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -74,7 +75,9 @@ import java.util.List;
  */
 public final class CountdownDemo {
 
-    /** The countdown a user of this demo gets when no length is given. */
+    /**
+     * The countdown a user of this demo gets when no length is given.
+     */
     public static final Duration DEFAULT_DURATION = Duration.ofSeconds(90);
 
     /**
@@ -86,13 +89,19 @@ public final class CountdownDemo {
      */
     public static final Duration TEST_DURATION = Duration.ofSeconds(5);
 
-    /** How much one duration gesture adds or removes. */
+    /**
+     * How much one duration gesture adds or removes.
+     */
     public static final Duration ADJUSTMENT = Duration.ofSeconds(15);
 
-    /** The shortest duration the scene allows. */
+    /**
+     * The shortest duration the scene allows.
+     */
     public static final Duration MIN_DURATION = Duration.ofSeconds(5);
 
-    /** The longest duration the scene allows; an hour would already paint a third field. */
+    /**
+     * The longest duration the scene allows; an hour would already paint a third field.
+     */
     public static final Duration MAX_DURATION = Duration.ofMinutes(10);
 
     private static final Style STATUS = Style.NONE.withBold();
@@ -109,7 +118,9 @@ public final class CountdownDemo {
      */
     public record Model(Countdown.Model countdown, Duration duration, int timeouts, String last) {
 
-        /** Substitutes an idle countdown, the default duration and no action for missing values. */
+        /**
+         * Substitutes an idle countdown, the default duration and no action for missing values.
+         */
         public Model {
             duration = clamp(duration == null ? DEFAULT_DURATION : duration);
             countdown = countdown == null ? Countdown.Model.stopped(duration) : countdown;
@@ -152,7 +163,9 @@ public final class CountdownDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -169,10 +182,14 @@ public final class CountdownDemo {
          */
         record Timed(Countdown.Output value) implements Msg {}
 
-        /** Starts a run of the configured duration from the beginning. */
+        /**
+         * Starts a run of the configured duration from the beginning.
+         */
         record Start() implements Msg {}
 
-        /** Pauses a running countdown, resumes a paused one, or starts a finished one over. */
+        /**
+         * Pauses a running countdown, resumes a paused one, or starts a finished one over.
+         */
         record Toggle() implements Msg {}
 
         /**
@@ -182,10 +199,14 @@ public final class CountdownDemo {
          */
         record Adjust(long seconds) implements Msg {}
 
-        /** Resets to the configured duration, stopped. */
+        /**
+         * Resets to the configured duration, stopped.
+         */
         record Reset() implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -213,7 +234,11 @@ public final class CountdownDemo {
                 KeyMap.group("Scene", KeyAction.<Msg>of("quit", new Msg.Quit(), "esc", "quit", "escape", "ctrl+c")));
     }
 
-    /** Runs the demo at its default duration against the owned terminal. */
+    /**
+     * Runs the demo at its default duration against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return run(DEFAULT_DURATION);
     }
@@ -255,7 +280,9 @@ public final class CountdownDemo {
         System.exit(result.status());
     }
 
-    /** Reports how to run the demo and ends the process with a usage status. */
+    /**
+     * Reports how to run the demo and ends the process with a usage status.
+     */
     private static void usage() {
         System.err.println("usage: CountdownDemo [seconds]");
         System.exit(2);
@@ -278,7 +305,9 @@ public final class CountdownDemo {
         return value;
     }
 
-    /** One mounted countdown, its status rows and one help line. */
+    /**
+     * One mounted countdown, its status rows and one help line.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
 
         private final KeyMap<Msg> keys = defaultKeys();
@@ -314,7 +343,9 @@ public final class CountdownDemo {
             };
         }
 
-        /** The countdown declares its own interval, and only while it runs. */
+        /**
+         * The countdown declares its own interval, and only while it runs.
+         */
         @Override
         public Subscription<Msg> subscriptions(Model model) {
             return mount(model).subscriptions(model);
@@ -328,25 +359,41 @@ public final class CountdownDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
+        }
+
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys.bindings();
+        }
+
+        /**
+         * The scene's rows as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
             int cols = context.viewport().cols();
-            List<View<Msg>> rows = new ArrayList<>(6);
+            List<Element<Msg>> rows = new ArrayList<>(6);
             // Status rows are one row each however narrow the terminal is: a wrapped diagnostic would
             // push the painted countdown and the help down and move what a verifier can assert.
-            rows.add(Views.fixed(1, Views.text(status(model), STATUS)));
-            rows.add(Views.fixed(1, Views.text(policy(model), STATUS)));
-            rows.add(Views.gap(1));
+            rows.add(Elements.fixed(1, Elements.text(status(model), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(policy(model), STATUS)));
+            rows.add(Elements.spacer(1));
             // The painted time is the mounted component's own view, so what a user sees is what the
             // widget renders rather than a second copy of its formatter.
-            rows.add(Views.fixed(
+            rows.add(Elements.fixed(
                     1,
-                    Views.row(
-                            Views.text("remaining  "),
+                    Elements.row(
+                            Elements.text("remaining  "),
                             mount(model).view(model, context),
-                            Views.text(model.expired() ? "   time is up" : ""))));
-            rows.add(Views.gap(1));
-            rows.add(Help.view(keys, false, cols));
-            return Views.onKeys(keys.bindings(), Views.column(rows));
+                            Elements.text(model.expired() ? "   time is up" : ""))));
+            rows.add(Elements.spacer(1));
+            rows.add(Help.element(keys, Help.Config.defaults(), false, cols));
+            return Elements.column(rows);
         }
 
         /**
@@ -390,7 +437,9 @@ public final class CountdownDemo {
             };
         }
 
-        /** Changes the configured duration and resets the countdown to it. */
+        /**
+         * Changes the configured duration and resets the countdown to it.
+         */
         private Update<Model, Msg, Never> adjust(Model model, Duration delta) {
             Duration next = clamp(model.duration().plus(delta));
             if (next.equals(model.duration())) {
@@ -404,7 +453,9 @@ public final class CountdownDemo {
                     reset.model().withLast("duration-" + next.toSeconds()), reset.command(), reset.outputs());
         }
 
-        /** What the toggle gesture did, read from the state the gesture saw. */
+        /**
+         * What the toggle gesture did, read from the state the gesture saw.
+         */
         private static String toggleWord(Model model) {
             Countdown.Model countdown = model.countdown();
             if (countdown.running()) {
@@ -421,7 +472,7 @@ public final class CountdownDemo {
          * <p>The state word is derived from the widget's own facts rather than stored beside them, so
          * it cannot disagree with them: a running run is {@code running}, a run with nothing left is
          * {@code expired}, and a stopped run is {@code idle} before its first start and {@code
-         * paused} afterwards.</p>
+         * paused} afterward.</p>
          */
         private static String status(Model model) {
             Countdown.Model countdown = model.countdown();
@@ -431,7 +482,9 @@ public final class CountdownDemo {
                     + " timeouts=" + model.timeouts();
         }
 
-        /** One state word for the countdown's own facts. */
+        /**
+         * One state word for the countdown's own facts.
+         */
         private static String stateWord(Countdown.Model countdown) {
             if (countdown.running()) {
                 return "running";
@@ -442,7 +495,9 @@ public final class CountdownDemo {
             return countdown.epoch() == 0L ? "idle" : "paused";
         }
 
-        /** The policy row: the duration and cadence the scene chose, and what it last did. */
+        /**
+         * The policy row: the duration and cadence the scene chose, and what it last did.
+         */
         private static String policy(Model model) {
             return "duration=" + Countdown.clock(model.duration())
                     + " tick=" + model.config().tickPeriod().toMillis() + "ms"

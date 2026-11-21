@@ -27,7 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** Concatenation is associative, and line splitting round-trips the plain text. */
+/**
+ * Concatenation is associative, and line splitting round-trips the plain text.
+ */
 class StyledTextPropertyTest {
 
     @Test

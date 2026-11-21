@@ -22,13 +22,13 @@
 
 package examples.harness.ai;
 
-import io.github.dhoard.braxton.app.TerminalCapabilities;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
+import io.github.dhoard.braxton.terminal.Capabilities;
 import io.github.dhoard.braxton.widget.Editor;
 import java.io.IOException;
 import java.io.StringReader;
@@ -97,7 +97,7 @@ class HarnessPropertyTest {
         List<String> failures = new ArrayList<>();
         for (int iteration = 0; iteration < 300; iteration++) {
             Harness program = new Harness(HarnessPropertyTest::transcript, "/tmp/project", List.of("warning"));
-            Harness.Model state = program.init(new InitContext(new Viewport(12, 40), TerminalCapabilities.PLAIN))
+            Harness.Model state = program.init(new InitContext(new Viewport(12, 40), Capabilities.PLAIN))
                     .model();
             for (int step = 0; step < 40; step++) {
                 Harness.Msg message = randomMessage(random);

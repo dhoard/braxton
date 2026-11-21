@@ -32,14 +32,21 @@ import java.util.Objects;
  * <p>The parent constructs its aggregate model from {@link #model()} before returning these
  * effects to the runtime, so no effect can observe a model that does not exist yet.</p>
  *
- * @param model the child's initialized model
- * @param command the child's command, scoped to the mount path
- * @param outputs the outputs the mount routed upward to the parent
  * @param <M> the child model type
  * @param <Msg> the parent message type
  * @param <Out> the parent output type
+ * @param model the child's initialized model
+ * @param command the child's command, scoped to the mount path
+ * @param outputs the outputs the mount routed upward to the parent
  */
 public record Initialization<M, Msg, Out>(M model, Command<Msg> command, List<Out> outputs) {
+    /**
+     * Creates a {@code Initialization} value.
+     *
+     * @param model the child's initialized model
+     * @param command the child's command, scoped to the mount path
+     * @param outputs the outputs the mount routed upward to the parent
+     */
     public Initialization {
         Objects.requireNonNull(model, "model");
         Objects.requireNonNull(command, "command");

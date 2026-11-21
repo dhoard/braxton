@@ -27,13 +27,12 @@ import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A block quote: a coloured bar, the quoted content, and an optional background.
+ * A block quote: a colored bar, the quoted content, and an optional background.
  *
  * <p>The bar is a one-line prefix on every quoted line, so a line break in it becomes a single
  * space instead of splitting the line into extra rows.</p>
@@ -47,6 +46,11 @@ import java.util.List;
  * from its own measurement leaves such a row a column short of the block or a column past it.</p>
  */
 public final class Quote {
+
+    /**
+     * Creates the quote with its default state.
+     */
+    public Quote() {}
 
     private final List<StyledText> lines = new ArrayList<>();
     private Style borderStyle = Style.NONE;
@@ -86,9 +90,9 @@ public final class Quote {
     }
 
     /**
-     * The same quote with a different bar colour.
+     * The same quote with a different bar color.
      *
-     * @param color the bar colour
+     * @param color the bar color
      * @return this builder
      */
     public Quote border(Color color) {
@@ -97,9 +101,9 @@ public final class Quote {
     }
 
     /**
-     * The same quote with a different background colour.
+     * The same quote with a different background color.
      *
-     * @param color the background colour
+     * @param color the background color
      * @return this builder
      */
     public Quote background(Color color) {
@@ -158,7 +162,9 @@ public final class Quote {
         return out;
     }
 
-    /** Applies the quote background to every span, keeping each span's own styling and link. */
+    /**
+     * Applies the quote background to every span, keeping each span's own styling and link.
+     */
     private static StyledText restyle(StyledText line, Style background) {
         StyledText body = StyledText.empty();
         for (StyledText.Span span : line.spans()) {
@@ -168,11 +174,12 @@ public final class Quote {
     }
 
     /**
-     * A one-element view of the rendered quote.
+     * The quote as a leaf of an element tree.
      *
-     * @return a text view holding {@link #render()}
+     * @param <Msg> the message type of the tree
+     * @return the element
      */
-    public View<Object> view() {
-        return Views.text(render());
+    public <Msg> Element<Msg> element() {
+        return RenderedText.of(cols -> render());
     }
 }

@@ -30,6 +30,7 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -42,14 +43,14 @@ import io.github.dhoard.braxton.style.ColorProfile;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Phase 18 parity demo: terminal queries, the facts they report, and colour profiles.
+ * Phase 18 parity demo: terminal queries, the facts they report, and color profiles.
  *
  * <p>Every query is asked on request, never at startup, and each answer is painted on a status row
  * exactly as the terminal gave it - including the answers that are not facts. A terminal that does not
@@ -59,13 +60,13 @@ import java.util.List;
  *
  * <ul>
  *   <li>{@code c} asks where the cursor is, {@code i} which terminal is attached, {@code m} whether
- *       bracketed paste is set, and {@code t} whether the terminal claims 24-bit colour.</li>
- *   <li>{@code b}, {@code f} and {@code k} ask for the background, foreground and cursor colours.
+ *       bracketed paste is set, and {@code t} whether the terminal claims 24-bit color.</li>
+ *   <li>{@code b}, {@code f} and {@code k} ask for the background, foreground and cursor colors.
  *       The background is also the session's theme, so it moves the {@code theme=} field.</li>
- *   <li>{@code p} reports the colour profile in force. It is a session fact, not a terminal
+ *   <li>{@code p} reports the color profile in force. It is a session fact, not a terminal
  *       question, so it never reaches the terminal and never times out.</li>
- *   <li>{@code 1} to {@code 4} switch the profile the runtime paints with: none, 16 colours, 256
- *       colours and truecolor. The sample row is styled text, so switching repaints it in the
+ *   <li>{@code 1} to {@code 4} switch the profile the runtime paints with: none, 16 colors, 256
+ *       colors and truecolor. The sample row is styled text, so switching repaints it in the
  *       profile's own SGR and a verifier can read the difference out of the transcript - exactly the
  *       switch the phase asks for, with no escape sequence in any content string.</li>
  *   <li>{@code a} asks every terminal question at once, which is where a terminal that answers some
@@ -79,22 +80,34 @@ import java.util.List;
  */
 public final class TerminalQueryDemo {
 
-    /** The bracketed-paste mode number, the one mode this demo reports on. */
+    /**
+     * The bracketed-paste mode number, the one mode this demo reports on.
+     */
     public static final int BRACKETED_PASTE_MODE = 2004;
 
-    /** The status row carrying the colour profile and the sample's theme. */
+    /**
+     * The status row carrying the color profile and the sample's theme.
+     */
     public static final int PROFILE_ROW = 0;
 
-    /** The status row carrying the three reported colours. */
+    /**
+     * The status row carrying the three reported colors.
+     */
     public static final int COLOR_ROW = 1;
 
-    /** The status row carrying the terminal's identity, the cursor and the terminal's claims. */
+    /**
+     * The status row carrying the terminal's identity, the cursor and the terminal's claims.
+     */
     public static final int FACTS_ROW = 2;
 
-    /** The status row carrying the query tally and the last event. */
+    /**
+     * The status row carrying the query tally and the last event.
+     */
     public static final int TALLY_ROW = 3;
 
-    /** The styled sample row, which is the row a profile change repaints. */
+    /**
+     * The styled sample row, which is the row a profile change repaints.
+     */
     public static final int SAMPLE_ROW = 4;
 
     private static final Style STATUS = Style.NONE.withBold();
@@ -103,7 +116,9 @@ public final class TerminalQueryDemo {
 
     private TerminalQueryDemo() {}
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -113,12 +128,19 @@ public final class TerminalQueryDemo {
          */
         record Ask(TerminalQuery query) implements Msg {
 
+            /**
+             * Creates a {@code Ask} value.
+             *
+             * @param query the question to ask
+             */
             public Ask {
                 java.util.Objects.requireNonNull(query, "query");
             }
         }
 
-        /** A key asked every terminal question at once. */
+        /**
+         * A key asked every terminal question at once.
+         */
         record AskAll() implements Msg {}
 
         /**
@@ -128,6 +150,11 @@ public final class TerminalQueryDemo {
          */
         record Profile(ColorProfile profile) implements Msg {
 
+            /**
+             * Creates a {@code Profile} value.
+             *
+             * @param profile the profile to render with
+             */
             public Profile {
                 java.util.Objects.requireNonNull(profile, "profile");
             }
@@ -148,7 +175,9 @@ public final class TerminalQueryDemo {
          */
         record Facts(TerminalFacts facts) implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -159,9 +188,9 @@ public final class TerminalQueryDemo {
      * @param cursor the reported cursor cell, or {@link #UNKNOWN}
      * @param paste the reported bracketed-paste setting, or null when it has not been reported
      * @param capability the reported {@code Tc} capability, or null when it has not been reported
-     * @param background the reported background colour, or null
-     * @param foreground the reported foreground colour, or null
-     * @param caret the reported cursor colour, or null
+     * @param background the reported background color, or null
+     * @param foreground the reported foreground color, or null
+     * @param caret the reported cursor color, or null
      * @param facts the session facts the runtime published
      * @param asked how many queries the scene has asked
      * @param answered how many were answered with a fact
@@ -182,7 +211,9 @@ public final class TerminalQueryDemo {
             int failed,
             String last) {
 
-        /** Substitutes the starting state for missing values. */
+        /**
+         * Substitutes the starting state for missing values.
+         */
         public Model {
             identity = identity == null ? UNKNOWN : identity;
             cursor = cursor == null ? UNKNOWN : cursor;
@@ -194,7 +225,9 @@ public final class TerminalQueryDemo {
             last = last == null ? "none" : last;
         }
 
-        /** The theme the terminal's background names, or {@code unknown}. */
+        /**
+         * The theme the terminal's background names, or {@code unknown}.
+         */
         String theme() {
             return facts.themeKnown() ? (facts.dark() ? "dark" : "light") : "unknown";
         }
@@ -420,7 +453,9 @@ public final class TerminalQueryDemo {
                     value);
         }
 
-        /** Whether an answer carried a fact. */
+        /**
+         * Whether an answer carried a fact.
+         */
         private static boolean isFact(TerminalQuery.Reply reply) {
             return switch (reply) {
                 case TerminalQuery.Reply.Unsupported unsupported -> false;
@@ -432,7 +467,9 @@ public final class TerminalQueryDemo {
             };
         }
 
-        /** One answer, as a single token a status row and a verifier can read. */
+        /**
+         * One answer, as a single token a status row and a verifier can read.
+         */
         static String describe(TerminalQuery.Reply reply) {
             return switch (reply) {
                 case TerminalQuery.Reply.CursorPosition position ->
@@ -462,7 +499,9 @@ public final class TerminalQueryDemo {
             };
         }
 
-        /** The token a query's row and event use. */
+        /**
+         * The token a query's row and event use.
+         */
         static String kind(TerminalQuery query) {
             return switch (query) {
                 case TerminalQuery.CursorPosition cursor -> "cursor";
@@ -493,7 +532,7 @@ public final class TerminalQueryDemo {
                         action("ask-mode", new TerminalQuery.Mode(BRACKETED_PASTE_MODE), "m", "paste mode"),
                         action("ask-capability", new TerminalQuery.Termcap("Tc"), "t", "truecolor claim")),
                 KeyMap.group(
-                        "Ask for colours",
+                        "Ask for colors",
                         action(
                                 "ask-background",
                                 new TerminalQuery.ColorReport(TerminalQuery.Target.BACKGROUND),
@@ -508,25 +547,31 @@ public final class TerminalQueryDemo {
                                 "ask-cursor-color",
                                 new TerminalQuery.ColorReport(TerminalQuery.Target.CURSOR),
                                 "k",
-                                "caret colour")),
+                                "caret color")),
                 KeyMap.group(
                         "Session",
                         action("ask-profile", new TerminalQuery.Profile(), "p", "session profile"),
                         KeyAction.<Msg>of("ask-all", new Msg.AskAll(), "a", "ask everything", "a"),
-                        KeyAction.<Msg>of("color-none", new Msg.Profile(ColorProfile.NONE), "1", "no colour", "1"),
-                        KeyAction.<Msg>of("color-16", new Msg.Profile(ColorProfile.ANSI16), "2", "16 colours", "2"),
-                        KeyAction.<Msg>of("color-256", new Msg.Profile(ColorProfile.ANSI256), "3", "256 colours", "3"),
+                        KeyAction.<Msg>of("color-none", new Msg.Profile(ColorProfile.NONE), "1", "no color", "1"),
+                        KeyAction.<Msg>of("color-16", new Msg.Profile(ColorProfile.ANSI16), "2", "16 colors", "2"),
+                        KeyAction.<Msg>of("color-256", new Msg.Profile(ColorProfile.ANSI256), "3", "256 colors", "3"),
                         KeyAction.<Msg>of(
                                 "color-truecolor", new Msg.Profile(ColorProfile.TRUECOLOR), "4", "truecolor", "4"),
                         KeyAction.<Msg>of("quit", new Msg.Quit(), "esc", "quit", "escape", "ctrl+c")));
     }
 
-    /** One query action: the key asks the question and the answer comes back as a message. */
+    /**
+     * One query action: the key asks the question and the answer comes back as a message.
+     */
     private static KeyAction<Msg> action(String id, TerminalQuery query, String key, String description) {
         return KeyAction.of(id, new Msg.Ask(query), key, description, key);
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
@@ -544,8 +589,15 @@ public final class TerminalQueryDemo {
         System.exit(result.status());
     }
 
-    /** A scene whose whole model is what the terminal has said. */
+    /**
+     * A scene whose whole model is what the terminal has said.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         /**
          * Asks nothing: a session that queries at startup would be deciding for the application what
@@ -569,35 +621,57 @@ public final class TerminalQueryDemo {
             };
         }
 
-        /** The session facts, so a profile change the scene did not ask for still reaches it. */
+        /**
+         * The session facts, so a profile change the scene did not ask for still reaches it.
+         */
         @Override
         public Subscription<Msg> subscriptions(Model model) {
             return Subscription.facts(SubscriptionId.of("facts"), Msg.Facts::new);
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
-            int cols = context.viewport().cols();
-            KeyMap<Msg> keys = keys(model);
-            List<View<Msg>> rows = new ArrayList<>(8);
-            // One row per fact group, each pinned to a single row: a wrapped status row would push
-            // the sample and the help down and move what a verifier reads.
-            rows.add(Views.fixed(1, Views.text(profileRow(model), STATUS)));
-            rows.add(Views.fixed(1, Views.text(colorRow(model), STATUS)));
-            rows.add(Views.fixed(1, Views.text(factsRow(model), STATUS)));
-            rows.add(Views.fixed(1, Views.text(tallyRow(model), STATUS)));
-            rows.add(Views.fixed(1, Views.text(sample())));
-            rows.add(Views.gap(1));
-            rows.add(Help.view(keys, false, cols));
-            return Views.onKeys(keys.bindings(), Views.column(rows));
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
         }
 
-        /** The one query this update asks, with its effect identity and its answer mapper. */
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys(model).bindings();
+        }
+
+        /**
+         * The scene's rows as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
+            int cols = context.viewport().cols();
+            KeyMap<Msg> keys = keys(model);
+            List<Element<Msg>> rows = new ArrayList<>(8);
+            // One row per fact group, each pinned to a single row: a wrapped status row would push
+            // the sample and the help down and move what a verifier reads.
+            rows.add(Elements.fixed(1, Elements.text(profileRow(model), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(colorRow(model), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(factsRow(model), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(tallyRow(model), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(sample())));
+            rows.add(Elements.spacer(1));
+            rows.add(Help.element(keys, Help.Config.defaults(), false, cols));
+            return Elements.column(rows);
+        }
+
+        /**
+         * The one query this update asks, with its effect identity and its answer mapper.
+         */
         private static Command<Msg> ask(TerminalQuery query) {
             return Command.query(EffectId.of("ask-" + Model.kind(query)), query, reply -> new Msg.Answer(query, reply));
         }
 
-        /** Every terminal question at once; the session profile is a fact, so it is not one. */
+        /**
+         * Every terminal question at once; the session profile is a fact, so it is not one.
+         */
         private static List<Command<Msg>> askAll() {
             return List.of(
                     ask(new TerminalQuery.CursorPosition()),
@@ -609,19 +683,25 @@ public final class TerminalQueryDemo {
                     ask(new TerminalQuery.ColorReport(TerminalQuery.Target.CURSOR)));
         }
 
-        /** The profile row: what the session paints with, and whether the scene chose it. */
+        /**
+         * The profile row: what the session paints with, and whether the scene chose it.
+         */
         private static String profileRow(Model model) {
             return "profile=" + model.facts().profile().token()
                     + " color=" + (model.facts().color() ? "on" : "off")
                     + " theme=" + model.theme();
         }
 
-        /** The colour row: the terminal's own three colours, as it reported them. */
+        /**
+         * The color row: the terminal's own three colors, as it reported them.
+         */
         private static String colorRow(Model model) {
             return "bg=" + hex(model.background()) + " fg=" + hex(model.foreground()) + " caret=" + hex(model.caret());
         }
 
-        /** The facts row: the identity, the cursor and the two terminal claims. */
+        /**
+         * The facts row: the identity, the cursor and the two terminal claims.
+         */
         private static String factsRow(Model model) {
             return "identity=" + model.identity()
                     + " cursor=" + model.cursor()
@@ -630,13 +710,17 @@ public final class TerminalQueryDemo {
                     + " tc=" + (model.capability() == null ? UNKNOWN : model.capability());
         }
 
-        /** The tally row: how many questions were answered, refused or never answered, and the last. */
+        /**
+         * The tally row: how many questions were answered, refused or never answered, and the last.
+         */
         private static String tallyRow(Model model) {
             return "asked=" + model.asked() + " answered=" + model.answered() + " failed=" + model.failed() + " last="
                     + model.last();
         }
 
-        /** A styled sample: one word per palette colour, so a profile change is visible in the bytes. */
+        /**
+         * A styled sample: one word per palette color, so a profile change is visible in the bytes.
+         */
         private static StyledText sample() {
             List<StyledText> parts = new ArrayList<>();
             parts.add(StyledText.plain("sample "));
@@ -648,7 +732,9 @@ public final class TerminalQueryDemo {
             return StyledText.concat(parts.toArray(new StyledText[0]));
         }
 
-        /** A colour as the report row spells it. */
+        /**
+         * A color as the report row spells it.
+         */
         private static String hex(Color color) {
             return color == null ? "unknown" : color.hex();
         }

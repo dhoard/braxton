@@ -39,7 +39,9 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** Timer registration can finish after removal or after its own callback schedules a successor. */
+/**
+ * Timer registration can finish after removal or after its own callback schedules a successor.
+ */
 @Timeout(10)
 class SubscriptionTimerLifecycleTest {
     private static Object validPayload(Mailbox.Envelope envelope) {

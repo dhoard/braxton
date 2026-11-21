@@ -34,12 +34,16 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.terminal.Capabilities;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Application entry values: transitions, exit results, init context, runtime options. */
+/**
+ * Application entry values: transitions, exit results, init context, runtime options.
+ */
 class AppValueTest {
 
     @Test
@@ -73,7 +77,7 @@ class AppValueTest {
     void anInitContextContainsOnlyImmutableFacts() {
         InitContext context = new InitContext(null, null);
         assertThat(context.viewport()).isEqualTo(Viewport.EMPTY);
-        assertThat(context.capabilities()).isEqualTo(TerminalCapabilities.PLAIN);
+        assertThat(context.capabilities()).isEqualTo(Capabilities.PLAIN);
         assertThat(new InitContext(Viewport.of(new Size(2, 3)), null).viewport())
                 .isEqualTo(new Viewport(2, 3));
     }
@@ -93,7 +97,12 @@ class AppValueTest {
                         RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
                         null,
                         null,
-                        null))
+                        null,
+                        RuntimeOptions.DEFAULT_COLOR_PROFILE,
+                        null,
+                        RuntimeOptions.DEFAULT_FPS,
+                        false,
+                        true))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("capacity");
         assertThatThrownBy(() -> new RuntimeOptions(
@@ -106,7 +115,12 @@ class AppValueTest {
                         RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
                         null,
                         null,
-                        null))
+                        null,
+                        RuntimeOptions.DEFAULT_COLOR_PROFILE,
+                        null,
+                        RuntimeOptions.DEFAULT_FPS,
+                        false,
+                        true))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new RuntimeOptions(
                         Duration.ofSeconds(-1),
@@ -118,7 +132,12 @@ class AppValueTest {
                         RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
                         null,
                         null,
-                        null))
+                        null,
+                        RuntimeOptions.DEFAULT_COLOR_PROFILE,
+                        null,
+                        RuntimeOptions.DEFAULT_FPS,
+                        false,
+                        true))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new RuntimeOptions(
                         Duration.ofSeconds(Long.MAX_VALUE),
@@ -130,7 +149,12 @@ class AppValueTest {
                         RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
                         null,
                         null,
-                        null))
+                        null,
+                        RuntimeOptions.DEFAULT_COLOR_PROFILE,
+                        null,
+                        RuntimeOptions.DEFAULT_FPS,
+                        false,
+                        true))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("nanoseconds");
         RuntimeOptions limited = defaults.withLimits(8, 2, 3);
@@ -151,8 +175,8 @@ class AppValueTest {
         }
 
         @Override
-        public io.github.dhoard.braxton.view.View<String> view(String model, ViewContext context) {
-            return Views.text("x");
+        public Element<String> view(String model, ViewContext context) {
+            return Elements.text("x");
         }
     }
 

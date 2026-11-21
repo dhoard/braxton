@@ -26,7 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-/** Styles are immutable values; the palette is valid by construction. */
+/**
+ * Styles are immutable values; the palette is valid by construction.
+ */
 class StyleTest {
 
     @Test

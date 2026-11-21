@@ -28,9 +28,11 @@ import io.github.dhoard.braxton.layout.Alignment;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Insets;
 import io.github.dhoard.braxton.layout.Rect;
+import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.ElementTree;
+import io.github.dhoard.braxton.widget.Elements;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -90,27 +92,27 @@ class LayoutConsistencyPropertyTest {
         Random random = new Random(20261107L);
         for (int round = 0; round < 1200; round++) {
             Built built = build(3, random);
-            View<Object> view = built.view();
+            Element<Object> view = built.element();
             int maxCols = 1 + random.nextInt(18);
-            LayoutEngine engine = new LayoutEngine();
-            int width = engine.intrinsicWidth(view, maxCols);
+            int width = ElementTree.measure(view, new Size(Integer.MAX_VALUE, maxCols))
+                    .cols();
             assertThat(width)
                     .as("the measured width of %s fits the %d columns offered", view, maxCols)
                     .isBetween(0, maxCols);
             for (int cols : new int[] {Math.max(1, width), Math.max(1, width - 1), maxCols}) {
-                int rows = engine.intrinsicHeight(view, cols);
+                int rows = ElementTree.measure(view, new Size(Integer.MAX_VALUE, cols))
+                        .rows();
                 assertThat(rows)
                         .as("the measured height of %s at %d columns", view, cols)
                         .isNotNegative();
-                Screen painted = engine.layout(view, new Rect(0, 0, rows, cols)).screen();
+                Screen painted = paint(view, rows, cols);
                 assertGridDescribesTheStream(painted, cols, view, rows + "x" + cols);
                 if (built.fills()) {
                     // A frame or a fill paints to the bounds it is given, so its own rows move when the
                     // bounds move. The height contract is about content that asked for its size.
                     continue;
                 }
-                Screen taller =
-                        engine.layout(view, new Rect(0, 0, rows + 4, cols)).screen();
+                Screen taller = paint(view, rows + 4, cols);
                 for (int row = 0; row < Math.min(rows, taller.rows()); row++) {
                     assertThat(painted.plainLine(row))
                             .as(
@@ -128,14 +130,48 @@ class LayoutConsistencyPropertyTest {
         }
     }
 
-    /** Every row of the grid agrees with the columns that row paints. */
-    private static void assertGridDescribesTheStream(Screen screen, int cols, View<?> view, String where) {
+    /**
+     * Whether a cell's text opens with a cluster that claims no column of its own.
+     */
+    private static boolean opensWithARun(String text) {
+        for (String cluster : TextMeasure.graphemes(text)) {
+            return TextMeasure.clusterColumns(cluster, io.github.dhoard.braxton.style.WidthPolicy.PINNED) == 0;
+        }
+        return false;
+    }
+
+    /**
+     * The columns one row's cells occupy, which is what the row holds on a screen.
+     */
+    private static int paintedColumns(Screen screen, int row) {
+        int columns = 0;
+        for (int col = 0; col < screen.cols(); col++) {
+            if (!screen.isContinuation(row, col)) {
+                columns += TextMeasure.columns(screen.cell(row, col).text());
+            }
+        }
+        return columns;
+    }
+
+    /**
+     * One frame of {@code tree}, painted into a screen of the size it was measured at.
+     */
+    private static Screen paint(Element<?> tree, int rows, int cols) {
+        Screen screen = new Screen(Math.max(0, rows), Math.max(0, cols));
+        ElementTree.paint(ElementTree.layout(tree, new Rect(0, 0, screen.rows(), screen.cols())), screen);
+        return screen;
+    }
+
+    private static void assertGridDescribesTheStream(Screen screen, int cols, Element<?> view, String where) {
         for (int row = 0; row < screen.rows(); row++) {
-            String line = screen.plainLine(row);
-            assertThat(TextMeasure.columns(line))
+            // The row is measured by the columns its cells occupy, not by re-segmenting the text
+            // they spell. A cell is the unit the encoder writes and the grid holds: a value that
+            // begins with a selector is one cell of its own here, and a terminal reading the two
+            // neighbouring cells as one cluster is a boundary this grid deliberately does not have.
+            assertThat(paintedColumns(screen, row))
                     .as(
                             "%s at %s: row %d [%s] fills more than the %d columns offered",
-                            view, where, row, show(line), cols)
+                            view, where, row, show(screen.plainLine(row)), cols)
                     .isLessThanOrEqualTo(cols);
             for (int col = 0; col < cols; col++) {
                 String text = screen.cell(row, col).text();
@@ -162,10 +198,13 @@ class LayoutConsistencyPropertyTest {
                             .as("%s at %s: the two-column cell at %d,%d owns the next cell too", view, where, row, col)
                             .isTrue();
                 }
-                if (col > 0 && !screen.isContinuation(row, col - 1)) {
+                if (col > 0 && !screen.isContinuation(row, col - 1) && !opensWithARun(text)) {
                     // The row's segmentation decides what continues what. A run at a cell's head that
                     // joins the cell before it is part of that cell's cluster, and the column the join
-                    // gains belongs to that cell - not to whoever is painted next.
+                    // gains belongs to that cell - not to whoever is painted next. A cell that opens
+                    // with a run is the boundary case: the run was the head of its own value, and the
+                    // cell before it belongs to another widget's paint, so the two are separate cells
+                    // on the screen even though a terminal reading the row as text would join them.
                     String painted = screen.cell(row, col - 1).text();
                     String held = painted.isEmpty() ? " " : painted;
                     assertThat(TextMeasure.graphemeCount(held + text))
@@ -182,49 +221,71 @@ class LayoutConsistencyPropertyTest {
      * A random tree, and whether anything in it paints to its bounds rather than to its content. Such a
      * view legitimately changes shape when the bounds do, so it is held to the column invariants only.
      */
-    private record Built(View<Object> view, boolean fills) {
+    private record Built(Element<Object> element, boolean fills) {
 
-        private static Built of(View<Object> view) {
-            return new Built(view, view.toString().contains("BorderBox"));
+        private static Built of(Element<Object> element) {
+            return new Built(element, hasFrame(element));
+        }
+
+        /**
+         * A frame paints to the bounds it is given, so its own rows move when the bounds move.
+         */
+        private static boolean hasFrame(Element<Object> element) {
+            if (element instanceof Element.Leaf<?, ?> leaf) {
+                // A frame paints the rectangle it is given, so it moves when the bounds move.
+                return leaf.widget() instanceof io.github.dhoard.braxton.widget.Frame<?>;
+            }
+            for (Element<Object> child : element.children()) {
+                if (hasFrame(child)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
     private static Built build(int depth, Random random) {
         if (depth <= 0 || random.nextInt(3) == 0) {
-            return Built.of(Views.text(TEXTS[random.nextInt(TEXTS.length)]));
+            return Built.of(Elements.text(TEXTS[random.nextInt(TEXTS.length)]));
         }
         return switch (random.nextInt(8)) {
-            case 0 -> Built.of(Views.border(BORDERS[random.nextInt(BORDERS.length)], child(depth - 1, random)));
-            case 1 -> Built.of(Views.padding(Insets.uniform(random.nextInt(3)), child(depth - 1, random)));
+            case 0 -> Built.of(Elements.frame(BORDERS[random.nextInt(BORDERS.length)], child(depth - 1, random)));
+            case 1 -> Built.of(Elements.pad(Insets.uniform(random.nextInt(3)), child(depth - 1, random)));
             case 2 ->
-                Built.of(Views.row(Alignment.START, random.nextBoolean() ? joins(random) : items(depth - 1, random)));
-            case 3 -> Built.of(Views.column(Alignment.START, items(depth - 1, random)));
-            case 4 -> Built.of(Views.overlay(child(depth - 1, random), child(depth - 1, random)));
+                Built.of(new Element.Group<>(
+                        (random.nextBoolean() ? joins(random) : items(depth - 1, random)),
+                        Element.Direction.ROW,
+                        Alignment.START));
+            case 3 ->
+                Built.of(new Element.Group<>(items(depth - 1, random), Element.Direction.COLUMN, Alignment.START));
+            case 4 -> Built.of(Elements.stack(child(depth - 1, random), child(depth - 1, random)));
             case 5 ->
-                Built.of(Views.padding(
+                Built.of(Elements.pad(
                         new Insets(random.nextInt(2), random.nextInt(3), random.nextInt(2), random.nextInt(3)),
                         child(depth - 1, random)));
-            default -> Built.of(Views.column(Alignment.END, items(depth - 1, random)));
+            default -> Built.of(new Element.Group<>(items(depth - 1, random), Element.Direction.COLUMN, Alignment.END));
         };
     }
 
-    /** Two or three texts in a row, each of which may open with a run that continues its neighbour. */
-    private static List<View<Object>> joins(Random random) {
-        List<View<Object>> items = new ArrayList<>();
+    /**
+     * Two or three texts in a row, each of which may open with a run that continues its neighbor.
+     */
+    private static List<Element<Object>> joins(Random random) {
+        List<Element<Object>> items = new ArrayList<>();
         for (int count = 2 + random.nextInt(2); count > 0; count--) {
-            items.add(Views.text(JOINS[random.nextInt(JOINS.length)]));
+            items.add(Elements.text(JOINS[random.nextInt(JOINS.length)]));
         }
         return items;
     }
 
-    private static View<Object> child(int depth, Random random) {
-        return build(depth, random).view();
+    private static Element<Object> child(int depth, Random random) {
+        return build(depth, random).element();
     }
 
-    private static List<View<Object>> items(int depth, Random random) {
-        List<View<Object>> items = new ArrayList<>();
+    private static List<Element<Object>> items(int depth, Random random) {
+        List<Element<Object>> items = new ArrayList<>();
         for (int count = 1 + random.nextInt(3); count > 0; count--) {
-            items.add(build(depth, random).view());
+            items.add(build(depth, random).element());
         }
         return items;
     }

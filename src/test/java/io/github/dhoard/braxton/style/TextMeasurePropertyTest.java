@@ -27,7 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** Truncation and fitting keep the column budget and never split a cluster. */
+/**
+ * Truncation and fitting keep the column budget and never split a cluster.
+ */
 class TextMeasurePropertyTest {
 
     @Test

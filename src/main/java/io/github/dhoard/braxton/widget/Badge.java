@@ -26,12 +26,13 @@ import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import java.util.ArrayList;
 import java.util.List;
 
-/** A row of pill-shaped labels rendered on their segment background. */
+/**
+ * A row of pill-shaped labels rendered on their segment background.
+ */
 public final class Badge {
 
     private final List<Segment> segments = new ArrayList<>();
@@ -45,7 +46,9 @@ public final class Badge {
      */
     public record Segment(StyledText text, Style style) {}
 
-    /** Creates a badge with no segments. */
+    /**
+     * Creates a badge with no segments.
+     */
     public Badge() {}
 
     /**
@@ -68,7 +71,7 @@ public final class Badge {
     }
 
     /**
-     * Appends a label on a background colour.
+     * Appends a label on a background color.
      *
      * @param text the label to paint; required
      * @param background the segment background, or null for none
@@ -93,6 +96,8 @@ public final class Badge {
     /**
      * Joins segments with a pathway arrow. Without it, adjacent pills are separated only by their own
      * padding, so the labels sit one space apart from each other on either side.
+     *
+     * @return joins segments with a pathway arrow
      */
     public Badge pathway() {
         pathway = true;
@@ -118,7 +123,9 @@ public final class Badge {
         return out;
     }
 
-    /** Applies the segment style to every label span, keeping each span's own styling. */
+    /**
+     * Applies the segment style to every label span, keeping each span's own styling.
+     */
     private static StyledText restyle(StyledText text, Style style) {
         StyledText out = StyledText.empty();
         for (StyledText.Span span : text.spans()) {
@@ -128,12 +135,13 @@ public final class Badge {
     }
 
     /**
-     * A one-element view of the rendered badge.
+     * The badge as a leaf of an element tree.
      *
-     * @return a text view holding {@link #render()}
+     * @param <Msg> the message type of the tree
+     * @return the element
      */
-    public View<Object> view() {
-        return Views.text(render());
+    public <Msg> Element<Msg> element() {
+        return RenderedText.of(cols -> render());
     }
 
     /**

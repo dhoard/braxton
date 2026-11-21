@@ -28,7 +28,9 @@ import java.lang.management.ManagementFactory;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
-/** FIGlet row assembly must grow with the output rather than repeated prefix copies. */
+/**
+ * FIGlet row assembly must grow with the output rather than repeated prefix copies.
+ */
 class FigletRenderCostTest {
     private static volatile Object sink;
 

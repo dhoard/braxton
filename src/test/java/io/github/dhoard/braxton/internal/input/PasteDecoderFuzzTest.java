@@ -139,7 +139,9 @@ class PasteDecoderFuzzTest {
         }
     }
 
-    /** Every fragment is also a complete paste body on its own, with no limit in the way. */
+    /**
+     * Every fragment is also a complete paste body on its own, with no limit in the way.
+     */
     @Test
     void eachFragmentOnItsOwnDecodesToItselfOrToTheMarkerItNearlyForms() throws IOException {
         for (byte[] fragment : FRAGMENTS) {
@@ -160,7 +162,9 @@ class PasteDecoderFuzzTest {
         }
     }
 
-    /** Half a surrogate pair would hand the application text it cannot encode or display. */
+    /**
+     * Half a surrogate pair would hand the application text it cannot encode or display.
+     */
     private static void assertWholeCharacters(String text, String where) {
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);

@@ -105,12 +105,39 @@ PARITY_DEMOS = {
            ("packages=6 installed=0 phase=idle mode=inline",
             "braxton inline output packages=6")),
     "24": ("examples.parity.Showcase",
-           ("catalog=24 open=none selected=01 top=0 help=compact last=none",
+           ("catalog=27 open=none selected=01 top=0 help=compact last=none",
             "braxton parity showcase")),
+    "25": ("examples.parity.TerminalMatrixDemo",
+           ("term=xterm-256color caps=1/1/1/1 size=24x80",
+            "Braxton terminal matrix")),
+    "26": ("examples.parity.EngineDemo",
+           ("engine text: alpha", "engine selection: 4", "engine scroll: 0")),
+    "27": ("examples.parity.ElementKernelDemo",
+           ("kernel widget=painted", "meter \u2588\u2588\u2588\u2588")),
+    "28": ("examples.parity.WidgetGalleryDemo",
+           ("gallery page=1/4 choice widgets=5", "name: Ada")),
+    "31": ("examples.parity.DebugOverlayDemo",
+           ("Braxton debug overlay", "debug overlay=on focus=left left=off right=off changes=0", "DEBUG bounds=")),
+    "30": ("examples.parity.RichOutputDemo",
+           ("Braxton rich output", "motion=normal value=0 target=0 state=settled moves=0")),
+    "29": ("examples.parity.LinePromptsDemo",
+           ("Braxton line prompts", "Overwrite the report? [y/N]")),
 }
 # Phases whose packaged demo needs more than ctrl+c to leave. Phase 22's quit is guarded on purpose,
 # so the demo is asked and then confirmed - the packaged launch proves the same path the scenario does.
-PARITY_DEMO_QUIT = {"22": (b"q", b"y")}
+PARITY_DEMO_QUIT = {
+    "22": (b"q", b"y"),
+    "25": (b"q",),
+    "26": (b"q",),
+    "27": (b"q",),
+    "28": (b"q",),
+    "30": (b"q",),
+    "31": (b"q",),
+    # The line prompts are a scripted dialog: each cancel answers the prompt it reaches, so three of
+    # them abandon the confirmation, the choice and the marks, and the progress count then runs to
+    # its end and the demo exits on its own.
+    "29": (b"\x03", b"\x03", b"\x03"),
+}
 # Phases whose demo needs the library's own runtime dependencies on its classpath, because the
 # packaged jar does not shade them: markdown rendering is CommonMark behind `Markdown`. Every other
 # demo still runs from the jar alone, which is the packaging gate those phases record.
@@ -153,6 +180,9 @@ class PtyChild:
         self.listener = socket.socket(socket.AF_UNIX) if control else None
         environment = os.environ.copy()
         environment["TERM"] = "xterm-256color"
+        # These owned terminals assert color output. Host preferences must not silently disable
+        # the behavior under test; a scenario can still request NO_COLOR explicitly through env.
+        environment.pop("NO_COLOR", None)
         if env:
             environment.update(env)
         if control:
@@ -271,7 +301,7 @@ class PtyChild:
             require(self.process.poll() is None, f"child exited before displaying {text!r}")
             self.pump(0.1)
 
-    def finish(self, expected_code=0):
+    def finish(self, expected_code=0, *, cursor_was_hidden=True):
         deadline = time.monotonic() + 10
         while self.process.poll() is None and time.monotonic() < deadline:
             self.pump(0.1)
@@ -283,7 +313,11 @@ class PtyChild:
         # Darwin revokes the slave when its controlling session leader exits. The retained
         # master still exposes the final attributes, so use it for the post-exit comparison.
         require(termios.tcgetattr(self.master) == self.original, "terminal attributes were not restored")
-        require(b"\x1b[?25h" in self.output, "cursor was not restored")
+        if cursor_was_hidden:
+            require(b"\x1b[?25h" in self.output, "cursor was not restored")
+        else:
+            require(b"\x1b[?25l" not in self.output and not self.screen.cursor.hidden,
+                    "a low-level image write changed cursor visibility")
 
 
 def check_session(java_command, plain):
@@ -509,11 +543,16 @@ def check_refresh_wide(java_command, plain):
         payload = ("w" * 78 + "y").encode()
         erase = b"\x1b[1;80H\x1b[0m\x1b[0K"
         if plain:
-            require(frame.index(b"\x1b[0J") < frame.index(("w" * 78 + "y").encode()),
+            require(frame.index(b"\x1b[0J") < frame.index(payload),
                     "the live region was cleared after its content was painted")
         else:
             require(erase in frame, "suffix erase missing or at the wrong column")
-            require(frame.index(payload) < frame.index(erase),
+            # A frame after the first one writes the cells that changed rather than the rows that
+            # hold them, so the replacement is the addressed cell at the last column, not the whole
+            # row it sits in; the row's content is what the screen assertions above check.
+            replacement = b"\x1b[1;79H"
+            require(replacement in frame, "the replacement cell was not addressed where it is")
+            require(frame.index(replacement) < frame.index(erase),
                     "suffix erased before the replacement was painted")
         require(child.screen.display[1] == " " * 80, "second row not cleared")
         require(all(child.screen.buffer[1][col].bg == "default" for col in range(80)),
@@ -535,6 +574,26 @@ def check_refresh_wide(java_command, plain):
         child.expect("KEY z 7a")
         child.finish()
     print(f"PASS synchronized wide-edge survival/split/regrow refresh (plain={plain})")
+
+
+def check_image_output(java_command):
+    for no_color in (False, True):
+        command = [*java_command, *(["native"] if no_color else [])]
+        with PtyChild(command, control=False, env={"NO_COLOR": "1" if no_color else ""}) as child:
+            child.terminal_contains("image-output-ready HALF_BLOCK")
+            require(child.screen.display[0].startswith("\u2580\u2580"), "image first row missing")
+            require(child.screen.display[1].startswith("\u2580\u2580"), "image odd final row missing")
+            if no_color:
+                require(child.screen.buffer[0][0].fg == "default", "NO_COLOR image still used color")
+                require(b"\x1b_G" not in child.output, "NO_COLOR selected native image output")
+            else:
+                require(child.screen.buffer[0][0].fg == "ff0000", "image upper pixel lost")
+                require(child.screen.buffer[0][0].bg == "00ff00", "image lower pixel lost")
+                require(child.screen.buffer[0][1].fg == "0000ff", "image second column lost")
+                require(child.screen.buffer[1][1].fg == "000000", "image alpha background lost")
+            os.write(child.master, b"q")
+            child.finish(cursor_was_hidden=False)
+        print(f"PASS low-level image half-block output, alpha and NO_COLOR (no_color={no_color})")
 
 
 def check_pending_escape(java_command):
@@ -590,7 +649,7 @@ def check_harness():
         os.write(child.master, b"\x1b")
         screen_until(lambda text: "esc again to stop" in text, "cancel confirmation")
         os.write(child.master, b"\x1b")
-        screen_until(lambda text: "Stopped." in text and "Working" not in text, "cancelled workflow")
+        screen_until(lambda text: "Stopped." in text and "Working" not in text, "canceled workflow")
         before = tuple(child.screen.display[:17])
         os.write(child.master, b"\x1b[5~")  # PageUp, then End returns to the latest transcript.
         screen_until(lambda text: tuple(child.screen.display[:17]) != before, "scroll movement")
@@ -937,12 +996,12 @@ def check_cursor_parity(java_command):
         os.write(child.master, b"b")
         screen_until(child, lambda text: "mode=blink" in text, "a blinking caret again")
 
-        # The caret colour is OSC 12, and the session gives the terminal's own colour back on exit.
+        # The caret color is OSC 12, and the session gives the terminal's own color back on exit.
         os.write(child.master, b"c")
-        screen_until(child, lambda text: "color=#1e90ff" in text, "the caret colour")
+        screen_until(child, lambda text: "color=#1e90ff" in text, "the caret color")
         require("\x1b]12;rgb:1e/90/ff\x1b\\" in child.output.decode("utf-8", errors="replace"),
-                "the caret colour was not written")
-        cursor_at(child, 4, 41, "the caret cell after the colour changed")
+                "the caret color was not written")
+        cursor_at(child, 4, 41, "the caret cell after the color changed")
 
         # A virtual caret is a painted cell: the layout reverses it and the terminal cursor is
         # hidden, so no caret is left flying around the frame.
@@ -953,7 +1012,7 @@ def check_cursor_parity(java_command):
         after = child.output[start:].decode("utf-8", errors="replace")
         require("\x1b[?25l" in after, "the terminal cursor was not hidden for a painted caret")
         require(child.screen.buffer[4][41].reverse, "the virtual caret did not reverse its cell")
-        require(not child.screen.buffer[4][42].reverse, "the virtual caret reversed a neighbouring cell")
+        require(not child.screen.buffer[4][42].reverse, "the virtual caret reversed a neighboring cell")
 
         # Only a painted caret needs a clock: the scene blinks it half-period by half-period.
         screen_until(child, lambda text: "cursor=hidden" in text, "the dark half of the blink")
@@ -970,7 +1029,7 @@ def check_cursor_parity(java_command):
         child.finish()
         final = child.output.decode("utf-8", errors="replace")
         require(final.count("\x1b[0 q") == 1, "the caret shape was not reset exactly once")
-        require(final.count("\x1b]112\x1b\\") == 1, "the caret colour was not reset exactly once")
+        require(final.count("\x1b]112\x1b\\") == 1, "the caret color was not reset exactly once")
         require(final.index("\x1b[0 q") < final.index("\x1b[?1049l"),
                 "the caret shape was reset after leaving the alternate screen")
     print("PASS parity 03 native and virtual cursor presentation")
@@ -1415,8 +1474,8 @@ def check_progress_parity(java_command):
         require(bar_row(child, 3) == graded.replace("detail  ", "install ", 1),
                 f"the animated row is not the same graded row: {bar_row(child, 3)!r}")
 
-        # The blend spans the filled width: the first cell is the start colour, the last filled cell
-        # is further along the ramp, and the cells still to come keep the empty colour.
+        # The blend spans the filled width: the first cell is the start color, the last filled cell
+        # is further along the ramp, and the cells still to come keep the empty color.
         os.write(child.master, b"b")
         screen_until(child, lambda text: "fill=blend " in text, "the blended fill")
         os.write(child.master, b"b")
@@ -1425,9 +1484,9 @@ def check_progress_parity(java_command):
         first = cell_color(child, 4, BAR_COLUMN)
         last = cell_color(child, 4, BAR_COLUMN + 4)
         empty = cell_color(child, 4, BAR_COLUMN + 5)
-        require(first == "2b8cff", f"the blend did not start at its first colour: {first!r}")
+        require(first == "2b8cff", f"the blend did not start at its first color: {first!r}")
         require(last != first, f"the blend did not advance across the fill: {last!r}")
-        require(empty not in (first, last), f"an empty cell was painted with a fill colour: {empty!r}")
+        require(empty not in (first, last), f"an empty cell was painted with a fill color: {empty!r}")
 
         # Install the rest of the seeded run: the bar finishes at one hundred percent and the
         # spinner stops, because the work it was turning for is done.
@@ -1514,7 +1573,7 @@ def displayed_value(child):
 
 
 def cell_color(child, row, column):
-    """The foreground colour one painted cell carries, as pyte reports it."""
+    """The foreground color one painted cell carries, as pyte reports it."""
     return child.screen.buffer[row][column].fg
 
 
@@ -1812,7 +1871,7 @@ def check_stopwatch_parity(java_command):
 
 def check_rich_list_parity(java_command):
     """Phase 11: a large list filtered, paged, added to, resized and reported on."""
-    # Spinner.Preset.DOT: one braille dot travelling around one cell.
+    # Spinner.Preset.DOT: one braille dot traveling around one cell.
     frames = set("\u2801\u2802\u2804\u2840\u2880\u2820\u2810\u2808")
     with PtyChild(java_command, control=False) as child:
         # The scene's three status rows, then the list's own chrome.
@@ -1825,7 +1884,7 @@ def check_rich_list_parity(java_command):
         screen_until(child,
                      lambda text: "title=on status=on page=on help=compact spinner=off rows=21 content=16" in text,
                      "the chrome row")
-        require(field_row(child, 3) == "Favourite things",
+        require(field_row(child, 3) == "Favorite things",
                 f"the list title row painted {field_row(child, 3)!r}")
         require(field_row(child, 4) == "240 items",
                 f"the list status row painted {field_row(child, 4)!r}")
@@ -1851,9 +1910,9 @@ def check_rich_list_parity(java_command):
         require("\u276F Raspberry jam" in field_row(child, 5),
                 f"the matched item was not painted: {field_row(child, 5)!r}")
 
-        # Cancelling restores the query and the item it hid.
+        # Canceling restores the query and the item it hid.
         os.write(child.master, b"\x1b")
-        screen_until(child, lambda text: "filter=-" in text and "editing=off" in text, "the cancelled filter")
+        screen_until(child, lambda text: "filter=-" in text and "editing=off" in text, "the canceled filter")
         screen_until(child, lambda text: "240 items" in text, "the restored counts")
         require("\u276F Raspberry jam" in field_row(child, 5),
                 f"the restored selection was not painted: {field_row(child, 5)!r}")
@@ -1891,10 +1950,10 @@ def check_rich_list_parity(java_command):
         # Chrome toggles give their rows back to the items.
         os.write(child.master, b"t")
         screen_until(child, lambda text: "title=off" in text, "the title switched off")
-        require("Favourite things" not in "\n".join(child.screen.display),
+        require("Favorite things" not in "\n".join(child.screen.display),
                 "the title stayed painted after it was switched off")
         os.write(child.master, b"t")
-        screen_until(child, lambda text: field_row(child, 3) == "Favourite things", "the title switched on")
+        screen_until(child, lambda text: field_row(child, 3) == "Favorite things", "the title switched on")
         os.write(child.master, b"h")
         # Help is two rows here - the list's own line and the application's - so switching it off
         # gives both back to the items.
@@ -1910,7 +1969,7 @@ def check_rich_list_parity(java_command):
                      "a spinner frame beside the title")
         os.write(child.master, b"s")
         screen_until(child, lambda text: "spinner=off" in text, "the spinner switched off")
-        screen_until(child, lambda text: field_row(child, 3) == "Favourite things",
+        screen_until(child, lambda text: field_row(child, 3) == "Favorite things",
                      "the title without a frame")
 
         # Full help lists every group, one line a group.
@@ -2257,7 +2316,7 @@ def check_file_picker_parity(java_command):
         screen_until(child, lambda text: "entries=9" in text and "added-1.txt" in text,
                      "the created file in the listing")
 
-        # Cancelling ends the session.
+        # Canceling ends the session.
         os.write(child.master, b"\x1b")
         child.finish()
     print("PASS parity 14 listing, navigation, refusal, hidden files, stale entries and a choice")
@@ -2689,17 +2748,25 @@ def written_since(child, start):
 
 
 def query_written(child, sequence, start, description):
-    """Waits until the child wrote one request after ``start``, and returns the new offset."""
+    """Waits until the child wrote one request after ``start``, and returns the offset just past it.
+
+    The offset is the position after the matched request, not the end of what the child has written.
+    A batch of requests is often written in one go and read as one chunk, so returning the end of the
+    buffer would put every later request of that batch behind the next window and the next search
+    could never find it. Callers that only care that a request was written may ignore the result.
+    """
     deadline = time.monotonic() + 15
-    while sequence not in written_since(child, start):
+    while True:
+        found = written_since(child, start).find(sequence)
+        if found >= 0:
+            return start + found + len(sequence)
         require(time.monotonic() < deadline, f"the application never wrote {description}")
         require(child.process.poll() is None, f"child exited before {description}")
         child.pump(0.05)
-    return len(child.output)
 
 
 def check_terminal_query_parity(java_command):
-    """Phase 18: bounded queries, typed answers, session facts and colour profiles."""
+    """Phase 18: bounded queries, typed answers, session facts and color profiles."""
     with PtyChild(java_command, control=False) as child:
         # Nothing is asked at startup: the demo's first question is the first key.
         screen_until(child, lambda text: "asked=0 answered=0 failed=0 last=none" in text,
@@ -2737,20 +2804,20 @@ def check_terminal_query_parity(java_command):
         os.write(child.master, b"\x1bP1+r5463=54727565436F6C6F72\x1b\\")
         screen_until(child, lambda text: "tc=TrueColor" in text, "the reported capability")
 
-        # The background colour is the session's theme, and the theme row derives from it.
+        # The background color is the session's theme, and the theme row derives from it.
         os.write(child.master, b"b")
-        start = query_written(child, BACKGROUND_REQUEST, start, "the background colour request")
+        start = query_written(child, BACKGROUND_REQUEST, start, "the background color request")
         os.write(child.master, b"\x1b]11;rgb:1010/1010/1010\x07")
         screen_until(child, lambda text: "theme=dark" in text, "the dark theme")
         require("bg=#101010" in field_row(child, QUERY_COLOR_ROW),
                 f"the reported background: {field_row(child, QUERY_COLOR_ROW)!r}")
 
-        # A colour the terminal refuses is reported as unsupported, never as black.
+        # A color the terminal refuses is reported as unsupported, never as black.
         os.write(child.master, b"f")
-        start = query_written(child, FOREGROUND_REQUEST, start, "the foreground colour request")
+        start = query_written(child, FOREGROUND_REQUEST, start, "the foreground color request")
         os.write(child.master, b"\x1b]10;?\x07")
         screen_until(child, lambda text: "last=foreground=unsupported" in text,
-                     "the refused colour")
+                     "the refused color")
 
         # A terminal that never answers is a timeout, reported honestly after the deadline.
         os.write(child.master, b"c")
@@ -2786,30 +2853,30 @@ def check_terminal_query_parity(java_command):
         # bytes after the key are the proof.
         start = len(child.output)
         os.write(child.master, b"3")
-        screen_until(child, lambda text: "profile=ansi256" in text, "the 256-colour profile")
+        screen_until(child, lambda text: "profile=ansi256" in text, "the 256-color profile")
         require(b"38;5;" in written_since(child, start)
                 and b"38;2;" not in written_since(child, start),
-                "the 256-colour profile did not repaint the sample in palette indices")
+                "the 256-color profile did not repaint the sample in palette indices")
 
         start = len(child.output)
         os.write(child.master, b"2")
-        screen_until(child, lambda text: "profile=ansi16" in text, "the 16-colour profile")
+        screen_until(child, lambda text: "profile=ansi16" in text, "the 16-color profile")
         painted = written_since(child, start)
         require(b"38;5;" not in painted and b"38;2;" not in painted,
-                "the 16-colour profile kept a wider colour form")
+                "the 16-color profile kept a wider color form")
 
         start = len(child.output)
         os.write(child.master, b"1")
-        screen_until(child, lambda text: "profile=none color=off" in text, "the colourless profile")
+        screen_until(child, lambda text: "profile=none color=off" in text, "the colorless profile")
         painted = written_since(child, start)
         require(b"38;" not in painted and b"48;" not in painted,
-                "a colourless profile wrote colour parameters")
+                "a colorless profile wrote color parameters")
 
         start = len(child.output)
         os.write(child.master, b"4")
         screen_until(child, lambda text: "profile=truecolor" in text, "the truecolor profile")
         require(b"38;2;" in written_since(child, start),
-                "the truecolor profile did not repaint the sample in 24-bit colour")
+                "the truecolor profile did not repaint the sample in 24-bit color")
 
         # The session profile is a fact, so asking for it writes nothing to the terminal.
         start = len(child.output)
@@ -2824,14 +2891,14 @@ def check_terminal_query_parity(java_command):
         os.write(child.master, b"\x03")
         child.finish()
 
-    # NO_COLOR is the user's own request to lose colour, and it outranks the terminal's ability.
+    # NO_COLOR is the user's own request to lose color, and it outranks the terminal's ability.
     with PtyChild(java_command, control=False, env={"NO_COLOR": "1"}) as child:
-        screen_until(child, lambda text: "profile=none color=off" in text, "the colourless session")
+        screen_until(child, lambda text: "profile=none color=off" in text, "the colorless session")
         require(b"38;2;" not in bytes(child.output) and b"38;5;" not in bytes(child.output),
-                "a NO_COLOR session painted a colour")
+                "a NO_COLOR session painted a color")
         os.write(child.master, b"\x03")
         child.finish()
-    print("PASS parity 18 bounded queries, typed answers, session facts and colour profiles")
+    print("PASS parity 18 bounded queries, typed answers, session facts and color profiles")
 
 
 # Phase 19's scene rows, as the demo paints them.
@@ -3087,23 +3154,23 @@ def check_presentation_parity(java_command):
         screen_until(child, lambda text: "focus=off" in text, "the disabled focus reporting")
         query_written(child, b"\x1b[?1004l", start, "focus reporting disabled")
 
-        # The terminal's default colours are set and then given back as the terminal's own.
+        # The terminal's default colors are set and then given back as the terminal's own.
         start = len(child.output)
         os.write(child.master, b"c")
         screen_until(child, lambda text: "fg=#e0e6f0 bg=#10141c cursor=#38a6ff" in text,
-                     "the applied default colours")
+                     "the applied default colors")
         painted = written_since(child, start)
         for sequence in (b"\x1b]10;rgb:e0/e6/f0\x1b\\", b"\x1b]11;rgb:10/14/1c\x1b\\",
                          b"\x1b]12;rgb:38/a6/ff\x1b\\"):
-            require(sequence in painted, f"the default colour {sequence!r} was not written")
+            require(sequence in painted, f"the default color {sequence!r} was not written")
         start = len(child.output)
         os.write(child.master, b"c")
         screen_until(child, lambda text: "fg=none bg=none cursor=none" in text,
-                     "the reset default colours")
-        query_written(child, b"\x1b]110\x1b\\", start, "the default text colour reset")
+                     "the reset default colors")
+        query_written(child, b"\x1b]110\x1b\\", start, "the default text color reset")
         painted = written_since(child, start)
         require(b"\x1b]111\x1b\\" in painted and b"\x1b]112\x1b\\" in painted,
-                "the default background and cursor colours were not reset")
+                "the default background and cursor colors were not reset")
 
         # Every progress state, including the one that removes the indication.
         for key, state, token in ((b"g", 1, b"\x1b]9;4;1;40\x1b\\"),
@@ -3150,11 +3217,11 @@ def check_presentation_parity(java_command):
         query_written(child, b"\x1b]7501;state=done", start, "the finished report")
 
         # Leave metadata applied so the exit has something to give back: a title, the terminal's
-        # default colours, a progress value and a finished status that the protocol keeps.
+        # default colors, a progress value and a finished status that the protocol keeps.
         os.write(child.master, b"t")
         screen_until(child, lambda text: "title=set" in text, "the title before quitting")
         os.write(child.master, b"c")
-        screen_until(child, lambda text: "fg=#e0e6f0" in text, "the default colours before quitting")
+        screen_until(child, lambda text: "fg=#e0e6f0" in text, "the default colors before quitting")
         os.write(child.master, b"g")
         screen_until(child, lambda text: "progress=normal:40" in text, "the progress before quitting")
         start = len(child.output)
@@ -3419,17 +3486,17 @@ def check_inline_io_streams():
 def check_showcase_parity(java_command):
     """Phase 24: one catalog opens every phase demo, returns, and composes the workspace."""
     with PtyChild(java_command, control=False) as child:
-        screen_until(child, lambda text: "catalog=24 open=none selected=01" in text,
+        screen_until(child, lambda text: "catalog=27 open=none selected=01" in text,
                      "the catalog's status row")
         screen_until(child, lambda text: "braxton parity showcase" in text, "the catalog's heading")
         screen_until(child, lambda text: "01 Keymaps and help" in text, "the first entry")
         screen_until(child, lambda text: "\u2191/k up \u2022 \u2193/j down" in text,
                      "the catalog's compact help")
 
-        # The catalog scrolls: the last entry is reachable, and it is the composed workspace.
+        # The catalog scrolls: the last entry is reachable, and it is the debug-overlay demo.
         os.write(child.master, b"\x1b[F")
-        screen_until(child, lambda text: "24 Composed task workspace" in text, "the last entry")
-        screen_until(child, lambda text: "selected=24" in text, "the last entry selected")
+        screen_until(child, lambda text: "31 Debug overlay" in text, "the last entry")
+        screen_until(child, lambda text: "selected=31" in text, "the last entry selected")
         os.write(child.master, b"\x1b[H")
         screen_until(child, lambda text: "selected=01" in text, "the first entry selected again")
 
@@ -3443,7 +3510,7 @@ def check_showcase_parity(java_command):
                      "the cursor scene's own status row")
         screen_until(child, lambda text: "ctrl+c back to catalog" in text, "the catalog's own help row")
         os.write(child.master, b"\x03")
-        screen_until(child, lambda text: "catalog=24 open=none selected=03" in text,
+        screen_until(child, lambda text: "catalog=27 open=none selected=03" in text,
                      "the catalog after returning")
 
         # The same return gesture works in selection widgets and the spinner.
@@ -3455,7 +3522,7 @@ def check_showcase_parity(java_command):
             screen_until(child, lambda text, phase=phase: f"open={phase} scene=" in text,
                          f"selection scene {phase} mounted")
             os.write(child.master, b"\x03")
-            screen_until(child, lambda text, phase=phase: f"catalog=24 open=none selected={phase}" in text,
+            screen_until(child, lambda text, phase=phase: f"catalog=27 open=none selected={phase}" in text,
                          f"Ctrl+C returning from selection scene {phase}")
 
         # Scenes with no focused widget must still own their shortcuts inside the catalog frame.
@@ -3477,7 +3544,7 @@ def check_showcase_parity(java_command):
             screen_until(child, lambda text, result=result: result in text,
                          f"phase {phase} handled its shortcut")
             os.write(child.master, b"\x03")
-            screen_until(child, lambda text, phase=phase: f"catalog=24 open=none selected={phase}" in text,
+            screen_until(child, lambda text, phase=phase: f"catalog=27 open=none selected={phase}" in text,
                          f"the catalog after phase {phase}")
 
         # Ctrl+C is the catalog's captured return gesture, even when the scene also binds quit.
@@ -3490,7 +3557,7 @@ def check_showcase_parity(java_command):
                      "the mounted clipboard scene")
         screen_until(child, lambda text: "copy=idle" in text, "the clipboard scene's own status row")
         os.write(child.master, b"\x03")
-        screen_until(child, lambda text: "catalog=24 open=none selected=19" in text,
+        screen_until(child, lambda text: "catalog=27 open=none selected=19" in text,
                      "the catalog after the mounted scene asked to quit")
 
         # The composed workspace: files on the left, a projection on the right, tasks on page two.
@@ -3540,7 +3607,7 @@ def check_showcase_parity(java_command):
         os.write(child.master, b"\x13")
         screen_until(child, lambda text: "dialog=open" in text, "the confirmation reopened")
         os.write(child.master, b"\x03")
-        screen_until(child, lambda text: "catalog=24 open=none selected=24" in text,
+        screen_until(child, lambda text: "catalog=27 open=none selected=24" in text,
                      "Ctrl+C returning from the workspace modal")
 
         # The mouse demo nests its modal list under layout and observer wrappers.
@@ -3551,27 +3618,270 @@ def check_showcase_parity(java_command):
         os.write(child.master, b"\x1bm")
         screen_until(child, lambda text: "dialog=open" in text, "the modal selection opened")
         os.write(child.master, b"\x03")
-        screen_until(child, lambda text: "catalog=24 open=none selected=17" in text,
+        screen_until(child, lambda text: "catalog=27 open=none selected=17" in text,
                      "Ctrl+C returning from the modal selection")
 
         # Reopening the workspace after a modal return keeps Ctrl+C working.
-        os.write(child.master, b"\x1b[F\r")
+        os.write(child.master, b"\x1b[B" * 7 + b"\r")
         screen_until(child, lambda text: "open=24 scene=" in text, "the workspace reopened")
         os.write(child.master, b"\x13")
         screen_until(child, lambda text: "dialog=open" in text, "the confirmation opened again")
         os.write(child.master, b"\x03")
-        screen_until(child, lambda text: "catalog=24 open=none selected=24" in text,
+        screen_until(child, lambda text: "catalog=27 open=none selected=24" in text,
                      "Ctrl+C returning from the workspace modal")
 
         # A resize proves the catalog still owns its window after the modal unmount.
         child.screen.resize(30, 100)
         child.resize(30, 100)
-        screen_until(child, lambda text: "catalog=24 open=none selected=24" in text
+        screen_until(child, lambda text: "catalog=27 open=none selected=24" in text
                      and "24 Composed task workspace" in text,
                      "the resized catalog")
+        os.write(child.master, b"\x1b[F\r")
+        screen_until(child, lambda text: "open=31 scene=Debug overlay" in text and "DEBUG bounds=" in text,
+                     "the mounted diagnostics scene")
+        os.write(child.master, b"\x03")
+        screen_until(child, lambda text: "catalog=27 open=none selected=31" in text and "DEBUG bounds=" not in text,
+                     "the catalog after diagnostics cleanup")
         os.write(child.master, b"q")
         child.finish()
     print("PASS parity 24 catalog mount/return, composed workspace and modal confirmation")
+
+
+def check_element_kernel_parity(java_command):
+    """Phase 27: an application's own widget routes keys, clicks and its caret in a real terminal."""
+    with PtyChild(java_command, control=False) as child:
+        screen_until(child, lambda text: "kernel widget=painted cells=4/" in text, "the status row")
+        screen_until(child, lambda text: "focus=meter" in text, "the meter's focus")
+        # The application's own binding still answers after the meter declined the gesture.
+        os.write(child.master, b"\t")
+        screen_until(child, lambda text: "focus=scene" in text, "the focus the application moved")
+        os.write(child.master, b"\t")
+        # The meter answers an arrow key itself: it owns focus and emits the fill it decided.
+        os.write(child.master, b"\x1b[C")
+        screen_until(child, lambda text: "cells=5/" in text, "the cell the meter added")
+        screen_until(child, lambda text: "reports=1" in text, "the report the meter counted")
+        # A click four cells into the widget's own row fills the bar to the cell it landed on. The
+        # scene also spells the bar out on a status row, so the widget's row is the one inside the
+        # frame: it is the last row holding filled cells.
+        bar_row = max(row for row, line in enumerate(child.screen.display) if "\u2588" in line)
+        bar_column = child.screen.display[bar_row].index("\u2588")
+        os.write(child.master, mouse_press(bar_row, bar_column + 6))
+        os.write(child.master, mouse_release(bar_row, bar_column + 6))
+        screen_until(child, lambda text: "reports=2" in text, "the click the meter counted")
+        screen_until(child, lambda text: "cells=7/" in text, "the fill the click set")
+        os.write(child.master, b"q")
+        child.finish()
+    print("PASS parity 27 an application's own widget on the public kernel")
+
+
+def check_shared_engines_parity(java_command):
+    """Phase 26: the shared engines are observable in a real terminal."""
+    with PtyChild(java_command, control=False) as child:
+        screen_until(child, lambda text: "engine text: alpha" in text, "the buffer row")
+        screen_until(child, lambda text: "engine selection: 4" in text, "the selection row")
+        screen_until(child, lambda text: "engine scroll: 0" in text, "the virtual scroll row")
+        os.write(child.master, b"q")
+        child.finish()
+    print("PASS parity 26 shared text, selection and virtual scroll engines")
+
+
+def check_terminal_matrix_parity(java_command):
+    """Phase 25: capability facts and a full repaint after an external stop and continue."""
+    status = "term=xterm-256color caps=1/1/1/1 size=24x80"
+    with PtyChild(java_command, control=False) as child:
+        screen_until(child, lambda text: status in text, "the capability status row")
+        screen_until(child, lambda text: "Braxton terminal matrix" in text, "the matrix heading")
+
+        os.killpg(child.process.pid, signal.SIGTSTP)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            attributes = termios.tcgetattr(child.slave)
+            if attributes[3] & termios.ICANON:
+                break
+            time.sleep(0.02)
+        else:
+            raise AssertionError("external SIGTSTP did not restore cooked input before stopping")
+        os.killpg(child.process.pid, signal.SIGCONT)
+
+        # The native continue path leaves the alternate screen and replays the entry sequence.
+        # Clearing pyte here means the status row can only reappear from a fresh full repaint.
+        child.screen.reset()
+        screen_until(child, lambda text: status in text, "the status row after SIGCONT")
+        os.write(child.master, b"q")
+        child.finish()
+    print("PASS parity 25 terminal capability matrix and external stop/continue repaint")
+
+
+def check_line_prompts_parity(java_command):
+    """Phase 29: the four line prompts, answered with real keys on a real terminal."""
+    with PtyChild(java_command, control=False) as child:
+        screen_until(child, lambda text: "Braxton line prompts" in text, "the demo's heading")
+        screen_until(child, lambda text: "Overwrite the report? [y/N]" in text, "the confirmation")
+
+        # A confirmation is a line: "y" alone is not an answer until Enter arrives.
+        os.write(child.master, b"y")
+        child.pump(0.2)
+        require("confirm=" not in "\n".join(child.screen.display),
+                "the confirmation answered before Enter")
+        os.write(child.master, b"\r")
+        screen_until(child, lambda text: "confirm=yes" in text, "the confirmed answer")
+
+        # The choice: down moves the highlight, Enter chooses the second theme.
+        screen_until(child, lambda text: "Pick a theme" in text, "the select prompt")
+        screen_until(child, lambda text: "\u276F dark" in text, "the highlighted first theme")
+        os.write(child.master, b"\x1b[B")
+        screen_until(child, lambda text: "\u276F light" in text, "the highlight moved one option on")
+        os.write(child.master, b"\r")
+        screen_until(child, lambda text: "theme=light" in text, "the chosen theme")
+
+        # The marks: space marks, down moves, space marks again, Enter confirms both.
+        screen_until(child, lambda text: "Build which targets" in text, "the multiple-choice prompt")
+        os.write(child.master, b" ")
+        screen_until(child, lambda text: "[\u2713] linux-x86_64" in text, "the first mark")
+        os.write(child.master, b"\x1b[B ")
+        screen_until(child, lambda text: "[\u2713] linux-aarch64" in text, "the second mark")
+        os.write(child.master, b"\r")
+        screen_until(child, lambda text: "targets=linux-x86_64,linux-aarch64" in text, "the marked targets")
+
+        # The progress count paints its bar in the same region, in place, and leaves it on screen.
+        screen_until(child, lambda text: "Installing packages" in text, "the progress bar")
+        screen_until(child, lambda text: "prompts confirm=yes theme=light targets=2/4 progress=6/6" in text,
+                     "the status line")
+        screen_until(child, lambda text: "6/6" in text and "100%" in text, "the completed progress row")
+        # Nothing the program printed before the first prompt was touched, and the whole dialog ran
+        # on the terminal's own screen.
+        screen_until(child, lambda text: "Braxton line prompts" in text, "the heading still on screen")
+        require("\x1b[?1049h" not in child.output.decode("utf-8", errors="replace"),
+                "a line-oriented dialog must not take the alternate screen")
+
+        child.finish()
+    print("PASS parity 29 line prompts: confirm, select, multi-select and progress")
+
+
+def check_widget_gallery_parity(java_command):
+    """Phase 28: every milestone-4 widget on one screen, on four pages, driven by real keys."""
+    with PtyChild(java_command, control=False) as child:
+        screen_until(child,
+                     lambda text: "gallery page=1/4 choice widgets=5 names=select,tags,remember,density,form" in text,
+                     "the gallery's status row")
+        screen_until(child, lambda text: "braxton widget gallery" in text, "the gallery's title")
+        screen_until(child, lambda text: "select=standard tags=design" in text,
+                     "the choice page's published state")
+        screen_until(child, lambda text: "name: Ada" in text, "the form's own editors")
+
+        # The focused select takes the arrow; the scene's own map never sees it.
+        os.write(child.master, b"\x1b[B")
+        screen_until(child, lambda text: "select=rich" in text and "last=select-chosen" in text,
+                     "the select's own choice")
+        # Tab moves the keyboard between specimens: two steps reach the checkbox.
+        os.write(child.master, b"\t")
+        screen_until(child, lambda text: "focus=tags" in text, "the multi-select focused")
+        os.write(child.master, b"\t")
+        screen_until(child, lambda text: "focus=remember" in text, "the checkbox focused")
+        os.write(child.master, b" ")
+        screen_until(child, lambda text: "remember=on" in text and "last=remember-changed" in text,
+                     "the checkbox flipped")
+        # The form's submission is the scene's gesture, and the seeded address is rejected.
+        os.write(child.master, b"\x13")
+        screen_until(child, lambda text: "last=form-rejected" in text, "the rejected submission")
+        screen_until(child, lambda text: "an address needs an @" in text, "the form's error row")
+
+        # The message surfaces: notifications, the log's tail, and a toast that owns no keys.
+        os.write(child.master, b"\x1b3")
+        screen_until(child, lambda text: "gallery page=3/4 message widgets=2 names=notices,log" in text,
+                     "the message page")
+        screen_until(child, lambda text: "gallery line 20" in text, "the log's tail")
+        os.write(child.master, b"\x1b[B")
+        screen_until(child, lambda text: "notices=2/3 unread=2" in text, "the notification read")
+        os.write(child.master, b"\x07")
+        screen_until(child, lambda text: "toast=shown" in text and "last=toast-shown" in text,
+                     "the toast shown")
+
+        # The data views: three readers and a date picker.
+        os.write(child.master, b"\x1b4")
+        screen_until(child, lambda text: "gallery page=4/4 data widgets=4 names=line,bars,spark,calendar" in text,
+                     "the data page")
+        screen_until(child, lambda text: "March 2026" in text, "the calendar's month")
+        os.write(child.master, b"\x1b[D")
+        screen_until(child, lambda text: "line=7/8" in text, "the line chart's reader stepped back")
+
+        # The navigation widgets: a tree, a scrollbar, a split, a menu and a palette.
+        os.write(child.master, b"\x1b2")
+        screen_until(child, lambda text: "gallery page=2/4 navigate widgets=5" in text,
+                     "the navigation page")
+        screen_until(child, lambda text: "Switch theme" in text, "the command palette")
+        os.write(child.master, b"\x1b[B")
+        screen_until(child, lambda text: "tree=ui.element" in text, "the tree's own selection")
+
+        # The dialog is a modal layer over the page, and its own gesture closes it.
+        os.write(child.master, b"\x1b1")
+        screen_until(child, lambda text: "gallery page=1/4 choice widgets=5" in text,
+                     "the choice page again")
+        os.write(child.master, b"\x04")
+        screen_until(child, lambda text: "apply the gallery change?" in text, "the dialog")
+        os.write(child.master, b"\x1b")
+        screen_until(child, lambda text: "last=dialog-canceled" in text and "focus=select" in text,
+                     "the dialog dismissed and the keyboard returned")
+
+        os.write(child.master, b"q")
+        child.finish()
+    print("PASS parity 28 widget gallery: every milestone-4 widget on four pages")
+
+
+def check_rich_output_parity(java_command):
+    with PtyChild(java_command, control=False) as child:
+        screen_until(child, lambda text: "motion=normal value=0 target=0 state=settled moves=0" in text,
+                     "the initial rich-output state")
+        screen_until(child, lambda text: "image fallback=half-block" in text, "the composed image")
+        require(any("\u2580" in row for row in child.screen.display), "the fallback painted no pixels")
+        os.write(child.master, b" ")
+        screen_until(child, lambda text: "value=100 target=100 state=settled moves=1" in text,
+                     "the completed transition")
+        os.write(child.master, b"m")
+        screen_until(child, lambda text: "motion=reduced value=100" in text, "reduced motion enabled")
+        os.write(child.master, b" ")
+        screen_until(child, lambda text: "motion=reduced value=0 target=0 state=settled moves=2" in text,
+                     "an immediate reduced-motion transition")
+        screen_until(child, lambda text: "frame=a" in text, "the stable reduced-motion frame")
+        os.write(child.master, b"m ")
+        screen_until(child, lambda text: "motion=normal value=100 target=100 state=settled moves=3" in text,
+                     "normal motion restored")
+        child.screen.resize(12, 32)
+        child.resize(12, 32)
+        screen_until(child, lambda text: "Braxton rich output" in text and "fallback=half-block" in text,
+                     "the narrow rich-output view")
+        os.write(child.master, b"q")
+        child.finish()
+    print("PASS parity 30 transitions, reduced motion and composed image fallback")
+
+
+def check_debug_overlay_parity(java_command):
+    with PtyChild(java_command, control=False) as child:
+        screen_until(child, lambda text: "debug overlay=on focus=left left=off right=off changes=0" in text,
+                     "the initial diagnostics scene")
+        screen_until(child, lambda text: "DEBUG bounds=" in text and "frame=" in text and "focus=root/2" in text,
+                     "actual layout, timing and focused path")
+        os.write(child.master, b" ")
+        screen_until(child, lambda text: "left=on right=off changes=1" in text and "msg=Child" in text,
+                     "the focused widget receiving space under the overlay")
+        os.write(child.master, b"\t ")
+        screen_until(child, lambda text: "focus=right left=on right=on changes=2" in text and "focus=root/3" in text,
+                     "focus movement and the second widget")
+        os.write(child.master, b"d")
+        screen_until(child, lambda text: "debug overlay=off" in text and "DEBUG bounds=" not in text,
+                     "diagnostics disabled without stale text")
+        os.write(child.master, b" ")
+        screen_until(child, lambda text: "left=on right=off changes=3" in text, "input with diagnostics off")
+        os.write(child.master, b"d")
+        screen_until(child, lambda text: "debug overlay=on" in text and "DEBUG bounds=" in text and "msg=(none)" in text,
+                     "a fresh diagnostics history")
+        child.screen.resize(16, 64)
+        child.resize(16, 64)
+        screen_until(child, lambda text: "bounds 0,0 16x64" in text and "focus=root/3" in text,
+                     "actual resized geometry")
+        os.write(child.master, b"q")
+        child.finish()
+    print("PASS parity 31 diagnostic bounds/focus/messages/timing, toggles and preserved input")
 
 
 PARITY_SCENARIOS = {
@@ -3599,6 +3909,13 @@ PARITY_SCENARIOS = {
     "22": check_application_control_parity,
     "23": check_inline_io_parity,
     "24": check_showcase_parity,
+    "25": check_terminal_matrix_parity,
+    "26": check_shared_engines_parity,
+    "27": check_element_kernel_parity,
+    "28": check_widget_gallery_parity,
+    "29": check_line_prompts_parity,
+    "30": check_rich_output_parity,
+    "31": check_debug_overlay_parity,
 }
 
 
@@ -3651,12 +3968,13 @@ def main():
         subprocess.run([javac, "-Xlint:all", "-cp", classpath, "-d", str(work),
                         str(ROOT / "tools/terminal/TerminalProbe.java"),
                         str(ROOT / "tools/terminal/ScrollViewProbe.java"),
+                        str(ROOT / "tools/terminal/ImageOutputProbe.java"),
                         str(ROOT / "tools/terminal/ParityProbe.java")], check=True)
         java_command = [java, "--enable-native-access=ALL-UNNAMED", "-cp",
                         os.pathsep.join((str(work), classpath)), PROBE]
         scroll_command = [java, "--enable-native-access=ALL-UNNAMED", "-cp",
                           os.pathsep.join((str(work), classpath)), SCROLL_PROBE]
-        for extra, expected in (([], "--enable-native-access"), (["--enable-native-access=ALL-UNNAMED"], "attached process terminal")):
+        for extra, expected in (([], "--enable-native-access"), (["--enable-native-access=ALL-UNNAMED"], "controlling terminal")):
             result = subprocess.run([java, *extra, "-cp", os.pathsep.join((str(work),classpath)), PROBE, "--bootstrap"],
                                     input=b"", capture_output=True, timeout=30, cwd=ROOT)
             require(result.returncode == 1 and expected in result.stderr.decode(),
@@ -3697,6 +4015,9 @@ def main():
             for command, code in (("EXCEPTION", 1), ("SHUTDOWN", 0), ("SIGTERM", 143)):
                 cases.append((command, lambda command=command, code=code: check_cleanup(java_command, command, code)))
             cases.append(("scroll view panes", lambda: check_scrollview(scroll_command)))
+            image_command = [java, "--enable-native-access=ALL-UNNAMED", "-cp",
+                             os.pathsep.join((str(work), classpath)), "io.github.dhoard.braxton.tools.ImageOutputProbe"]
+            cases.append(("image output", lambda: check_image_output(image_command)))
             if args.harness:
                 cases.append(("packaged harness", check_harness))
             if args.parity_all:

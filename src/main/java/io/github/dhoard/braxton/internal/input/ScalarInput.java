@@ -27,7 +27,9 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.util.concurrent.TimeUnit;
 
-/** Parser cursor: scalar assembly and lookahead across timed UTF-16 reads. */
+/**
+ * Parser cursor: scalar assembly and lookahead across timed UTF-16 reads.
+ */
 final class ScalarInput {
     private final TimedReader reader;
     private final long intervalMillis;

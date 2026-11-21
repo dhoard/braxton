@@ -28,7 +28,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Styled text is a value: immutable, style-aware, and safe to render or copy. */
+/**
+ * Styled text is a value: immutable, style-aware, and safe to render or copy.
+ */
 class StyledTextTest {
 
     @Test

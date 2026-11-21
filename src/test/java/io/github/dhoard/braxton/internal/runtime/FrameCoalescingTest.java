@@ -34,8 +34,8 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -76,10 +76,10 @@ class FrameCoalescingTest {
                 return Update.next(Integer.parseInt(message), Command.none());
             }
 
-            public View<String> view(Integer model, ViewContext context) {
+            public Element<String> view(Integer model, ViewContext context) {
                 rendered.add(model);
                 if (model == 1) armed.set(true);
-                return Views.text("state " + model);
+                return Elements.text("state " + model);
             }
 
             public Subscription<String> subscriptions(Integer model) {

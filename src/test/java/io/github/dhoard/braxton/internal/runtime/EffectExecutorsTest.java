@@ -30,7 +30,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-/** The shared effect executor gives every application task its own virtual thread. */
+/**
+ * The shared effect executor gives every application task its own virtual thread.
+ */
 class EffectExecutorsTest {
 
     @Test

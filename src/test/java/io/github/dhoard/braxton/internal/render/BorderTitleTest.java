@@ -29,11 +29,24 @@ import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import org.junit.jupiter.api.Test;
 
-/** A framed view keeps its width whatever the title contains. */
+/**
+ * A framed region keeps its width whatever the title and the border characters contain.
+ */
 class BorderTitleTest {
+
+    /**
+     * One frame of {@code tree} laid out for {@code rows} by {@code cols} cells.
+     */
+    private static Screen paint(Element<?> tree, int rows, int cols) {
+        Screen screen = new Screen(rows, cols);
+        io.github.dhoard.braxton.ui.ElementTree.paint(
+                io.github.dhoard.braxton.ui.ElementTree.layout(tree, new Rect(0, 0, rows, cols)), screen);
+        return screen;
+    }
 
     @Test
     void everyBuiltInVariantFramesItsChildWithItsOwnCharacters() {
@@ -46,9 +59,7 @@ class BorderTitleTest {
                 new Case(Border.ROUNDED, "\u256D\u2500\u2500\u256E", "\u2570\u2500\u2500\u256F"),
                 new Case(Border.DOUBLE, "\u2554\u2550\u2550\u2557", "\u255A\u2550\u2550\u255D"));
         assertThat(cases).allSatisfy(entry -> {
-            Screen screen = new LayoutEngine()
-                    .layout(Views.border(entry.border(), Views.text("xx")), new Rect(0, 0, 3, 4))
-                    .screen();
+            Screen screen = paint(Elements.frame(entry.border(), Elements.text("xx")), 3, 4);
             java.util.List<String> lines = screen.plainLines();
             assertThat(lines).as("%s frame", entry.border()).hasSize(3);
             assertThat(lines.get(0)).isEqualTo(entry.top());
@@ -57,18 +68,14 @@ class BorderTitleTest {
             assertThat(lines.get(2)).isEqualTo(entry.bottom());
         });
         assertThat(Border.NONE.isVisible()).isFalse();
-        var none = new LayoutEngine()
-                .layout(Views.border(Border.NONE, Views.text("xx")), new Rect(0, 0, 1, 4))
-                .screen();
+        Screen none = paint(Elements.frame(Border.NONE, Elements.text("xx")), 1, 4);
         assertThat(none.plainLines())
                 .as("an invisible border adds no frame and no inset")
                 .containsExactly("xx");
-        var horizontalOnly = new LayoutEngine()
-                .layout(
-                        Views.border(
-                                new Border('\u250C', '\u2510', '\u2514', '\u2518', '\u2500', ' '), Views.text("xx")),
-                        new Rect(0, 0, 2, 4))
-                .screen();
+        Screen horizontalOnly = paint(
+                Elements.frame(new Border('\u250C', '\u2510', '\u2514', '\u2518', '\u2500', ' '), Elements.text("xx")),
+                2,
+                4);
         assertThat(horizontalOnly.plainLines())
                 .as("a border with a blank vertical edge is not a frame")
                 .containsExactly("xx", "");
@@ -82,9 +89,7 @@ class BorderTitleTest {
         // painted it. Every other content path - StyledText.Span, and therefore Box and Table -
         // drops a control character or an unpaired surrogate before it can reach a cell.
         Border crafted = new Border('+', '+', '+', '+', '-', '\u001b');
-        Screen screen = new LayoutEngine()
-                .layout(Views.border(crafted, Views.text("[2K")), new Rect(0, 0, 3, 6))
-                .screen();
+        Screen screen = paint(Elements.frame(crafted, Elements.text("[2K")), 3, 6);
         assertThat(screen.cell(1, 0).text())
                 .as("the edge is a blank cell, not a control character")
                 .isEqualTo(" ");
@@ -97,9 +102,7 @@ class BorderTitleTest {
         // The same boundary owns an unpaired surrogate: UTF-8 would replace it with '?', so the
         // cell would display a character the border never held.
         Border surrogate = new Border('\ud800', '+', '+', '+', '-', '|');
-        Screen surrogateScreen = new LayoutEngine()
-                .layout(Views.border(surrogate, Views.text("[2K")), new Rect(0, 0, 3, 6))
-                .screen();
+        Screen surrogateScreen = paint(Elements.frame(surrogate, Elements.text("[2K")), 3, 6);
         assertThat(surrogateScreen.cell(0, 0).text()).isEqualTo(" ");
     }
 
@@ -107,10 +110,9 @@ class BorderTitleTest {
     void aWideTitleNeverWidensTheFrame() {
         for (int width = 2; width <= 12; width++) {
             for (String title : new String[] {"", "ab", "\u65E5", "\u65E5\u672C", "abcdefghij"}) {
-                var view = Views.border(Border.SINGLE, StyledText.of(title, Style.NONE.withBold()), Views.text("x"));
-                Screen screen = new LayoutEngine()
-                        .layout(view, new Rect(0, 0, 3, width))
-                        .screen();
+                var view = Elements.frame(
+                        Border.SINGLE, StyledText.of(title, Style.NONE.withBold()), Style.NONE, Elements.text("x"));
+                Screen screen = paint(view, 3, width);
                 for (String line : screen.plainLines()) {
                     assertThat(TextMeasure.columns(line))
                             .as("width %d title [%s] line [%s]", width, title, line)
@@ -128,9 +130,7 @@ class BorderTitleTest {
         // break and no tab stop to advance: the raw byte would split the row or move the cursor.
         for (char edge : new char[] {'\n', '\t', '\r', '\u0007'}) {
             Border horizontal = new Border('+', '+', '+', '+', edge, '|');
-            Screen screen = new LayoutEngine()
-                    .layout(Views.border(horizontal, Views.text("ab")), new Rect(0, 0, 3, 4))
-                    .screen();
+            Screen screen = paint(Elements.frame(horizontal, Elements.text("ab")), 3, 4);
             assertThat(screen.plainLines())
                     .as("horizontal edge 0x%04x", (int) edge)
                     .containsExactly("+  +", "|ab|", "+  +");
@@ -142,9 +142,7 @@ class BorderTitleTest {
                     .doesNotContain("\n")
                     .doesNotContain("\t");
             Border vertical = new Border('+', '+', '+', '+', '-', edge);
-            Screen side = new LayoutEngine()
-                    .layout(Views.border(vertical, Views.text("ab")), new Rect(0, 0, 3, 4))
-                    .screen();
+            Screen side = paint(Elements.frame(vertical, Elements.text("ab")), 3, 4);
             // plainLines trims trailing blanks, so the right edge is checked on the cell.
             assertThat(side.plainLines()).as("vertical edge 0x%04x", (int) edge).containsExactly("+--+", " ab", "+--+");
             assertThat(side.cell(1, 0).text())
@@ -169,9 +167,7 @@ class BorderTitleTest {
         // it landed left of where the frame put them.
         for (char edge : new char[] {'\u200B', '\u200D', '\uFEFF', '\u00AD'}) {
             Border horizontal = new Border('+', '+', '+', '+', edge, '|');
-            Screen screen = new LayoutEngine()
-                    .layout(Views.border(horizontal, Views.text("ab")), new Rect(0, 0, 3, 4))
-                    .screen();
+            Screen screen = paint(Elements.frame(horizontal, Elements.text("ab")), 3, 4);
             assertThat(screen.plainLines())
                     .as("horizontal edge 0x%04x", (int) edge)
                     .containsExactly("+  +", "|ab|", "+  +");
@@ -185,9 +181,7 @@ class BorderTitleTest {
                     .as("horizontal edge 0x%04x", (int) edge)
                     .doesNotContain(String.valueOf(edge));
             Border vertical = new Border('+', '+', '+', '+', '-', edge);
-            Screen side = new LayoutEngine()
-                    .layout(Views.border(vertical, Views.text("ab")), new Rect(0, 0, 3, 4))
-                    .screen();
+            Screen side = paint(Elements.frame(vertical, Elements.text("ab")), 3, 4);
             // plainLines trims trailing blanks, so the right edge is checked on the cell.
             assertThat(side.plainLines()).as("vertical edge 0x%04x", (int) edge).containsExactly("+--+", " ab", "+--+");
             assertThat(side.cell(1, 0).text())
@@ -217,9 +211,7 @@ class BorderTitleTest {
                     new Border(edge, edge, edge, edge, '\u2500', '|'));
             assertThat(borders).allSatisfy(border -> {
                 for (int width = 2; width <= 10; width++) {
-                    Screen screen = new LayoutEngine()
-                            .layout(Views.border(border, Views.text("ab")), new Rect(0, 0, 3, width))
-                            .screen();
+                    Screen screen = paint(Elements.frame(border, Elements.text("ab")), 3, width);
                     for (String line : screen.plainLines()) {
                         assertThat(TextMeasure.columns(line))
                                 .as("edge 0x%04x width %d line [%s]", (int) edge, width, line)
@@ -241,11 +233,7 @@ class BorderTitleTest {
             });
             // The edge keeps its cell as a blank, so the frame still insets the child by one column
             // on each side and its corners line up with the rows they frame.
-            Screen side = new LayoutEngine()
-                    .layout(
-                            Views.border(new Border('+', '+', '+', '+', '-', edge), Views.text("ab")),
-                            new Rect(0, 0, 3, 4))
-                    .screen();
+            Screen side = paint(Elements.frame(new Border('+', '+', '+', '+', '-', edge), Elements.text("ab")), 3, 4);
             assertThat(side.cell(1, 0).text())
                     .as("vertical edge 0x%04x", (int) edge)
                     .isEqualTo(" ");

@@ -31,7 +31,9 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** Only the transport changes with the strategy; an off switch writes no escape at all. */
+/**
+ * Only the transport changes with the strategy; an off switch writes no escape at all.
+ */
 class ClipboardTransportTest {
 
     private static ClipboardService service(

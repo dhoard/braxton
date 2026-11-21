@@ -22,13 +22,15 @@
 
 package io.github.dhoard.braxton.internal.terminal;
 
-import io.github.dhoard.braxton.app.TerminalCapabilities;
 import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.terminal.Capabilities;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.PrintWriter;
 
-/** Internal services needed by the runtime; never part of the public MVU surface. */
+/**
+ * Internal services needed by the runtime; never part of the public MVU surface.
+ */
 public interface Terminal extends Closeable {
 
     /**
@@ -39,35 +41,72 @@ public interface Terminal extends Closeable {
      * hands off is {@link #ACTIVE} from open to {@link #CLOSED}.</p>
      */
     enum State {
-        /** Owned by the session and available for reads, writes and mode changes. */
+        /**
+         * Owned by the session and available for reads, writes and mode changes.
+         */
         ACTIVE,
-        /** Being given back; the session is no longer allowed to use it. */
+        /**
+         * Being given back; the session is no longer allowed to use it.
+         */
         RELEASING,
-        /** Given back to the user or to a child process the session started. */
+        /**
+         * Given back to the user or to a child process the session started.
+         */
         RELEASED,
-        /** Being taken back after a release. */
+        /**
+         * Being taken back after a release.
+         */
         REACQUIRING,
-        /** Closed; every later operation fails and close is a no-op. */
+        /**
+         * Closed; every later operation fails and close is a no-op.
+         */
         CLOSED
     }
 
+    /**
+     * Returns the timed character reader for this terminal.
+     *
+     * @return the timed character reader for this terminal
+     */
     TimedReader reader();
 
+    /**
+     * Returns the writer used for terminal output.
+     *
+     * @return the writer used for terminal output
+     */
     PrintWriter writer();
 
     /**
      * The most recent I/O failure behind {@link #writer()}. A {@link PrintWriter} only reports
      * that an error occurred, so the runtime attaches this as the cause of its output failure;
      * {@code null} when no failure was recorded.
+     *
+     * @return the output failure, or null when no error is recorded
      */
     default IOException outputError() {
         return null;
     }
 
+    /**
+     * Returns the current terminal dimensions in cells.
+     *
+     * @return the current terminal dimensions in cells
+     */
     Size size();
 
-    TerminalCapabilities capabilities();
+    /**
+     * Returns the terminal facts and their per-feature evidence.
+     *
+     * @return the terminal facts and their per-feature evidence
+     */
+    Capabilities capabilities();
 
+    /**
+     * Enters the owned terminal's raw input configuration.
+     *
+     * @throws IOException if input or output fails
+     */
     void enterRawMode() throws IOException;
 
     /**
@@ -125,23 +164,58 @@ public interface Terminal extends Closeable {
     }
 
     /**
+     * Preregisters the bytes an external stop writes before handing the terminal to the shell and
+     * the bytes a continue writes when the session takes it back. The native signal path only ever
+     * writes these already-encoded sequences, so no allocation or Java call happens during a stop.
+     *
+     * @param restore the control bytes to emit when suspending
+     * @param resume the control bytes to emit when resuming
+     * @throws java.io.IOException if input or output fails
+     */
+    default void registerSuspendBytes(String restore, String resume) throws IOException {}
+
+    /**
+     * Monotonic notification token for a completed external stop/continue cycle.
+     *
+     * @return monotonic notification token for a completed external stop/continue cycle
+     */
+    default long resumeEpoch() {
+        return 0L;
+    }
+
+    /**
      * Called when shutdown begins. From then on, output the terminal does not accept within the
      * short shutdown stall limit fails instead of waiting out the running limit, including a write
      * that is already in progress. Idempotent and callable from any thread without locks.
      */
     default void boundOutput() {}
 
+    /**
+     * Registers a callback for terminal-size changes; non-device implementations may ignore it.
+     *
+     * @param callback the resize notification callback
+     */
     default void onResize(Runnable callback) {}
 
-    /** Monotonic notification token; changes can represent a shrink/grow with equal final size. */
+    /**
+     * Monotonic notification token; changes can represent a shrink/grow with equal final size.
+     *
+     * @return monotonic notification token; changes can represent a shrink/grow with equal final size
+     */
     default long resizeEpoch() {
         return 0L;
     }
 
+    /**
+     * Writes the synchronized-update opening sequence.
+     */
     default void beginSynchronizedUpdate() {
         writer().write("\u001b[?2026h");
     }
 
+    /**
+     * Writes the synchronized-update closing sequence.
+     */
     default void endSynchronizedUpdate() {
         writer().write("\u001b[?2026l");
     }

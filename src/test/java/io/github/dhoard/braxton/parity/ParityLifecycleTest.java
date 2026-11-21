@@ -36,7 +36,6 @@ import io.github.dhoard.braxton.effect.SuspendResult;
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.internal.render.AnsiEncoder;
 import io.github.dhoard.braxton.internal.runtime.ManualTimers;
 import io.github.dhoard.braxton.internal.runtime.RuntimeLoop;
@@ -51,10 +50,9 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -99,7 +97,9 @@ class ParityLifecycleTest {
                 .withNanoTime(() -> 1_000L);
     }
 
-    /** One child result as the token a scene records. */
+    /**
+     * One child result as the token a scene records.
+     */
     private static String describe(ProcessResult result) {
         return switch (result) {
             case ProcessResult.Exited exited -> "handed:exited:" + exited.status();
@@ -108,7 +108,9 @@ class ParityLifecycleTest {
         };
     }
 
-    /** One suspend outcome as the token a scene records. */
+    /**
+     * One suspend outcome as the token a scene records.
+     */
     private static String describe(SuspendResult result) {
         return switch (result) {
             case SuspendResult.Resumed resumed -> "suspend:resumed";
@@ -118,13 +120,13 @@ class ParityLifecycleTest {
     }
 
     /**
-     * A two-key scene whose update is the test's own behaviour.
+     * A two-key scene whose update is the test's own behavior.
      *
-     * @param behaviour the command each message returns, or null for none
+     * @param behavior the command each message returns, or null for none
      * @return the program
      */
     private static Component<List<String>, String, Never> scene(
-            BiFunction<List<String>, String, Command<String>> behaviour) {
+            BiFunction<List<String>, String, Command<String>> behavior) {
         List<Binding<String>> bindings =
                 List.of(new Binding<>(Key.of("r"), "run"), new Binding<>(Key.of("s"), "suspend"));
         return new Component<>() {
@@ -138,24 +140,29 @@ class ParityLifecycleTest {
                 List<String> next = new ArrayList<>(model);
                 next.add(message);
                 List<String> recorded = List.copyOf(next);
-                Command<String> command = behaviour.apply(recorded, message);
+                Command<String> command = behavior.apply(recorded, message);
                 return command == null ? Update.next(recorded) : Update.next(recorded, command);
             }
 
             @Override
-            public View<String> view(List<String> model, ViewContext context) {
-                return Views.focus(
-                        ElementId.of("scene"),
-                        true,
-                        bindings,
-                        View.InputHandler.none(),
-                        Views.text(SCENE + ":" + model.size() + ":"
-                                + context.viewport().cols()));
+            public Element<String> view(List<String> model, ViewContext context) {
+                return Elements.text(
+                        SCENE + ":" + model.size() + ":" + context.viewport().cols());
+            }
+
+            /**
+             * The gestures this fixture answers, once no leaf has taken them.
+             */
+            @Override
+            public java.util.List<Binding<String>> claims(List<String> model) {
+                return bindings;
             }
         };
     }
 
-    /** Runs one scene, feeding {@code key} once its frame is painted. */
+    /**
+     * Runs one scene, feeding {@code key} once its frame is painted.
+     */
     private static ExitResult run(TestTerminal fixture, RuntimeLoop<List<String>, String> loop, String key) {
         AtomicBoolean fed = new AtomicBoolean();
         fixture.onOutput(text -> {
@@ -260,7 +267,7 @@ class ParityLifecycleTest {
             assertThat(left)
                     .as("the session gives the alternate screen back for the child")
                     .isGreaterThan(0);
-            assertThat(back).as("and takes it again afterwards").isGreaterThan(left);
+            assertThat(back).as("and takes it again afterward").isGreaterThan(left);
             assertThat(output.substring(left, back))
                     .as("the child runs outside the session's screen, so nothing is painted there")
                     .doesNotContain(SCENE);
@@ -375,13 +382,13 @@ class ParityLifecycleTest {
             }
 
             @Override
-            public View<String> view(List<Boolean> model, ViewContext context) {
-                return Views.focus(
-                        ElementId.of("scene"),
-                        true,
-                        List.of(new Binding<>(Key.of("r"), "run")),
-                        View.InputHandler.none(),
-                        Views.text(SCENE));
+            public Element<String> view(List<Boolean> model, ViewContext context) {
+                return Elements.text(SCENE);
+            }
+
+            @Override
+            public java.util.List<Binding<String>> claims(List<Boolean> model) {
+                return List.of(Binding.of("r", "run"));
             }
 
             @Override
@@ -445,16 +452,20 @@ class ParityLifecycleTest {
         return demo().update(model, message).model();
     }
 
-    /** What one key does to the demo's screen, as the scene's own message. */
+    /**
+     * What one key does to the demo's screen, as the scene's own message.
+     */
     private static Optional<ProcessHandoffDemo.Msg> route(ProcessHandoffDemo.Model model, String spec) {
         Key gesture = Key.parse(spec);
-        return InputRouter.route(
-                demo().view(model, new ViewContext(VIEWPORT)), InputEvent.KeyInput.of(gesture, gesture.name()));
+        return io.github.dhoard.braxton.testing.Routing.route(
+                        demo(), model, new ViewContext(VIEWPORT), InputEvent.KeyInput.of(gesture, gesture.name()))
+                .stream()
+                .findFirst();
     }
 
     private static String row(ProcessHandoffDemo.Model model, int index) {
-        return new ScreenRenderer()
-                .plainLines(demo().view(model, new ViewContext(VIEWPORT)), VIEWPORT)
+        return ElementScreen.render(demo().view(model, new ViewContext(VIEWPORT)), VIEWPORT.rows(), VIEWPORT.cols())
+                .lines()
                 .get(index)
                 .strip();
     }

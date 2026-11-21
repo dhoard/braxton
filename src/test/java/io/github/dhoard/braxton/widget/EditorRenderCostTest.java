@@ -67,12 +67,12 @@ class EditorRenderCostTest {
     @Test
     void renderingALongDraftDoesNotRebuildItsGrowingPrefixPerCluster() {
         Editor.Model state = Editor.Model.of(draft(ASCII_UNIT, 4096));
-        long bytes = allocated(() -> sink = Editor.render(state, Editor.Config.defaults(), true));
+        long bytes = allocated(() -> sink = Editor.render(state, EditorConfig.defaults(), true));
         assertThat(bytes)
                 .as("painting one long line must not copy the text it has already accumulated for "
                         + "every cluster it adds")
                 .isLessThan(1_000_000L);
-        assertThat(Editor.render(state, Editor.Config.defaults(), true).plainText())
+        assertThat(Editor.render(state, EditorConfig.defaults(), true).plainText())
                 .as("the whole draft is still painted")
                 .isEqualTo(draft(ASCII_UNIT, 4096) + Editor.CURSOR);
     }
@@ -80,9 +80,9 @@ class EditorRenderCostTest {
     @Test
     void renderingGrowsNearLinearlyWithTheDraft() {
         long small = allocated(
-                () -> sink = Editor.render(Editor.Model.of(draft(ASCII_UNIT, 1024)), Editor.Config.defaults(), true));
+                () -> sink = Editor.render(Editor.Model.of(draft(ASCII_UNIT, 1024)), EditorConfig.defaults(), true));
         long large = allocated(
-                () -> sink = Editor.render(Editor.Model.of(draft(ASCII_UNIT, 4096)), Editor.Config.defaults(), true));
+                () -> sink = Editor.render(Editor.Model.of(draft(ASCII_UNIT, 4096)), EditorConfig.defaults(), true));
         assertThat(large)
                 .as("four times the draft must not cost far more than four times the allocation")
                 .isLessThan(small * 8);
@@ -91,7 +91,7 @@ class EditorRenderCostTest {
     @Test
     void renderingAWideDraftStaysWithinTheAsciiBudget() {
         Editor.Model state = Editor.Model.of(draft(CJK_UNIT, 4096));
-        long bytes = allocated(() -> sink = Editor.render(state, Editor.Config.defaults(), true));
+        long bytes = allocated(() -> sink = Editor.render(state, EditorConfig.defaults(), true));
         assertThat(bytes)
                 .as("a wide draft is the same number of clusters, so it must not cost an order of "
                         + "magnitude more than an ASCII draft")
@@ -103,14 +103,14 @@ class EditorRenderCostTest {
      * style matches. It does not share the production accumulation strategy, so it keeps catching a
      * fast path that drops or reorders a cluster.
      */
-    private static StyledText reference(Editor.Model state, Editor.Config opts, boolean focused) {
+    private static StyledText reference(Editor.Model state, EditorConfig opts, boolean focused) {
         int lines = state.lineCount();
         int visible = Math.min(opts.maxVisibleLines(), lines);
         int caretLine = state.lineAt(state.caret());
         int first = Math.max(0, Math.min(caretLine - visible + 1, lines - visible));
         int promptWidth = TextMeasure.columns(
                 TabStops.expand(StyledText.plain(opts.prompt())).plainText());
-        boolean masking = opts.masking() != Editor.Config.Masking.NONE;
+        boolean masking = opts.masking() != EditorConfig.Masking.NONE;
 
         List<StyledText.Span> spans = new ArrayList<>();
         Style lastStyle = opts.textStyle();
@@ -143,7 +143,7 @@ class EditorRenderCostTest {
             int used = promptWidth;
             for (String cluster : TextMeasure.graphemes(state.text().substring(start, end))) {
                 boolean selected = selectionStart >= 0 && position >= selectionStart && position < selectionEnd;
-                String display = opts.masking() == Editor.Config.Masking.HIDDEN ? "" : masking ? "\u2022" : cluster;
+                String display = opts.masking() == EditorConfig.Masking.HIDDEN ? "" : masking ? "\u2022" : cluster;
                 int cells = masking
                         ? 1
                         : "\t".equals(cluster)
@@ -200,13 +200,13 @@ class EditorRenderCostTest {
                 "a\u0301\u0301b",
                 "selection across a wide glyph 漢字",
                 "line one\nline two\nline three\nline four");
-        List<Editor.Config> optionSets = List.of(
-                Editor.Config.defaults(),
-                Editor.Config.defaults().withPrompt("> ", Style.NONE),
-                Editor.Config.defaults().withMasking(Editor.Config.Masking.PASSWORD),
-                Editor.Config.defaults().withMasking(Editor.Config.Masking.HIDDEN));
+        List<EditorConfig> optionSets = List.of(
+                EditorConfig.defaults(),
+                EditorConfig.defaults().withPrompt("> ", Style.NONE),
+                EditorConfig.defaults().withMasking(EditorConfig.Masking.PASSWORD),
+                EditorConfig.defaults().withMasking(EditorConfig.Masking.HIDDEN));
         for (String draft : drafts) {
-            for (Editor.Config options : optionSets) {
+            for (EditorConfig options : optionSets) {
                 for (int caret : new int[] {0, Math.min(1, draft.length()), draft.length() / 2, draft.length()}) {
                     for (boolean focused : new boolean[] {true, false}) {
                         Editor.Model state = Editor.Model.of(draft).withCaret(caret);

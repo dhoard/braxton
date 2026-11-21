@@ -28,7 +28,9 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.ProcessRequest;
 import io.github.dhoard.braxton.effect.ProcessResult;
 import io.github.dhoard.braxton.effect.SuspendResult;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
+import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -37,18 +39,21 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.Interactive;
+import io.github.dhoard.braxton.ui.Sizing;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Phase 21 parity demo: process handoff and suspend/resume.
@@ -64,7 +69,7 @@ import java.util.Optional;
  *       stopped existing, only the terminal was given away.</li>
  *   <li>{@code ctrl+z} suspends the session when it owns the terminal's foreground. The job stops in
  *       the shell's own configuration, {@code fg} continues it, and the row reports
- *       {@code suspend=resumed} on the frame painted afterwards. A session that does not own the
+ *       {@code suspend=resumed} on the frame painted afterward. A session that does not own the
  *       foreground is refused rather than left stopped with nobody to continue it.</li>
  * </ul>
  *
@@ -74,53 +79,89 @@ import java.util.Optional;
  */
 public final class ProcessHandoffDemo {
 
-    /** The row carrying how many handoffs ran, how the last one ended, and the suspend state. */
+    /**
+     * The row carrying how many handoffs ran, how the last one ended, and the suspend state.
+     */
     public static final int STATUS_ROW = 0;
 
-    /** The row carrying the draft the handoff must not lose. */
+    /**
+     * The row carrying the draft the handoff must not lose.
+     */
     public static final int DRAFT_ROW = 1;
 
-    /** The body row, which changes on every gesture. */
+    /**
+     * The body row, which changes on every gesture.
+     */
     public static final int BODY_ROW = 3;
 
-    /** The first line the owned helper prints. */
+    /**
+     * The first line the owned helper prints.
+     */
     public static final String HELPER_TITLE = "braxton handoff helper";
 
-    /** The environment entry the helper reads back, so the request's environment is visible. */
+    /**
+     * The environment entry the helper reads back, so the request's environment is visible.
+     */
     public static final String HELPER_VARIABLE = "BRAXTON_HANDOFF";
 
-    /** The environment value the helper reads back. */
+    /**
+     * The environment value the helper reads back.
+     */
     public static final String HELPER_VALUE = "phase-21";
 
-    /** The longest draft the scene keeps. */
+    /**
+     * The longest draft the scene keeps.
+     */
     public static final int MAX_DRAFT = 40;
 
     private static final Style STATUS = Style.NONE.withBold();
 
     private ProcessHandoffDemo() {}
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
-        /** Appends the typed text to the draft. */
+        /**
+         * Appends the typed text to the draft.
+         *
+         * @param text the text typed since the last message
+         */
         record Type(String text) implements Msg {}
 
-        /** Removes the last character of the draft. */
+        /**
+         * Removes the last character of the draft.
+         */
         record Backspace() implements Msg {}
 
-        /** Hands the terminal to the owned helper. */
+        /**
+         * Hands the terminal to the owned helper.
+         */
         record RunHelper() implements Msg {}
 
-        /** The helper finished; this is its scoped completion. */
+        /**
+         * The helper finished; this is its scoped completion.
+         *
+         * @param result the completed operation result
+         */
         record Handed(ProcessResult result) implements Msg {}
 
-        /** Asks the session to suspend. */
+        /**
+         * Asks the session to suspend.
+         */
         record Suspend() implements Msg {}
 
-        /** The suspend request resolved. */
+        /**
+         * The suspend request resolved.
+         *
+         * @param result the completed operation result
+         */
         record Suspended(SuspendResult result) implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -136,7 +177,9 @@ public final class ProcessHandoffDemo {
      */
     public record Model(String draft, int handoffs, String last, int exit, String suspend, int gestures) {
 
-        /** Substitutes the starting values for anything missing. */
+        /**
+         * Substitutes the starting values for anything missing.
+         */
         public Model {
             draft = draft == null ? "" : draft;
             handoffs = Math.max(0, handoffs);
@@ -145,7 +188,11 @@ public final class ProcessHandoffDemo {
             gestures = Math.max(0, gestures);
         }
 
-        /** The scene's starting state: an empty draft and nothing handed off yet. */
+        /**
+         * The scene's starting state: an empty draft and nothing handed off yet.
+         *
+         * @return the scene's starting state: an empty draft and nothing handed off yet
+         */
         public static Model start() {
             return new Model("", 0, "none", -1, "ready", 0);
         }
@@ -199,11 +246,20 @@ public final class ProcessHandoffDemo {
                         KeyAction.<Msg>of("backspace", new Msg.Backspace(), "backspace", "delete", "backspace")));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
 
+    /**
+     * Launches the interactive process handoff demo.
+     *
+     * @param args the command-line arguments
+     */
     public static void main(String[] args) {
         if (args.length > 0 && args[0].equals("--helper")) {
             helper(args);
@@ -254,8 +310,15 @@ public final class ProcessHandoffDemo {
         System.exit(status);
     }
 
-    /** The demo scene: a draft, the handoff rows and the help lines. */
+    /**
+     * The demo scene: a draft, the handoff rows and the help lines.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final KeyMap<Msg> keys = defaultKeys();
 
@@ -289,31 +352,75 @@ public final class ProcessHandoffDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
-            int width = context.viewport().cols();
-            return Views.onKeys(
-                    keys.bindings(),
-                    Views.focus(
-                            ElementId.of("draft"),
-                            true,
-                            keys.bindings(),
-                            Scene::type,
-                            Views.column(
-                                    Views.text(status(model), STATUS),
-                                    Views.text("draft=" + (model.draft().isEmpty() ? "-" : model.draft()), STATUS),
-                                    Views.gap(1),
-                                    Views.text("braxton process handoff gestures=" + model.gestures(), STATUS),
-                                    Views.gap(1),
-                                    Help.view(keys, false, width))));
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
         }
 
-        /** The handoff and suspend state, in one row. */
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys.bindings();
+        }
+
+        /**
+         * The status rows, the sample line and the help, as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+            int width = context.viewport().cols();
+            Element<Msg> rows = Elements.column(
+                    Elements.text(status(model), STATUS),
+                    Elements.text("draft=" + (model.draft().isEmpty() ? "-" : model.draft()), STATUS),
+                    Elements.spacer(1),
+                    Elements.text("braxton process handoff gestures=" + model.gestures(), STATUS),
+                    Elements.spacer(1),
+                    Help.element(keys, Help.Config.defaults(), false, width));
+            // The draft is the scene's own field: the leaf that answers for it types the text a key
+            // carries, and declines a key the scene's shortcuts already answer so one gesture never
+            // both runs a shortcut and types its letter.
+            return Elements.stack(rows, new Element.Leaf<Model, Msg>(new Draft(), model, Sizing.measured()));
+        }
+
+        /**
+         * The scene as a field: it types printable text into the draft and owns the keyboard.
+         *
+         * <p>It paints nothing, because the status rows are what the scene shows; what it owns is the
+         * caret-free typing the demo is about.</p>
+         */
+        private final class Draft implements Interactive<Model, Msg> {
+
+            /**
+             * Whether a scene shortcut already answers this gesture, in which case typing declines it.
+             */
+            private boolean bound(Key key) {
+                return keys.bindings().stream().anyMatch(binding -> binding.matches(key));
+            }
+
+            @Override
+            public boolean focused(Model model) {
+                return true;
+            }
+
+            @Override
+            public void onKey(InputEvent.KeyInput key, Model model, Consumer<Msg> emit) {
+                if (!bound(key.key()) && !key.text().isEmpty()) {
+                    emit.accept(new Msg.Type(key.text()));
+                }
+            }
+        }
+
+        /**
+         * The handoff and suspend state, in one row.
+         */
         private static String status(Model model) {
             return "handoffs=" + model.handoffs() + " last=" + model.last() + " exit="
                     + (model.exit() < 0 ? "-" : Integer.toString(model.exit())) + " suspend=" + model.suspend();
         }
 
-        /** Appends typed text, refusing to grow past the bound. */
+        /**
+         * Appends typed text, refusing to grow past the bound.
+         */
         private static String appended(String draft, String text) {
             String candidate = draft + (text == null ? "" : text);
             if (candidate.codePointCount(0, candidate.length()) <= MAX_DRAFT) {
@@ -336,7 +443,9 @@ public final class ProcessHandoffDemo {
             return Optional.empty();
         }
 
-        /** The owned helper, run in the terminal the session gives back. */
+        /**
+         * The owned helper, run in the terminal the session gives back.
+         */
         static Command<Msg> helperCommand() {
             String java =
                     Path.of(System.getProperty("java.home", ""), "bin", "java").toString();
@@ -352,7 +461,9 @@ public final class ProcessHandoffDemo {
             return Command.exec(request, Msg.Handed::new);
         }
 
-        /** The suspend request. */
+        /**
+         * The suspend request.
+         */
         static Command<Msg> suspendCommand() {
             return Command.suspend(Msg.Suspended::new);
         }

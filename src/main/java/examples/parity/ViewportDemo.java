@@ -27,6 +27,7 @@ import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -41,10 +42,11 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.TextInput;
+import io.github.dhoard.braxton.widget.TextInputConfig;
 import io.github.dhoard.braxton.widget.TextViewport;
 import java.util.ArrayList;
 import java.util.List;
@@ -74,22 +76,34 @@ import java.util.Locale;
  */
 public final class ViewportDemo {
 
-    /** The rows the scene paints above the pager: two status rows and the find field. */
+    /**
+     * The rows the scene paints above the pager: two status rows and the find field.
+     */
     public static final int HEADER_ROWS = 3;
 
-    /** The rows the scene paints between the pager and the outline: one status row. */
+    /**
+     * The rows the scene paints between the pager and the outline: one status row.
+     */
     public static final int OUTLINE_HEADER_ROWS = 1;
 
-    /** The rows the scene paints below both panes: one help line per key map. */
+    /**
+     * The rows the scene paints below both panes: one help line per key map.
+     */
     public static final int HELP_ROWS = 2;
 
-    /** The tallest the outline pane may become. */
+    /**
+     * The tallest the outline pane may become.
+     */
     public static final int OUTLINE_MAX_ROWS = 4;
 
-    /** The cells the line-number gutter occupies, separator included. */
+    /**
+     * The cells the line-number gutter occupies, separator included.
+     */
     public static final int GUTTER_COLUMNS = 6;
 
-    /** The rows the scene keeps for its two help lines and the outline before the pager. */
+    /**
+     * The rows the scene keeps for its two help lines and the outline before the pager.
+     */
     private static final int FIXED_ROWS = HEADER_ROWS + OUTLINE_HEADER_ROWS + HELP_ROWS;
 
     private static final Style STATUS = Style.NONE.withBold();
@@ -102,10 +116,14 @@ public final class ViewportDemo {
 
     private static final Style GUTTER = Style.NONE.withItalic();
 
-    /** The word the demo's search finds, and the fixture repeats. */
+    /**
+     * The word the demo's search finds, and the fixture repeats.
+     */
     public static final String KEYWORD = "artichoke";
 
-    /** The document's source: one entry a logical line, styled by its prefix. */
+    /**
+     * The document's source: one entry a logical line, styled by its prefix.
+     */
     private static final String[] SOURCE = {
         "# A pocket guide to the artichoke",
         "",
@@ -138,7 +156,7 @@ public final class ViewportDemo {
         "artichoke \u671d\u9c9c\u84df alcachofa carciofo \u03b1\u03b3\u03ba\u03b9\u03bd\u03ac\u03c1\u03b1",
         "",
         "## Growing them",
-        "They want sun, drainage and room. Give them a metre and they will give",
+        "They want sun, drainage and room. Give them a meter and they will give",
         "you a season of buds; crowd them and they will give you a season of",
         "disappointment. Cut them back in autumn and they will come again, which",
         "is most of what a gardener asks for.",
@@ -151,22 +169,34 @@ public final class ViewportDemo {
         "An artichoke takes its time, and a field guide should too.",
     };
 
-    /** The document: logical lines, with headings, a quotation, a link and wide glyphs. */
+    /**
+     * The document: logical lines, with headings, a quotation, a link and wide glyphs.
+     */
     public static final List<StyledText> LINES = document();
 
-    /** The outline's lines: one entry a section, numbered by the line it starts on. */
+    /**
+     * The outline's lines: one entry a section, numbered by the line it starts on.
+     */
     public static final List<StyledText> OUTLINE = outline();
 
-    /** Which mounted component owns focus. */
+    /**
+     * Which mounted component owns focus.
+     */
     public enum Focus {
 
-        /** The pager: its own gestures scroll it. */
+        /**
+         * The pager: its own gestures scroll it.
+         */
         MAIN,
 
-        /** The outline pane: its own gestures scroll it, independently of the pager. */
+        /**
+         * The outline pane: its own gestures scroll it, independently of the pager.
+         */
         OUTLINE,
 
-        /** The find field: printable keys are a query and the panes scroll nothing. */
+        /**
+         * The find field: printable keys are a query and the panes scroll nothing.
+         */
         FIELD
     }
 
@@ -196,7 +226,9 @@ public final class ViewportDemo {
             int added,
             String last) {
 
-        /** Substitutes the defaults for a missing value. */
+        /**
+         * Substitutes the defaults for a missing value.
+         */
         public Model {
             lines = lines == null ? LINES : List.copyOf(lines);
             main = main == null ? TextViewport.Model.of(TextViewport.Content.empty()) : main;
@@ -253,7 +285,9 @@ public final class ViewportDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -286,25 +320,39 @@ public final class ViewportDemo {
          */
         record Resized(int rows, int columns) implements Msg {}
 
-        /** Replaces the pager's mode with the other one. */
+        /**
+         * Replaces the pager's mode with the other one.
+         */
         record ToggleMode() implements Msg {}
 
-        /** Shows or hides the panes' line numbers. */
+        /**
+         * Shows or hides the panes' line numbers.
+         */
         record ToggleNumbers() implements Msg {}
 
-        /** Appends one note to the end of the document. */
+        /**
+         * Appends one note to the end of the document.
+         */
         record Append() implements Msg {}
 
-        /** Moves focus to the other pane. */
+        /**
+         * Moves focus to the other pane.
+         */
         record NextPane() implements Msg {}
 
-        /** Moves focus to the find field. */
+        /**
+         * Moves focus to the find field.
+         */
         record Search() implements Msg {}
 
-        /** Moves focus to the pager. */
+        /**
+         * Moves focus to the pager.
+         */
         record Find() implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -333,7 +381,11 @@ public final class ViewportDemo {
                         KeyAction.<Msg>of("quit", new Msg.Quit(), "ctrl+c", "quit", "ctrl+c")));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
@@ -393,13 +445,17 @@ public final class ViewportDemo {
      *
      * @return the field's definition
      */
-    public static TextInput.Config searchConfig() {
-        return TextInput.Config.defaults()
+    public static TextInputConfig searchConfig() {
+        return TextInputConfig.defaults()
                 .withPrompt("find: ", Style.NONE.withBold())
                 .withCompletion(TextInput.Completion.disabled());
     }
 
-    /** The line-number gutter both panes paint. */
+    /**
+     * The line-number gutter both panes paint.
+     *
+     * @return the line-number gutter both panes paint
+     */
     public static TextViewport.Gutter gutter() {
         return TextViewport.Gutter.lineNumbers(GUTTER_COLUMNS, GUTTER);
     }
@@ -481,7 +537,9 @@ public final class ViewportDemo {
         return List.copyOf(found);
     }
 
-    /** The length in UTF-16 units of the pattern matched at one offset, or zero. */
+    /**
+     * The length in UTF-16 units of the pattern matched at one offset, or zero.
+     */
     private static int matchAt(String text, int offset, int[] pattern) {
         int position = offset;
         for (int expected : pattern) {
@@ -497,7 +555,9 @@ public final class ViewportDemo {
         return position - offset;
     }
 
-    /** The document, built from source lines whose prefix decides their style. */
+    /**
+     * The document, built from source lines whose prefix decides their style.
+     */
     private static List<StyledText> document() {
         List<StyledText> lines = new ArrayList<>(SOURCE.length);
         for (String line : SOURCE) {
@@ -506,7 +566,9 @@ public final class ViewportDemo {
         return List.copyOf(lines);
     }
 
-    /** One source line, styled by its prefix, with its own link target. */
+    /**
+     * One source line, styled by its prefix, with its own link target.
+     */
     private static StyledText styled(String line) {
         if (line.startsWith("## ")) {
             return StyledText.of(line.substring(3), HEADING);
@@ -527,7 +589,9 @@ public final class ViewportDemo {
                 StyledText.plain(line.substring(link + "[glossary]".length())));
     }
 
-    /** The outline: every heading and quotation, numbered by the line it starts on. */
+    /**
+     * The outline: every heading and quotation, numbered by the line it starts on.
+     */
     private static List<StyledText> outline() {
         List<StyledText> entries = new ArrayList<>();
         for (int line = 0; line < SOURCE.length; line++) {
@@ -542,8 +606,15 @@ public final class ViewportDemo {
 
     // ── the scene ────────────────────────────────────────────────────────────
 
-    /** The status rows, the find field, both panes and the two help lines. */
+    /**
+     * The status rows, the find field, both panes and the two help lines.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         @Override
         public Update<Model, Msg, Never> init(InitContext context) {
@@ -560,7 +631,7 @@ public final class ViewportDemo {
                     0,
                     "none");
             // Each pane is initialized through its own mount, so the definition the scene advertises
-            // is the one its state was built from; nothing about the mounts changes afterwards.
+            // is the one its state was built from; nothing about the mounts changes afterward.
             Model started = empty.withMain(
                             mainMount(empty, 0, 0).initialize(context).model())
                     .withOutline(outlineMount(empty, 0, 0).initialize(context).model())
@@ -615,25 +686,44 @@ public final class ViewportDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
+        }
+
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys().bindings();
+        }
+
+        /**
+         * The scene as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
             int rows = context.viewport().rows();
             int cols = context.viewport().cols();
             int mainRows = mainRows(rows);
             int outlineRows = outlineRows(rows);
-            List<View<Msg>> sections = new ArrayList<>(8);
-            sections.add(Views.fixed(1, Views.text(status(model), STATUS)));
-            sections.add(Views.fixed(1, Views.text(found(model), STATUS)));
-            sections.add(Views.fixed(1, fieldMount(model).view(model, context)));
-            sections.add(Views.fixed(mainRows, mainMount(model, mainRows, cols).view(model, context)));
-            sections.add(Views.fixed(1, Views.text(outlineStatus(model), STATUS)));
-            sections.add(Views.fixed(
+            List<Element<Msg>> sections = new ArrayList<>(8);
+            sections.add(Elements.fixed(1, Elements.text(status(model), STATUS)));
+            sections.add(Elements.fixed(1, Elements.text(found(model), STATUS)));
+            sections.add(Elements.fixed(1, fieldMount(model).view(model, context)));
+            sections.add(
+                    Elements.fixed(mainRows, mainMount(model, mainRows, cols).view(model, context)));
+            sections.add(Elements.fixed(1, Elements.text(outlineStatus(model), STATUS)));
+            sections.add(Elements.fixed(
                     outlineRows, outlineMount(model, outlineRows, cols).view(model, context)));
-            sections.add(Views.fixed(1, Views.text(Help.render(mainKeys(model), false, cols))));
-            sections.add(Views.fixed(1, Views.text(Help.render(keys(), false, cols))));
-            return Views.keyed(List.of(), Views.column(sections), keys().bindings());
+            sections.add(Elements.fixed(1, Elements.text(Help.render(mainKeys(model), false, cols))));
+            sections.add(Elements.fixed(1, Elements.text(Help.render(keys(), false, cols))));
+            return Elements.column(sections);
         }
 
-        /** The pager's own gestures, for the mode its definition is in. */
+        /**
+         * The pager's own gestures, for the mode its definition is in.
+         */
         private static KeyMap<TextViewport.Msg> mainKeys(Model model) {
             return TextViewport.keys(model.main(), mainConfig(model, 0, 0));
         }
@@ -674,7 +764,9 @@ public final class ViewportDemo {
                     OutputRoute.toMessage(Msg.FieldOutput::new));
         }
 
-        /** One pane message, applied through the mount that owns it. */
+        /**
+         * One pane message, applied through the mount that owns it.
+         */
         private Update<Model, Msg, Never> paneUpdate(Model model, Msg.Pane message) {
             Mount<Model, Msg, Never, TextViewport.Model, TextViewport.Msg, Never> mount =
                     message.pane() == 0 ? mainMount(model, 0, 0) : outlineMount(model, 0, 0);
@@ -683,7 +775,9 @@ public final class ViewportDemo {
             return Update.next(applied.model().withLast(prefix + action(message.value())), applied.command());
         }
 
-        /** One field message, applied through the field's mount and then published to the pager. */
+        /**
+         * One field message, applied through the field's mount and then published to the pager.
+         */
         private Update<Model, Msg, Never> typed(Model model, TextInput.Msg message) {
             Update<Model, Msg, Never> applied = fieldMount(model).update(model, message);
             // The ranges are the scene's search policy applied to the field's own text, so a
@@ -693,7 +787,9 @@ public final class ViewportDemo {
                     published(applied.model(), applied.model().lines(), true).withLast("typed"));
         }
 
-        /** The document gains one note, and both panes are told the content changed. */
+        /**
+         * The document gains one note, and both panes are told the content changed.
+         */
         private Update<Model, Msg, Never> appended(Model model) {
             int number = model.added() + 1;
             List<StyledText> lines = new ArrayList<>(model.lines());
@@ -730,14 +826,18 @@ public final class ViewportDemo {
                     .model();
         }
 
-        /** Publishes the outline's own content, which has no matches and follows nothing. */
+        /**
+         * Publishes the outline's own content, which has no matches and follows nothing.
+         */
         private Model publishedOutline(Model model, List<StyledText> lines) {
             Update<Model, Msg, Never> replaced = outlineMount(model, 0, 0)
                     .update(model, new TextViewport.Msg.ContentChanged(TextViewport.Content.of(lines)));
             return replaced.model();
         }
 
-        /** The geometry the scene reports to both panes for one terminal size. */
+        /**
+         * The geometry the scene reports to both panes for one terminal size.
+         */
         private Model geometry(Model model, int rows, int columns) {
             int cols = Math.max(0, columns);
             Update<Model, Msg, Never> main =
@@ -747,7 +847,9 @@ public final class ViewportDemo {
             return outline.model();
         }
 
-        /** The pager's own state, as one verifier-friendly row. */
+        /**
+         * The pager's own state, as one verifier-friendly row.
+         */
         private static String status(Model model) {
             TextViewport.Config config = mainConfig(model, 0, 0);
             TextViewport.Model main = model.main();
@@ -760,7 +862,9 @@ public final class ViewportDemo {
                     + " hscroll=" + percent(TextViewport.horizontalPercent(main, config));
         }
 
-        /** What the search found, what is active, and which component owns focus. */
+        /**
+         * What the search found, what is active, and which component owns focus.
+         */
         private static String found(Model model) {
             return "matches=" + model.main().highlights().size()
                     + " active=" + (model.main().active() + 1)
@@ -771,7 +875,9 @@ public final class ViewportDemo {
                     + " last=" + model.last();
         }
 
-        /** The outline's own state, which moves independently of the pager. */
+        /**
+         * The outline's own state, which moves independently of the pager.
+         */
         private static String outlineStatus(Model model) {
             TextViewport.Config config = outlineConfig(model, 0, 0);
             TextViewport.Model outline = model.outline();
@@ -829,6 +935,8 @@ public final class ViewportDemo {
         }
     }
 
-    /** The terminal size, which is the one number the scene splits between its panes. */
+    /**
+     * The terminal size, which is the one number the scene splits between its panes.
+     */
     private static final SubscriptionId SIZE = SubscriptionId.of("size");
 }

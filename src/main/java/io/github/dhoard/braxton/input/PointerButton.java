@@ -32,28 +32,44 @@ package io.github.dhoard.braxton.input;
  */
 public enum PointerButton {
 
-    /** No button: motion with nothing held, or a report that does not name one. */
+    /**
+     * No button: motion with nothing held, or a report that does not name one.
+     */
     NONE,
 
-    /** The left (primary) button. */
+    /**
+     * The left (primary) button.
+     */
     LEFT,
 
-    /** The middle button. */
+    /**
+     * The middle button.
+     */
     MIDDLE,
 
-    /** The right (secondary) button. */
+    /**
+     * The right (secondary) button.
+     */
     RIGHT,
 
-    /** The wheel turned away from the user. */
+    /**
+     * The wheel turned away from the user.
+     */
     WHEEL_UP,
 
-    /** The wheel turned towards the user. */
+    /**
+     * The wheel turned toward the user.
+     */
     WHEEL_DOWN,
 
-    /** The wheel tilted left. */
+    /**
+     * The wheel tilted left.
+     */
     WHEEL_LEFT,
 
-    /** The wheel tilted right. */
+    /**
+     * The wheel tilted right.
+     */
     WHEEL_RIGHT;
 
     /**

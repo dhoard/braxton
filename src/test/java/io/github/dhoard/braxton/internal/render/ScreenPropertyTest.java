@@ -28,7 +28,9 @@ import io.github.dhoard.braxton.style.Style;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** Randomized painting keeps the wide-glyph bookkeeping consistent. */
+/**
+ * Randomized painting keeps the wide-glyph bookkeeping consistent.
+ */
 class ScreenPropertyTest {
 
     @Test

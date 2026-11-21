@@ -27,18 +27,45 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 
-/** A single-consumer UTF-16 input with distinct timeout and end-of-input results. */
+/**
+ * A single-consumer UTF-16 input with distinct timeout and end-of-input results.
+ */
 public abstract class TimedReader implements Closeable {
+
+    /**
+     * Initializes a timed character reader.
+     */
+    public TimedReader() {}
+    /**
+     * The timed-read result indicating that no character arrived before the deadline.
+     */
     public static final int READ_EXPIRED = -2;
 
-    /** Wait at most timeoutMillis; nonnegative values are UTF-16 units, -1 is EOF. */
+    /**
+     * Wait at most timeoutMillis; nonnegative values are UTF-16 units, -1 is EOF.
+     *
+     * @param timeoutMillis the maximum wait in milliseconds
+     * @return wait at most timeoutMillis; nonnegative values are UTF-16 units, -1 is EOF
+     * @throws java.io.IOException if input or output fails
+     */
     public abstract int read(long timeoutMillis) throws IOException;
 
-    /** Consume already decoded input without waiting; used before applying arrival deadlines. */
+    /**
+     * Consume already decoded input without waiting; used before applying arrival deadlines.
+     *
+     * @return consume already decoded input without waiting; used before applying arrival deadlines
+     * @throws java.io.IOException if input or output fails
+     */
     public int poll() throws IOException {
         return READ_EXPIRED;
     }
 
+    /**
+     * Creates a timed reader that decodes the caller-owned stream as UTF-8.
+     *
+     * @param input the input source
+     * @return a timed reader that decodes the caller-owned stream as UTF-8
+     */
     public static TimedReader utf8(InputStream input) {
         var bytes = new StreamBytes(input);
         var reader = new Utf8Reader(bytes);
@@ -58,7 +85,12 @@ public abstract class TimedReader implements Closeable {
         };
     }
 
-    /** Adapts an owned blocking reader using bounded buffering and a virtual acquisition worker. */
+    /**
+     * Adapts an owned blocking reader using bounded buffering and a virtual acquisition worker.
+     *
+     * @param source the caller-owned character source
+     * @return adapts an owned blocking reader using bounded buffering and a virtual acquisition worker
+     */
     public static TimedReader from(Reader source) {
         var pipe = new CharacterInput(8192);
         Thread worker = Thread.ofVirtual().name("braxton-stream-input").start(() -> {

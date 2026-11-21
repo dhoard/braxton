@@ -29,7 +29,9 @@ import io.github.dhoard.braxton.style.TextMeasure;
 import java.awt.image.BufferedImage;
 import org.junit.jupiter.api.Test;
 
-/** Pixel art keeps one grid cell per pixel whatever symbol the caller asks for. */
+/**
+ * Pixel art keeps one grid cell per pixel whatever symbol the caller asks for.
+ */
 class ImageViewTest {
 
     private static BufferedImage diagonalPixels() {
@@ -96,14 +98,14 @@ class ImageViewTest {
     void replaceMapsOneExactColourAndIgnoresAnythingUnparseable() {
         ImageView view = ImageView.of(ImageAsset.of(diagonalPixels())).symbol("@");
         view.replace("#ff0000", "#0000ff")
-                .replace("not a colour", "#ffffff")
+                .replace("not a color", "#ffffff")
                 .replace("#00ff00", "nope")
                 .replace("00ff00", "#123456");
         StyledText rendered = view.render();
         assertThat(rendered.spans().get(0).style().foreground())
                 .isEqualTo(new io.github.dhoard.braxton.style.Color(0, 0, 0xFF));
         assertThat(rendered.spans().get(2).style().foreground())
-                .as("an unparseable target leaves the pixel's own colour")
+                .as("an unparseable target leaves the pixel's own color")
                 .isEqualTo(new io.github.dhoard.braxton.style.Color(0, 0xFF, 0));
         assertThat(rendered.spans())
                 .as("only #rrggbb parses, so the source without one is ignored")
@@ -148,7 +150,7 @@ class ImageViewTest {
         // One grid cell per pixel whatever symbol the caller asks for: a break would split an
         // image row into extra lines, a tab would widen one pixel by an amount that depends on
         // where the pixel sits, and a control the styled-text boundary drops would shrink a
-        // painted pixel while its transparent neighbour still reserves the measured width.
+        // painted pixel while its transparent neighbor still reserves the measured width.
         for (String symbol : java.util.List.of("a\nb", "a\rb", "a\r\nb", "a\tb")) {
             assertThat(ImageView.of(ImageAsset.of(diagonalPixels()))
                             .symbol(symbol)

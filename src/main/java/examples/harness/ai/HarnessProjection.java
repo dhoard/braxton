@@ -43,14 +43,20 @@ final class HarnessProjection {
     static final int SCROLL_STEP = 3;
     static final int TOOL_PREVIEW_LINES = 6;
 
-    /** The pinned identity block: the identity line and the rule beneath it. */
+    /**
+     * The pinned identity block: the identity line and the rule beneath it.
+     */
     static final int HEADER_HEIGHT = 2;
 
     static final int FOOTER_HEIGHT = 4;
     static final int INPUT_GAP_ROWS = 1;
-    /** Transcript rows the full layout keeps whenever the queue and the draft leave room. */
+    /**
+     * Transcript rows the full layout keeps whenever the queue and the draft leave room.
+     */
     private static final int MIN_BODY_ROWS = 2;
-    /** The most composer rows the frame shows, however tall the terminal or long the draft. */
+    /**
+     * The most composer rows the frame shows, however tall the terminal or long the draft.
+     */
     static final int MAX_EDITOR_ROWS = 10;
     /**
      * The shortest frame the full layout can carry: the header block, the input gap, two rules,
@@ -100,7 +106,9 @@ final class HarnessProjection {
         return state.working() && !state.pending().isEmpty() ? state.pending().get(0) : "";
     }
 
-    /** The composer rows the frame needs: the mirrored prompt's, or the draft's. */
+    /**
+     * The composer rows the frame needs: the mirrored prompt's, or the draft's.
+     */
     static int composerRows(Harness.Model state) {
         String mirrored = mirroredPrompt(state);
         int rows = mirrored.isEmpty() ? state.editorRows() : lineCount(mirrored);
@@ -164,7 +172,9 @@ final class HarnessProjection {
         return Math.max(0, total - rows);
     }
 
-    /** The visible transcript rows and the scroll position they were read at. */
+    /**
+     * The visible transcript rows and the scroll position they were read at.
+     */
     private record Slice(List<StyledText> rows, int start, int total) {}
 
     private static Slice slice(Session.Model state, int width, int rows) {
@@ -191,7 +201,9 @@ final class HarnessProjection {
         return new Slice(List.copyOf(window), start, total);
     }
 
-    /** The visible transcript window, padded with background rows to the allocated height. */
+    /**
+     * The visible transcript window, padded with background rows to the allocated height.
+     */
     static List<StyledText> window(Session.Model state, int width, int allocatedRows) {
         int rows = Math.max(0, allocatedRows);
         Slice slice = slice(state, width, rows);
@@ -222,7 +234,9 @@ final class HarnessProjection {
 
     // ── content ──────────────────────────────────────────────────────────────
 
-    /** Wrapped content and a pure row factory, deferring styled output until a row is requested. */
+    /**
+     * Wrapped content and a pure row factory, deferring styled output until a row is requested.
+     */
     private record ProjectedRows(int size, IntFunction<StyledText> row) {}
 
     static List<StyledText> allRows(Harness.Model state, int width) {
@@ -235,7 +249,9 @@ final class HarnessProjection {
         return result;
     }
 
-    /** One blank-separated group per entry, in transcript order. */
+    /**
+     * One blank-separated group per entry, in transcript order.
+     */
     private static List<ProjectedRows> projectedRows(Session.Model state, int width) {
         List<ProjectedRows> rows = new ArrayList<>();
         List<HarnessEntry> entries = state.entries();
@@ -255,7 +271,9 @@ final class HarnessProjection {
 
     // ── chrome ───────────────────────────────────────────────────────────────
 
-    /** The pinned identity block: the identity line, then a full-width rule. */
+    /**
+     * The pinned identity block: the identity line, then a full-width rule.
+     */
     static List<StyledText> header(Harness.Model state, int width) {
         int columns = Math.max(1, width);
         List<StyledText> rows = new ArrayList<>(HEADER_HEIGHT);
@@ -285,7 +303,9 @@ final class HarnessProjection {
                 identity.append(StyledText.plain(" ".repeat(gap))).append(field), width, HarnessTheme.BACKGROUND);
     }
 
-    /** A full-width horizontal rule in the metrics dim, the style every frame rule wears. */
+    /**
+     * A full-width horizontal rule in the metrics dim, the style every frame rule wears.
+     */
     static StyledText rule(int width) {
         int columns = Math.max(1, width);
         return HarnessRender.fill(
@@ -293,7 +313,7 @@ final class HarnessProjection {
     }
 
     /**
-     * The rule above the composer, carrying the turn's status label in the text colour. An idle
+     * The rule above the composer, carrying the turn's status label in the text color. An idle
      * frame, or a label that does not fit, leaves the plain rule.
      */
     static StyledText statusRule(Harness.Model state) {
@@ -309,7 +329,9 @@ final class HarnessProjection {
         return HarnessRender.fill(row, width, HarnessTheme.BACKGROUND);
     }
 
-    /** The status label of a working turn, or the empty label of an idle one. */
+    /**
+     * The status label of a working turn, or the empty label of an idle one.
+     */
     static String statusLabel(Harness.Model state) {
         if (!state.working()) {
             return "";
@@ -378,7 +400,7 @@ final class HarnessProjection {
 
     /**
      * The composer rows for a prompt waiting in the queue: the prompt's own lines in the queued
-     * colour, with no caret. A line too wide for the frame is cut at its right edge, exactly as
+     * color, with no caret. A line too wide for the frame is cut at its right edge, exactly as
      * the editor cuts a draft line it cannot draw.
      */
     static List<StyledText> queuedComposerRows(Harness.Model state, int width, int rows) {
@@ -393,7 +415,9 @@ final class HarnessProjection {
         return out;
     }
 
-    /** The footer: project path, example source, provider/model identity, and the metrics lane. */
+    /**
+     * The footer: project path, example source, provider/model identity, and the metrics lane.
+     */
     static List<StyledText> footer(Harness.Model state, int width) {
         int columns = Math.max(0, width);
         List<StyledText> rows = new ArrayList<>(FOOTER_HEIGHT);
@@ -418,7 +442,9 @@ final class HarnessProjection {
         return rows;
     }
 
-    /** The metrics lane: real totals, cache hit rate, context use, and generation rate. */
+    /**
+     * The metrics lane: real totals, cache hit rate, context use, and generation rate.
+     */
     static StyledText statsRow(Harness.Model state, int width) {
         int columns = Math.max(0, width);
         if (columns == 0) {
@@ -503,7 +529,9 @@ final class HarnessProjection {
                 HarnessTheme.BACKGROUND);
     }
 
-    /** One full-width row painted with the frame background. */
+    /**
+     * One full-width row painted with the frame background.
+     */
     static StyledText backgroundRow(int width) {
         return HarnessRender.fill(StyledText.empty(), Math.max(0, width), HarnessTheme.BACKGROUND);
     }

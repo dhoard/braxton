@@ -25,11 +25,13 @@ package io.github.dhoard.braxton.asset;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.util.List;
 
-/** A FIGlet-style logo rendered as styled text. */
+/**
+ * A FIGlet-style logo rendered as styled text.
+ */
 public final class Logo {
 
     private final String text;
@@ -42,6 +44,13 @@ public final class Logo {
         this.font = font;
     }
 
+    /**
+     * Creates a {@code Logo} value.
+     *
+     * @param text the text to process
+     * @param font the FIGlet font
+     * @return a logo using the supplied text and font
+     */
     public static Logo of(String text, FigletFont font) {
         if (font == null) {
             throw new IllegalArgumentException("font is required");
@@ -49,25 +58,45 @@ public final class Logo {
         return new Logo(text, font);
     }
 
+    /**
+     * Returns the text style.
+     *
+     * @param value the text style to paint with
+     * @return the text style
+     */
     public Logo style(Style value) {
         style = value == null ? Style.NONE : value;
         return this;
     }
 
+    /**
+     * Returns the foreground color.
+     *
+     * @param value the color to paint the text with
+     * @return the foreground color
+     */
     public Logo color(Color value) {
         style = value == null ? style : style.withForeground(value);
         return this;
     }
 
     /**
-     * Applies a shadow colour. The bundled shadow fonts encode their shadow in the glyph shapes, so
+     * Applies a shadow color. The bundled shadow fonts encode their shadow in the glyph shapes, so
      * this value is applied to the whole art rather than guessed per glyph.
+     *
+     * @param value the shadow color applied to the whole art
+     * @return this logo for chaining
      */
     public Logo shadowColor(Color value) {
         shadowColor = value;
         return this;
     }
 
+    /**
+     * Renders the configured FIGlet text, styling, and optional shadow.
+     *
+     * @return the styled FIGlet banner and optional shadow
+     */
     public StyledText render() {
         List<String> rows = font.render(text);
         StyledText out = StyledText.empty();
@@ -81,7 +110,12 @@ public final class Logo {
         return out;
     }
 
-    public View<Object> view() {
-        return Views.text(render());
+    /**
+     * The art as a one-element tree, for a scene that paints it.
+     *
+     * @return the art as text
+     */
+    public Element<Object> element() {
+        return Elements.text(render());
     }
 }

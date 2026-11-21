@@ -31,7 +31,6 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.internal.runtime.Mailbox;
 import io.github.dhoard.braxton.internal.runtime.ManualTimers;
 import io.github.dhoard.braxton.internal.runtime.SubscriptionManager;
@@ -46,8 +45,8 @@ import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.testing.AllocationProbe;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.AnimatedProgress;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.ProgressBar;
@@ -66,7 +65,7 @@ import org.junit.jupiter.api.Timeout;
  * timing is exact and involves no sleeps; a "response time" is therefore a number of ticks, not a
  * wall clock. The lifecycle cases reconcile the demo's own subscription declarations against
  * {@link ManualTimers}, so "at rest" is proven by the interval that stops being scheduled rather
- * than by a value that happened to hold still. The terminal behaviour of the packaged demo is
+ * than by a value that happened to hold still. The terminal behavior of the packaged demo is
  * verified separately by {@code python3 tools/terminal/verify_terminal.py --parity-phase 08}.</p>
  */
 @Timeout(20)
@@ -76,7 +75,9 @@ class ParityProgressTest {
 
     private static final long MILLIS = 1_000_000L;
 
-    /** How far a demo bar is advanced to be sure it has come to rest: past the demo's response time. */
+    /**
+     * How far a demo bar is advanced to be sure it has come to rest: past the demo's response time.
+     */
     private static final long SETTLED_MILLIS = 900L;
 
     private static final ProgressBar BAR = ProgressBar.of(20);
@@ -106,17 +107,23 @@ class ParityProgressTest {
         return widget.update(model, message).model();
     }
 
-    /** A bar that has been asked for a target: the segment is armed until its first tick. */
+    /**
+     * A bar that has been asked for a target: the segment is armed until its first tick.
+     */
     private static AnimatedProgress.Model armed(AnimatedProgress widget, double target) {
         return apply(widget, AnimatedProgress.Model.at(0.0), new AnimatedProgress.Msg.Set(target));
     }
 
-    /** One tick of the model's current segment, at an absolute monotonic time in milliseconds. */
+    /**
+     * One tick of the model's current segment, at an absolute monotonic time in milliseconds.
+     */
     private static AnimatedProgress.Model at(AnimatedProgress widget, AnimatedProgress.Model model, long millis) {
         return apply(widget, model, new AnimatedProgress.Msg.Tick(model.epoch(), millis * MILLIS));
     }
 
-    /** A segment whose origin has been named at zero, then advanced to {@code millis}. */
+    /**
+     * A segment whose origin has been named at zero, then advanced to {@code millis}.
+     */
     private static AnimatedProgress.Model ran(AnimatedProgress widget, AnimatedProgress.Model model, long millis) {
         return model.armed() ? at(widget, at(widget, model, 0L), millis) : at(widget, model, millis);
     }
@@ -134,15 +141,17 @@ class ParityProgressTest {
         return InputEvent.KeyInput.of(gesture, gesture.name());
     }
 
-    private static List<String> painted(View<?> view) {
-        return new ScreenRenderer().plainLines(view, new Viewport(24, 80));
+    private static List<String> painted(Element<?> view) {
+        return ElementScreen.render(view, 24, 80).lines();
     }
 
-    private static List<String> painted(View<?> view, int rows, int cols) {
-        return new ScreenRenderer().plainLines(view, new Viewport(rows, cols));
+    private static List<String> painted(Element<?> view, int rows, int cols) {
+        return ElementScreen.render(view, rows, cols).lines();
     }
 
-    /** The demo the packaged launch runs, driven as its own component. */
+    /**
+     * The demo the packaged launch runs, driven as its own component.
+     */
     private static ProgressDemo.Scene demo() {
         return new ProgressDemo.Scene();
     }
@@ -155,16 +164,21 @@ class ParityProgressTest {
         return demo().update(model, message).model();
     }
 
-    /** What one key does to the demo's screen, as the scene's own message. */
+    /**
+     * What one key does to the demo's screen, as the scene's own message.
+     */
     private static Optional<ProgressDemo.Msg> route(ProgressDemo.Model model, String keyName) {
-        return InputRouter.route(demo().view(model, CONTEXT), key(keyName));
+        return io.github.dhoard.braxton.testing.Routing.route(demo(), model, CONTEXT, key(keyName)).stream()
+                .findFirst();
     }
 
     private static ProgressDemo.Model send(ProgressDemo.Model model, String keyName) {
         return apply(model, route(model, keyName).orElseThrow(() -> new AssertionError("no message for " + keyName)));
     }
 
-    /** The demo's status and bar rows, so a test can assert the scene without decoding styles. */
+    /**
+     * The demo's status and bar rows, so a test can assert the scene without decoding styles.
+     */
     private static String row(ProgressDemo.Model model, int index) {
         return painted(demo().view(model, CONTEXT)).get(index).strip();
     }
@@ -173,7 +187,9 @@ class ParityProgressTest {
         return painted(demo().view(model, CONTEXT), 24, cols).get(index).strip();
     }
 
-    /** Feeds one tick to the demo's bar, as the runtime's mapper would. */
+    /**
+     * Feeds one tick to the demo's bar, as the runtime's mapper would.
+     */
     private static ProgressDemo.Model tick(ProgressDemo.Model model, long millis) {
         return apply(
                 model,
@@ -181,7 +197,9 @@ class ParityProgressTest {
                         new AnimatedProgress.Msg.Tick(model.bar().epoch(), millis * MILLIS)));
     }
 
-    /** The demo's bar, with its segment origin named at zero and then advanced to {@code millis}. */
+    /**
+     * The demo's bar, with its segment origin named at zero and then advanced to {@code millis}.
+     */
     private static ProgressDemo.Model ease(ProgressDemo.Model model, long millis) {
         return model.bar().armed() ? tick(tick(model, 0L), millis) : tick(model, millis);
     }
@@ -556,7 +574,7 @@ class ParityProgressTest {
         assertThat(interval.id().value()).isEqualTo("tick");
 
         // The mapper carries the segment of the model it was declared from, so a tick mapped before
-        // a retarget is recognisable afterwards.
+        // a retarget is recognizable afterward.
         AnimatedProgress.Model segment = new AnimatedProgress.Model(true, 7L, 1.0, 0.0, 0.0, 0L, 0L);
         Subscription.Interval<AnimatedProgress.Msg> mapped = (Subscription.Interval<AnimatedProgress.Msg>)
                 Subscription.leaves(widget.subscriptions(segment)).get(0);
@@ -575,7 +593,7 @@ class ParityProgressTest {
                 .isEqualTo(EMPTY.repeat(20));
     }
 
-    // ── R-03: graded fills and blended colours ───────────────────────────────
+    // ── R-03: graded fills and blended colors ───────────────────────────────
 
     @Test
     void aPartialFillGradesTheCellTheFillStopsIn() {
@@ -621,7 +639,7 @@ class ParityProgressTest {
         ProgressBar narrow = ProgressBar.of(5).fractional(true);
         ProgressBar wide = ProgressBar.of(5).fractional(true).icons("\u6F22", "\u65E5");
         // The percentage label is as wide as the number it prints, which is the static bar's own
-        // documented behaviour, so the constant-width invariant is asserted on the cells and the
+        // documented behavior, so the constant-width invariant is asserted on the cells and the
         // labels rather than on the label's digits.
         ProgressBar dressed = ProgressBar.of(5)
                 .fractional(true)
@@ -676,7 +694,7 @@ class ParityProgressTest {
         ProgressBar blended = ProgressBar.of(4).blend(RED, BLUE);
         assertThat(foregrounds(blended.render(1.0, 1.0)))
                 .containsExactly(RED, new Color(170, 0, 85), new Color(85, 0, 170), BLUE);
-        // The ramp is anchored to the bar, so a cell keeps its colour as the fill grows.
+        // The ramp is anchored to the bar, so a cell keeps its color as the fill grows.
         assertThat(foregrounds(blended.render(0.5, 1.0)))
                 .as("the first two cells of a half-filled bar, then the empty ones")
                 .containsExactly(RED, new Color(170, 0, 85), null, null);
@@ -690,7 +708,7 @@ class ParityProgressTest {
         assertThat(half.plainText()).isEqualTo(FULL + "\u258C" + EMPTY.repeat(2));
         assertThat(foregrounds(half)).containsExactly(RED, new Color(170, 0, 85), null, null);
 
-        // One cell is the start of the ramp; a missing colour means no blend at all.
+        // One cell is the start of the ramp; a missing color means no blend at all.
         assertThat(foregrounds(ProgressBar.of(1).blend(RED, BLUE).render(1.0, 1.0)))
                 .as("one cell is the start of the ramp")
                 .containsExactly(RED);
@@ -878,7 +896,7 @@ class ParityProgressTest {
         ProgressDemo.Model blended = send(partial, "b");
         assertThat(row(blended, 1)).contains("fill=blend");
         assertThat(row(blended, 4))
-                .as("a blend changes the colours, not the cells")
+                .as("a blend changes the colors, not the cells")
                 .isEqualTo("detail  " + FULL.repeat(5) + EMPTY.repeat(27) + " 17%");
         StyledText painted = blended.staticBar().render(blended.target(), 1.0);
         assertThat(painted.spans().get(1).style().foreground())
@@ -926,9 +944,10 @@ class ParityProgressTest {
         assertThat(route(model, "escape")).contains(new ProgressDemo.Msg.Quit());
         assertThat(route(model, "q")).as("an unbound key reaches nothing").isEmpty();
 
-        List<String> help = painted(Help.view(ProgressDemo.defaultKeys(), true, 200), 8, 200).stream()
-                .filter(line -> !line.isBlank())
-                .toList();
+        List<String> help =
+                painted(Help.element(ProgressDemo.defaultKeys(), Help.Config.defaults(), true, 200), 8, 200).stream()
+                        .filter(line -> !line.isBlank())
+                        .toList();
         assertThat(help).hasSize(3);
         assertThat(help.get(0)).contains("install").contains("uninstall").contains("reset");
         assertThat(help.get(1)).contains("motion").contains("fill");
@@ -963,12 +982,12 @@ class ParityProgressTest {
                 ComponentDriver.initialize(demo(), new InitContext(new Viewport(24, 80), null));
         driver.send(new ProgressDemo.Msg.Install());
         ProgressDemo.Model armed = driver.model();
-        assertThat(driver.screen(CONTEXT).plainLine(0)).isEqualTo("animated target=0.167 displayed=0.000 run=on");
+        assertThat(driver.screen(CONTEXT).line(0)).isEqualTo("animated target=0.167 displayed=0.000 run=on");
         driver.send(new ProgressDemo.Msg.Bar(
                 new AnimatedProgress.Msg.Tick(armed.bar().epoch(), 800 * MILLIS)));
         driver.send(new ProgressDemo.Msg.Bar(
                 new AnimatedProgress.Msg.Tick(armed.bar().epoch(), 1_600 * MILLIS)));
-        assertThat(driver.screen(CONTEXT).plainLine(0)).isEqualTo("animated target=0.167 displayed=0.167 run=off");
+        assertThat(driver.screen(CONTEXT).line(0)).isEqualTo("animated target=0.167 displayed=0.167 run=off");
         assertThat(driver.children().nodes()).hasSize(2);
     }
 
@@ -1053,7 +1072,9 @@ class ParityProgressTest {
                 .allSatisfy(leaf -> assertThat(leaf.id().value()).isEqualTo("tick"));
     }
 
-    /** Every message the mailbox holds, without waiting for more. */
+    /**
+     * Every message the mailbox holds, without waiting for more.
+     */
     private static List<ProgressDemo.Msg> drained(Mailbox mailbox) {
         List<ProgressDemo.Msg> messages = new ArrayList<>();
         while (true) {

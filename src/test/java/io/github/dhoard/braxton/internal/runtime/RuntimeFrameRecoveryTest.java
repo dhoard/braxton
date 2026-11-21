@@ -32,8 +32,8 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
@@ -41,7 +41,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-/** Regressions for frame behavior recovered from the installed Braxton artifact. */
+/**
+ * Regressions for frame behavior recovered from the installed Braxton artifact.
+ */
 @Timeout(10)
 class RuntimeFrameRecoveryTest {
     @Test
@@ -134,8 +136,8 @@ class RuntimeFrameRecoveryTest {
                     return Update.next(model);
                 }
 
-                public View<String> view(Integer model, ViewContext context) {
-                    return Views.text("ready");
+                public Element<String> view(Integer model, ViewContext context) {
+                    return Elements.text("ready");
                 }
             };
             return new RuntimeLoop<>(program, RuntimeOptions.defaults(), terminal, RuntimeServices.system()).run();

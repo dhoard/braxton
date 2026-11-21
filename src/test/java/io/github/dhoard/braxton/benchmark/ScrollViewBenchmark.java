@@ -23,7 +23,6 @@
 package io.github.dhoard.braxton.benchmark;
 
 import io.github.dhoard.braxton.internal.render.AnsiEncoder;
-import io.github.dhoard.braxton.internal.render.LayoutEngine;
 import io.github.dhoard.braxton.internal.render.Screen;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.ViewContext;
@@ -44,7 +43,9 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 
-/** Indexed immutable display rows, independent of the AI Harness's application-level projection. */
+/**
+ * Indexed immutable display rows, independent of the AI Harness's application-level projection.
+ */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
@@ -66,7 +67,6 @@ public class ScrollViewBenchmark {
         }
     }
 
-    private final LayoutEngine engine = new LayoutEngine();
     private ScrollView widget;
     private ScrollView.Model model;
     private ViewContext context;
@@ -80,7 +80,7 @@ public class ScrollViewBenchmark {
         model = new ScrollView.Model(0, true, true, height, new Document(rows));
         viewport = new Viewport(height, 80);
         context = new ViewContext(viewport);
-        previous = engine.layout(widget.view(model, context), viewport.bounds()).screen();
+        previous = frame();
         publication = new ArrayList<>(java.util.Collections.nCopies(rows, ROW));
     }
 
@@ -93,21 +93,30 @@ public class ScrollViewBenchmark {
 
     @Benchmark
     public String paintAndEncode() {
-        return AnsiEncoder.frame(
-                engine.layout(widget.view(model, context), viewport.bounds()).screen(), true);
+        return AnsiEncoder.frame(frame(), true);
     }
 
     @Benchmark
     public String paintAndDiff() {
-        return AnsiEncoder.diff(
-                previous,
-                engine.layout(widget.view(model, context), viewport.bounds()).screen(),
-                true);
+        return AnsiEncoder.diff(previous, frame(), true);
     }
 
-    /** Deliberately separate O(history) list publication from O(window) frame work. */
+    /**
+     * Deliberately separate O(history) list publication from O(window) frame work.
+     */
     @Benchmark
     public Object publishListSnapshot() {
         return ScrollView.Content.of(publication);
+    }
+
+    /**
+     * One frame: resolve the widget's tree, then paint it into the cells the encoder reads.
+     */
+    private Screen frame() {
+        io.github.dhoard.braxton.ui.ElementTree.Placement<?> placement =
+                io.github.dhoard.braxton.ui.ElementTree.layout(widget.view(model, context), viewport.bounds());
+        Screen screen = new Screen(viewport.rows(), viewport.cols());
+        io.github.dhoard.braxton.ui.ElementTree.paint(placement, screen);
+        return screen;
     }
 }

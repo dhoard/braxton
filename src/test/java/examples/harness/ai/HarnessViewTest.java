@@ -27,21 +27,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.Modifiers;
-import io.github.dhoard.braxton.internal.input.InputRouter;
-import io.github.dhoard.braxton.internal.render.LayoutEngine;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.RenderedScreen;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
 import io.github.dhoard.braxton.widget.Editor;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-/** Harness frame, transcript rows, and palette, measured through the real production view. */
+/**
+ * Harness frame, transcript rows, and palette, measured through the real production view.
+ */
 class HarnessViewTest {
 
     private static final HarnessTranscript.Profile PROFILE =
@@ -73,7 +71,9 @@ class HarnessViewTest {
                 "~/Development/braxton");
     }
 
-    /** The state with a running turn and the supplied prompts queued behind it. */
+    /**
+     * The state with a running turn and the supplied prompts queued behind it.
+     */
     private static Harness.Model working(Harness.Model base, List<String> pending) {
         return new Harness.Model(
                 base.session(),
@@ -94,7 +94,9 @@ class HarnessViewTest {
         return HarnessView.renderLines(state);
     }
 
-    /** The index of the row whose padded text starts with {@code prefix}. */
+    /**
+     * The index of the row whose padded text starts with {@code prefix}.
+     */
     private static int rowStartingWith(List<String> lines, String prefix) {
         for (int i = 0; i < lines.size(); i++) {
             if (lines.get(i).startsWith(prefix)) {
@@ -214,9 +216,9 @@ class HarnessViewTest {
         assertThat(user).isPositive();
         assertThat(lines.get(user)).startsWith("USER " + expected);
 
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state), new Viewport(24, 80));
-        assertThat(screen.cell(user, 0).style().foreground()).isEqualTo(HarnessTheme.USER_GUTTER_COLOR);
-        assertThat(screen.cell(user, "USER ".length()).style().foreground()).isEqualTo(HarnessTheme.DIM_COLOR);
+        ElementScreen screen = ElementScreen.render(HarnessView.view(state), 24, 80);
+        assertThat(screen.canvas().style(user, 0).foreground()).isEqualTo(HarnessTheme.USER_GUTTER_COLOR);
+        assertThat(screen.canvas().style(user, "USER ".length()).foreground()).isEqualTo(HarnessTheme.DIM_COLOR);
 
         int assistant = rowStartingWith(lines, "ASSISTANT");
         assertThat(lines.get(assistant).stripTrailing())
@@ -298,14 +300,14 @@ class HarnessViewTest {
                 "",
                 new Size(24, 80),
                 List.of());
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(failed), new Viewport(24, 80));
+        ElementScreen screen = ElementScreen.render(HarnessView.view(failed), 24, 80);
         List<String> lines = lines(failed);
         int header = rowStartingWith(lines, "TOOL");
         assertThat(header).isPositive();
-        assertThat(screen.cell(header, 0).style().foreground()).isEqualTo(HarnessTheme.ERROR_COLOR);
+        assertThat(screen.canvas().style(header, 0).foreground()).isEqualTo(HarnessTheme.ERROR_COLOR);
         int body = rowStartingWith(lines, "boom");
         assertThat(body).isPositive();
-        assertThat(screen.cell(body, 0).style().foreground()).isEqualTo(HarnessTheme.ERROR_COLOR);
+        assertThat(screen.canvas().style(body, 0).foreground()).isEqualTo(HarnessTheme.ERROR_COLOR);
     }
 
     @Test
@@ -357,8 +359,8 @@ class HarnessViewTest {
         assertThat(TextMeasure.columns(stats)).isEqualTo(120);
         assertThat(HarnessProjection.footer(armed, 120).getLast().plainText()).endsWith("ctrl+c again to exit");
 
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(armed), new Viewport(40, 120));
-        String last = screen.plainLine(39);
+        ElementScreen screen = ElementScreen.render(HarnessView.view(armed), 40, 120);
+        String last = screen.line(39);
         assertThat(last).endsWith("ctrl+c again to exit");
     }
 
@@ -408,8 +410,8 @@ class HarnessViewTest {
         assertThat(String.join("\n", lines)).doesNotContain("unused draft");
         assertThat(String.join("\n", lines).split("queued prompt", -1)).hasSize(2);
 
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(queued), new Viewport(24, 80));
-        assertThat(screen.cell(composerRowIndex(layout), 0).style().foreground())
+        ElementScreen screen = ElementScreen.render(HarnessView.view(queued), 24, 80);
+        assertThat(screen.canvas().style(composerRowIndex(layout), 0).foreground())
                 .isEqualTo(HarnessTheme.QUEUED_COLOR);
 
         // A queued prompt belongs to the queue, not to a draft, so edits are refused.
@@ -422,13 +424,13 @@ class HarnessViewTest {
 
     @Test
     void messageHeadersPaintTheirTextOnTheHeaderBand() {
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")), new Viewport(40, 120));
+        ElementScreen screen = ElementScreen.render(HarnessView.view(state("")), 40, 120);
         List<String> lines = lines(state(""));
         for (String prefix : List.of("SYSTEM", "USER", "THINKING", "TOOL", "ASSISTANT")) {
             int header = rowStartingWith(lines, prefix);
             assertThat(header).as("%s header row", prefix).isPositive();
             for (int col : new int[] {0, prefix.length() - 1, 119}) {
-                assertThat(screen.cell(header, col).style().background())
+                assertThat(screen.canvas().style(header, col).background())
                         .as("%s header cell %d background", prefix, col)
                         .isEqualTo(HarnessTheme.TRANSCRIPT_HEADER_BG_COLOR);
             }
@@ -437,15 +439,15 @@ class HarnessViewTest {
 
     @Test
     void theIdentityLineCarriesTheExampleVersion() {
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")), new Viewport(40, 120));
-        String line = screen.plainLine(0);
+        ElementScreen screen = ElementScreen.render(HarnessView.view(state("")), 40, 120);
+        String line = screen.line(0);
         assertThat(line).startsWith("AI Harness v" + HarnessTranscript.EXAMPLE_VERSION);
         assertThat(line).endsWith(HarnessTranscript.EXAMPLE_SESSION_ID);
-        assertThat(screen.cell(0, 0).style().foreground()).isEqualTo(HarnessTheme.ACCENT_COLOR);
-        assertThat(screen.cell(0, 0).style().bold()).isTrue();
+        assertThat(screen.canvas().style(0, 0).foreground()).isEqualTo(HarnessTheme.ACCENT_COLOR);
+        assertThat(screen.canvas().style(0, 0).bold()).isTrue();
         int version = "AI Harness v".length();
-        assertThat(screen.cell(0, version).style().foreground()).isEqualTo(HarnessTheme.DIM_COLOR);
-        assertThat(screen.cell(0, version).style().bold()).isFalse();
+        assertThat(screen.canvas().style(0, version).foreground()).isEqualTo(HarnessTheme.DIM_COLOR);
+        assertThat(screen.canvas().style(0, version).bold()).isFalse();
 
         // Narrow frames keep the identity and drop the session field whole.
         List<String> narrow = lines(state("").withViewport(new Size(24, 40)));
@@ -454,39 +456,39 @@ class HarnessViewTest {
 
     @Test
     void paletteIsCarriedByCellStylesRatherThanInlineAnsi() {
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")), new Viewport(40, 120));
+        ElementScreen screen = ElementScreen.render(HarnessView.view(state("")), 40, 120);
         List<String> lines = lines(state(""));
         int user = rowStartingWith(lines, "USER");
-        assertThat(screen.cell(user, 0).style().foreground()).isEqualTo(HarnessTheme.USER_GUTTER_COLOR);
-        assertThat(screen.cell(user, 0).style().bold()).isTrue();
-        assertThat(screen.cell(user, 119).style().background()).isEqualTo(HarnessTheme.TRANSCRIPT_HEADER_BG_COLOR);
+        assertThat(screen.canvas().style(user, 0).foreground()).isEqualTo(HarnessTheme.USER_GUTTER_COLOR);
+        assertThat(screen.canvas().style(user, 0).bold()).isTrue();
+        assertThat(screen.canvas().style(user, 119).background()).isEqualTo(HarnessTheme.TRANSCRIPT_HEADER_BG_COLOR);
         int system = rowStartingWith(lines, "SYSTEM");
-        assertThat(screen.cell(system, 0).style().foreground()).isEqualTo(HarnessTheme.SYSTEM_GUTTER_COLOR);
+        assertThat(screen.canvas().style(system, 0).foreground()).isEqualTo(HarnessTheme.SYSTEM_GUTTER_COLOR);
         int assistant = rowStartingWith(lines, "ASSISTANT");
-        assertThat(screen.cell(assistant, 0).style().foreground()).isEqualTo(HarnessTheme.ASSISTANT_GUTTER_COLOR);
-        for (int row = 0; row < screen.rows(); row++) {
-            for (int col = 0; col < screen.cols(); col++) {
-                assertThat(screen.cell(row, col).text()).doesNotContain("\u001B");
+        assertThat(screen.canvas().style(assistant, 0).foreground()).isEqualTo(HarnessTheme.ASSISTANT_GUTTER_COLOR);
+        for (int row = 0; row < screen.canvas().rows(); row++) {
+            for (int col = 0; col < screen.canvas().cols(); col++) {
+                assertThat(screen.canvas().text(row, col)).doesNotContain("\u001B");
             }
         }
     }
 
     @Test
     void reasoningBodyIsItalicAndMessagesKeepTheTextColour() {
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")), new Viewport(40, 120));
+        ElementScreen screen = ElementScreen.render(HarnessView.view(state("")), 40, 120);
         List<String> lines = lines(state(""));
         int thinking = rowStartingWith(lines, "THINKING");
-        assertThat(screen.cell(thinking, 0).style().foreground()).isEqualTo(HarnessTheme.THINKING_GUTTER_COLOR);
+        assertThat(screen.canvas().style(thinking, 0).foreground()).isEqualTo(HarnessTheme.THINKING_GUTTER_COLOR);
         int body = rowStartingWith(lines, "The user is checking");
         assertThat(body).isPositive();
-        assertThat(screen.cell(body, 0).style().italic()).isTrue();
-        assertThat(screen.cell(body, 0).style().foreground()).isEqualTo(HarnessTheme.THINKING_TEXT_COLOR);
+        assertThat(screen.canvas().style(body, 0).italic()).isTrue();
+        assertThat(screen.canvas().style(body, 0).foreground()).isEqualTo(HarnessTheme.THINKING_TEXT_COLOR);
     }
 
     @Test
     void composerRowAndCaretCarryTheInputAreaBackground() {
         Harness.Model state = state("hi");
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state), new Viewport(40, 120));
+        ElementScreen screen = ElementScreen.render(HarnessView.view(state), 40, 120);
         HarnessProjection.Layout layout = HarnessProjection.layout(state);
         int composerRow = layout.header()
                 + layout.body()
@@ -494,10 +496,10 @@ class HarnessViewTest {
                 + layout.gap()
                 + layout.statusRule()
                 + layout.editorPad();
-        String row = screen.plainLine(composerRow);
+        String row = screen.line(composerRow);
         assertThat(row).startsWith("hi").contains(Editor.CURSOR);
-        for (int col = 0; col < screen.cols(); col++) {
-            assertThat(screen.cell(composerRow, col).style().background())
+        for (int col = 0; col < screen.canvas().cols(); col++) {
+            assertThat(screen.canvas().style(composerRow, col).background())
                     .as("composer cell %d background in %s", col, row)
                     .isEqualTo(HarnessTheme.BACKGROUND_COLOR);
         }
@@ -505,12 +507,12 @@ class HarnessViewTest {
 
     @Test
     void noMessageCarriesABackgroundPanel() {
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(state("")), new Viewport(40, 120));
+        ElementScreen screen = ElementScreen.render(HarnessView.view(state("")), 40, 120);
         List<String> lines = lines(state(""));
         for (String prefix : List.of("USER", "TOOL", "ASSISTANT")) {
             int row = rowStartingWith(lines, prefix);
             int body = row + 2;
-            assertThat(screen.cell(body, 0).style().background())
+            assertThat(screen.canvas().style(body, 0).background())
                     .as("%s body background", prefix)
                     .isEqualTo(HarnessTheme.BACKGROUND_COLOR);
         }
@@ -617,15 +619,15 @@ class HarnessViewTest {
                 0L,
                 new Size(24, 80),
                 "~/braxton");
-        RenderedScreen screen = new ScreenRenderer().screen(HarnessView.view(warning), new Viewport(24, 80));
-        RenderedScreen errorScreen = new ScreenRenderer().screen(HarnessView.view(error), new Viewport(24, 80));
+        ElementScreen screen = ElementScreen.render(HarnessView.view(warning), 24, 80);
+        ElementScreen errorScreen = ElementScreen.render(HarnessView.view(error), 24, 80);
         boolean yellow = false;
         boolean red = false;
-        for (int row = 0; row < screen.rows(); row++) {
-            for (int col = 0; col < screen.cols(); col++) {
-                var color = screen.cell(row, col).style().foreground();
+        for (int row = 0; row < screen.canvas().rows(); row++) {
+            for (int col = 0; col < screen.canvas().cols(); col++) {
+                var color = screen.canvas().style(row, col).foreground();
                 yellow |= HarnessTheme.WARNING_COLOR.equals(color);
-                var errorColor = errorScreen.cell(row, col).style().foreground();
+                var errorColor = errorScreen.canvas().style(row, col).foreground();
                 red |= HarnessTheme.ERROR_COLOR.equals(errorColor);
             }
         }
@@ -668,12 +670,20 @@ class HarnessViewTest {
         assertThat(HarnessTheme.ERROR_GUTTER_COLOR).isEqualTo(HarnessTheme.ERROR_COLOR);
     }
 
+    /**
+     * One event through the runtime's two steps, for the documented-key assertions below.
+     */
+    private static List<Harness.Msg> route(Harness harness, Harness.Model model, InputEvent event) {
+        return io.github.dhoard.braxton.testing.Routing.route(
+                harness, model, new ViewContext(new Viewport(24, 80)), event);
+    }
+
     @Test
     void ctrlCIsInterceptedWithItsCaptureTimeAndIsNotABinding() {
-        View<Harness.Msg> view = HarnessView.view(state(""));
-        Optional<Harness.Msg> routed =
-                InputRouter.route(view, InputEvent.KeyInput.of(Key.of("c", Modifiers.CTRL), "", 42L));
-        assertThat(routed).contains(new Harness.Msg.QuitRequest(42L));
+        // Ctrl+C is observed rather than bound, so it carries the time the terminal reported it.
+        assertThat(new Harness(() -> HarnessTranscript.empty(List.of()), "~/braxton", List.of())
+                        .observed(InputEvent.KeyInput.of(Key.of("c", Modifiers.CTRL), "", 42L)))
+                .contains(new Harness.Msg.QuitRequest(42L));
         assertThat(HarnessView.bindings()).noneMatch(binding -> binding.key().equals(Key.of("c", Modifiers.CTRL)));
     }
 
@@ -681,7 +691,8 @@ class HarnessViewTest {
     void everyDocumentedKeyReachesItsDocumentedAction() {
         // The README's key table is the harness contract; route each documented gesture through
         // the production view so a changed binding cannot drift from the documentation.
-        View<Harness.Msg> view = HarnessView.view(state(""));
+        Harness harness = new Harness(() -> HarnessTranscript.empty(List.of()), "~/braxton", List.of());
+        Harness.Model model = state("");
         record Case(Key key, String text, Class<?> messageType) {}
         List<Case> cases = List.of(
                 new Case(Key.ENTER, "\r", Harness.Msg.ComposerMsg.class),
@@ -701,25 +712,28 @@ class HarnessViewTest {
                 new Case(Key.of("t", Modifiers.ALT), "", Harness.Msg.CopyVisible.class),
                 new Case(Key.of("l", Modifiers.ALT), "", Harness.Msg.CopyLastReply.class));
         assertThat(cases).allSatisfy(entry -> {
-            Optional<Harness.Msg> routed =
-                    InputRouter.route(view, new InputEvent.KeyInput(entry.key(), entry.text(), 0L));
+            List<Harness.Msg> routed = io.github.dhoard.braxton.testing.Routing.route(
+                    harness,
+                    model,
+                    new ViewContext(new Viewport(24, 80)),
+                    new InputEvent.KeyInput(entry.key(), entry.text(), 0L));
             assertThat(routed)
                     .as("%s is documented but produces nothing", entry.key())
-                    .isPresent();
-            assertThat(routed.get())
+                    .isNotEmpty();
+            assertThat(routed.get(0))
                     .as("%s routes to the documented message", entry.key())
                     .isInstanceOf(entry.messageType());
         });
         // A printable key edits the composer, and the two editor gestures keep their own actions.
-        assertThat(InputRouter.route(view, new InputEvent.KeyInput(Key.of("a"), "a", 0L)))
+        assertThat(route(harness, model, new InputEvent.KeyInput(Key.of("a"), "a", 0L)))
                 .contains(new Harness.Msg.ComposerMsg(new io.github.dhoard.braxton.widget.Editor.Msg.Insert("a")));
-        assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.of("j", Modifiers.CTRL))))
+        assertThat(route(harness, model, InputEvent.KeyInput.of(Key.of("j", Modifiers.CTRL))))
                 .contains(new Harness.Msg.ComposerMsg(new io.github.dhoard.braxton.widget.Editor.Msg.Newline()));
-        assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.of("c", Modifiers.ALT))))
+        assertThat(route(harness, model, InputEvent.KeyInput.of(Key.of("c", Modifiers.ALT))))
                 .contains(new Harness.Msg.ComposerMsg(new io.github.dhoard.braxton.widget.Editor.Msg.Copy()));
-        assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.of("v", Modifiers.CTRL))))
+        assertThat(route(harness, model, InputEvent.KeyInput.of(Key.of("v", Modifiers.CTRL))))
                 .contains(new Harness.Msg.ComposerMsg(new io.github.dhoard.braxton.widget.Editor.Msg.PasteRequest()));
-        assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.of("t", Modifiers.ALT))))
+        assertThat(route(harness, model, InputEvent.KeyInput.of(Key.of("t", Modifiers.ALT))))
                 .as("Alt+T copies the visible transcript, not the draft")
                 .contains(new Harness.Msg.CopyVisible());
     }
@@ -728,9 +742,8 @@ class HarnessViewTest {
     void layoutIsDeterministic() {
         Harness.Model state = state("hello");
         assertThat(lines(state)).isEqualTo(lines(state));
-        LayoutEngine engine = new LayoutEngine();
-        assertThat(engine.layout(HarnessView.view(state), new io.github.dhoard.braxton.layout.Rect(0, 0, 40, 120)))
-                .isEqualTo(engine.layout(
-                        HarnessView.view(state), new io.github.dhoard.braxton.layout.Rect(0, 0, 40, 120)));
+        assertThat(ElementScreen.render(HarnessView.view(state), 40, 120).lines())
+                .isEqualTo(
+                        ElementScreen.render(HarnessView.view(state), 40, 120).lines());
     }
 }

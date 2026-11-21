@@ -26,13 +26,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.dhoard.braxton.layout.Border;
-import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -40,7 +39,9 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Catalog widgets remain pure values with deterministic layout. */
+/**
+ * Catalog widgets remain pure values with deterministic layout.
+ */
 class CatalogTest {
 
     @Test
@@ -89,7 +90,8 @@ class CatalogTest {
         Table table = Table.of();
         table.row(StyledText.plain("a\tb"), StyledText.plain("c"));
         table.row(StyledText.plain("x"), StyledText.plain("y"));
-        List<String> lines = new ScreenRenderer().plainLines(table.view(), new Viewport(2, 24));
+        List<String> lines = io.github.dhoard.braxton.testing.ElementScreen.render(table.<String>element(), 2, 24)
+                .lines();
         assertThat(lines.get(0).indexOf('c')).isEqualTo(lines.get(1).indexOf('y'));
     }
 
@@ -145,8 +147,8 @@ class CatalogTest {
         StyledText rendered = Markup.parse("<root><table gap=\"1\">"
                 + "<tr><td>a\tb</td><td>c</td></tr>"
                 + "<tr><td>x</td><td>y</td></tr></table></root>");
-        List<String> lines = new ScreenRenderer()
-                .plainLines(io.github.dhoard.braxton.view.Views.text(rendered), new Viewport(2, 24));
+        List<String> lines = ElementScreen.render(io.github.dhoard.braxton.widget.Elements.text(rendered), 2, 24)
+                .lines();
         assertThat(lines.get(0).indexOf('c')).isEqualTo(lines.get(1).indexOf('y'));
     }
 
@@ -164,10 +166,10 @@ class CatalogTest {
                 + "<tr><td>x</td><td>a\u0301\tb</td></tr>"
                 + "<tr><td>y</td><td>z</td></tr></table></root>");
         assertThat(styled.plainText()).as("the same plain text").isEqualTo(plain.plainText());
-        assertThat(new ScreenRenderer()
-                        .plainLines(io.github.dhoard.braxton.view.Views.text(styled), new Viewport(2, 24)))
-                .isEqualTo(new ScreenRenderer()
-                        .plainLines(io.github.dhoard.braxton.view.Views.text(plain), new Viewport(2, 24)));
+        assertThat(ElementScreen.render(io.github.dhoard.braxton.widget.Elements.text(styled), 2, 24)
+                        .lines())
+                .isEqualTo(ElementScreen.render(io.github.dhoard.braxton.widget.Elements.text(plain), 2, 24)
+                        .lines());
     }
 
     @Test
@@ -479,7 +481,9 @@ class CatalogTest {
         // The text view paints a tab as spaces up to the next four-column stop. A box that
         // measures the tab as one column pads or truncates to the wrong width, so the right frame
         // column lands past the frame's own width.
-        String framed = new ScreenRenderer().plainText(Box.of("a\tb").width(10).view(10), new Viewport(3, 20));
+        String framed = io.github.dhoard.braxton.testing.ElementScreen.render(
+                        Box.<String>of("a\tb").width(10).element(), 3, 20)
+                .text();
         assertThat(framed).isEqualTo("""
                 \u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510
                 \u2502a   b   \u2502
@@ -952,7 +956,7 @@ class CatalogTest {
     @Test
     void tableSelectorKeepsAMultiLineCellOnOneRow() {
         TableSelector.Model state = TableSelector.Model.of(List.of("h"), List.of(List.of("a\nb"), List.of("c")));
-        View<Object> view = new TableSelector(new TableSelector.Config(
+        Element<Object> view = new TableSelector(new TableSelector.Config(
                         TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
                         Style.NONE,
                         Style.NONE,
@@ -961,7 +965,7 @@ class CatalogTest {
                         (state).withFocus(false),
                         new io.github.dhoard.braxton.mvu.ViewContext(io.github.dhoard.braxton.layout.Viewport.EMPTY))
                 .map(action -> "");
-        List<String> lines = new ScreenRenderer().plainLines(view, new Viewport(3, 20));
+        List<String> lines = ElementScreen.render(view, 3, 20).lines();
         assertThat(lines.get(1)).startsWith("a b");
         assertThat(lines.get(2)).startsWith("c");
     }
@@ -969,7 +973,7 @@ class CatalogTest {
     @Test
     void tableSelectorColumnsLineUpWhenACellContainsATabStop() {
         TableSelector.Model state = TableSelector.Model.of(List.of("a\tb", "c"), List.of(List.of("x", "y")));
-        View<Object> view = new TableSelector(new TableSelector.Config(
+        Element<Object> view = new TableSelector(new TableSelector.Config(
                         TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
                         Style.NONE,
                         Style.NONE,
@@ -978,7 +982,7 @@ class CatalogTest {
                         (state).withFocus(false),
                         new io.github.dhoard.braxton.mvu.ViewContext(io.github.dhoard.braxton.layout.Viewport.EMPTY))
                 .map(action -> "");
-        List<String> lines = new ScreenRenderer().plainLines(view, new Viewport(2, 20));
+        List<String> lines = ElementScreen.render(view, 2, 20).lines();
         assertThat(lines.get(0).indexOf('c')).isEqualTo(lines.get(1).indexOf('y'));
     }
 
@@ -1038,6 +1042,6 @@ class CatalogTest {
 
         io.github.dhoard.braxton.widget.Box box = io.github.dhoard.braxton.widget.Box.of("body");
         assertThat(box.responsive()).isSameAs(box);
-        assertThat(box.view(8)).isEqualTo(box.view(8));
+        assertThat(box.render(8)).isEqualTo(box.render(8));
     }
 }

@@ -26,20 +26,34 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * A 24-bit sRGB colour with a validated value range.
+ * A 24-bit sRGB color with a validated value range.
  *
  * <p>Parsing accepts the {@code #RRGGBB} form used by Braxton's documented markup and builder
  * configuration. Invalid or missing input yields {@link Optional#empty()} so callers can keep
- * their previous value instead of silently rendering a replacement colour.</p>
+ * their previous value instead of silently rendering a replacement color.</p>
+ *
  * @param red the red channel, 0..255
  * @param green the green channel, 0..255
  * @param blue the blue channel, 0..255
  */
 public record Color(int red, int green, int blue) {
 
+    /**
+     * Opaque white, {@code #ffffff}.
+     */
     public static final Color WHITE = new Color(0xFF, 0xFF, 0xFF);
+    /**
+     * Opaque black, {@code #000000}.
+     */
     public static final Color BLACK = new Color(0, 0, 0);
 
+    /**
+     * Creates a {@code Color} value.
+     *
+     * @param red the red channel, 0..255
+     * @param green the green channel, 0..255
+     * @param blue the blue channel, 0..255
+     */
     public Color {
         requireChannel(red, "red");
         requireChannel(green, "green");
@@ -52,7 +66,12 @@ public record Color(int red, int green, int blue) {
         }
     }
 
-    /** Parses {@code #RRGGBB}, returning empty for null, malformed, or out-of-range input. */
+    /**
+     * Parses {@code #RRGGBB}, returning empty for null, malformed, or out-of-range input.
+     *
+     * @param hex the hexadecimal color specification
+     * @return the parsed RGB color
+     */
     public static Optional<Color> parse(String hex) {
         if (hex == null) {
             return Optional.empty();
@@ -72,7 +91,9 @@ public record Color(int red, int green, int blue) {
         return Optional.of(new Color((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF));
     }
 
-    /** ASCII hex digit value, or -1. Rejects the signs and Unicode digits parseInt would accept. */
+    /**
+     * ASCII hex digit value, or -1. Rejects the signs and Unicode digits parseInt would accept.
+     */
     private static int hexDigit(char value) {
         if (value >= '0' && value <= '9') {
             return value - '0';
@@ -86,12 +107,22 @@ public record Color(int red, int green, int blue) {
         return -1;
     }
 
-    /** Parses like {@link #parse(String)} but falls back to {@code fallback} on invalid input. */
+    /**
+     * Parses like {@link #parse(String)} but falls back to {@code fallback} on invalid input.
+     *
+     * @param hex the hexadecimal color specification
+     * @param fallback the value to use when resolution fails
+     * @return the parsed color, or the supplied fallback for invalid input
+     */
     public static Color parseOr(String hex, Color fallback) {
         return parse(hex).orElse(fallback);
     }
 
-    /** Lower-case {@code #rrggbb} form; diagnostics and documentation only, never ANSI output. */
+    /**
+     * Lower-case {@code #rrggbb} form; diagnostics and documentation only, never ANSI output.
+     *
+     * @return the six-digit RGB value prefixed with {@code #}
+     */
     public String hex() {
         return String.format(Locale.ROOT, "#%02x%02x%02x", red, green, blue);
     }

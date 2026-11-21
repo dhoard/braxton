@@ -50,25 +50,39 @@ public record KeyboardEnhancements(
         boolean reportAllKeys,
         boolean reportAssociatedText) {
 
-    /** No enhancement: legacy keyboard input. */
+    /**
+     * No enhancement: legacy keyboard input.
+     */
     public static final KeyboardEnhancements NONE = new KeyboardEnhancements(false, false, false, false, false);
 
-    /** The bit the protocol assigns to disambiguated escape codes. */
+    /**
+     * The bit the protocol assigns to disambiguated escape codes.
+     */
     private static final int DISAMBIGUATE = 1;
 
-    /** The bit the protocol assigns to reported key event types. */
+    /**
+     * The bit the protocol assigns to reported key event types.
+     */
     private static final int EVENT_TYPES = 2;
 
-    /** The bit the protocol assigns to reported alternate keys. */
+    /**
+     * The bit the protocol assigns to reported alternate keys.
+     */
     private static final int ALTERNATE_KEYS = 4;
 
-    /** The bit the protocol assigns to reporting every key as an escape code. */
+    /**
+     * The bit the protocol assigns to reporting every key as an escape code.
+     */
     private static final int ALL_KEYS = 8;
 
-    /** The bit the protocol assigns to reported associated text. */
+    /**
+     * The bit the protocol assigns to reported associated text.
+     */
     private static final int ASSOCIATED_TEXT = 16;
 
-    /** Every flag this type can represent. */
+    /**
+     * Every flag this type can represent.
+     */
     private static final int KNOWN = DISAMBIGUATE | EVENT_TYPES | ALTERNATE_KEYS | ALL_KEYS | ASSOCIATED_TEXT;
 
     /**
@@ -115,7 +129,8 @@ public record KeyboardEnhancements(
                 (known & ASSOCIATED_TEXT) != 0);
     }
 
-    /** Whether any enhancement is set.
+    /**
+     * Whether any enhancement is set.
      *
      * @return true when at least one flag is set
      */

@@ -52,6 +52,9 @@ public final class LineBreaks {
     /**
      * Converts LF, CRLF, and lone CR to one LF each. Tabs and every other character are preserved.
      * A null or empty value returns an empty string.
+     *
+     * @param text the text to process
+     * @return converts LF, CRLF, and lone CR to one LF each
      */
     public static String normalize(String text) {
         return convert(text, false, false);
@@ -61,6 +64,9 @@ public final class LineBreaks {
      * Converts LF, CRLF, and lone CR to one space each, for a value painted on a single row. Tabs
      * are preserved because the destination may expand them to its own tab stops. A null or empty
      * value returns an empty string.
+     *
+     * @param text the text to process
+     * @return converts LF, CRLF, and lone CR to one space each, for a value painted on a single row
      */
     public static String singleRow(String text) {
         return convert(text, true, false);
@@ -70,6 +76,10 @@ public final class LineBreaks {
      * Converts LF, CRLF, and lone CR to one space each and tabs to one space, for a value whose
      * painted width must not depend on where it sits. A null or empty value returns an empty
      * string.
+     *
+     * @param text the text to process
+     * @return converts LF, CRLF, and lone CR to one space each and tabs to one space, for a value whose
+     * painted width must not depend on where it sits
      */
     public static String singleRowAndTabs(String text) {
         return convert(text, true, true);

@@ -34,7 +34,9 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
-/** Source reconciliation: identity, mapping refresh, epochs, and limits. */
+/**
+ * Source reconciliation: identity, mapping refresh, epochs, and limits.
+ */
 class SubscriptionManagerTest {
 
     private final Mailbox mailbox = new Mailbox(32);

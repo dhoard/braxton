@@ -23,13 +23,14 @@
 package io.github.dhoard.braxton.style;
 
 /**
- * Immutable text styling: colours plus the SGR attributes Braxton emits.
+ * Immutable text styling: colors plus the SGR attributes Braxton emits.
  *
- * <p>{@code null} colours mean "inherit nothing"; the renderer simply omits that component. Use the
+ * <p>{@code null} colors mean "inherit nothing"; the renderer simply omits that component. Use the
  * {@code with*} methods to derive a changed style; a style instance is shared freely across span
  * values and is safe to compare.</p>
- * @param foreground the foreground colour, or null to inherit
- * @param background the background colour, or null to inherit
+ *
+ * @param foreground the foreground color, or null to inherit
+ * @param background the background color, or null to inherit
  * @param bold whether bold is set
  * @param italic whether italic is set
  * @param underline whether underline is set
@@ -47,17 +48,20 @@ public record Style(
         boolean invert,
         boolean hidden) {
 
+    /**
+     * No color and no attribute: the inherited terminal style.
+     */
     public static final Style NONE = new Style(null, null, false, false, false, false, false, false);
 
     /**
-     * Rejects no value; null colours mean inherit.
+     * Rejects no value; null colors mean inherit.
      */
     public Style {}
 
     /**
-     * A style with a foreground colour.
+     * A style with a foreground color.
      *
-     * @param foreground the foreground colour
+     * @param foreground the foreground color
      * @return the style
      */
     public static Style fg(Color foreground) {
@@ -65,9 +69,9 @@ public record Style(
     }
 
     /**
-     * A style with a background colour.
+     * A style with a background color.
      *
-     * @param background the background colour
+     * @param background the background color
      * @return the style
      */
     public static Style bg(Color background) {
@@ -75,9 +79,9 @@ public record Style(
     }
 
     /**
-     * The same style with a foreground colour.
+     * The same style with a foreground color.
      *
-     * @param color the foreground colour
+     * @param color the foreground color
      * @return the new style
      */
     public Style withForeground(Color color) {
@@ -85,9 +89,9 @@ public record Style(
     }
 
     /**
-     * The same style with a background colour.
+     * The same style with a background color.
      *
-     * @param color the background colour
+     * @param color the background color
      * @return the new style
      */
     public Style withBackground(Color color) {
@@ -165,7 +169,7 @@ public record Style(
     }
 
     /**
-     * Applies {@code overlay} on top of this style, inheriting unspecified colours.
+     * Applies {@code overlay} on top of this style, inheriting unspecified colors.
      *
      * @param overlay the style applied on top
      * @return the merged style

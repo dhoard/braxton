@@ -27,13 +27,17 @@ import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.app.MouseMode;
 import io.github.dhoard.braxton.app.RuntimeOptions;
 import io.github.dhoard.braxton.app.TerminalOptions;
+import io.github.dhoard.braxton.app.TerminalPresentation;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.input.PointerButton;
 import io.github.dhoard.braxton.input.PointerEvent;
+import io.github.dhoard.braxton.layout.Rect;
+import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.ComponentTree;
@@ -41,12 +45,14 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
+import io.github.dhoard.braxton.render.Surface;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.style.WidthPolicy;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.Widget;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -56,6 +62,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Phase 24: the integrated showcase - one executable catalog over every completed phase.
@@ -65,9 +72,9 @@ import java.util.Optional;
  * left. Three things follow from that shape and are what this class is for:</p>
  *
  * <ul>
- *   <li><b>One scene is alive at a time.</b> {@link #children} declares the open scene's node and
+ *   <li><b>One scene is alive at a time.</b> {@link Scene#children} declares the open scene's node and
  *       nothing else, so closing a scene is the documented unmount: its scoped subscriptions and
- *       commands are cancelled, its focus elements are released, and a later open starts that scene
+ *       commands are canceled, its focus elements are released, and a later open starts that scene
  *       from its own {@code init} again. A closed scene cannot receive a later message from a timer
  *       it started.
  *   <li><b>Only the active surface routes.</b> In the catalog the scene's own actions are capture
@@ -80,25 +87,34 @@ import java.util.Optional;
  *       the runtime does not let an application turn a quit request into a message.
  * </ul>
  *
- * <p>The status rows name the state the verifier asserts - {@code catalog=24 open=none selected=01
+ * <p>The status rows name the state the verifier asserts - {@code catalog=27 open=none selected=01
  * ...} - so a terminal scenario reads the catalog's own decision instead of decoding styling, and
  * the phase demos keep their own status rows while they are mounted.</p>
  */
 public final class Showcase {
 
-    /** The heading the catalog paints above its list. */
+    /**
+     * The heading the catalog paints above its list.
+     */
     public static final String HEADING = "braxton parity showcase";
 
-    /** The rows the catalog spends on its status row, its heading and its compact help. */
+    /**
+     * The rows the catalog spends on its status row, its heading and its compact help.
+     */
     public static final int CHROME_ROWS = 3;
 
     private static final Style STATUS = Style.NONE.withBold();
 
+    /**
+     * The identity of the showcase's one element subtree.
+     */
     private static final Style SELECTED = Style.NONE.withInvert();
 
     private static final String RETURN = "ctrl+c";
 
-    /** The catalog's one size source. */
+    /**
+     * The catalog's one size source.
+     */
     private static final SubscriptionId SIZE = SubscriptionId.of("catalog-size");
 
     private Showcase() {}
@@ -116,7 +132,9 @@ public final class Showcase {
      */
     public record Model(int selected, int top, int rows, String open, Object sceneModel, boolean help, String last) {
 
-        /** Keeps every value representable. */
+        /**
+         * Keeps every value representable.
+         */
         public Model {
             selected = Math.max(0, selected);
             top = Math.max(0, top);
@@ -187,7 +205,9 @@ public final class Showcase {
             return new Model(selected, top, rows, open, sceneModel, help, value);
         }
 
-        /** Bounded form: the mounted scene's model is not this value's business. */
+        /**
+         * Bounded form: the mounted scene's model is not this value's business.
+         */
         @Override
         public String toString() {
             return "Showcase.Model[selected=" + selected + ", top=" + top + ", rows=" + rows + ", open=" + open
@@ -197,7 +217,9 @@ public final class Showcase {
         }
     }
 
-    /** Every message the catalog handles. */
+    /**
+     * Every message the catalog handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -207,10 +229,14 @@ public final class Showcase {
          */
         record Move(int delta) implements Msg {}
 
-        /** Highlights the first entry. */
+        /**
+         * Highlights the first entry.
+         */
         record First() implements Msg {}
 
-        /** Highlights the last entry. */
+        /**
+         * Highlights the last entry.
+         */
         record Last() implements Msg {}
 
         /**
@@ -238,10 +264,14 @@ public final class Showcase {
          */
         record Open(int index) implements Msg {}
 
-        /** Leaves the mounted scene, or does nothing in the catalog. */
+        /**
+         * Leaves the mounted scene, or does nothing in the catalog.
+         */
         record Back() implements Msg {}
 
-        /** Switches between the list and the grouped help. */
+        /**
+         * Switches between the list and the grouped help.
+         */
         record ToggleHelp() implements Msg {}
 
         /**
@@ -252,7 +282,9 @@ public final class Showcase {
          */
         record Resized(int rows, int columns) implements Msg {}
 
-        /** Asks the session to end. */
+        /**
+         * Asks the session to end.
+         */
         record Quit() implements Msg {}
 
         /**
@@ -262,6 +294,12 @@ public final class Showcase {
          * @param message the scene's own message
          */
         record SceneMessage(String id, Object message) implements Msg {
+            /**
+             * Creates a {@code SceneMessage} value.
+             *
+             * @param id the scene the message belongs to
+             * @param message the scene's own message
+             */
             public SceneMessage {
                 Objects.requireNonNull(id, "id");
                 Objects.requireNonNull(message, "message");
@@ -382,7 +420,9 @@ public final class Showcase {
         }
     }
 
-    /** The catalog itself: one list, one mounted scene, and the frames around them. */
+    /**
+     * The catalog itself: one list, one mounted scene, and the frames around them.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
 
         private final List<SceneCatalog.Slot> slots;
@@ -467,18 +507,63 @@ public final class Showcase {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
+        }
+
+        /**
+         * The gestures the frame keeps for itself: the catalog's map while the list is up, and the
+         * back key plus whatever the open scene claims while a scene is.
+         *
+         * <p>Only claims are listed here. A scene's ordinary bindings are its own keys - the letters
+         * its fields take - so they belong to the last tier, not to the tier that beats the focused
+         * widget.</p>
+         */
+        @Override
+        public List<Binding<Msg>> claims(Model model) {
+            if (!model.inScene()) {
+                return catalogKeys.bindings();
+            }
+            List<Binding<Msg>> routes = new ArrayList<>(mountedKeys.bindings());
+            routes.addAll(slots.get(index(model.open())).claims(model));
+            return List.copyOf(routes);
+        }
+
+        /**
+         * The open scene's own keys, answered once its widgets have declined them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            if (!model.inScene()) {
+                return List.of();
+            }
+            List<Binding<Msg>> routes = new ArrayList<>(mountedKeys.bindings());
+            routes.addAll(slots.get(index(model.open())).bindings(model));
+            return List.copyOf(routes);
+        }
+
+        /**
+         * What the open scene asks the frame to present, if it asks for anything.
+         */
+        @Override
+        public TerminalPresentation presentation(Model model) {
+            return model.inScene() ? slots.get(index(model.open())).presentation(model) : null;
+        }
+
+        /**
+         * The catalog, or the open scene framed by the showcase's own chrome.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
             int rows = Math.max(1, context.viewport().rows());
             int cols = Math.max(1, context.viewport().cols());
-            if (model.inScene()) {
-                return sceneView(model, rows, cols);
-            }
-            return Views.keyed(catalogKeys.bindings(), catalogView(model, rows, cols), List.of());
+            return model.inScene() ? sceneView(model, rows, cols) : catalogView(model, rows, cols);
         }
 
         // ── the catalog ─────────────────────────────────────────────────────
 
-        /** What the catalog is showing, in the terms the verifier asserts. */
+        /**
+         * What the catalog is showing, in the terms the verifier asserts.
+         */
         private String status(Model model) {
             return "catalog=" + slots.size()
                     + " open=" + (model.inScene() ? model.open() : "none")
@@ -488,30 +573,74 @@ public final class Showcase {
                     + " last=" + model.last();
         }
 
-        private View<Msg> catalogView(Model model, int rows, int cols) {
+        private Element<Msg> catalogView(Model model, int rows, int cols) {
             int visible = Math.max(1, rows - CHROME_ROWS);
-            List<View<Msg>> sections = new ArrayList<>(4);
-            sections.add(Views.fixed(1, Views.text(status(model), STATUS)));
-            sections.add(Views.fixed(1, Views.text(HEADING, STATUS)));
-            sections.add(Views.fixed(
-                    visible, model.help() ? Help.view(catalogKeys, true, cols) : list(model, visible, cols)));
-            sections.add(Views.fixed(1, Views.text(Help.render(catalogKeys, false, cols))));
-            return Views.column(sections);
+            List<Element<Msg>> sections = new ArrayList<>(4);
+            sections.add(Elements.fixed(1, Elements.text(status(model), STATUS)));
+            sections.add(Elements.fixed(1, Elements.text(HEADING, STATUS)));
+            sections.add(Elements.fixed(
+                    visible,
+                    model.help()
+                            ? Help.element(catalogKeys, Help.Config.defaults(), true, cols)
+                            : list(model, visible, cols)));
+            sections.add(Elements.fixed(1, Elements.text(Help.render(catalogKeys, false, cols))));
+            return Elements.column(sections);
         }
 
-        /** The window of entries the state asks for, each one a pointer target of its own. */
-        private View<Msg> list(Model model, int visible, int cols) {
+        /**
+         * The window of entries the state asks for, each one a pointer target of its own.
+         */
+        private Element<Msg> list(Model model, int visible, int cols) {
             int first = first(model, visible);
-            List<View<Msg>> painted = new ArrayList<>(visible);
+            List<Element<Msg>> painted = new ArrayList<>(visible);
             for (int at = first; at < Math.min(slots.size(), first + visible); at++) {
                 int index = at;
-                painted.add(Views.focus(
-                        ElementId.of("entry-" + entry(index).id()),
-                        index == model.selected(),
-                        (event, region) -> pointer(index, event),
-                        Views.text(row(index, index == model.selected(), cols))));
+                painted.add(new Element.Leaf<Entry.Model, Msg>(
+                        new Entry(),
+                        new Entry.Model(
+                                index, index == model.selected(), row(index, index == model.selected(), cols))));
             }
-            return Views.column(painted);
+            return Elements.column(painted);
+        }
+
+        /**
+         * One catalog row as a leaf: it paints the line and answers the pointer that lands on it.
+         *
+         * <p>The press is the row's own, so a click selects the entry it landed on without the
+         * showcase having to work out which line a cell belongs to.</p>
+         */
+        private static final class Entry implements Widget<Entry.Model, Msg> {
+
+            /**
+             * One painted row: which entry it is, whether it is selected, and the line itself.
+             */
+            private record Model(int index, boolean selected, StyledText line) {}
+
+            @Override
+            public Size measure(Size max, Model model) {
+                return new Size(
+                        1, Math.min(max.cols(), TextMeasure.columns(model.line().plainText())));
+            }
+
+            @Override
+            public void paint(Surface surface, Rect bounds, Model model) {
+                surface.writeLine(bounds.row(), bounds.col(), bounds.cols(), model.line(), WidthPolicy.PINNED);
+            }
+
+            @Override
+            public boolean canFocus(Model model) {
+                return true;
+            }
+
+            @Override
+            public boolean focused(Model model) {
+                return model.selected();
+            }
+
+            @Override
+            public void onPointer(PointerEvent pointer, Rect bounds, Model model, Consumer<Msg> emit) {
+                pointer(model.index(), pointer).ifPresent(emit);
+            }
         }
 
         private StyledText row(int index, boolean selected, int cols) {
@@ -520,7 +649,9 @@ public final class Showcase {
             return StyledText.of(text, selected ? SELECTED : Style.NONE);
         }
 
-        /** One pointer report on one entry: a press selects it, a repeated press opens it. */
+        /**
+         * One pointer report on one entry: a press selects it, a repeated press opens it.
+         */
         private static Optional<Msg> pointer(int index, PointerEvent event) {
             return switch (event.action()) {
                 case PRESS ->
@@ -532,7 +663,9 @@ public final class Showcase {
             };
         }
 
-        /** The first entry the window shows: the state's top, clamped to a window that fits. */
+        /**
+         * The first entry the window shows: the state's top, clamped to a window that fits.
+         */
         private int first(Model model, int visible) {
             return Math.max(0, Math.min(model.top(), Math.max(0, slots.size() - visible)));
         }
@@ -544,98 +677,21 @@ public final class Showcase {
             return "open=" + entry.id() + " scene=" + entry.title() + " " + RETURN + "=back last=" + model.last();
         }
 
-        private View<Msg> sceneView(Model model, int rows, int cols) {
+        private Element<Msg> sceneView(Model model, int rows, int cols) {
             int body = Math.max(0, rows - 2);
-            View<Msg> child = slots.get(index(model.open())).view(model, new ViewContext(new Viewport(body, cols)));
-            return framedScene(model, modalReturnKeys(child), body, cols);
-        }
-
-        /** Gives each modal its own catalog escape without routing into the covered scene. */
-        private View<Msg> modalReturnKeys(View<Msg> view) {
-            return switch (view) {
-                case View.Text<Msg> text -> text;
-                case View.Blank<Msg> blank -> blank;
-                case View.Fill<Msg> fill -> fill;
-                case View.Column<Msg> column ->
-                    new View.Column<>(
-                            column.items().stream().map(this::modalReturnKeys).toList(), column.align());
-                case View.Row<Msg> row ->
-                    new View.Row<>(
-                            row.items().stream().map(this::modalReturnKeys).toList(), row.align());
-                case View.Padding<Msg> padding ->
-                    new View.Padding<>(padding.insets(), modalReturnKeys(padding.child()));
-                case View.BorderBox<Msg> box ->
-                    new View.BorderBox<>(box.border(), box.title(), box.style(), modalReturnKeys(box.child()));
-                case View.TopEdge<Msg> edge ->
-                    new View.TopEdge<>(edge.border(), edge.style(), edge.top(), modalReturnKeys(edge.child()));
-                case View.Fixed<Msg> fixed -> new View.Fixed<>(fixed.size(), modalReturnKeys(fixed.child()));
-                case View.Grow<Msg> grow -> new View.Grow<>(grow.weight(), modalReturnKeys(grow.child()));
-                case View.Overlay<Msg> overlay -> {
-                    var layers = new ArrayList<>(
-                            overlay.layers().stream().map(this::modalReturnKeys).toList());
-                    if (overlay.modal() && !layers.isEmpty()) {
-                        int top = layers.size() - 1;
-                        layers.set(top, withReturnKeys(layers.get(top)));
-                    }
-                    yield new View.Overlay<>(layers, overlay.modal());
-                }
-                case View.Keyed<Msg> keyed ->
-                    Views.keyed(keyed.capture(), keyed.intercept(), modalReturnKeys(keyed.child()), keyed.bubble());
-                case View.Focused<Msg> focused ->
-                    new View.Focused<>(
-                            focused.id(),
-                            focused.focused(),
-                            focused.bindings(),
-                            focused.input(),
-                            modalReturnKeys(focused.child()),
-                            focused.pointer());
-                case View.CursorAt<Msg> cursor -> Views.cursor(cursor.cursor(), modalReturnKeys(cursor.child()));
-                case View.Presentation<Msg> presentation ->
-                    Views.presentation(presentation.presentation(), modalReturnKeys(presentation.child()));
-                case View.Sized<Msg> sized ->
-                    Views.sized(size -> modalReturnKeys(sized.build().apply(size)));
-            };
+            Element<Msg> child = slots.get(index(model.open())).view(model, new ViewContext(new Viewport(body, cols)));
+            return sceneFrame(model, child, body, cols);
         }
 
         /**
-         * Keeps the scene's root handlers at the routing root while adding the catalog chrome.
-         * Without a focused element only the root's handlers route, so placing the whole scene
-         * under a column would hide a spinner's, timer's or status board's own shortcuts.
+         * The showcase's own chrome: one status row, the scene, and the back key.
          */
-        private View<Msg> framedScene(Model model, View<Msg> child, int body, int cols) {
-            if (child instanceof View.Presentation<Msg> presentation) {
-                return Views.presentation(
-                        presentation.presentation(), framedScene(model, presentation.child(), body, cols));
-            }
-            if (child instanceof View.Keyed<Msg> keyed) {
-                return withReturnKeys(Views.keyed(
-                        keyed.capture(),
-                        keyed.intercept(),
-                        sceneFrame(model, keyed.child(), body, cols),
-                        keyed.bubble()));
-            }
-            return withReturnKeys(sceneFrame(model, child, body, cols));
-        }
-
-        private View<Msg> withReturnKeys(View<Msg> child) {
-            if (child instanceof View.Keyed<Msg> keyed) {
-                var capture = new ArrayList<>(mountedKeys.bindings());
-                for (var binding : keyed.capture()) {
-                    if (mountedKeys.bindings().stream().noneMatch(owned -> owned.matches(binding.key()))) {
-                        capture.add(binding);
-                    }
-                }
-                return Views.keyed(capture, keyed.intercept(), keyed.child(), keyed.bubble());
-            }
-            return Views.keyed(mountedKeys.bindings(), child, List.of());
-        }
-
-        private View<Msg> sceneFrame(Model model, View<Msg> child, int body, int cols) {
-            List<View<Msg>> sections = new ArrayList<>(3);
-            sections.add(Views.fixed(1, Views.text(sceneStatus(model), STATUS)));
-            sections.add(Views.fixed(body, child));
-            sections.add(Views.fixed(1, Views.text(Help.render(mountedKeys, false, cols))));
-            return Views.column(sections);
+        private Element<Msg> sceneFrame(Model model, Element<Msg> child, int body, int cols) {
+            List<Element<Msg>> sections = new ArrayList<>(3);
+            sections.add(Elements.fixed(1, Elements.text(sceneStatus(model), STATUS)));
+            sections.add(Elements.fixed(body, child));
+            sections.add(Elements.fixed(1, Elements.text(Help.render(mountedKeys, false, cols))));
+            return Elements.column(sections);
         }
 
         // ── the reductions ──────────────────────────────────────────────────
@@ -671,7 +727,7 @@ public final class Showcase {
          *
          * <p>Entering a second scene in one step is the same transition as leaving the first and
          * opening the next: the children this model declares are the new scene's alone, so the old
-         * scene's sources and commands are cancelled when the transition commits.</p>
+         * scene's sources and commands are canceled when the transition commits.</p>
          */
         private Update<Model, Msg, Never> opened(Model model, int index) {
             int at = index < 0 ? clamp(model.selected()) : clamp(index);
@@ -680,7 +736,11 @@ public final class Showcase {
                     startup,
                     revealed(model.withSelected(at)).withScene(slot.entry().id(), null));
             return new Update<>(
-                    started.model().withLast("open:" + slot.entry().id()), started.command(), started.outputs());
+                    started.model().withLast("open:" + slot.entry().id()),
+                    model.open().equals("31")
+                            ? Command.sequence(Command.debugOverlay(false), started.command())
+                            : started.command(),
+                    started.outputs());
         }
 
         private Update<Model, Msg, Never> back(Model model) {
@@ -688,7 +748,10 @@ public final class Showcase {
                 return Update.next(model.withLast("catalog"));
             }
             // Declaring no child is the unmount: the scene's subscriptions and commands end here.
-            return Update.next(model.withScene("", null).withLast("back"));
+            // The diagnostics demo explicitly owns its session-level overlay preference.
+            return Update.next(
+                    model.withScene("", null).withLast("back"),
+                    model.open().equals("31") ? Command.debugOverlay(false) : Command.none());
         }
 
         private Update<Model, Msg, Never> scene(Model model, Msg.SceneMessage message) {
@@ -700,7 +763,9 @@ public final class Showcase {
             return slots.get(index(message.id())).update(model, message.message());
         }
 
-        /** The same state with the window moved so the highlighted entry is inside it. */
+        /**
+         * The same state with the window moved so the highlighted entry is inside it.
+         */
         private Model revealed(Model model) {
             int visible = model.visible();
             int top = model.top();
@@ -720,7 +785,9 @@ public final class Showcase {
             return slots.get(clamp(index)).entry();
         }
 
-        /** The slot index of one entry id. */
+        /**
+         * The slot index of one entry id.
+         */
         private int index(String id) {
             for (int at = 0; at < slots.size(); at++) {
                 if (slots.get(at).entry().id().equals(id)) {

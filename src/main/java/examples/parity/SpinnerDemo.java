@@ -26,6 +26,7 @@ import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -39,8 +40,8 @@ import io.github.dhoard.braxton.mvu.OutputRoute;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.Spinner;
 import java.time.Duration;
@@ -73,21 +74,33 @@ public final class SpinnerDemo {
 
     private static final Style STATUS = Style.NONE.withBold();
 
-    /** The preset the first spinner starts on. */
+    /**
+     * The preset the first spinner starts on.
+     */
     public static final Spinner.Preset LEFT_PRESET = Spinner.Preset.LINE;
 
-    /** The second spinner starts on a two-column emoji preset. */
+    /**
+     * The second spinner starts on a two-column emoji preset.
+     */
     public static final Spinner.Preset RIGHT_PRESET = Spinner.Preset.GLOBE;
 
     private SpinnerDemo() {}
 
-    /** How fast the two spinners are asked to run; the scene, not the widget, owns this choice. */
+    /**
+     * How fast the two spinners are asked to run; the scene, not the widget, owns this choice.
+     */
     public enum Cadence {
-        /** The default: ten frames a second. */
+        /**
+         * The default: ten frames a second.
+         */
         NORMAL(Duration.ofMillis(100), "100ms"),
-        /** Twice as fast, for a busier indicator. */
+        /**
+         * Twice as fast, for a busier indicator.
+         */
         FAST(Duration.ofMillis(50), "50ms"),
-        /** A slow, calm indicator. */
+        /**
+         * A slow, calm indicator.
+         */
         SLOW(Duration.ofMillis(250), "250ms");
 
         private final Duration duration;
@@ -136,7 +149,9 @@ public final class SpinnerDemo {
      */
     public record Slot(Spinner.Model model, Spinner.Preset preset) {
 
-        /** Substitutes the stopped state and the default preset for missing values. */
+        /**
+         * Substitutes the stopped state and the default preset for missing values.
+         */
         public Slot {
             model = model == null ? Spinner.Model.stopped() : model;
             preset = preset == null ? Spinner.DEFAULT_PRESET : preset;
@@ -167,7 +182,9 @@ public final class SpinnerDemo {
     public record Model(
             Slot left, Slot right, boolean rightMounted, boolean leftFocused, Cadence cadence, String last) {
 
-        /** Substitutes a stopped slot, the normal cadence and no action for missing values. */
+        /**
+         * Substitutes a stopped slot, the normal cadence and no action for missing values.
+         */
         public Model {
             left = left == null ? new Slot(null, null) : left;
             right = right == null ? new Slot(null, null) : right;
@@ -233,7 +250,9 @@ public final class SpinnerDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -257,19 +276,29 @@ public final class SpinnerDemo {
          */
         record CyclePreset(int delta) implements Msg {}
 
-        /** Starts or stops the focused spinner. */
+        /**
+         * Starts or stops the focused spinner.
+         */
         record ToggleRun() implements Msg {}
 
-        /** Cycles the cadence both spinners are asked to run at. */
+        /**
+         * Cycles the cadence both spinners are asked to run at.
+         */
         record CycleCadence() implements Msg {}
 
-        /** Moves the gestures to the other spinner. */
+        /**
+         * Moves the gestures to the other spinner.
+         */
         record ToggleFocus() implements Msg {}
 
-        /** Removes or restores the second spinner's mount. */
+        /**
+         * Removes or restores the second spinner's mount.
+         */
         record ToggleSecond() implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -297,7 +326,11 @@ public final class SpinnerDemo {
                         KeyAction.<Msg>of("quit", new Msg.Quit(), "esc", "quit", "escape", "ctrl+c")));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
@@ -315,8 +348,15 @@ public final class SpinnerDemo {
         System.exit(result.status());
     }
 
-    /** Two mounted spinners, their status rows and one help line. */
+    /**
+     * Two mounted spinners, their status rows and one help line.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final KeyMap<Msg> keys = defaultKeys();
 
@@ -380,26 +420,42 @@ public final class SpinnerDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
+        }
+
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys.bindings();
+        }
+
+        /**
+         * The scene's rows as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
             int cols = context.viewport().cols();
-            List<View<Msg>> rows = new ArrayList<>(7);
+            List<Element<Msg>> rows = new ArrayList<>(7);
             // Status rows are one row each however narrow the terminal is: a wrapped diagnostic
             // would push the painted glyphs and the help down and move what a verifier can assert.
-            rows.add(Views.fixed(1, Views.text(status("left", model, true), STATUS)));
-            rows.add(Views.fixed(
-                    1, Views.text(model.rightMounted() ? status("right", model, false) : "right=absent", STATUS)));
-            rows.add(Views.fixed(1, Views.text(policy(model), STATUS)));
-            rows.add(Views.gap(1));
+            rows.add(Elements.fixed(1, Elements.text(status("left", model, true), STATUS)));
+            rows.add(Elements.fixed(
+                    1, Elements.text(model.rightMounted() ? status("right", model, false) : "right=absent", STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(policy(model), STATUS)));
+            rows.add(Elements.spacer(1));
             // The two glyphs are the mounted components' own views, so what is painted is what the
             // widget renders rather than a second copy of its frame selection.
-            rows.add(Views.row(
-                    Views.text("left  "),
+            rows.add(Elements.row(
+                    Elements.text("left  "),
                     mount(model, true).view(model, context),
-                    Views.text("    right  "),
-                    model.rightMounted() ? mount(model, false).view(model, context) : Views.<Msg>blank()));
-            rows.add(Views.gap(1));
-            rows.add(Help.view(keys, false, cols));
-            return Views.onKeys(keys.bindings(), Views.column(rows));
+                    Elements.text("    right  "),
+                    model.rightMounted() ? mount(model, false).view(model, context) : Elements.<Msg>spacer()));
+            rows.add(Elements.spacer(1));
+            rows.add(Help.element(keys, Help.Config.defaults(), false, cols));
+            return Elements.column(rows);
         }
 
         /**
@@ -446,7 +502,9 @@ public final class SpinnerDemo {
             return Update.next(reset.model().withLast("preset-" + next.label()));
         }
 
-        /** Starts or stops the focused spinner, leaving the other one's cycle alone. */
+        /**
+         * Starts or stops the focused spinner, leaving the other one's cycle alone.
+         */
         private Update<Model, Msg, Never> run(Model model) {
             boolean leftPane = model.leftFocused();
             boolean running = model.slot(leftPane).model().running();
@@ -470,7 +528,9 @@ public final class SpinnerDemo {
             return Update.next(model.withRightMounted(true).withLast("restored"));
         }
 
-        /** One spinner's status row: preset, frame, running state and elapsed time. */
+        /**
+         * One spinner's status row: preset, frame, running state and elapsed time.
+         */
         private static String status(String name, Model model, boolean leftPane) {
             Slot slot = model.slot(leftPane);
             Spinner.Config config = model.config(leftPane);
@@ -481,7 +541,9 @@ public final class SpinnerDemo {
                     + " t=" + (state.elapsedNanos() / 1_000_000L) + "ms";
         }
 
-        /** The policy row: what the gestures act on, how fast, and what they last did. */
+        /**
+         * The policy row: what the gestures act on, how fast, and what they last did.
+         */
         private static String policy(Model model) {
             return "focus=" + (model.leftFocused() ? "left" : "right")
                     + " cadence=" + model.cadence().label()

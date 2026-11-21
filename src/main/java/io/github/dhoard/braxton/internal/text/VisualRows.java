@@ -46,28 +46,62 @@ import java.util.List;
  */
 public final class VisualRows {
 
-    /** Columns between tab stops, matching the layout engine's text wrapping. */
+    /**
+     * Columns between tab stops, matching the layout engine's text wrapping.
+     */
     public static final int TAB_WIDTH = 4;
 
     private VisualRows() {}
 
-    /** How many cells one cluster occupies when it is painted. */
+    /**
+     * How many cells one cluster occupies when it is painted.
+     */
     public enum Cells {
-        /** The cluster's own columns: a tab reaches its stop and a wide glyph its width. */
+        /**
+         * The cluster's own columns: a tab reaches its stop and a wide glyph its width.
+         */
         NATURAL,
-        /** One cell per cluster, because the row paints one mask glyph instead of the cleartext. */
+        /**
+         * One cell per cluster, because the row paints one mask glyph instead of the cleartext.
+         */
         MASKED,
-        /** No cell at all: a hidden row paints no glyph before its caret. */
+        /**
+         * No cell at all: a hidden row paints no glyph before its caret.
+         */
         HIDDEN
     }
 
-    /** How a field marks the caret in the row it shows. */
+    /**
+     * Where a row breaks when the next cluster does not fit.
+     */
+    public enum Wrap {
+        /**
+         * At the next cluster boundary, so a word is cut wherever the row ends.
+         */
+        CELL,
+        /**
+         * At the last blank the row painted, so a word moves to the next row whole. A word that is
+         * wider than a whole row has no blank to break at and falls back to a cell break, which is
+         * what keeps a long token - a path, a URL - from overflowing the row it starts on.
+         */
+        WORD
+    }
+
+    /**
+     * How a field marks the caret in the row it shows.
+     */
     public enum CaretMark {
-        /** The field shows no caret, so nothing is reserved for one. */
+        /**
+         * The field shows no caret, so nothing is reserved for one.
+         */
         NONE,
-        /** A declared cursor sits on the caret's cell, which is a cell of its own at the row's end. */
+        /**
+         * A declared cursor sits on the caret's cell, which is a cell of its own at the row's end.
+         */
         DECLARED,
-        /** A caret block replaces the cluster under it, so it is painted into the row. */
+        /**
+         * A caret block replaces the cluster under it, so it is painted into the row.
+         */
         BLOCK
     }
 
@@ -85,17 +119,29 @@ public final class VisualRows {
      */
     public record Open(String cell, boolean tabStop) {
 
+        /**
+         * Creates a {@code Open} value.
+         *
+         * @param cell the text of the cell the run ends with, or empty when it leaves none open
+         * @param tabStop whether that cell is the space a tab stop ended with
+         */
         public Open {
             cell = cell == null ? "" : cell;
         }
 
-        /** Whether the run ends with no cell for the next cluster to continue. */
+        /**
+         * Whether the run ends with no cell for the next cluster to continue.
+         *
+         * @return {@code true} if the run ends with no cell for the next cluster to continue; otherwise {@code false}
+         */
         public boolean closed() {
             return cell.isEmpty();
         }
     }
 
-    /** The state of a run that ends with no open cell. */
+    /**
+     * The state of a run that ends with no open cell.
+     */
     public static final Open CLOSED = new Open("", false);
 
     /**
@@ -425,16 +471,63 @@ public final class VisualRows {
             Cells mode,
             Open firstOpen,
             int caretOffset) {
+        return project(text, lineStart, lineEnd, firstColumn, width, mode, firstOpen, caretOffset, Wrap.CELL);
+    }
+
+    /**
+     * Projects one logical line into the rows it paints, breaking at {@code wrap}.
+     *
+     * <p>{@link Wrap#WORD} moves a word that does not fit to the next row as a whole: the row ends
+     * before the run of blanks that separates it from the word, and the run is not painted at all.
+     * The offsets the run covers therefore belong to no row - a one-row-per-offset mapping still
+     * answers with the row before the break, which is the line the run ended - and no row is ever
+     * wider than {@code width}.</p>
+     *
+     * <p>A caret inside the run keeps the cell break for that row, because dropping the run would
+     * drop the caret with it.</p>
+     *
+     * @param text the document
+     * @param lineStart the first offset of the logical line
+     * @param lineEnd the offset of the line's break, or the end of the document
+     * @param firstColumn the column the row starts at on screen, so a tab reaches its painted stop
+     * @param width the cells available to one row; a value below one is treated as one
+     * @param mode how the row paints its clusters
+     * @param firstOpen the cell the first row's prefix leaves open to its first cluster
+     * @param caretOffset the offset a painted caret block replaces, or -1 for none
+     * @param wrap where a row breaks when the next cluster does not fit; null is {@link Wrap#CELL}
+     * @return the rows, at least one
+     */
+    public static List<Row> project(
+            String text,
+            int lineStart,
+            int lineEnd,
+            int firstColumn,
+            int width,
+            Cells mode,
+            Open firstOpen,
+            int caretOffset,
+            Wrap wrap) {
         int start = Math.max(0, Math.min(lineStart, text.length()));
         int end = Math.max(start, Math.min(lineEnd, text.length()));
         int limit = firstColumn + Math.max(1, width);
+        Wrap policy = wrap == null ? Wrap.CELL : wrap;
+        List<String> clusters = new ArrayList<>();
+        for (String cluster : Graphemes.iterate(text.substring(start, end))) {
+            clusters.add(cluster);
+        }
         List<Row> rows = new ArrayList<>();
         int rowStart = start;
         int used = firstColumn;
         Open open = firstOpen;
         int position = start;
-        for (String cluster : Graphemes.iterate(text.substring(start, end))) {
-            int next = position + cluster.length();
+        // The blank run painted last on this row: where it starts, and the columns before it. A word
+        // break ends the row there, so the run separates the rows without being painted.
+        int runIndex = -1;
+        int runOffset = -1;
+        int runColumns = 0;
+        int index = 0;
+        while (index < clusters.size()) {
+            String cluster = clusters.get(index);
             boolean caret = position == caretOffset;
             int cells = caret ? blockCells(cluster, used, mode) : cells(cluster, used, mode, open);
             if (mode == Cells.NATURAL && "\t".equals(cluster)) {
@@ -442,27 +535,76 @@ public final class VisualRows {
                 // row is painted with the spaces it can hold rather than the column the tab names.
                 cells = Math.max(1, Math.min(cells, limit - used));
             }
+            boolean blank = !caret && mode == Cells.NATURAL && " ".equals(cluster);
             if (used > firstColumn && used + cells > limit) {
+                if (policy == Wrap.WORD) {
+                    // The row ends before the blanks that separate it from the cluster that did not
+                    // fit: the last run it painted when that cluster is a word, or the run that
+                    // starts at this cluster when the blank itself is what does not fit.
+                    // A blank that does not fit is part of a run: the run as a whole is what
+                    // separates the rows, so the whole run is dropped rather than the blanks
+                    // painted so far being kept and the rest skipped.
+                    boolean wholeRun = runIndex >= 0 && runOffset > rowStart;
+                    int breakAt = blank ? (wholeRun ? runOffset : position) : runOffset;
+                    int breakColumns = blank ? (wholeRun ? runColumns : used - firstColumn) : runColumns;
+                    int from = blank ? (wholeRun ? runIndex : index) : runIndex;
+                    if (breakAt > rowStart) {
+                        int afterRun = breakAt;
+                        int next = from;
+                        while (next < clusters.size() && " ".equals(clusters.get(next))) {
+                            afterRun += clusters.get(next).length();
+                            next++;
+                        }
+                        boolean caretKept = caretOffset >= breakAt && caretOffset <= afterRun;
+                        if (!caretKept) {
+                            rows.add(new Row(rowStart, breakAt, breakColumns));
+                            rowStart = afterRun;
+                            position = afterRun;
+                            index = next;
+                            used = firstColumn;
+                            open = firstOpen;
+                            runIndex = -1;
+                            runOffset = -1;
+                            runColumns = 0;
+                            continue;
+                        }
+                    }
+                }
                 // The blank a soft break leaves belongs at the end of the row it broke from: the
                 // offset the caret names is that row's, and the new row starts behind it. A block
                 // is never dropped that way - it is the caret, so it opens the row it moves to.
-                boolean blank = !caret && mode == Cells.NATURAL && " ".equals(cluster);
-                int breakEnd = blank ? next : position;
+                int breakEnd = blank ? position + cluster.length() : position;
                 rows.add(new Row(rowStart, breakEnd, used - firstColumn));
                 rowStart = breakEnd;
                 used = firstColumn;
                 open = firstOpen;
+                runIndex = -1;
+                runOffset = -1;
+                runColumns = 0;
                 if (blank) {
-                    position = next;
+                    position = breakEnd;
+                    index++;
                     continue;
                 }
                 cells = caret ? blockCells(cluster, used, mode) : cells(cluster, used, mode, open);
+                if (mode == Cells.NATURAL && "\t".equals(cluster)) {
+                    cells = Math.max(1, Math.min(cells, limit - used));
+                }
             }
+            int columnsBefore = used - firstColumn;
             used += cells;
             // A block replaces the cluster and joins nothing, so the cell before it cannot continue
             // into the next cluster either.
             open = caret ? CLOSED : openBehind(cluster, mode);
-            position = next;
+            if (mode == Cells.NATURAL && !caret && " ".equals(cluster)) {
+                if (runIndex < 0) {
+                    runIndex = index;
+                    runOffset = position;
+                    runColumns = columnsBefore;
+                }
+            }
+            position += cluster.length();
+            index++;
         }
         rows.add(new Row(rowStart, position, used - firstColumn));
         return rows;

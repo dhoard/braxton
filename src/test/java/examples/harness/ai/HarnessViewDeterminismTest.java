@@ -29,7 +29,9 @@ import io.github.dhoard.braxton.widget.Editor;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** The production view paints exactly the viewport height and is deterministic. */
+/**
+ * The production view paints exactly the viewport height and is deterministic.
+ */
 class HarnessViewDeterminismTest {
 
     @Test

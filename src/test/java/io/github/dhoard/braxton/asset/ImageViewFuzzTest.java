@@ -60,13 +60,15 @@ import org.junit.jupiter.api.io.TempDir;
  *
  * <p>The unit of the grid is measured, not assumed: a one pixel image rendered at scale one says how
  * wide one pixel is for a given symbol, and every other render of that symbol has to be a whole number
- * of those units. Colour has its own oracle - an exact RGB match is replaced and everything else keeps
+ * of those units. Color has its own oracle - an exact RGB match is replaced and everything else keeps
  * its own value - and the pixel store is checked against the image library that produced it.</p>
  */
 @Timeout(value = 120, unit = java.util.concurrent.TimeUnit.SECONDS)
 class ImageViewFuzzTest {
 
-    /** Symbols a pixel might be painted with, including ones the terminal boundary dislikes. */
+    /**
+     * Symbols a pixel might be painted with, including ones the terminal boundary dislikes.
+     */
     private static final String[] SYMBOLS = {
         "\u2588",
         "#",
@@ -100,7 +102,7 @@ class ImageViewFuzzTest {
      * cannot hold the one-cell-per-pixel rule the rest of this class checks.
      * {@code ImageViewTest.aCombiningMarkAttachesToThePixelBeforeItByTheUnicodeClusterRule} pins that
      * as measurement policy the renderer deliberately does not correct, so they are checked for that
-     * behaviour below instead of here.
+     * behavior below instead of here.
      */
     private static final String[] MERGING_SYMBOLS = {"\u0301", "\u0301\u0301", "\uFE0E", "\uD83C\uDDE6"};
 
@@ -139,7 +141,9 @@ class ImageViewFuzzTest {
         }
     }
 
-    /** A symbol that carries no column falls back to the block rather than painting a short grid. */
+    /**
+     * A symbol that carries no column falls back to the block rather than painting a short grid.
+     */
     @Test
     void aSymbolThatCarriesNoColumnFallsBackAndRepeatingAPixelOnlyMakesItWider() {
         ImageAsset grid = ImageAsset.of(image(new Random(11), 3, 2));
@@ -189,7 +193,9 @@ class ImageViewFuzzTest {
         }
     }
 
-    /** Transparent pixels hold their cell, and every pixel keeps the colour it was given. */
+    /**
+     * Transparent pixels hold their cell, and every pixel keeps the color it was given.
+     */
     @Test
     void transparentPixelsHoldTheirCellAndOpaquePixelsKeepTheirColour() {
         Random random = new Random(1_732_050L);
@@ -245,13 +251,15 @@ class ImageViewFuzzTest {
             }
             assertThat(paintedColors)
                     .as(
-                            "%s: painted colours %s do not match the pixels and replacements %s",
+                            "%s: painted colors %s do not match the pixels and replacements %s",
                             where, paintedColors, wanted)
                     .isEqualTo(wanted);
         }
     }
 
-    /** The pixel store is the image library's answer, and coordinates outside it are transparent. */
+    /**
+     * The pixel store is the image library's answer, and coordinates outside it are transparent.
+     */
     @Test
     void theAssetCopiesTheImageAndAnswersOutsideItsBoundsWithNothing() {
         Random random = new Random(1_618_033L);
@@ -300,7 +308,9 @@ class ImageViewFuzzTest {
         assertThatThrownBy(() -> ImageView.of(null)).isInstanceOf(IllegalArgumentException.class);
     }
 
-    /** Whatever a file happens to contain, loading is either a picture or an IOException. */
+    /**
+     * Whatever a file happens to contain, loading is either a picture or an IOException.
+     */
     @Test
     void aFileThatIsNotAnImageIsAnIOExceptionAndNothingElse(@TempDir Path directory) throws IOException {
         Random random = new Random(104_729L);
@@ -367,7 +377,9 @@ class ImageViewFuzzTest {
         return rows.isEmpty() ? 0 : TextMeasure.columns(rows.getFirst());
     }
 
-    /** The rows of a painted picture. A row separator is painted between every pair of image rows. */
+    /**
+     * The rows of a painted picture. A row separator is painted between every pair of image rows.
+     */
     private static List<String> rows(String painted, String where) {
         String[] parts = painted.split("\n", -1);
         long separators = painted.chars().filter(value -> value == '\n').count();
@@ -381,7 +393,9 @@ class ImageViewFuzzTest {
         return rows;
     }
 
-    /** AWT refuses a BufferedImage with no rows or columns, so the smallest picture is 1x1. */
+    /**
+     * AWT refuses a BufferedImage with no rows or columns, so the smallest picture is 1x1.
+     */
     private static BufferedImage image(Random random) {
         return image(random, 1 + random.nextInt(6), 1 + random.nextInt(5));
     }

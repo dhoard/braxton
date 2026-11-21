@@ -127,7 +127,7 @@ Work independently within the authorized scope. Detect and accommodate unversion
 
 ```text
 Read PROMPT_ENGINEER.md and create a design plan
-using DESIGN_PLAN_TEMPLATE.md for:
+using DESIGN.md for:
 
 Refactor the font loader's classpath and
 working-directory resolution without changing

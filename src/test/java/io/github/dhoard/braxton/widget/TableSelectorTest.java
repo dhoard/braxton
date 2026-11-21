@@ -26,16 +26,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.RenderedScreen;
-import io.github.dhoard.braxton.view.ScreenRenderer;
+import io.github.dhoard.braxton.testing.ElementScreen;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** A table selector: navigation, confirmation, and the drawn grid. */
+/**
+ * A table selector: navigation, confirmation, and the drawn grid.
+ */
 class TableSelectorTest {
 
     private static final List<String> HEADER = List.of("id", "name");
@@ -130,8 +130,7 @@ class TableSelectorTest {
 
     @Test
     void theViewPadsColumnsToOneGridAndMapsItsKeys() {
-        List<String> lines = new ScreenRenderer()
-                .plainLines(
+        List<String> lines = ElementScreen.render(
                         new TableSelector(new TableSelector.Config(
                                         TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
                                         Style.NONE.withInvert(),
@@ -142,7 +141,9 @@ class TableSelectorTest {
                                         new io.github.dhoard.braxton.mvu.ViewContext(
                                                 io.github.dhoard.braxton.layout.Viewport.EMPTY))
                                 .map(action -> action.getClass().getSimpleName()),
-                        new Viewport(3, 40));
+                        3,
+                        40)
+                .lines();
         assertThat(lines).containsExactly("id  name", "1   alpha", "2   be");
         java.util.Optional<String> down = actionFor(Key.DOWN);
         assertThat(down).contains("Down");
@@ -154,7 +155,7 @@ class TableSelectorTest {
     @Test
     void aCellBreakCannotWidenTheSharedGrid() {
         // TableSelector prepares every cell with the same one-line rule the sibling widgets apply
-        // (Selector, Markup, Quote, ImageView, ProgressBar, Editor.Config): CRLF, CR and LF each
+        // (Selector, Markup, Quote, ImageView, ProgressBar, EditorConfig): CRLF, CR and LF each
         // become one space. Flattening per character instead turned CRLF into two spaces, so a
         // Windows line ending widened the shared column and pushed every later column right.
         List<String> lineBreak = painted(List.of("id", "n"), List.of(List.of("1", "a\r\nb")));
@@ -173,8 +174,7 @@ class TableSelectorTest {
     }
 
     private static List<String> painted(List<String> header, List<List<String>> rows) {
-        return new ScreenRenderer()
-                .plainLines(
+        return ElementScreen.render(
                         new TableSelector(new TableSelector.Config(
                                         TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
                                         Style.NONE.withInvert(),
@@ -185,7 +185,9 @@ class TableSelectorTest {
                                         new io.github.dhoard.braxton.mvu.ViewContext(
                                                 io.github.dhoard.braxton.layout.Viewport.EMPTY))
                                 .map(action -> action),
-                        new Viewport(2, 40));
+                        2,
+                        40)
+                .lines();
     }
 
     /**
@@ -209,31 +211,35 @@ class TableSelectorTest {
             "\uFEFFx", // byte-order mark
             "\u00ADx"); // soft hyphen
 
-    /** The grid painted through a viewport wider than it, cell (1, 1) selected. */
-    private static RenderedScreen grid(List<String> header, List<List<String>> rows) {
-        return new ScreenRenderer()
-                .screen(
-                        new TableSelector(new TableSelector.Config(
-                                        TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
-                                        Style.NONE.withInvert(),
-                                        Style.NONE,
-                                        Style.NONE.withBold()))
-                                .view(
-                                        (new TableSelector.Model(header, rows, 1, 1)).withFocus(true),
-                                        new io.github.dhoard.braxton.mvu.ViewContext(
-                                                io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                                .map(action -> action.getClass().getSimpleName()),
-                        new Viewport(rows.size() + 1, 40));
+    /**
+     * The grid painted through a viewport wider than it, cell (1, 1) selected.
+     */
+    private static ElementScreen grid(List<String> header, List<List<String>> rows) {
+        return ElementScreen.render(
+                new TableSelector(new TableSelector.Config(
+                                TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
+                                Style.NONE.withInvert(),
+                                Style.NONE,
+                                Style.NONE.withBold()))
+                        .view(
+                                (new TableSelector.Model(header, rows, 1, 1)).withFocus(true),
+                                new io.github.dhoard.braxton.mvu.ViewContext(
+                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                        .map(action -> action.getClass().getSimpleName()),
+                rows.size() + 1,
+                40);
     }
 
-    /** The cells a row was painted with; a wide cluster's second half is a continuation. */
-    private static List<String> paintedCells(RenderedScreen screen, int row) {
+    /**
+     * The cells a row was painted with; a wide cluster's second half is a continuation.
+     */
+    private static List<String> paintedCells(ElementScreen screen, int row) {
         List<String> cells = new ArrayList<>();
-        for (int col = 0; col < screen.cols(); col++) {
+        for (int col = 0; col < screen.canvas().cols(); col++) {
             cells.add(
-                    screen.isContinuation(row, col)
+                    screen.canvas().isContinuation(row, col)
                             ? "<continuation>"
-                            : show(screen.cell(row, col).text()));
+                            : show(screen.canvas().text(row, col)));
         }
         return cells;
     }
@@ -242,45 +248,53 @@ class TableSelectorTest {
      * The columns a row really occupies. Re-measuring the row's own plain text hides a column the
      * paint path gave back to the cell before it, so the cells are the oracle.
      */
-    private static int paintedColumns(RenderedScreen screen, int row) {
+    private static int paintedColumns(ElementScreen screen, int row) {
         int columns = 0;
-        for (int col = 0; col < screen.cols(); col++) {
-            if (screen.isContinuation(row, col)) {
+        for (int col = 0; col < screen.canvas().cols(); col++) {
+            if (screen.canvas().isContinuation(row, col)) {
                 continue;
             }
-            columns += TextMeasure.columns(screen.cell(row, col).text());
+            columns += TextMeasure.columns(screen.canvas().text(row, col));
         }
         return columns;
     }
 
-    /** The last column a row paints in, so the grid's right edge has to land in one column. */
-    private static int lastPaintedColumn(RenderedScreen screen, int row) {
-        for (int col = screen.cols() - 1; col >= 0; col--) {
-            if (!screen.isContinuation(row, col) && !screen.cell(row, col).isEmpty()) {
+    /**
+     * The last column a row paints in, so the grid's right edge has to land in one column.
+     */
+    private static int lastPaintedColumn(ElementScreen screen, int row) {
+        for (int col = screen.canvas().cols() - 1; col >= 0; col--) {
+            if (!screen.canvas().isContinuation(row, col)
+                    && !(screen.canvas().text(row, col).isEmpty()
+                            && screen.canvas().style(row, col).isPlain())) {
                 return col;
             }
         }
         return -1;
     }
 
-    /** The column {@code needle} was painted in on {@code row}, or -1 when it is not painted. */
-    private static int paintedColumn(RenderedScreen screen, int row, char needle) {
-        for (int column = 0; column < screen.cols(); column++) {
-            if (!screen.isContinuation(row, column)
-                    && screen.cell(row, column).text().indexOf(needle) >= 0) {
+    /**
+     * The column {@code needle} was painted in on {@code row}, or -1 when it is not painted.
+     */
+    private static int paintedColumn(ElementScreen screen, int row, char needle) {
+        for (int column = 0; column < screen.canvas().cols(); column++) {
+            if (!screen.canvas().isContinuation(row, column)
+                    && screen.canvas().text(row, column).indexOf(needle) >= 0) {
                 return column;
             }
         }
         return -1;
     }
 
-    /** The columns the inversion of the selected cell covers. */
-    private static int invertedColumns(RenderedScreen screen, int row) {
+    /**
+     * The columns the inversion of the selected cell covers.
+     */
+    private static int invertedColumns(ElementScreen screen, int row) {
         int columns = 0;
-        for (int col = 0; col < screen.cols(); col++) {
-            if (!screen.isContinuation(row, col)
-                    && screen.cell(row, col).style().invert()) {
-                columns += TextMeasure.columns(screen.cell(row, col).text());
+        for (int col = 0; col < screen.canvas().cols(); col++) {
+            if (!screen.canvas().isContinuation(row, col)
+                    && screen.canvas().style(row, col).invert()) {
+                columns += TextMeasure.columns(screen.canvas().text(row, col));
             }
         }
         return columns;
@@ -308,10 +322,10 @@ class TableSelectorTest {
     @Test
     void aCellOpeningWithABaselessClusterKeepsTheGridRectangular() {
         // Column widths are [2, 2], so every row occupies (2 + 2) + (2 + 2) = 8 painted columns.
-        RenderedScreen screen =
+        ElementScreen screen =
                 grid(List.of("h1", "h2"), List.of(List.of("a", "b"), List.of("p", "\u0301x"), List.of("q", "\uFE0Fz")));
-        assertThat(screen.rows()).isEqualTo(4);
-        for (int row = 0; row < screen.rows(); row++) {
+        assertThat(screen.canvas().rows()).isEqualTo(4);
+        for (int row = 0; row < screen.canvas().rows(); row++) {
             List<String> cells = paintedCells(screen, row);
             assertThat(paintedColumns(screen, row))
                     .as("painted columns of row %d, painted as %s", row, cells)
@@ -334,20 +348,20 @@ class TableSelectorTest {
      */
     @Test
     void aBaselessClusterTheSelectorWidensKeepsTheHeaderAndDataRowsInOneGrid() {
-        RenderedScreen screen = new ScreenRenderer()
-                .screen(
-                        new TableSelector(new TableSelector.Config(
-                                        TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
-                                        Style.NONE.withInvert(),
-                                        Style.NONE,
-                                        Style.NONE.withBold()))
-                                .view(
-                                        (new TableSelector.Model(List.of("h"), List.of(List.of("\u0301\uFE0F")), 0, 0))
-                                                .withFocus(true),
-                                        new io.github.dhoard.braxton.mvu.ViewContext(
-                                                io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                                .map(action -> action.getClass().getSimpleName()),
-                        new Viewport(2, 8));
+        ElementScreen screen = ElementScreen.render(
+                new TableSelector(new TableSelector.Config(
+                                TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
+                                Style.NONE.withInvert(),
+                                Style.NONE,
+                                Style.NONE.withBold()))
+                        .view(
+                                (new TableSelector.Model(List.of("h"), List.of(List.of("\u0301\uFE0F")), 0, 0))
+                                        .withFocus(true),
+                                new io.github.dhoard.braxton.mvu.ViewContext(
+                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                        .map(action -> action.getClass().getSimpleName()),
+                2,
+                8);
         assertThat(paintedColumns(screen, 0))
                 .as("painted columns of the header, painted as %s", paintedCells(screen, 0))
                 .isEqualTo(4);
@@ -359,7 +373,9 @@ class TableSelectorTest {
                 .isEqualTo(lastPaintedColumn(screen, 0));
     }
 
-    /** Every baseless cell form keeps the grid rectangular, in either column. */
+    /**
+     * Every baseless cell form keeps the grid rectangular, in either column.
+     */
     @Test
     void everyRowKeepsOneGridWhenACellOpensWithABaselessCluster() {
         for (String cell : BASELESS) {
@@ -367,11 +383,11 @@ class TableSelectorTest {
                 List<List<String>> rows = column == 0
                         ? List.of(List.of(cell, "b"), List.of("bb", "c"))
                         : List.of(List.of("a", cell), List.of("bb", "c"));
-                RenderedScreen screen = grid(List.of("h1", "h2"), rows);
-                assertThat(screen.rows())
+                ElementScreen screen = grid(List.of("h1", "h2"), rows);
+                assertThat(screen.canvas().rows())
                         .as("cell %s column %d", show(cell), column)
                         .isEqualTo(3);
-                for (int row = 1; row < screen.rows(); row++) {
+                for (int row = 1; row < screen.canvas().rows(); row++) {
                     List<String> cells = paintedCells(screen, row);
                     assertThat(paintedColumns(screen, row))
                             .as(
@@ -399,16 +415,16 @@ class TableSelectorTest {
         // Column widths are [2, 5, 1], so every row occupies 4 + 7 + 3 = 14 columns and the third
         // column's text is painted in column 11 on every row.
         for (String cell : List.of("\u0301beta", "beta")) {
-            RenderedScreen screen =
+            ElementScreen screen =
                     grid(List.of("id", "name", "x"), List.of(List.of("1", "alpha", "z"), List.of("22", cell, "z")));
-            for (int row = 0; row < screen.rows(); row++) {
+            for (int row = 0; row < screen.canvas().rows(); row++) {
                 assertThat(paintedColumns(screen, row))
                         .as(
                                 "painted columns of row %d for cell %s, painted as %s",
                                 row, show(cell), paintedCells(screen, row))
                         .isEqualTo(14);
             }
-            for (int row = 1; row < screen.rows(); row++) {
+            for (int row = 1; row < screen.canvas().rows(); row++) {
                 assertThat(paintedColumn(screen, row, 'z'))
                         .as(
                                 "third column of row %d for cell %s, painted as %s",
@@ -423,55 +439,51 @@ class TableSelectorTest {
 
     @Test
     void onlyTheSelectedCellIsInvertedAndOnlyWhileFocused() {
-        var screen = new ScreenRenderer()
-                .screen(
-                        new TableSelector(new TableSelector.Config(
-                                        TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
-                                        Style.NONE.withInvert(),
-                                        Style.NONE,
-                                        Style.NONE.withBold()))
-                                .view(
-                                        (state()).withFocus(true),
-                                        new io.github.dhoard.braxton.mvu.ViewContext(
-                                                io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                                .map(action -> action.getClass().getSimpleName()),
-                        new Viewport(3, 40));
-        assertThat(screen.cell(1, 0).style().invert()).as("selected cell").isTrue();
-        assertThat(screen.cell(2, 0).style().invert()).as("other row").isFalse();
-        assertThat(screen.cell(1, 4).style().invert()).as("other column").isFalse();
-        assertThat(screen.cell(0, 0).style().bold()).as("header").isTrue();
+        var screen = ElementScreen.render(
+                new TableSelector(new TableSelector.Config(
+                                TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
+                                Style.NONE.withInvert(),
+                                Style.NONE,
+                                Style.NONE.withBold()))
+                        .view(
+                                (state()).withFocus(true),
+                                new io.github.dhoard.braxton.mvu.ViewContext(
+                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                        .map(action -> action.getClass().getSimpleName()),
+                3,
+                40);
+        assertThat(screen.canvas().style(1, 0).invert()).as("selected cell").isTrue();
+        assertThat(screen.canvas().style(2, 0).invert()).as("other row").isFalse();
+        assertThat(screen.canvas().style(1, 4).invert()).as("other column").isFalse();
+        assertThat(screen.canvas().style(0, 0).bold()).as("header").isTrue();
 
-        var unfocused = new ScreenRenderer()
-                .screen(
-                        new TableSelector(new TableSelector.Config(
-                                        TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
-                                        Style.NONE.withInvert(),
-                                        Style.NONE,
-                                        Style.NONE.withBold()))
-                                .view(
-                                        (state()).withFocus(false),
-                                        new io.github.dhoard.braxton.mvu.ViewContext(
-                                                io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                                .map(action -> action.getClass().getSimpleName()),
-                        new Viewport(3, 40));
-        assertThat(unfocused.cell(1, 0).style().invert())
+        var unfocused = ElementScreen.render(
+                new TableSelector(new TableSelector.Config(
+                                TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
+                                Style.NONE.withInvert(),
+                                Style.NONE,
+                                Style.NONE.withBold()))
+                        .view(
+                                (state()).withFocus(false),
+                                new io.github.dhoard.braxton.mvu.ViewContext(
+                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                        .map(action -> action.getClass().getSimpleName()),
+                3,
+                40);
+        assertThat(unfocused.canvas().style(1, 0).invert())
                 .as("nothing is selected while unfocused")
                 .isFalse();
-        assertThat(unfocused.plainLine(1)).as("the rows are drawn the same").isEqualTo("1   alpha");
+        assertThat(unfocused.line(1)).as("the rows are drawn the same").isEqualTo("1   alpha");
     }
 
     private static java.util.Optional<String> actionFor(Key key) {
-        var view = new TableSelector(new TableSelector.Config(
+        List<TableSelector.Msg> produced = new ArrayList<>(1);
+        new TableSelector(new TableSelector.Config(
                         TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
                         Style.NONE,
                         Style.NONE,
                         Style.NONE))
-                .view(
-                        (state()).withFocus(true),
-                        new io.github.dhoard.braxton.mvu.ViewContext(io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                .map(action -> action.getClass().getSimpleName());
-        return view instanceof io.github.dhoard.braxton.view.View.Focused<String> focused
-                ? focused.input().handle(InputEvent.KeyInput.of(key, ""))
-                : java.util.Optional.empty();
+                .onKey(InputEvent.KeyInput.of(key, ""), state().withFocus(true), produced::add);
+        return produced.stream().findFirst().map(action -> action.getClass().getSimpleName());
     }
 }

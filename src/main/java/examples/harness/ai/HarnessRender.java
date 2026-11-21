@@ -48,7 +48,9 @@ final class HarnessRender {
         "\u2834", "\u2826", "\u2827", "\u2807", "\u280f"
     };
 
-    /** How long one spinner frame lasts; the label advances one frame per interval. */
+    /**
+     * How long one spinner frame lasts; the label advances one frame per interval.
+     */
     static final long SPINNER_FRAME_MILLIS = 80L;
 
     private HarnessRender() {}
@@ -215,7 +217,7 @@ final class HarnessRender {
      * is never measured on its own: a variation selector with no base of its own continues the cell
      * in front of it and makes that cell two columns wide, and those are the columns the row costs
      * once painted. Charging the run for the columns it holds alone left rows a cell wider than the
-     * width they were wrapped to, and {@link #pad} cut the real text they overflowed with an
+     * width they were wrapped to, and {@link #truncate(String, int)} cut the real text they overflowed with an
      * ellipsis.
      */
     private static int appendedColumns(StringBuilder current, int currentWidth, String text, int start, int end) {
@@ -233,7 +235,9 @@ final class HarnessRender {
         return visibleLength(joined.toString());
     }
 
-    /** Measure ordinary word/space runs without allocating one substring for every word. */
+    /**
+     * Measure ordinary word/space runs without allocating one substring for every word.
+     */
     private static int runColumns(String line, int start, int end) {
         for (int i = start; i < end; i++) {
             if (!TextMeasure.isPrintableAscii(line.charAt(i))) {
@@ -251,7 +255,9 @@ final class HarnessRender {
         current.setLength(0);
     }
 
-    /** Truncates plain text to {@code width} cells, appending an ellipsis when cut. */
+    /**
+     * Truncates plain text to {@code width} cells, appending an ellipsis when cut.
+     */
     static String truncate(String text, int width) {
         String safe = text == null ? "" : text;
         int limit = Math.max(0, width);
@@ -267,7 +273,9 @@ final class HarnessRender {
         return TextMeasure.truncate(safe, limit - 1) + "\u2026";
     }
 
-    /** Truncates from the left, keeping the informative tail of a path. */
+    /**
+     * Truncates from the left, keeping the informative tail of a path.
+     */
     static String truncateLeft(String text, int width) {
         String safe = text == null ? "" : text;
         int limit = Math.max(0, width);
@@ -318,7 +326,9 @@ final class HarnessRender {
         return body.append(StyledText.of(" ".repeat(limit - used), pad));
     }
 
-    /** Applies a row background to every span of styled text, keeping each span's own style. */
+    /**
+     * Applies a row background to every span of styled text, keeping each span's own style.
+     */
     private static StyledText withBackground(StyledText text, Style background) {
         StyledText out = StyledText.empty();
         for (StyledText.Span span : text.spans()) {
@@ -327,7 +337,9 @@ final class HarnessRender {
         return out;
     }
 
-    /** Truncates styled text to {@code width} columns without splitting a grapheme cluster. */
+    /**
+     * Truncates styled text to {@code width} columns without splitting a grapheme cluster.
+     */
     static StyledText truncate(StyledText text, int width) {
         if (text == null || width <= 0) {
             return StyledText.empty();
@@ -358,7 +370,9 @@ final class HarnessRender {
         return text == null ? 0 : TextMeasure.columns(text);
     }
 
-    /** Compact token counts for the metrics lane. */
+    /**
+     * Compact token counts for the metrics lane.
+     */
     static String formatTokens(long count) {
         if (count < 1000) {
             return Long.toString(count);
@@ -375,7 +389,9 @@ final class HarnessRender {
         return Math.round(count / 1_000_000.0) + "M";
     }
 
-    /** Formats elapsed seconds as {@code 1h 0m 5s}, {@code 1m 5s}, or {@code 5s}. */
+    /**
+     * Formats elapsed seconds as {@code 1h 0m 5s}, {@code 1m 5s}, or {@code 5s}.
+     */
     static String formatElapsed(long totalSeconds) {
         long seconds = Math.max(0, totalSeconds);
         long hours = seconds / 3600;
@@ -403,7 +419,9 @@ final class HarnessRender {
         return SPINNER[Math.floorMod(frame, SPINNER.length)];
     }
 
-    /** A bounded preview of tool output: the first {@code maxLines} lines plus a total count. */
+    /**
+     * A bounded preview of tool output: the first {@code maxLines} lines plus a total count.
+     */
     static Preview toolPreview(String result, int maxLines) {
         String safe = sanitize(result);
         if (safe.isBlank()) {

@@ -52,7 +52,9 @@ import org.commonmark.parser.Parser;
  */
 public final class MarkdownParser {
 
-    /** Every extension Braxton's dialect enables, in parser order. */
+    /**
+     * Every extension Braxton's dialect enables, in parser order.
+     */
     private static final List<Extension> EXTENSIONS = List.of(
             AutolinkExtension.create(),
             StrikethroughExtension.create(),

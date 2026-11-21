@@ -27,7 +27,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 
-/** Geometry values: validation, emptiness, selection and clipping. */
+/**
+ * Geometry values: validation, emptiness, selection and clipping.
+ */
 class GeometryTest {
 
     @Test
@@ -83,7 +85,7 @@ class GeometryTest {
 
     @Test
     void anInsetLargerThanTheRemainingRoomSaturatesTheOriginInsteadOfWrappingIt() {
-        // Insetting can only shrink and move a rectangle towards its far corner, so an origin that is
+        // Insetting can only shrink and move a rectangle toward its far corner, so an origin that is
         // not at zero plus a huge inset saturates at the largest coordinate instead of wrapping
         // negative and being rejected by the value type.
         Rect rect = new Rect(5, 7, 4, 4);

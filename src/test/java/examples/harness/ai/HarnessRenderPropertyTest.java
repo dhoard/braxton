@@ -69,12 +69,16 @@ class HarnessRenderPropertyTest {
         return text.toString();
     }
 
-    /** Wrapping turns runs of spaces and line breaks into structure, never into content. */
+    /**
+     * Wrapping turns runs of spaces and line breaks into structure, never into content.
+     */
     private static String content(String text) {
         return text.replace(" ", "").replace("\n", "");
     }
 
-    /** The widest single cluster: a line can never be narrower than a cluster it cannot split. */
+    /**
+     * The widest single cluster: a line can never be narrower than a cluster it cannot split.
+     */
     private static int widestCluster(String text) {
         int widest = 1;
         for (String grapheme : TextMeasure.graphemes(text)) {

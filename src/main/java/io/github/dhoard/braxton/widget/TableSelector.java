@@ -25,6 +25,8 @@ package io.github.dhoard.braxton.widget;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
+import io.github.dhoard.braxton.input.PointerEvent;
+import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Update;
@@ -33,14 +35,13 @@ import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.Interactive;
+import io.github.dhoard.braxton.ui.Sizing;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.function.Function;
+import java.util.function.Consumer;
 
 /**
  * A focusable table with a selected row and column.
@@ -56,13 +57,19 @@ import java.util.function.Function;
  * share, so a cell that opens with a cluster that has no base of its own cannot make one row of the
  * grid a different width from another.</p>
  *
+ * <p>A pointer press selects the cell it landed on, and a second press on the selected cell confirms
+ * it. The header row names the columns, so a press there selects nothing.</p>
+ *
  * <p>The gestures this selector handles are a {@link KeyMap}: {@link #defaultKeys()} defines the
  * defaults, {@link #keys()} is the definition a caller can render through {@link Help}, and the
  * {@link #TableSelector(Config, KeyMap)} constructor replaces it.</p>
  */
-public final class TableSelector implements Component<TableSelector.Model, TableSelector.Msg, TableSelector.Output> {
+public final class TableSelector
+        implements Component<TableSelector.Model, TableSelector.Msg, TableSelector.Output>,
+                Interactive<TableSelector.Model, TableSelector.Msg> {
 
-    /** Immutable selection state.
+    /**
+     * Immutable selection state.
      *
      * @param header the column headers
      * @param rows the selectable rows
@@ -72,16 +79,39 @@ public final class TableSelector implements Component<TableSelector.Model, Table
      */
     public record Model(List<String> header, List<List<String>> rows, int row, int column, boolean focused) {
 
+        /**
+         * Creates a {@code Model} value.
+         *
+         * @param header the column headers
+         * @param rows the selectable rows
+         * @param row the selected row index
+         * @param column the selected column index
+         */
         public Model(List<String> header, List<List<String>> rows, int row, int column) {
             this(header, rows, row, column, true);
         }
 
+        /**
+         * Returns the same value with focus replaced.
+         *
+         * @param value the requested focus
+         * @return the value with the requested focus
+         */
         public Model withFocus(boolean value) {
             // Matching the editor and selector: unchanged focus keeps the instance, so a message that
             // changed nothing stays a no-op for the runtime's unchanged-reference view rule.
             return value == focused ? this : new Model(header, rows, row, column, value);
         }
 
+        /**
+         * Creates a {@code Model} value.
+         *
+         * @param header the column headers
+         * @param rows the selectable rows
+         * @param row the selected row index
+         * @param column the selected column index
+         * @param focused whether the selector currently owns focus
+         */
         public Model {
             header = List.copyOf(header);
             List<List<String>> copy = new ArrayList<>();
@@ -93,10 +123,22 @@ public final class TableSelector implements Component<TableSelector.Model, Table
             column = header.isEmpty() ? -1 : Math.max(0, Math.min(column, header.size() - 1));
         }
 
+        /**
+         * Creates a {@code Model} value.
+         *
+         * @param header the column headers
+         * @param rows the selectable rows
+         * @return the normalized table selection state
+         */
         public static Model of(List<String> header, List<List<String>> rows) {
             return new Model(header, rows, rows.isEmpty() ? -1 : 0, header.isEmpty() ? -1 : 0);
         }
 
+        /**
+         * Returns the selected cell text, or an empty string outside the table.
+         *
+         * @return the selected cell text, or an empty string outside the table
+         */
         public String selectedValue() {
             if (row < 0 || row >= rows.size()) {
                 return "";
@@ -106,31 +148,87 @@ public final class TableSelector implements Component<TableSelector.Model, Table
         }
     }
 
-    /** One navigation or confirmation gesture. */
+    /**
+     * One navigation or confirmation gesture.
+     */
     public sealed interface Msg {
+        /**
+         * Moves the selection up.
+         */
         record Up() implements Msg {}
 
+        /**
+         * Selects one cell: a pointer press.
+         *
+         * @param row the row to select; clamped into the rows
+         * @param column the column to select; clamped into the header's columns
+         */
+        record Select(int row, int column) implements Msg {}
+
+        /**
+         * Moves the selection down.
+         */
         record Down() implements Msg {}
 
+        /**
+         * Moves the selection left.
+         */
         record Left() implements Msg {}
 
+        /**
+         * Moves the selection right.
+         */
         record Right() implements Msg {}
 
+        /**
+         * Confirms the current selection.
+         */
         record Confirm() implements Msg {}
 
+        /**
+         * Requests cancellation.
+         */
         record Cancel() implements Msg {}
     }
 
-    /** What the owner should do after an action. */
+    /**
+     * What the owner should do after an action.
+     */
     public sealed interface Output {
+        /**
+         * Reports the selected coordinates and display value.
+         *
+         * @param row the zero-based row
+         * @param column the zero-based column
+         * @param value the display value of the chosen cell
+         */
         record Chosen(int row, int column, String value) implements Output {}
 
+        /**
+         * Reports that the user canceled the selection.
+         */
         record Cancelled() implements Output {}
     }
 
     private record Result(Model state, Output intent) implements WidgetResult<Model, Output> {}
 
+    /**
+     * The initial table selection and focused, unfocused, and header styles.
+     *
+     * @param initial the initial selected cell
+     * @param activeStyle the selected item style
+     * @param inactiveStyle the unselected item style
+     * @param headerStyle the header cell style
+     */
     public record Config(Model initial, Style activeStyle, Style inactiveStyle, Style headerStyle) {
+        /**
+         * Creates a {@code Config} value.
+         *
+         * @param initial the initial selected cell
+         * @param activeStyle the selected item style
+         * @param inactiveStyle the unselected item style
+         * @param headerStyle the header cell style
+         */
         public Config {
             Objects.requireNonNull(initial, "initial");
             activeStyle = activeStyle == null ? Style.NONE : activeStyle;
@@ -138,6 +236,11 @@ public final class TableSelector implements Component<TableSelector.Model, Table
             headerStyle = headerStyle == null ? Style.NONE : headerStyle;
         }
 
+        /**
+         * Returns the default table selector configuration.
+         *
+         * @return the default table selector configuration
+         */
         public static Config defaults() {
             return new Config(Model.of(List.of(), List.of()), Style.NONE.withInvert(), Style.NONE, Style.NONE);
         }
@@ -205,23 +308,11 @@ public final class TableSelector implements Component<TableSelector.Model, Table
                 model, message, action -> reduce(model, action), state -> state.withFocus(model.focused()));
     }
 
-    @Override
-    public View<Msg> view(Model model, ViewContext context) {
-        return paint(
-                ElementId.of("input"),
-                model,
-                model.focused(),
-                config.activeStyle(),
-                config.inactiveStyle(),
-                config.headerStyle(),
-                keys,
-                Function.identity());
-    }
-
     private static Result reduce(Model state, Msg action) {
         int rows = state.rows().size();
         int columns = Math.max(1, state.header().size());
         return switch (action) {
+            case Msg.Select select -> moved(state, select.row(), select.column());
             case Msg.Up up -> moved(state, Math.max(0, state.row() - 1), state.column());
             case Msg.Down down -> moved(state, Math.min(Math.max(0, rows - 1), state.row() + 1), state.column());
             case Msg.Left left -> moved(state, state.row(), Math.max(0, state.column() - 1));
@@ -240,30 +331,19 @@ public final class TableSelector implements Component<TableSelector.Model, Table
         return new Result(new Model(state.header(), state.rows(), row, column), null);
     }
 
-    private static <Message> View<Message> paint(
-            ElementId id,
-            Model state,
-            boolean focused,
-            Style activeStyle,
-            Style inactiveStyle,
-            Style headerStyle,
-            KeyMap<Msg> keys,
-            Function<Msg, Message> map) {
-        List<String> header = expanded(state.header());
+    @Override
+    public Element<Msg> view(Model model, ViewContext context) {
+        return scene(model);
+    }
+
+    /**
+     * The grid, with the table itself as the leaf that answers for its cells.
+     */
+    private Element<Msg> scene(Model model) {
+        List<String> header = expanded(model.header());
         int columns = header.size();
-        int[] widths = new int[columns];
-        for (int i = 0; i < columns; i++) {
-            widths[i] = TextMeasure.columns(header.get(i));
-        }
-        List<List<String>> rows = new ArrayList<>(state.rows().size());
-        for (List<String> row : state.rows()) {
-            List<String> expanded = expanded(row);
-            rows.add(expanded);
-            for (int i = 0; i < Math.min(columns, expanded.size()); i++) {
-                widths[i] = Math.max(widths[i], TextMeasure.columns(expanded.get(i)));
-            }
-        }
-        List<View<Message>> lines = new ArrayList<>();
+        int[] widths = widths(model);
+        List<Element<Msg>> lines = new ArrayList<>();
         StyledText headerLine = StyledText.empty();
         // A rendered row is one cluster sequence, so each cell is charged inside the row rather
         // than measured on its own: a cluster with no base of its own at the head of a cell joins
@@ -276,28 +356,95 @@ public final class TableSelector implements Component<TableSelector.Model, Table
         for (int i = 0; i < columns; i++) {
             String value = header.get(i);
             int pad = headerRow.pad(value, widths[i] + 2);
-            headerLine = headerLine.append(StyledText.of(value + " ".repeat(pad), headerStyle));
+            headerLine = headerLine.append(StyledText.of(value + " ".repeat(pad), config.headerStyle()));
         }
-        lines.add(Views.text(headerLine));
-        for (int r = 0; r < rows.size(); r++) {
-            List<String> values = rows.get(r);
+        lines.add(Elements.text(headerLine));
+        for (int r = 0; r < model.rows().size(); r++) {
+            List<String> values = expanded(model.rows().get(r));
             StyledText line = StyledText.empty();
             GridRows.Row row = GridRows.Row.empty();
             for (int c = 0; c < columns; c++) {
                 String value = c < values.size() ? values.get(c) : "";
-                Style style = focused && r == state.row() && c == state.column() ? activeStyle : inactiveStyle;
+                Style style = model.focused() && r == model.row() && c == model.column()
+                        ? config.activeStyle()
+                        : config.inactiveStyle();
                 int pad = row.pad(value, widths[c] + 2);
                 line = line.append(StyledText.of(value + " ".repeat(pad), style));
             }
-            lines.add(Views.text(line));
+            lines.add(Elements.text(line));
         }
-        View.InputHandler<Message> handler = event -> {
-            if (!(event instanceof InputEvent.KeyInput key)) {
-                return Optional.empty();
+        return Elements.stack(Elements.column(lines), new Element.Leaf<>(this, model, Sizing.measured()));
+    }
+
+    /**
+     * The painted width of every column: the widest of its header and its cells.
+     */
+    private static int[] widths(Model model) {
+        List<String> header = expanded(model.header());
+        int[] widths = new int[header.size()];
+        for (int index = 0; index < header.size(); index++) {
+            widths[index] = TextMeasure.columns(header.get(index));
+        }
+        for (List<String> row : model.rows()) {
+            List<String> values = expanded(row);
+            for (int index = 0; index < Math.min(widths.length, values.size()); index++) {
+                widths[index] = Math.max(widths[index], TextMeasure.columns(values.get(index)));
             }
-            return keys.actionFor(key.key()).map(KeyAction::message).map(map);
-        };
-        return Views.focus(id, focused, List.of(), handler, Views.column(lines));
+        }
+        return widths;
+    }
+
+    /**
+     * The table's keys, from the same map {@link Help} renders.
+     */
+    @Override
+    public void onKey(InputEvent.KeyInput key, Model model, Consumer<Msg> emit) {
+        keys.actionFor(key.key()).map(KeyAction::message).ifPresent(emit);
+    }
+
+    /**
+     * Focus is model data: the application sets it and the widget only reports it.
+     */
+    @Override
+    public boolean focused(Model model) {
+        return model.focused();
+    }
+
+    /**
+     * A press selects the cell it landed on; a second press on the selected cell confirms it, which
+     * is the pointer form of enter. The header row names the columns, so a press there selects
+     * nothing.
+     */
+    @Override
+    public void onPointer(PointerEvent pointer, Rect bounds, Model model, Consumer<Msg> emit) {
+        PointerEvent local = pointer.localTo(bounds.row(), bounds.col());
+        if (!local.isLeftPress()) {
+            return;
+        }
+        int row = local.row() - 1;
+        if (row < 0 || row >= model.rows().size()) {
+            return;
+        }
+        if (local.clickCount() > 1 && row == model.row()) {
+            emit.accept(new Msg.Confirm());
+            return;
+        }
+        emit.accept(new Msg.Select(row, columnAt(widths(model), local.column())));
+    }
+
+    /**
+     * The column a painted cell falls in: each cell occupies its width and the two cells of padding.
+     */
+    private static int columnAt(int[] widths, int column) {
+        int start = 0;
+        for (int index = 0; index < widths.length; index++) {
+            int cells = widths[index] + 2;
+            if (column >= start && column < start + cells) {
+                return index;
+            }
+            start += cells;
+        }
+        return Math.max(0, widths.length - 1);
     }
 
     /**
@@ -315,7 +462,7 @@ public final class TableSelector implements Component<TableSelector.Model, Table
 
     /**
      * A cell is one painted row, so every break form is one space - the rule {@link Selector},
-     * {@link Markup}, {@link Quote}, {@link ImageView} and {@link ProgressBar} apply. Flattening
+     * {@link Markup}, {@link Quote}, {@link io.github.dhoard.braxton.asset.ImageView} and {@link ProgressBar} apply. Flattening
      * per character turned CRLF into two spaces and widened the shared column.
      */
     private static String singleRow(String value) {

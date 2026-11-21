@@ -29,11 +29,15 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
-/** Bracketed-paste reading: termination, limits, and the idle window. */
+/**
+ * Bracketed-paste reading: termination, limits, and the idle window.
+ */
 @org.junit.jupiter.api.extension.ExtendWith(io.github.dhoard.braxton.internal.input.TestReaders.class)
 class PasteDecoderTest {
 
-    /** Reports no data for the first {@code quietPolls} queries, like a paste arriving in pieces. */
+    /**
+     * Reports no data for the first {@code quietPolls} queries, like a paste arriving in pieces.
+     */
     private static final class DelayedStream extends InputStream {
         private final byte[] data;
         private final int quietPolls;

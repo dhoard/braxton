@@ -45,6 +45,8 @@ public enum PasteMode {
     /**
      * Parses {@code normal} or {@code aggressive} case-insensitively.
      *
+     * @param value the configuration value to parse
+     * @param fallback the value to use when resolution fails
      * @return the matching mode, or {@code fallback} for a missing or unknown value
      */
     public static PasteMode parse(String value, PasteMode fallback) {
@@ -63,6 +65,8 @@ public enum PasteMode {
     /**
      * The mode configured by the {@code braxton.paste.mode} system property, defaulting to
      * {@link #NORMAL}.
+     *
+     * @return the configured mode, or NORMAL when absent, invalid, or inaccessible
      */
     public static PasteMode configuredDefault() {
         try {

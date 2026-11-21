@@ -27,8 +27,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
@@ -78,19 +76,21 @@ class WrapLinesPropertyTest {
     @Test
     void everyWrappedLineFitsAndTheMeasuredHeightIsTheLinesPainted() {
         Random random = new Random(777L);
-        LayoutEngine engine = new LayoutEngine();
         for (int round = 0; round < 20000; round++) {
             StyledText text = randomText(random);
             int cols = 1 + random.nextInt(12);
-            var lines = engine.wrapLines(text, cols);
+            var lines = io.github.dhoard.braxton.style.TextWrap.wrap(
+                    text, io.github.dhoard.braxton.style.WidthPolicy.PINNED, cols);
             for (StyledText line : lines) {
                 assertThat(TextMeasure.columns(line))
                         .as("line [%s] of [%s] wrapped to %d columns", line.plainText(), text.plainText(), cols)
                         .isLessThanOrEqualTo(cols);
             }
             // The height a container measures is the number of lines paint lays out from the same text.
-            View<?> view = Views.text(text);
-            assertThat(engine.intrinsicHeight(view, cols))
+            assertThat(io.github.dhoard.braxton.ui.ElementTree.measure(
+                                    io.github.dhoard.braxton.widget.Elements.text(text),
+                                    new io.github.dhoard.braxton.layout.Size(Integer.MAX_VALUE, cols))
+                            .rows())
                     .as("the measured height of [%s] at %d columns", text.plainText(), cols)
                     .isEqualTo(lines.size());
         }

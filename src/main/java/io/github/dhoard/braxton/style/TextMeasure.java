@@ -37,7 +37,9 @@ import java.util.List;
  */
 public final class TextMeasure {
 
-    /** Rendered in front of a cluster that has no base character to occupy a cell. */
+    /**
+     * Rendered in front of a cluster that has no base character to occupy a cell.
+     */
     public static final String DOTTED_CIRCLE = "\u25CC";
 
     private TextMeasure() {}
@@ -119,6 +121,7 @@ public final class TextMeasure {
      * cells wide whatever form it is drawn in, and charging one column for it made every row holding
      * one a column shorter than what was painted. Only U+FE0F (VS16) changes a width, and only upward:
      * it asks for the emoji form of a base that would otherwise be one column wide.</p>
+     *
      * @param cluster the grapheme cluster to measure
      * @param policy the column-width policy
      * @return the columns it occupies, 0, 1 or 2
@@ -180,6 +183,7 @@ public final class TextMeasure {
     /**
      * Truncates {@code text} to at most {@code maxColumns} columns without splitting a cluster.
      * A wide cluster that does not fit is dropped entirely rather than half-painted.
+     *
      * @param text the text to truncate
      * @param maxColumns the column budget
      * @return the longest whole-cluster prefix that fits
@@ -360,6 +364,7 @@ public final class TextMeasure {
      * cell accounting all take this shortcut, so the rule has one owner here: if it were restated per
      * call site, one copy could drift and a caret column or a painted cell would disagree with the
      * measurement that placed it.</p>
+     *
      * @param value the character to test
      * @return whether it is printable ASCII
      */

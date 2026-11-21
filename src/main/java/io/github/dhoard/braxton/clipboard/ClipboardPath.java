@@ -22,20 +22,32 @@
 
 package io.github.dhoard.braxton.clipboard;
 
-/** The transport path used for one clipboard write. */
+/**
+ * The transport path used for one clipboard write.
+ */
 public enum ClipboardPath {
-    /** Nothing was written and nothing needed storing (empty payload). */
+    /**
+     * Nothing was written and nothing needed storing (empty payload).
+     */
     NONE,
 
-    /** A plain OSC 52 sequence was written directly. */
+    /**
+     * A plain OSC 52 sequence was written directly.
+     */
     OSC52_DIRECT,
 
-    /** A plain OSC 52 sequence was written and left for tmux to forward natively. */
+    /**
+     * A plain OSC 52 sequence was written and left for tmux to forward natively.
+     */
     TMUX_NATIVE,
 
-    /** A DCS-wrapped OSC 52 sequence was written for tmux passthrough. */
+    /**
+     * A DCS-wrapped OSC 52 sequence was written for tmux passthrough.
+     */
     TMUX_PASSTHROUGH,
 
-    /** No escape sequence was written; only the in-process buffer holds the text. */
+    /**
+     * No escape sequence was written; only the in-process buffer holds the text.
+     */
     INTERNAL_ONLY
 }

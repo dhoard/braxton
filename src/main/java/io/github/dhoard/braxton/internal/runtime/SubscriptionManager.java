@@ -44,6 +44,7 @@ import java.util.function.Function;
  * is kept and only the message mapper is replaced, so a new closure can never leak a stale model
  * into a running timer. A changed or removed source is closed exactly once, and a stale emission is
  * ignored.</p>
+ *
  * @param <Msg> the component message type sources emit
  */
 public final class SubscriptionManager<Msg> {
@@ -67,7 +68,9 @@ public final class SubscriptionManager<Msg> {
         final java.util.function.BiConsumer<Object, java.util.function.BooleanSupplier> emitter;
         final Consumer<String> diagnostics;
         final java.util.function.BooleanSupplier paused;
-        /** Whether a period elapsed while the session had released its terminal. */
+        /**
+         * Whether a period elapsed while the session had released its terminal.
+         */
         final java.util.concurrent.atomic.AtomicBoolean tickPending = new java.util.concurrent.atomic.AtomicBoolean();
 
         private final Object timerLock = new Object();
@@ -128,7 +131,9 @@ public final class SubscriptionManager<Msg> {
             scheduled.cancel();
         }
 
-        /** Maps one elapsed period and publishes it, containing a throwing mapper. */
+        /**
+         * Maps one elapsed period and publishes it, containing a throwing mapper.
+         */
         private void tick() {
             Function<Long, Msg> current = mapper.get();
             if (current == null) {
@@ -154,7 +159,9 @@ public final class SubscriptionManager<Msg> {
             }
         }
 
-        /** Claims the tick that elapsed while the session was released, if there was one. */
+        /**
+         * Claims the tick that elapsed while the session was released, if there was one.
+         */
         boolean takePendingTick() {
             return tickPending.getAndSet(false);
         }
@@ -233,6 +240,11 @@ public final class SubscriptionManager<Msg> {
     private ScopeManager scopes;
     private java.util.function.Supplier<TerminalFacts> facts = () -> null;
 
+    /**
+     * Binds subscription delivery to active component lifetimes.
+     *
+     * @param scopes the active component lifetime registry
+     */
     public void bindScopes(ScopeManager scopes) {
         this.scopes = scopes;
     }
@@ -250,7 +262,11 @@ public final class SubscriptionManager<Msg> {
         return scopes == null ? null : scopes.capture(id.path());
     }
 
-    /** Invalidates removed scopes before any replacement sources start. */
+    /**
+     * Invalidates removed scopes before any replacement sources start.
+     *
+     * @param path the component scope path
+     */
     public void closeScope(ComponentPath path) {
         List<Live> removed = new ArrayList<>();
         synchronized (lock) {
@@ -274,12 +290,22 @@ public final class SubscriptionManager<Msg> {
     private final Consumer<String> diagnostics;
     private final Map<SubscriptionId, Live> live = new java.util.LinkedHashMap<>();
     private final Object lock = new Object();
-    /** Whether the session has released its terminal, so interval ticks are coalesced. */
+    /**
+     * Whether the session has released its terminal, so interval ticks are coalesced.
+     */
     private volatile boolean paused;
 
     private boolean closed;
     private Thread owner = Thread.currentThread();
 
+    /**
+     * Creates a {@code SubscriptionManager} value.
+     *
+     * @param mailbox the runtime mailbox
+     * @param timers the timer service
+     * @param maxSubscriptions the maximum number of active subscriptions
+     * @param diagnostics the diagnostic message consumer
+     */
     public SubscriptionManager(Mailbox mailbox, Timers timers, int maxSubscriptions, Consumer<String> diagnostics) {
         this.mailbox = mailbox;
         this.timers = timers;
@@ -287,12 +313,20 @@ public final class SubscriptionManager<Msg> {
         this.diagnostics = diagnostics == null ? message -> {} : diagnostics;
     }
 
-    /** Marks the thread allowed to enqueue without waiting for itself. */
+    /**
+     * Marks the thread allowed to enqueue without waiting for itself.
+     *
+     * @param thread the thread whose lifecycle is controlled
+     */
     public void bindOwner(Thread thread) {
         this.owner = thread;
     }
 
-    /** Applies a new subscription description, keeping unchanged live resources. */
+    /**
+     * Applies a new subscription description, keeping unchanged live resources.
+     *
+     * @param subscription the subscription descriptor
+     */
     public void reconcile(Subscription<Msg> subscription) {
         List<Subscription<Msg>> leaves = Subscription.leaves(subscription);
         if (leaves.size() > maxSubscriptions) {
@@ -486,7 +520,11 @@ public final class SubscriptionManager<Msg> {
         ((IntervalLive<Msg>) interval).tick();
     }
 
-    /** Called on the owner thread when a resize is measured. */
+    /**
+     * Called on the owner thread when a resize is measured.
+     *
+     * @param size the requested cell dimensions
+     */
     public void notifyResize(Size size) {
         List<Live> targets;
         synchronized (lock) {
@@ -512,8 +550,8 @@ public final class SubscriptionManager<Msg> {
     /**
      * Publishes a changed set of session facts to every live facts source.
      *
-     * <p>Called on the owner thread when a fact changes - a colour profile upgraded by a capability
-     * reply, or a background colour reported for the first time - so a component that did not ask for
+     * <p>Called on the owner thread when a fact changes - a color profile upgraded by a capability
+     * reply, or a background color reported for the first time - so a component that did not ask for
      * the change still learns it.</p>
      *
      * @param current the facts in force
@@ -629,7 +667,9 @@ public final class SubscriptionManager<Msg> {
         }
     }
 
-    /** Closes every live source once. */
+    /**
+     * Closes every live source once.
+     */
     public void closeAll() {
         List<Live> all;
         synchronized (lock) {

@@ -22,12 +22,20 @@
 
 package io.github.dhoard.braxton.layout;
 
-/** Cross-axis placement of children that do not fill their allocated space. */
+/**
+ * Cross-axis placement of children that do not fill their allocated space.
+ */
 public enum Alignment {
-    /** The start edge of the parent's cross axis. */
+    /**
+     * The start edge of the parent's cross axis.
+     */
     START,
-    /** The centre of the parent's cross axis. */
+    /**
+     * The center of the parent's cross axis.
+     */
     CENTER,
-    /** The end edge of the parent's cross axis. */
+    /**
+     * The end edge of the parent's cross axis.
+     */
     END
 }

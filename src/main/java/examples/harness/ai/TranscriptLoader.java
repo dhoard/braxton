@@ -35,11 +35,18 @@ import java.util.List;
  */
 public final class TranscriptLoader {
 
+    /**
+     * The packaged offline transcript resource.
+     */
     public static final String RESOURCE = "/examples/ai-harness/test.json";
 
     private TranscriptLoader() {}
 
-    /** Loads the bundled fixture, degrading to a warning-and-fallback transcript on failure. */
+    /**
+     * Loads the bundled fixture, degrading to a warning-and-fallback transcript on failure.
+     *
+     * @return the bundled transcript, or fallback data with a warning if loading fails
+     */
     public static HarnessTranscript load() {
         try (InputStream stream = TranscriptLoader.class.getResourceAsStream(RESOURCE)) {
             if (stream == null) {

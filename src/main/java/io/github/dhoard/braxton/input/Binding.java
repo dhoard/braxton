@@ -22,14 +22,21 @@
 
 package io.github.dhoard.braxton.input;
 
-/** Binds one key gesture to one application message value.
+/**
+ * Binds one key gesture to one application message value.
  *
+ * @param <Msg> the message type of the owning component
  * @param key the key gesture this binding matches
  * @param message the message value it produces
- * @param <Msg> the message type of the owning component
  */
 public record Binding<Msg>(Key key, Msg message) {
 
+    /**
+     * Creates a {@code Binding} value.
+     *
+     * @param key the key gesture this binding matches
+     * @param message the message value it produces
+     */
     public Binding {
         if (key == null) {
             throw new IllegalArgumentException("binding key is required");
@@ -41,11 +48,40 @@ public record Binding<Msg>(Key key, Msg message) {
         }
     }
 
+    /**
+     * Creates a {@code Binding} value.
+     *
+     * @param <Msg> the message type of the owning component
+     * @param spec the key or style specification
+     * @param message the message value it produces
+     * @return the gesture-to-message binding
+     */
     public static <Msg> Binding<Msg> of(String spec, Msg message) {
         return new Binding<>(Key.parse(spec), message);
     }
 
+    /**
+     * Tests whether the gesture equals this binding, including modifiers.
+     *
+     * @param candidate the candidate normalized key gesture
+     * @return {@code true} if the gesture equals this binding, including modifiers; otherwise {@code false}
+     */
     public boolean matches(Key candidate) {
         return key.equals(candidate);
+    }
+
+    /**
+     * This binding with its message lifted into a parent's message type.
+     *
+     * <p>A mount maps a child's answer into the parent's type everywhere else, and a claim or a
+     * binding is no different: the gesture stays the child's, the message becomes the parent's.</p>
+     *
+     * @param <Msg2> the parent message type
+     * @param mapper maps the child message to the parent's message; required
+     * @return the lifted binding
+     */
+    public <Msg2> Binding<Msg2> map(java.util.function.Function<? super Msg, ? extends Msg2> mapper) {
+        java.util.Objects.requireNonNull(mapper, "mapper");
+        return new Binding<>(key, mapper.apply(message));
     }
 }

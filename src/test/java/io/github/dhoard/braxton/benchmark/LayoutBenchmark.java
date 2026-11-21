@@ -22,10 +22,12 @@
 
 package io.github.dhoard.braxton.benchmark;
 
-import io.github.dhoard.braxton.internal.render.LayoutEngine;
+import io.github.dhoard.braxton.internal.render.Screen;
 import io.github.dhoard.braxton.layout.Rect;
+import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.ElementTree;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -58,9 +60,7 @@ public class LayoutBenchmark {
     @Param({"10", "60"})
     public int tableRows;
 
-    private final LayoutEngine engine = new LayoutEngine();
-
-    private View<Object> root;
+    private Element<Object> root;
     private Rect bounds;
 
     @Setup
@@ -72,11 +72,14 @@ public class LayoutBenchmark {
 
     @Benchmark
     public void layout(Blackhole sink) {
-        sink.consume(engine.layout(root, bounds));
+        ElementTree.Placement<Object> placement = ElementTree.layout(root, bounds);
+        Screen screen = new Screen(bounds.rows(), bounds.cols());
+        ElementTree.paint(placement, screen);
+        sink.consume(screen);
     }
 
     @Benchmark
-    public void intrinsicHeight(Blackhole sink) {
-        sink.consume(engine.intrinsicHeight(root, bounds.cols()));
+    public void measure(Blackhole sink) {
+        sink.consume(ElementTree.measure(root, new Size(bounds.rows(), bounds.cols())));
     }
 }

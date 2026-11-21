@@ -28,13 +28,13 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
+import io.github.dhoard.braxton.widget.Elements;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -61,10 +61,17 @@ class MountTest {
                     List.of(model + message));
         }
 
-        public View<Integer> view(Integer model, ViewContext context) {
+        public Element<Integer> view(Integer model, ViewContext context) {
             check(ComponentFailure.Phase.VIEW);
-            return Views.focus(
-                    ElementId.of("input"), true, List.of(), View.InputHandler.none(), Views.text("" + model));
+            return Elements.text("" + model);
+        }
+
+        /**
+         * The gestures this fixture answers, once no leaf has taken them.
+         */
+        @Override
+        public java.util.List<Binding<Integer>> claims(Integer model) {
+            return List.of();
         }
 
         public Subscription<Integer> subscriptions(Integer model) {
@@ -114,11 +121,13 @@ class MountTest {
         var model = new Parent(2, new Object());
         assertThat(left.update(model, 1).outputs()).containsExactly("3");
         var context = new ViewContext(new Viewport(2, 10));
-        var renderer = new ScreenRenderer();
-        var regions = renderer.regions(
-                Views.column(left.view(model, context), right.view(model, context)), context.viewport());
-        assertThat(regions).hasSize(2);
-        assertThat(regions.get(0).id()).isNotEqualTo(regions.get(1).id());
+        // Identity is structural now: two mounts of the same child are two leaves, so a pointer that
+        // lands on one of them never reaches the other.
+        var screen = io.github.dhoard.braxton.testing.ElementScreen.render(
+                io.github.dhoard.braxton.widget.Elements.column(left.view(model, context), right.view(model, context)),
+                2,
+                10);
+        assertThat(screen.hit(0, 0)).isNotNull().isNotSameAs(screen.hit(1, 0));
         assertThat(Subscription.leaves(Subscription.batch(left.subscriptions(model), right.subscriptions(model))))
                 .hasSize(2);
         assertThat(left.tree(model).id()).isEqualTo(ComponentId.of("left"));
@@ -196,7 +205,7 @@ class MountTest {
                 return inner.update(m, 1);
             }
 
-            public View<String> view(Parent m, ViewContext c) {
+            public Element<String> view(Parent m, ViewContext c) {
                 return inner.view(m, c);
             }
         };
@@ -235,8 +244,8 @@ class MountTest {
                                 failure -> -1));
             }
 
-            public View<Integer> view(Integer model, ViewContext context) {
-                return Views.blank();
+            public Element<Integer> view(Integer model, ViewContext context) {
+                return Elements.spacer();
             }
         };
         var inner = Mount.<Parent, String, Never, Integer, Integer, Never>of(
@@ -257,7 +266,7 @@ class MountTest {
                 return inner.update(model, Integer.parseInt(message));
             }
 
-            public View<String> view(Parent model, ViewContext context) {
+            public Element<String> view(Parent model, ViewContext context) {
                 return inner.view(model, context);
             }
 
@@ -299,15 +308,14 @@ class MountTest {
 
     @Test
     void driverKeepsEffectsInertAndUsesProductionWidgetViews() {
-        var editor = new Editor(Editor.Config.defaults());
+        var editor = new Editor(EditorConfig.defaults());
         var driver = ComponentDriver.initialize(editor, new InitContext(null, null));
         assertThat(driver.model().text()).isEmpty();
         driver.send(new Editor.Msg.Insert("hello"));
         assertThat(driver.model().text()).isEqualTo("hello");
         driver.send(new Editor.Msg.Submit());
         assertThat(driver.latest().outputs()).containsExactly(new Editor.Output.Submit("hello"));
-        assertThat(driver.screen(new ViewContext(new Viewport(1, 20))).plainLine(0))
-                .contains("hello");
+        assertThat(driver.screen(new ViewContext(new Viewport(1, 20))).line(0)).contains("hello");
         assertThat(driver.subscriptions()).isInstanceOf(Subscription.None.class);
         assertThat(driver.children().nodes()).isEmpty();
         assertThatThrownBy(() -> driver.send(null)).isInstanceOf(NullPointerException.class);
@@ -324,8 +332,8 @@ class MountTest {
                 return Update.next(m);
             }
 
-            public View<String> view(Integer m, ViewContext c) {
-                return Views.blank();
+            public Element<String> view(Integer m, ViewContext c) {
+                return Elements.spacer();
             }
         };
         assertThat(ComponentDriver.initialize(inert, new InitContext(null, null))
@@ -346,8 +354,8 @@ class MountTest {
                 return new Update<>(model, Command.dispatch(message), List.of(message));
             }
 
-            public View<Integer> view(Integer model, ViewContext context) {
-                return Views.text("ready");
+            public Element<Integer> view(Integer model, ViewContext context) {
+                return Elements.text("ready");
             }
         };
         var replacements = new AtomicInteger();

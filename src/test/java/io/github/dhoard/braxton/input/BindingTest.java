@@ -27,7 +27,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 
-/** A binding maps one gesture to one message value; routing can only consume a real value. */
+/**
+ * A binding maps one gesture to one message value; routing can only consume a real value.
+ */
 class BindingTest {
 
     @Test

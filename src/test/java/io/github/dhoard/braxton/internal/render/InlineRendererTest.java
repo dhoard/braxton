@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.style.ColorProfile;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.Cursor;
+import io.github.dhoard.braxton.ui.Cursor;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -39,12 +39,16 @@ import org.junit.jupiter.api.Test;
  */
 class InlineRendererTest {
 
-    /** A renderer whose caret is hidden, which is what a view without a cursor asks for. */
+    /**
+     * A renderer whose caret is hidden, which is what a view without a cursor asks for.
+     */
     private static InlineRenderer renderer() {
         return new InlineRenderer(new CursorPresenter(false));
     }
 
-    /** A screen with one plain row per text. */
+    /**
+     * A screen with one plain row per text.
+     */
     private static Screen screen(String... rows) {
         Screen screen = new Screen(Math.max(rows.length, 1) + 1, 20);
         for (int row = 0; row < rows.length; row++) {

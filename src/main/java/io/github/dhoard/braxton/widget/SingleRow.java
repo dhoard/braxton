@@ -32,7 +32,7 @@ import io.github.dhoard.braxton.style.StyledText;
  * <p>Surviving line breaks and tabs become spaces while each span keeps its style and link, so the
  * flattened value can still be restyled and still carries its links. The conversion is applied
  * span by span because that is what rebuilds the value with its styles; converting
- * {@link StyledText#plainText()} afterwards would return a bare string and lose both.</p>
+ * {@link StyledText#plainText()} afterward would return a bare string and lose both.</p>
  *
  * <p>A bare CR is not recoverable here: {@code Span} deletes it as an unrepresentable control
  * character when the value is constructed, so no later step can tell it apart from text that never
@@ -44,7 +44,9 @@ final class SingleRow {
 
     private SingleRow() {}
 
-    /** {@code text} flat enough to paint on one row; a null value is empty. */
+    /**
+     * {@code text} flat enough to paint on one row; a null value is empty.
+     */
     static StyledText of(StyledText text) {
         if (text == null) {
             return StyledText.empty();

@@ -32,8 +32,7 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -102,10 +101,14 @@ import java.util.function.UnaryOperator;
  */
 public final class Spinner implements Component<Spinner.Model, Spinner.Msg, Never> {
 
-    /** The cadence of a definition that does not name its own. */
+    /**
+     * The cadence of a definition that does not name its own.
+     */
     public static final Duration DEFAULT_FRAME_DURATION = Duration.ofMillis(100);
 
-    /** The preset a definition without one uses. */
+    /**
+     * The preset a definition without one uses.
+     */
     public static final Preset DEFAULT_PRESET = Preset.LINE;
 
     /**
@@ -116,22 +119,28 @@ public final class Spinner implements Component<Spinner.Model, Spinner.Msg, Neve
      */
     public static final long UNSET_ORIGIN = Long.MIN_VALUE;
 
-    /** The scoped identity of a mounted spinner's tick source. */
+    /**
+     * The scoped identity of a mounted spinner's tick source.
+     */
     private static final SubscriptionId TICK = SubscriptionId.of("tick");
 
     /**
      * The bundled frame definitions.
      *
      * <p>Each preset is one cycle of frames and the cadence it is designed for: a spinning line,
-     * a dot travelling around a braille cell, a pulsing block, a rotating globe and the moon's
+     * a dot traveling around a braille cell, a pulsing block, a rotating globe and the moon's
      * phases. The frames are Braxton's own; the two emoji presets are two columns wide, which is
      * what the sizing facts report.</p>
      */
     public enum Preset {
-        /** Four ASCII strokes: a line that rotates. */
+        /**
+         * Four ASCII strokes: a line that rotates.
+         */
         LINE("line", Duration.ofMillis(100), "|", "/", "-", "\\"),
 
-        /** A single braille dot travelling around one cell. */
+        /**
+         * A single braille dot traveling around one cell.
+         */
         DOT(
                 "dot",
                 Duration.ofMillis(80),
@@ -144,13 +153,19 @@ public final class Spinner implements Component<Spinner.Model, Spinner.Msg, Neve
                 "\u2810",
                 "\u2808"),
 
-        /** A block that brightens and fades. */
+        /**
+         * A block that brightens and fades.
+         */
         PULSE("pulse", Duration.ofMillis(120), "\u2591", "\u2592", "\u2593", "\u2588", "\u2593", "\u2592"),
 
-        /** The globe's three longitude views. */
+        /**
+         * The globe's three longitude views.
+         */
         GLOBE("globe", Duration.ofMillis(200), "\uD83C\uDF0D", "\uD83C\uDF0E", "\uD83C\uDF0F"),
 
-        /** The moon's eight phases. */
+        /**
+         * The moon's eight phases.
+         */
         MOON(
                 "moon",
                 Duration.ofMillis(120),
@@ -212,7 +227,7 @@ public final class Spinner implements Component<Spinner.Model, Spinner.Msg, Neve
         /**
          * Another preset of the cycle, {@code steps} presets away and wrapped into it.
          *
-         * @param steps how far to move; negative moves towards the first preset
+         * @param steps how far to move; negative moves toward the first preset
          * @return the selected preset
          */
         public Preset shift(int steps) {
@@ -235,7 +250,9 @@ public final class Spinner implements Component<Spinner.Model, Spinner.Msg, Neve
      */
     public record Config(List<String> frames, Duration frameDuration, Style style) {
 
-        /** Copies and validates the frames and the cadence and substitutes the plain style. */
+        /**
+         * Copies and validates the frames and the cadence and substitutes the plain style.
+         */
         public Config {
             frames = checkedFrames(frames);
             frameDuration = checkedDuration(frameDuration);
@@ -430,7 +447,9 @@ public final class Spinner implements Component<Spinner.Model, Spinner.Msg, Neve
         }
     }
 
-    /** One lifecycle gesture or one runtime time reading. */
+    /**
+     * One lifecycle gesture or one runtime time reading.
+     */
     public sealed interface Msg {
 
         /**
@@ -465,7 +484,9 @@ public final class Spinner implements Component<Spinner.Model, Spinner.Msg, Neve
         record Tick(long epoch, long nowNanos) implements Msg {}
     }
 
-    /** A reduction result. The spinner has no semantic outputs, so the intent is always absent. */
+    /**
+     * A reduction result. The spinner has no semantic outputs, so the intent is always absent.
+     */
     private record Result(Model state, Never intent) implements WidgetResult<Model, Never> {}
 
     private final Config config;
@@ -579,12 +600,16 @@ public final class Spinner implements Component<Spinner.Model, Spinner.Msg, Neve
         return StyledText.of(painted.toString(), look.style());
     }
 
-    /** One row of a frame, cut to the column budget without splitting a cluster. */
+    /**
+     * One row of a frame, cut to the column budget without splitting a cluster.
+     */
     private static String cut(String row, int width) {
         return TextMeasure.columns(row) <= width ? row : TextMeasure.truncate(row, width);
     }
 
-    /** Copies a frame list and rejects every definition a spinner cannot paint. */
+    /**
+     * Copies a frame list and rejects every definition a spinner cannot paint.
+     */
     private static List<String> checkedFrames(List<String> frames) {
         Objects.requireNonNull(frames, "frames");
         if (frames.isEmpty()) {
@@ -597,7 +622,9 @@ public final class Spinner implements Component<Spinner.Model, Spinner.Msg, Neve
         return List.copyOf(checked);
     }
 
-    /** One frame: non-empty text whose only control character is the break between its rows. */
+    /**
+     * One frame: non-empty text whose only control character is the break between its rows.
+     */
     private static String checkedFrame(String frame) {
         Objects.requireNonNull(frame, "frame");
         if (frame.isEmpty()) {
@@ -625,7 +652,9 @@ public final class Spinner implements Component<Spinner.Model, Spinner.Msg, Neve
         return frame;
     }
 
-    /** A cadence a frame can be selected with. */
+    /**
+     * A cadence a frame can be selected with.
+     */
     private static Duration checkedDuration(Duration duration) {
         Objects.requireNonNull(duration, "frameDuration");
         if (duration.isZero() || duration.isNegative()) {
@@ -661,19 +690,21 @@ public final class Spinner implements Component<Spinner.Model, Spinner.Msg, Neve
         }
         // The interval is the only timer: one tick per frame step, scoped to this mount, and closed
         // when the spinner stops or is unmounted. The epoch is captured so a tick mapped before a
-        // stop or restart is recognisable afterwards.
+        // stop or restart is recognizable afterward.
         long epoch = model.epoch();
         return Subscription.interval(TICK, config.frameDuration(), time -> new Msg.Tick(epoch, time));
     }
 
     @Override
-    public View<Msg> view(Model model, ViewContext context) {
+    public Element<Msg> view(Model model, ViewContext context) {
         Objects.requireNonNull(model, "model");
         Objects.requireNonNull(context, "context");
-        return Views.sized(size -> Views.text(render(model, config, size.cols())));
+        return RenderedText.<Msg>of(cols -> render(model, config, cols));
     }
 
-    /** Applies one lifecycle gesture or one time reading. Never performs I/O. */
+    /**
+     * Applies one lifecycle gesture or one time reading. Never performs I/O.
+     */
     private static Model reduce(Model state, Msg action) {
         return switch (action) {
             case Msg.Start start ->
@@ -686,7 +717,9 @@ public final class Spinner implements Component<Spinner.Model, Spinner.Msg, Neve
         };
     }
 
-    /** One time reading: stale cycles are ignored, and the first reading of a cycle is its origin. */
+    /**
+     * One time reading: stale cycles are ignored, and the first reading of a cycle is its origin.
+     */
     private static Model ticked(Model state, Msg.Tick tick) {
         if (!state.running() || tick.epoch() != state.epoch()) {
             return state;

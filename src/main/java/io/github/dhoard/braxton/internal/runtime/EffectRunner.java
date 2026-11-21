@@ -55,14 +55,17 @@ import java.util.function.Supplier;
  * effects, and on the effect executor for application tasks.
  *
  * <p>Every one-shot effect is registered under its id. Registering that id again replaces the
- * registration, and cancelling removes it, so a late completion compares itself with the live
+ * registration, and canceling removes it, so a late completion compares itself with the live
  * registration and can never reach the model. Results are enqueued as ordinary messages; the
  * interpreter never calls {@code update} itself.</p>
+ *
  * @param <Msg> the component message type effects deliver
  */
 public final class EffectRunner<Msg> {
 
-    /** The completion of a command that is not a sequence step. */
+    /**
+     * The completion of a command that is not a sequence step.
+     */
     private static final Runnable NOTHING = () -> {};
 
     private static final class Entry {
@@ -72,7 +75,9 @@ public final class EffectRunner<Msg> {
         final Duration delay;
         Timers.Handle timer;
         volatile Thread thread;
-        /** What a sequence waits for when this entry is one of its steps, or null. */
+        /**
+         * What a sequence waits for when this entry is one of its steps, or null.
+         */
         private final Runnable finished;
 
         private final AtomicBoolean claimed = new AtomicBoolean();
@@ -85,7 +90,9 @@ public final class EffectRunner<Msg> {
             this.finished = finished;
         }
 
-        /** Declares the work over; the completion runs once, however the entry resolved. */
+        /**
+         * Declares the work over; the completion runs once, however the entry resolved.
+         */
         void complete() {
             if (finished == null || !claimed.compareAndSet(false, true)) return;
             finished.run();
@@ -110,42 +117,78 @@ public final class EffectRunner<Msg> {
 
     private TerminalQueries<Msg> queries;
     private Consumer<ColorProfile> presentation = profile -> {};
+    private Consumer<Boolean> debugOverlay = enabled -> {};
     private Function<ProcessRequest, ProcessResult> handoff =
             request -> new ProcessResult.Rejected("this session cannot hand off its terminal");
     private Supplier<SuspendResult> suspension = () -> new SuspendResult.Refused("this session cannot suspend");
-    /** Whether a graceful quit request is accepted; a session without a filter accepts every one. */
+    /**
+     * Whether a graceful quit request is accepted; a session without a filter accepts every one.
+     */
     private IntPredicate quitGate = status -> true;
 
-    /** Where durable output goes; a session that binds no printer reports the loss as a diagnostic. */
+    /**
+     * Where durable output goes; a session that binds no printer reports the loss as a diagnostic.
+     */
     private Consumer<String> printer;
 
+    /**
+     * Binds component lifetime checks and owner-local message delivery.
+     *
+     * @param scopes the active component lifetime registry
+     * @param dispatch the owner-local message consumer
+     */
     public void bindScopes(ScopeManager scopes, Consumer<Mailbox.AppMessage> dispatch) {
         this.scopes = scopes;
         this.dispatch = dispatch;
     }
 
-    /** Binds the session's reversible terminal handoff that {@link Command.Exec} is interpreted by. */
+    /**
+     * Binds the session's reversible terminal handoff that {@link Command.Exec} is interpreted by.
+     *
+     * @param handoff the child-process handoff interpreter
+     */
     public void bindHandoff(Function<ProcessRequest, ProcessResult> handoff) {
         if (handoff != null) {
             this.handoff = handoff;
         }
     }
 
-    /** Binds the session's suspend/resume support that {@link Command.Suspend} is interpreted by. */
+    /**
+     * Binds the session's suspend/resume support that {@link Command.Suspend} is interpreted by.
+     *
+     * @param suspension the terminal suspension interpreter
+     */
     public void bindSuspension(Supplier<SuspendResult> suspension) {
         if (suspension != null) {
             this.suspension = suspension;
         }
     }
 
-    /** Binds the terminal query engine that {@link Command.Query} is interpreted by. */
+    /**
+     * Binds the terminal query engine that {@link Command.Query} is interpreted by.
+     *
+     * @param queries the terminal-query interpreter
+     */
     public void bindQueries(TerminalQueries<Msg> queries) {
         this.queries = queries;
     }
 
-    /** Binds the session presentation a {@link Command.ColorProfileCommand} changes. */
+    /**
+     * Binds the session presentation a {@link Command.ColorProfileCommand} changes.
+     *
+     * @param presentation the terminal-presentation interpreter
+     */
     public void bindPresentation(Consumer<ColorProfile> presentation) {
         this.presentation = presentation;
+    }
+
+    /**
+     * Binds the owner-side developer overlay toggle.
+     *
+     * @param overlay the debug-overlay state consumer
+     */
+    public void bindDebugOverlay(Consumer<Boolean> overlay) {
+        this.debugOverlay = java.util.Objects.requireNonNull(overlay, "overlay");
     }
 
     /**
@@ -154,6 +197,8 @@ public final class EffectRunner<Msg> {
      * <p>Printing happens on the owner thread, inside the command's interpretation, so the text is
      * written with the same lock as the frames it appears above and never between a frame's
      * synchronized-update bracket. The interpreter never touches the terminal itself.</p>
+     *
+     * @param printer the durable-output consumer
      */
     public void bindPrinter(Consumer<String> printer) {
         if (printer != null) {
@@ -161,7 +206,11 @@ public final class EffectRunner<Msg> {
         }
     }
 
-    /** Binds the decision a {@link Command.Quit} is offered to before it ends the run. */
+    /**
+     * Binds the decision a {@link Command.Quit} is offered to before it ends the run.
+     *
+     * @param gate the application quit-request filter
+     */
     public void bindQuitGate(IntPredicate gate) {
         if (gate != null) {
             this.quitGate = gate;
@@ -192,6 +241,14 @@ public final class EffectRunner<Msg> {
     private boolean quitRequested;
     private int quitStatus;
 
+    /**
+     * Creates a {@code EffectRunner} value.
+     *
+     * @param mailbox the runtime mailbox
+     * @param environment the terminal environment and runtime services
+     * @param clipboard the clipboard policy or service
+     * @param maxEffects the maximum number of admitted one-shot effects
+     */
     public EffectRunner(Mailbox mailbox, RuntimeServices environment, ClipboardService clipboard, int maxEffects) {
         this.mailbox = mailbox;
         this.environment = environment;
@@ -200,20 +257,38 @@ public final class EffectRunner<Msg> {
         this.printer = text -> environment.diagnostics().accept("printed text has nowhere to go: " + text);
     }
 
-    /** Marks the thread allowed to enqueue without waiting for itself. */
+    /**
+     * Marks the thread allowed to enqueue without waiting for itself.
+     *
+     * @param thread the thread whose lifecycle is controlled
+     */
     public void bindOwner(Thread thread) {
         this.owner = thread;
     }
 
+    /**
+     * Tests whether an interpreted command requested application exit.
+     *
+     * @return {@code true} if an interpreted command requested application exit; otherwise {@code false}
+     */
     public boolean quitRequested() {
         return quitRequested;
     }
 
+    /**
+     * Returns the status requested by the quit command.
+     *
+     * @return the status requested by the quit command
+     */
     public int quitStatus() {
         return quitStatus;
     }
 
-    /** Interprets one command; batches run in order and stop after a quit. */
+    /**
+     * Interprets one command; batches run in order and stop after a quit.
+     *
+     * @param command the inert command to interpret
+     */
     public void interpret(Command<Msg> command) {
         interpret(command, ComponentPath.ROOT, NOTHING);
     }
@@ -224,7 +299,7 @@ public final class EffectRunner<Msg> {
      * <p>{@code onComplete} runs exactly once for a step of a {@link Command.Sequence}: on the owner
      * thread when the step finished while it was being submitted (an immediate command), or on
      * whichever thread resolved an asynchronous one - the sequence then resumes on the owner through
-     * a {@link Mailbox.Resume} envelope. A step that was cancelled, or whose component is gone, never
+     * a {@link Mailbox.Resume} envelope. A step that was canceled, or whose component is gone, never
      * completes, which is how a sequence stops instead of running work nobody is waiting for.</p>
      *
      * @param command the command to interpret
@@ -271,7 +346,7 @@ public final class EffectRunner<Msg> {
             }
             case Command.Exec<Msg> exec -> {
                 // The handoff runs here, on the owner thread, and blocks until the child has exited
-                // and the terminal has been taken back. Its result is delivered afterwards, which is
+                // and the terminal has been taken back. Its result is delivered afterward, which is
                 // what "one scoped completion" means: the application's screen is its own again
                 // before it learns what happened.
                 deliver(exec.mapper().apply(handoff.apply(exec.request())), origin(path));
@@ -308,6 +383,10 @@ public final class EffectRunner<Msg> {
                 presentation.accept(color.profile());
                 onComplete.run();
             }
+            case Command.DebugOverlay<Msg> debug -> {
+                debugOverlay.accept(debug.enabled());
+                onComplete.run();
+            }
             case Command.PrintLine<Msg> print -> {
                 printer.accept(print.text());
                 onComplete.run();
@@ -340,7 +419,9 @@ public final class EffectRunner<Msg> {
         }
     }
 
-    /** One batch: finished when every member has, whatever order they finish in. */
+    /**
+     * One batch: finished when every member has, whatever order they finish in.
+     */
     private void batch(Command.Batch<Msg> batch, ComponentPath path, Runnable onComplete) {
         int size = batch.commands().size();
         if (size == 0) {
@@ -361,7 +442,9 @@ public final class EffectRunner<Msg> {
         }
     }
 
-    /** One sequence: each step submitted only after the previous one finished. */
+    /**
+     * One sequence: each step submitted only after the previous one finished.
+     */
     private void sequence(Command.Sequence<Msg> sequence, ComponentPath path, Runnable onComplete) {
         submit(sequence.commands(), 0, path, origin(path), onComplete);
     }
@@ -394,7 +477,9 @@ public final class EffectRunner<Msg> {
         onComplete.run();
     }
 
-    /** Whether a sequence may still submit work: not quit, and its scope still current. */
+    /**
+     * Whether a sequence may still submit work: not quit, and its scope still current.
+     */
     private boolean alive(ScopeManager.Origin origin) {
         return !quitRequested && (origin == null || scopes == null || scopes.isCurrent(origin));
     }
@@ -442,7 +527,9 @@ public final class EffectRunner<Msg> {
             return finished.get();
         }
 
-        /** Runs {@code action} when the step finishes, or now when it already has. */
+        /**
+         * Runs {@code action} when the step finishes, or now when it already has.
+         */
         void whenFinished(Runnable action) {
             continuation.set(action);
             if (finished.get() && continuation.compareAndSet(action, null)) {
@@ -489,7 +576,9 @@ public final class EffectRunner<Msg> {
                 onComplete);
     }
 
-    /** One terminal answer as the clipboard result the application sees. */
+    /**
+     * One terminal answer as the clipboard result the application sees.
+     */
     private static ClipboardReadResult readResult(
             ClipboardSelection selection, ClipboardPath transport, TerminalQuery.Reply reply) {
         if (reply instanceof TerminalQuery.Reply.Clipboard clipboard) {
@@ -624,7 +713,9 @@ public final class EffectRunner<Msg> {
         }
     }
 
-    /** Reports a failed or unmappable completion, containing a throwing failure mapper. */
+    /**
+     * Reports a failed or unmappable completion, containing a throwing failure mapper.
+     */
     private void deliverFailure(Command.Task<Msg> command, Throwable failure) {
         deliverFailure(command, failure, null);
     }
@@ -649,7 +740,9 @@ public final class EffectRunner<Msg> {
         }
     }
 
-    /** Removes the entry when it is still current; returns whether it was. */
+    /**
+     * Removes the entry when it is still current; returns whether it was.
+     */
     private boolean finish(Entry entry) {
         synchronized (lock) {
             if (!isCurrent(entry)) {
@@ -686,6 +779,11 @@ public final class EffectRunner<Msg> {
         }
     }
 
+    /**
+     * Cancels all admitted effects belonging to a removed component scope.
+     *
+     * @param path the component scope path
+     */
     public void cancelScope(ComponentPath path) {
         List<Entry> cancelled = new ArrayList<>();
         synchronized (lock) {
@@ -714,7 +812,9 @@ public final class EffectRunner<Msg> {
         }
     }
 
-    /** Invalidates every pending effect and requests interruption of running tasks. */
+    /**
+     * Invalidates every pending effect and requests interruption of running tasks.
+     */
     public void cancelAll() {
         List<Entry> cancelled;
         synchronized (lock) {
@@ -727,7 +827,12 @@ public final class EffectRunner<Msg> {
         }
     }
 
-    /** Waits up to {@code grace} for running task bodies to return; reports how many remain. */
+    /**
+     * Waits up to {@code grace} for running task bodies to return; reports how many remain.
+     *
+     * @param grace the maximum time to wait for admitted effects
+     * @return the number of effects still active after the wait
+     */
     public int awaitIdle(Duration grace) {
         long deadline = System.nanoTime() + Math.max(0L, grace.toNanos());
         synchronized (lock) {
@@ -747,7 +852,9 @@ public final class EffectRunner<Msg> {
         }
     }
 
-    /** Claims one completed delivery unless cancellation or replacement already invalidated it. */
+    /**
+     * Claims one completed delivery unless cancellation or replacement already invalidated it.
+     */
     private boolean accept(Entry entry) {
         synchronized (lock) {
             return deliveries.remove(entry.id, entry);

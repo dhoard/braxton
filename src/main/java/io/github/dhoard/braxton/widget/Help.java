@@ -27,8 +27,7 @@ import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -53,13 +52,19 @@ import java.util.List;
  */
 public final class Help {
 
-    /** Separates compact-help entries. */
+    /**
+     * Separates compact-help entries.
+     */
     public static final String COMPACT_SEPARATOR = " \u2022 ";
 
-    /** Separates expanded-help entries and a group heading from its entries. */
+    /**
+     * Separates expanded-help entries and a group heading from its entries.
+     */
     public static final String FULL_SEPARATOR = "    ";
 
-    /** Ends a line cut by the available width. */
+    /**
+     * Ends a line cut by the available width.
+     */
     public static final String ELLIPSIS = "\u2026";
 
     private Help() {}
@@ -176,30 +181,17 @@ public final class Help {
     }
 
     /**
-     * A text view of {@link #render}, with the default styling.
+     * The help line as an element, for a scene that is itself an element tree.
      *
-     * @param keys the actions to render; null is empty
-     * @param expanded whether to render every group instead of the compact line
-     * @param width the available display columns
-     * @param <Msg> the message type the view produces
-     * @return the help view
-     */
-    public static <Msg> View<Msg> view(KeyMap<?> keys, boolean expanded, int width) {
-        return view(keys, Config.defaults(), expanded, width);
-    }
-
-    /**
-     * A text view of {@link #render}.
-     *
+     * @param <Msg> the message type the tree produces
      * @param keys the actions to render; null is empty
      * @param config the styling; null is {@link Config#defaults()}
      * @param expanded whether to render every group instead of the compact line
      * @param width the available display columns
-     * @param <Msg> the message type the view produces
-     * @return the help view
+     * @return the element
      */
-    public static <Msg> View<Msg> view(KeyMap<?> keys, Config config, boolean expanded, int width) {
-        return Views.text(render(keys, config, expanded, width));
+    public static <Msg> Element<Msg> element(KeyMap<?> keys, Config config, boolean expanded, int width) {
+        return Elements.text(render(keys, config, expanded, width));
     }
 
     private static List<StyledText> compactLines(KeyMap<?> keys, Config config) {

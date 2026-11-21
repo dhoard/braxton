@@ -28,7 +28,9 @@ import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import org.junit.jupiter.api.Test;
 
-/** A cell is a value, and only an untouched one counts as empty: a blank still occupies a column. */
+/**
+ * A cell is a value, and only an untouched one counts as empty: a blank still occupies a column.
+ */
 class CellTest {
 
     @Test
@@ -41,7 +43,9 @@ class CellTest {
         assertThat(Cell.EMPTY.link()).isNull();
     }
 
-    /** A blank carrying a style or a link is painted content, so it is not an empty cell. */
+    /**
+     * A blank carrying a style or a link is painted content, so it is not an empty cell.
+     */
     @Test
     void aBlankThatCarriesSomethingIsNotEmpty() {
         assertThat(new Cell(" ", Style.NONE, null).isEmpty()).isFalse();

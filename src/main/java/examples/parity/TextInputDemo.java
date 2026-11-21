@@ -25,6 +25,7 @@ package examples.parity;
 import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -37,11 +38,12 @@ import io.github.dhoard.braxton.mvu.OutputRoute;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
-import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.EditorConfig;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.TextInput;
+import io.github.dhoard.braxton.widget.TextInputConfig;
 import java.util.List;
 import java.util.Optional;
 
@@ -75,20 +77,30 @@ public final class TextInputDemo {
 
     private static final Style SUGGESTION = Style.NONE.withItalic();
 
-    /** The static candidate list the nickname field completes from; no network is involved. */
+    /**
+     * The static candidate list the nickname field completes from; no network is involved.
+     */
     public static final List<String> REPOS = List.of(
             "braxton", "branch", "bubbles", "bubbletea", "glamour", "gum", "harmonica", "huh", "lipgloss", "wish");
 
-    /** The columns the nickname field paints in. */
+    /**
+     * The columns the nickname field paints in.
+     */
     public static final int NICKNAME_WIDTH = 16;
 
-    /** The columns the email field paints in. */
+    /**
+     * The columns the email field paints in.
+     */
     public static final int EMAIL_WIDTH = 24;
 
-    /** The columns the password field paints in. */
+    /**
+     * The columns the password field paints in.
+     */
     public static final int PASSWORD_WIDTH = 12;
 
-    /** The field names, in focus order. */
+    /**
+     * The field names, in focus order.
+     */
     public static final List<String> FIELDS = List.of("nickname", "email", "password");
 
     private TextInputDemo() {}
@@ -152,7 +164,9 @@ public final class TextInputDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -171,13 +185,19 @@ public final class TextInputDemo {
          */
         record Output(int index, TextInput.Output value) implements Msg {}
 
-        /** Moves focus to the next field, wrapping. */
+        /**
+         * Moves focus to the next field, wrapping.
+         */
         record NextField() implements Msg {}
 
-        /** Moves focus to the previous field, wrapping. */
+        /**
+         * Moves focus to the previous field, wrapping.
+         */
         record PreviousField() implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -200,7 +220,11 @@ public final class TextInputDemo {
                 KeyMap.group("General", KeyAction.<Msg>of("quit", new Msg.Quit(), "esc", "quit", "escape", "ctrl+c")));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
@@ -228,10 +252,10 @@ public final class TextInputDemo {
      * @param index the field index
      * @return that field's policy
      */
-    public static TextInput.Config config(int index) {
+    public static TextInputConfig config(int index) {
         return switch (index) {
             case 0 ->
-                TextInput.Config.defaults()
+                TextInputConfig.defaults()
                         .withWidth(NICKNAME_WIDTH)
                         .withMaxLength(32)
                         .withValidator(TextInputDemo::validateNickname)
@@ -240,16 +264,16 @@ public final class TextInputDemo {
                         .withPrompt("", Style.NONE)
                         .withStyles(Style.NONE, Style.NONE.withInvert(), SUGGESTION);
             case 1 ->
-                TextInput.Config.defaults()
+                TextInputConfig.defaults()
                         .withWidth(EMAIL_WIDTH)
                         .withMaxLength(64)
                         .withValidator(TextInputDemo::validateEmail)
                         .withPlaceholder("Email", Style.NONE);
             case 2 ->
-                TextInput.Config.defaults()
+                TextInputConfig.defaults()
                         .withWidth(PASSWORD_WIDTH)
                         .withMaxLength(16)
-                        .withMasking(Editor.Config.Masking.PASSWORD)
+                        .withMasking(EditorConfig.Masking.PASSWORD)
                         .withValidator(TextInputDemo::validatePassword)
                         .withPlaceholder("Password", Style.NONE);
             default -> throw new IllegalArgumentException("no field " + index);
@@ -269,7 +293,9 @@ public final class TextInputDemo {
         return text.length() < 3 ? TextInput.Validation.invalid("too-short") : TextInput.Validation.ok();
     }
 
-    /** An email needs exactly one {@code @} and a domain behind it. */
+    /**
+     * An email needs exactly one {@code @} and a domain behind it.
+     */
     private static TextInput.Validation validateEmail(String text) {
         if (text.isBlank()) {
             return TextInput.Validation.invalid("empty");
@@ -281,13 +307,22 @@ public final class TextInputDemo {
         return text.indexOf('.', at) < 0 ? TextInput.Validation.invalid("needs-a-domain") : TextInput.Validation.ok();
     }
 
-    /** A password needs eight characters. */
+    /**
+     * A password needs eight characters.
+     */
     private static TextInput.Validation validatePassword(String text) {
         return text.length() < 8 ? TextInput.Validation.invalid("too-short") : TextInput.Validation.ok();
     }
 
-    /** The form scene: three mounted fields, five status rows and the help line. */
+    /**
+     * The form scene: three mounted fields, five status rows and the help line.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final KeyMap<Msg> keys = defaultKeys();
 
@@ -310,36 +345,52 @@ public final class TextInputDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
+        }
+
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys.bindings();
+        }
+
+        /**
+         * The scene as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
             int cols = context.viewport().cols();
             // The scene's gestures are bubble bindings: a focused field sees a key first, so tab
             // completes a field with a candidate and only then reaches the focus traversal.
-            return Views.keyed(
-                    List.of(),
-                    Views.column(
-                            Views.text(headline(model), STATUS),
-                            Views.text(status(0, model), STATUS),
-                            Views.text(status(1, model), STATUS),
-                            Views.text(status(2, model), STATUS),
-                            Views.text("last=" + model.last(), STATUS),
-                            Views.gap(1),
-                            row(0, model, context),
-                            row(1, model, context),
-                            row(2, model, context),
-                            Views.gap(1),
-                            Help.view(keys, false, cols)),
-                    keys.bindings());
+            return Elements.column(
+                    Elements.text(headline(model), STATUS),
+                    Elements.text(status(0, model), STATUS),
+                    Elements.text(status(1, model), STATUS),
+                    Elements.text(status(2, model), STATUS),
+                    Elements.text("last=" + model.last(), STATUS),
+                    Elements.spacer(1),
+                    row(0, model, context),
+                    row(1, model, context),
+                    row(2, model, context),
+                    Elements.spacer(1),
+                    Help.element(keys, Help.Config.defaults(), false, cols));
         }
 
-        /** One labelled field: the label the form owns, then the mounted field. */
-        private View<Msg> row(int index, Model model, ViewContext context) {
+        /**
+         * One labeled field: the label the form owns, then the mounted field.
+         */
+        private Element<Msg> row(int index, Model model, ViewContext context) {
             String label = switch (index) {
                 case 0 -> "Nickname: ";
                 case 1 -> "Email:    ";
                 default -> "Password: ";
             };
-            return Views.row(
-                    Views.text(label, PROMPT), Views.grow(1, mount(index, model).view(model, context)));
+            return Elements.row(
+                    Elements.text(label, PROMPT),
+                    Elements.grow(1, mount(index, model).view(model, context)));
         }
 
         /**
@@ -377,13 +428,17 @@ public final class TextInputDemo {
             return Update.next(next);
         }
 
-        /** One field's starting model: empty, validated by its own policy, and unfocused. */
+        /**
+         * One field's starting model: empty, validated by its own policy, and unfocused.
+         */
         private static TextInput.Model fieldModel(int index) {
             TextInput field = new TextInput(config(index));
             return field.validated(TextInput.Model.empty());
         }
 
-        /** The first status row: the form's own state. */
+        /**
+         * The first status row: the form's own state.
+         */
         private static String headline(Model model) {
             return "fields=" + FIELDS.size()
                     + " focus=" + FIELDS.get(model.focus())
@@ -397,7 +452,7 @@ public final class TextInputDemo {
          */
         private static String status(int index, Model model) {
             TextInput.Model field = model.field(index);
-            TextInput.Config opts = config(index);
+            TextInputConfig opts = config(index);
             StringBuilder row = new StringBuilder(FIELDS.get(index));
             row.append(" len=").append(field.text().length());
             row.append(" caret=").append(field.caret());
@@ -408,7 +463,7 @@ public final class TextInputDemo {
                 row.append(" cand=")
                         .append(TextInput.selectedCandidate(field, opts).orElse("none"));
             }
-            if (opts.masking() == Editor.Config.Masking.PASSWORD) {
+            if (opts.masking() == EditorConfig.Masking.PASSWORD) {
                 row.append(" masked=yes");
             }
             row.append(" valid=").append(field.valid() ? "yes" : "no");
@@ -417,7 +472,9 @@ public final class TextInputDemo {
             return row.toString();
         }
 
-        /** What the scene last saw from a field, as one token so a verifier can assert it. */
+        /**
+         * What the scene last saw from a field, as one token so a verifier can assert it.
+         */
         private static Optional<String> describe(int index, TextInput.Output output) {
             String name = FIELDS.get(index);
             return switch (output) {

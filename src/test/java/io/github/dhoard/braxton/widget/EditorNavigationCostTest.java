@@ -39,7 +39,7 @@ class EditorNavigationCostTest {
         String line = "界".repeat(1024);
         Editor.Model state = new Editor.Model(line + "\n" + line, 1024, 1024, 0);
         assertThat(AllocationProbe.bytes(
-                        () -> new Editor(Editor.Config.defaults()).update(state, new Editor.Msg.MoveDown())))
+                        () -> new Editor(EditorConfig.defaults()).update(state, new Editor.Msg.MoveDown())))
                 .isLessThan(2_000_000);
     }
 
@@ -52,7 +52,7 @@ class EditorNavigationCostTest {
                     for (int direction : new int[] {-1, 1}) {
                         Editor.Model state = new Editor.Model(text, i, i, preferred);
                         Editor.Msg action = direction < 0 ? new Editor.Msg.MoveUp() : new Editor.Msg.MoveDown();
-                        assertThat(new Editor(Editor.Config.defaults())
+                        assertThat(new Editor(EditorConfig.defaults())
                                         .update(state, action)
                                         .model())
                                 .isEqualTo(reference(state, direction));

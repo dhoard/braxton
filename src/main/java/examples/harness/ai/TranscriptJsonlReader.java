@@ -54,7 +54,7 @@ final class TranscriptJsonlReader {
 
     /**
      * Reads one record stream. A raw session-log line has a tab-separated prefix before the JSON
-     * object; parsing starts at the first {@code {} so both the bundled pure-JSONL fixture and a
+     * object; parsing starts at the first opening brace, so both the bundled pure-JSONL fixture and a
      * raw {@code session-log} line work.
      */
     HarnessTranscript read(Reader source) throws IOException {

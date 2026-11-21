@@ -27,7 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.dhoard.braxton.style.Style;
 import org.junit.jupiter.api.Test;
 
-/** A styled row always closes its styling, whatever the mix of cells. */
+/**
+ * A styled row always closes its styling, whatever the mix of cells.
+ */
 class AnsiEncoderPropertyTest {
 
     @Test

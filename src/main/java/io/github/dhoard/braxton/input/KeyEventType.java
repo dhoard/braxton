@@ -34,13 +34,19 @@ package io.github.dhoard.braxton.input;
  */
 public enum KeyEventType {
 
-    /** The key went down. */
+    /**
+     * The key went down.
+     */
     PRESS(1),
 
-    /** The key is being held down and the terminal repeated it. */
+    /**
+     * The key is being held down and the terminal repeated it.
+     */
     REPEAT(2),
 
-    /** The key came up. */
+    /**
+     * The key came up.
+     */
     RELEASE(3);
 
     private final int code;
@@ -49,7 +55,8 @@ public enum KeyEventType {
         this.code = code;
     }
 
-    /** The protocol number reporting this kind, as the Kitty keyboard protocol encodes it.
+    /**
+     * The protocol number reporting this kind, as the Kitty keyboard protocol encodes it.
      *
      * @return 1 for a press, 2 for a repeat, 3 for a release
      */

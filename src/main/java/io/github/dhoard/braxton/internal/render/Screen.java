@@ -23,297 +23,225 @@
 package io.github.dhoard.braxton.internal.render;
 
 import io.github.dhoard.braxton.layout.Rect;
-import io.github.dhoard.braxton.style.Color;
+import io.github.dhoard.braxton.render.Canvas;
+import io.github.dhoard.braxton.render.Surface;
 import io.github.dhoard.braxton.style.Style;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A fixed-size grid of painted cells.
+ * A fixed-size grid of painted cells, backed by {@link PackedCells}.
  *
- * <p>Layout writes graphemes into the grid; the encoder reads rows back out. Writing a two-column
- * grapheme marks the following cell as a continuation, so a later narrow glyph or background fill
- * clears both halves instead of leaving a stale shadow.</p>
+ * <p>This is the temporary bridge from the object-cell renderer to the public {@link Canvas}: the
+ * layout engine still paints through it, while applications can read a frame without importing an
+ * internal package. WP-3.6 removes the old view API and this bridge together.</p>
  */
-public final class Screen {
-
-    /**
-     * How many (style, background) pairs of inherited styles one screen remembers. A frame paints a
-     * run of columns with one style over one background, so a handful of remembered pairs covers
-     * the styles a frame actually mixes.
-     */
-    private static final int INHERITED_CAP = 4;
+public final class Screen implements Surface {
 
     // Bound both allocation and iteration (including an empty screen with one enormous axis).
     private static final int MAX_CELLS = 4_194_304;
 
-    private final int rows;
-    private final int cols;
-    private final Cell[] cells;
-    private final boolean[] continuation;
-    /** Remembered results of {@link #inherit(Style, Color)}, oldest slot overwritten first. */
-    private final Inherited[] inherited = new Inherited[INHERITED_CAP];
+    private final PackedCells cells;
 
-    private int inheritedSlot;
-
+    /**
+     * Creates a {@code Screen} value.
+     *
+     * @param rows the number of rows
+     * @param cols the number of columns
+     */
     public Screen(int rows, int cols) {
-        this.rows = Math.max(0, rows);
-        this.cols = Math.max(0, cols);
-        if ((long) Math.max(1, this.rows) * Math.max(1, this.cols) > MAX_CELLS) {
+        int safeRows = Math.max(0, rows);
+        int safeCols = Math.max(0, cols);
+        if ((long) Math.max(1, safeRows) * Math.max(1, safeCols) > MAX_CELLS) {
             throw new IllegalArgumentException(
                     "screen dimensions exceed " + MAX_CELLS + " cells: " + rows + "x" + cols);
         }
-        this.cells = new Cell[this.rows * this.cols];
-        this.continuation = new boolean[this.rows * this.cols];
-        java.util.Arrays.fill(cells, Cell.EMPTY);
-    }
-
-    public int rows() {
-        return rows;
-    }
-
-    public int cols() {
-        return cols;
-    }
-
-    public boolean isEmpty() {
-        return rows == 0 || cols == 0;
-    }
-
-    public Cell cell(int row, int col) {
-        if (!inside(row, col)) {
-            return Cell.EMPTY;
-        }
-        return cells[index(row, col)];
-    }
-
-    public boolean isContinuation(int row, int col) {
-        return inside(row, col) && continuation[index(row, col)];
-    }
-
-    private boolean inside(int row, int col) {
-        return row >= 0 && row < rows && col >= 0 && col < cols;
-    }
-
-    private int index(int row, int col) {
-        return row * cols + col;
+        cells = new PackedCells(safeRows, safeCols);
     }
 
     /**
-     * Clears a cell's content and continuation flag, together with the other half of any wide glyph
-     * it belongs to, so no half-painted glyph survives.
+     * Returns the number of rows.
+     *
+     * @return the number of rows
+     */
+    public int rows() {
+        return cells.rows();
+    }
+
+    /**
+     * Returns the number of columns.
+     *
+     * @return the number of columns
+     */
+    public int cols() {
+        return cells.cols();
+    }
+
+    /**
+     * Tests whether at least one cell dimension is zero.
+     *
+     * @return {@code true} if at least one cell dimension is zero; otherwise {@code false}
+     */
+    public boolean isEmpty() {
+        return rows() == 0 || cols() == 0;
+    }
+
+    /**
+     * Returns a value snapshot of the specified cell.
+     *
+     * @param row the zero-based row
+     * @param col the zero-based column
+     * @return a value snapshot of the specified cell
+     */
+    public Cell cell(int row, int col) {
+        return cells.cell(row, col);
+    }
+
+    /**
+     * Tests whether the cell continues a wide grapheme from its left neighbor.
+     *
+     * @param row the zero-based row
+     * @param col the zero-based column
+     * @return {@code true} if the cell continues a wide grapheme from its left neighbor; otherwise {@code false}
+     */
+    public boolean isContinuation(int row, int col) {
+        return cells.isContinuation(row, col);
+    }
+
+    /**
+     * Non-allocating field reads for the encoder's hot path.
+     *
+     * @param row the zero-based row
+     * @param col the zero-based column
+     * @return non-allocating field reads for the encoder's hot path
+     */
+    public String text(int row, int col) {
+        return cells.text(row, col);
+    }
+
+    /**
+     * Returns the resolved style stored at the specified cell.
+     *
+     * @param row the zero-based row
+     * @param col the zero-based column
+     * @return the resolved style stored at the specified cell
+     */
+    public Style style(int row, int col) {
+        return cells.style(row, col);
+    }
+
+    /**
+     * Returns the hyperlink target stored at the specified cell.
+     *
+     * @param row the zero-based row
+     * @param col the zero-based column
+     * @return the hyperlink target stored at the specified cell
+     */
+    public String link(int row, int col) {
+        return cells.link(row, col);
+    }
+
+    /**
+     * Tests whether the specified cell holds no painted content.
+     *
+     * @param row the zero-based row
+     * @param col the zero-based column
+     * @return {@code true} if the specified cell holds no painted content; otherwise {@code false}
+     */
+    public boolean isEmptyCell(int row, int col) {
+        return cells.isEmptyCell(row, col);
+    }
+
+    /**
+     * Clears a cell and the other half of any wide glyph it belongs to.
+     *
+     * @param row the zero-based row
+     * @param col the zero-based column
      */
     public void clear(int row, int col) {
-        if (!inside(row, col)) {
-            return;
-        }
-        if (continuation[index(row, col)] && col > 0) {
-            cells[index(row, col - 1)] = Cell.EMPTY;
-            continuation[index(row, col - 1)] = false;
-        }
-        if (col + 1 < cols && continuation[index(row, col + 1)]) {
-            cells[index(row, col + 1)] = Cell.EMPTY;
-            continuation[index(row, col + 1)] = false;
-        }
-        cells[index(row, col)] = Cell.EMPTY;
-        continuation[index(row, col)] = false;
+        cells.clear(row, col);
     }
 
     /**
-     * Writes one grapheme cluster.
-     *
-     * <p>A style without a background is transparent: it inherits the background already painted in
-     * that cell, so text drawn over a background fill (or any earlier layer) keeps the layer's
-     * colour instead of reverting to the terminal default.</p>
-     *
-     * @param width 1 or 2 columns. A width of 2 marks the next cell as a continuation; when the
-     *     second column falls outside the screen the glyph is clipped entirely. Writing a narrower
-     *     glyph clears whichever half of a previous wide glyph it covers, so no stale
-     *     continuation flag is left to erase later content.
+     * Writes one grapheme cluster; a two-column glyph marks the next cell as a continuation.
      */
+    @Override
     public void put(int row, int col, String grapheme, Style style, String link, int width) {
-        if (!inside(row, col) || grapheme == null || grapheme.isEmpty()) {
-            return;
-        }
-        int span = Math.max(1, Math.min(2, width));
-        if (span == 2 && col + 1 >= cols) {
-            clear(row, col);
-            return;
-        }
-        // Repainting over the second half of a previous wide glyph must clear its first half.
-        if (span == 2) {
-            clearIfContinuation(row, col + 1);
-            // A previous wide glyph may also start at col + 1; its continuation at col + 2 is
-            // covered by this glyph, so the flag must not survive as a stale marker.
-            clearContinuationAt(row, col + 2);
-        }
-        clearIfContinuation(row, col);
-        cells[index(row, col)] = new Cell(grapheme, inheritBackground(row, col, style), link);
-        continuation[index(row, col)] = false;
-        if (span == 2) {
-            cells[index(row, col + 1)] = Cell.EMPTY;
-            continuation[index(row, col + 1)] = true;
-        } else {
-            // The new glyph occupies the first half, so the old wide glyph's second half is gone.
-            clearOrphanedContinuation(row, col);
-        }
+        cells.put(row, col, grapheme, style, link, width);
     }
 
     /**
      * Replaces one cell's style, keeping its text, link and continuation flag.
-     *
-     * <p>Restyling is not painting: no half of a wide glyph is cleared and no column changes
-     * hands. A frame that marks a cell it has already painted uses this, so marking a caret cannot
-     * eat the glyph it sits on.</p>
      */
+    @Override
     public void restyle(int row, int col, Style style) {
-        if (!inside(row, col)) {
-            return;
-        }
-        Cell cell = cells[index(row, col)];
-        cells[index(row, col)] = new Cell(cell.text(), style == null ? Style.NONE : style, cell.link());
-    }
-
-    /** A style with no background picks up the background already painted in the cell. */
-    private Style inheritBackground(int row, int col, Style style) {
-        Style safe = style == null ? Style.NONE : style;
-        if (safe.background() != null) {
-            return safe;
-        }
-        Color beneath = cells[index(row, col)].style().background();
-        return beneath == null ? safe : inherit(safe, beneath);
+        cells.restyle(row, col, style);
     }
 
     /**
-     * {@code style} with {@code background} behind it.
-     *
-     * <p>Every column painted over a background fill needs that merged style, so deriving it per
-     * column allocates a style for every column of text painted over that fill - as many objects as
-     * the frame writes cells. {@link Style} is an immutable record compared by value, so a cell
-     * cannot tell a remembered merge from a freshly built one, and the encoder emits the same SGR
-     * parameters either way. The table holds a fixed number of pairs and overwrites one when a frame
-     * mixes more, so it never outlives the screen it belongs to.</p>
+     * Fills a rectangle with a style (spaces), clearing continuations first.
      */
-    private Style inherit(Style style, Color background) {
-        for (Inherited known : inherited) {
-            if (known != null
-                    && known.style().equals(style)
-                    && known.background().equals(background)) {
-                return known.merged();
-            }
-        }
-        Style merged = style.withBackground(background);
-        inherited[inheritedSlot] = new Inherited(style, background, merged);
-        inheritedSlot = (inheritedSlot + 1) % INHERITED_CAP;
-        return merged;
-    }
-
-    /** One remembered {@link #inherit(Style, Color)} result. */
-    private record Inherited(Style style, Color background, Style merged) {}
-
-    /** Drops a continuation flag whose wide glyph was just overwritten by a narrower one. */
-    private void clearOrphanedContinuation(int row, int col) {
-        int next = col + 1;
-        if (inside(row, next) && continuation[index(row, next)]) {
-            cells[index(row, next)] = Cell.EMPTY;
-            continuation[index(row, next)] = false;
-        }
-    }
-
-    /** Drops a continuation whose wide glyph is being overwritten. */
-    private void clearContinuationAt(int row, int col) {
-        if (inside(row, col) && continuation[index(row, col)]) {
-            cells[index(row, col)] = Cell.EMPTY;
-            continuation[index(row, col)] = false;
-        }
-    }
-
-    private void clearIfContinuation(int row, int col) {
-        if (inside(row, col) && continuation[index(row, col)] && col > 0) {
-            Cell previous = cells[index(row, col - 1)];
-            // The cleared half keeps its ancestor's background and stays a blank that occupies
-            // its column; an empty cell would silently drop a column from the row.
-            Color beneath = previous.style().background();
-            Cell blank = beneath == null ? Cell.EMPTY : new Cell(" ", inherit(Style.NONE, beneath), null);
-            cells[index(row, col - 1)] = blank;
-            cells[index(row, col)] = blank;
-            continuation[index(row, col)] = false;
-        }
-    }
-
-    /** Fills a rectangle with a style (spaces), clearing continuations first. */
+    @Override
     public void fill(Rect rect, Style style) {
-        Rect clipped = rect.clip(new Rect(0, 0, rows, cols));
-        for (int row = clipped.row(); row < clipped.row() + clipped.rows(); row++) {
-            for (int col = clipped.col(); col < clipped.col() + clipped.cols(); col++) {
-                clear(row, col);
-            }
-        }
-        if (style == null || style.isPlain()) {
-            return;
-        }
-        Cell fill = new Cell(" ", style, null);
-        for (int row = clipped.row(); row < clipped.row() + clipped.rows(); row++) {
-            for (int col = clipped.col(); col < clipped.col() + clipped.cols(); col++) {
-                cells[index(row, col)] = fill;
-            }
-        }
+        cells.fill(rect, style);
     }
 
-    /** Plain text of one row, trailing blanks trimmed. */
+    /**
+     * Plain text of one row, trailing blanks trimmed.
+     *
+     * @param row the zero-based row
+     * @return plain text of one row, trailing blanks trimmed
+     */
     public String plainLine(int row) {
-        if (row < 0 || row >= rows) {
-            return "";
-        }
-        StringBuilder text = new StringBuilder();
-        for (int col = 0; col < cols; col++) {
-            if (continuation[index(row, col)]) {
-                continue;
-            }
-            Cell cell = cells[index(row, col)];
-            // A blank cell still occupies its column, exactly as the encoder emits it.
-            text.append(cell.isEmpty() ? " " : cell.text());
-        }
-        int end = text.length();
-        while (end > 0 && text.charAt(end - 1) == ' ') {
-            end--;
-        }
-        return text.substring(0, end);
+        return cells.plainLine(row);
     }
 
+    /**
+     * Returns the painted text as separate rows.
+     *
+     * @return the painted text as separate rows
+     */
     public List<String> plainLines() {
-        List<String> lines = new ArrayList<>(rows);
-        for (int row = 0; row < rows; row++) {
-            lines.add(plainLine(row));
-        }
-        return List.copyOf(lines);
+        return cells.plainLines();
     }
 
+    /**
+     * Returns the painted text joined with line breaks.
+     *
+     * @return the painted text joined with line breaks
+     */
     public String plainText() {
         return String.join("\n", plainLines());
     }
 
-    /** Structural equality, used by diffing and tests. */
+    /**
+     * A read-only application-facing view over this frame.
+     *
+     * @return a read-only application-facing view over this frame
+     */
+    public Canvas toCanvas() {
+        return new Canvas(
+                rows(),
+                cols(),
+                (row, col) -> {
+                    Cell cell = cells.cell(row, col);
+                    return new Canvas.Cell(cell.text(), cell.style(), cell.link());
+                },
+                cells::isContinuation,
+                this::plainLines);
+    }
+
     @Override
     public boolean equals(Object other) {
-        if (!(other instanceof Screen screen) || screen.rows != rows || screen.cols != cols) {
-            return false;
-        }
-        if (!java.util.Arrays.equals(cells, screen.cells)) {
-            return false;
-        }
-        return java.util.Arrays.equals(continuation, screen.continuation);
+        return other instanceof Screen screen && cells.equals(screen.cells);
     }
 
     @Override
     public int hashCode() {
-        return 31 * (31 * java.util.Arrays.hashCode(cells) + java.util.Arrays.hashCode(continuation))
-                + rows * 31
-                + cols;
+        return cells.hashCode();
     }
 
     @Override
     public String toString() {
-        return "Screen[" + rows + "x" + cols + "]";
+        return "Screen[" + rows() + "x" + cols() + "]";
     }
 }

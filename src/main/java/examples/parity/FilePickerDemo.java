@@ -27,6 +27,7 @@ import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -42,9 +43,11 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.FilePicker;
+import io.github.dhoard.braxton.widget.FilePickerConfig;
+import io.github.dhoard.braxton.widget.FilePickerModel;
 import io.github.dhoard.braxton.widget.Help;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -81,13 +84,19 @@ import java.util.stream.Stream;
  */
 public final class FilePickerDemo {
 
-    /** The rows the scene paints above the picker: two status rows and its own help line. */
+    /**
+     * The rows the scene paints above the picker: two status rows and its own help line.
+     */
     public static final int STATUS_ROWS = 2;
 
-    /** The rows the scene reserves outside the picker. */
+    /**
+     * The rows the scene reserves outside the picker.
+     */
     public static final int RESERVED_ROWS = STATUS_ROWS + 1;
 
-    /** The extensions the demo's picker allows; every other file is listed and refused. */
+    /**
+     * The extensions the demo's picker allows; every other file is listed and refused.
+     */
     public static final List<String> EXTENSIONS = List.of(".txt", ".md");
 
     private static final Style STATUS = Style.NONE.withBold();
@@ -112,15 +121,17 @@ public final class FilePickerDemo {
      * @param deleted how many files the scene removed
      * @param added how many files the scene created
      */
-    public record Model(FilePicker.Model picker, String last, int chosen, int rejected, int deleted, int added) {
+    public record Model(FilePickerModel picker, String last, int chosen, int rejected, int deleted, int added) {
 
-        /** Substitutes the picker's starting state for a missing one. */
+        /**
+         * Substitutes the picker's starting state for a missing one.
+         */
         public Model {
-            picker = picker == null ? FilePicker.Model.of(Path.of("")) : picker;
+            picker = picker == null ? FilePickerModel.of(Path.of("")) : picker;
             last = last == null ? "none" : last;
         }
 
-        Model withPicker(FilePicker.Model value) {
+        Model withPicker(FilePickerModel value) {
             return new Model(value, last, chosen, rejected, deleted, added);
         }
 
@@ -145,7 +156,9 @@ public final class FilePickerDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -162,10 +175,14 @@ public final class FilePickerDemo {
          */
         record PickerOutput(FilePicker.Output value) implements Msg {}
 
-        /** Removes the selected file from the fixture. */
+        /**
+         * Removes the selected file from the fixture.
+         */
         record Delete() implements Msg {}
 
-        /** Creates one file in the directory the picker shows. */
+        /**
+         * Creates one file in the directory the picker shows.
+         */
         record Add() implements Msg {}
 
         /**
@@ -189,7 +206,9 @@ public final class FilePickerDemo {
          */
         record Failed(String message) implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -313,8 +332,8 @@ public final class FilePickerDemo {
      * @param directory the directory the picker opens; required
      * @return the picker's definition
      */
-    public static FilePicker.Config pickerConfig(Path directory) {
-        return FilePicker.Config.defaults()
+    public static FilePickerConfig pickerConfig(Path directory) {
+        return FilePickerConfig.defaults()
                 .withDirectory(directory)
                 .withRoot(directory)
                 .withExtensions(EXTENSIONS.toArray(String[]::new))
@@ -322,7 +341,9 @@ public final class FilePickerDemo {
                 .withReservedRows(RESERVED_ROWS);
     }
 
-    /** The demo's colours: directories stand out, metadata recedes. */
+    /**
+     * The demo's colors: directories stand out, metadata recedes.
+     */
     private enum Theme implements FilePicker.Theme {
         INSTANCE;
 
@@ -359,7 +380,9 @@ public final class FilePickerDemo {
 
     // ── scene ────────────────────────────────────────────────────────────────
 
-    /** Two status rows, the mounted picker and the scene's own help line. */
+    /**
+     * Two status rows, the mounted picker and the scene's own help line.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
 
         private final Path directory;
@@ -384,7 +407,7 @@ public final class FilePickerDemo {
 
         @Override
         public Update<Model, Msg, Never> init(InitContext context) {
-            Model empty = new Model(FilePicker.Model.of(directory), "none", 0, 0, 0, 0);
+            Model empty = new Model(FilePickerModel.of(directory), "none", 0, 0, 0, 0);
             // The picker is initialized through its own mount, so its definition and its state
             // agree, and the command that reads the directory is the picker's own scoped effect.
             var started = mount(empty).initialize(context);
@@ -415,7 +438,9 @@ public final class FilePickerDemo {
             };
         }
 
-        /** The picker's own size subscription, lifted through the mount. */
+        /**
+         * The picker's own size subscription, lifted through the mount.
+         */
         @Override
         public Subscription<Msg> subscriptions(Model model) {
             return mount(model).subscriptions(model);
@@ -427,19 +452,37 @@ public final class FilePickerDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
-            int cols = context.viewport().cols();
-            List<View<Msg>> rows = new ArrayList<>(4);
-            rows.add(Views.fixed(1, Views.text(StyledText.of(status(model), STATUS))));
-            rows.add(Views.fixed(1, Views.text(StyledText.of(counts(model), STATUS))));
-            rows.add(mount(model).view(model, context));
-            rows.add(Views.fixed(1, Views.text(Help.render(keys(), false, cols))));
-            return Views.keyed(List.of(), Views.column(rows), keys().bindings());
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
         }
 
-        /** The picker's own state, as one verifier-friendly row. */
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys().bindings();
+        }
+
+        /**
+         * The scene as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
+            int cols = context.viewport().cols();
+            List<Element<Msg>> rows = new ArrayList<>(4);
+            rows.add(Elements.fixed(1, Elements.text(StyledText.of(status(model), STATUS))));
+            rows.add(Elements.fixed(1, Elements.text(StyledText.of(counts(model), STATUS))));
+            rows.add((mount(model).view(model, context)));
+            rows.add(Elements.fixed(1, Elements.text(Help.render(keys(), false, cols))));
+            return Elements.column(rows);
+        }
+
+        /**
+         * The picker's own state, as one verifier-friendly row.
+         */
         private String status(Model model) {
-            FilePicker.Model picker = model.picker();
+            FilePickerModel picker = model.picker();
             return "dir=" + relative(picker.directory())
                     + " entries=" + picker.entries().size()
                     + " shown=" + FilePicker.shown(picker).size()
@@ -451,7 +494,9 @@ public final class FilePickerDemo {
                     + " state=" + state(picker);
         }
 
-        /** What the scene changed, and what the picker reported. */
+        /**
+         * What the scene changed, and what the picker reported.
+         */
         private static String counts(Model model) {
             return "last=" + model.last()
                     + " chosen=" + model.chosen()
@@ -460,17 +505,21 @@ public final class FilePickerDemo {
                     + " added=" + model.added();
         }
 
-        /** The object the mounted picker writes into the scene's model. */
-        private Mount<Model, Msg, Never, FilePicker.Model, FilePicker.Msg, FilePicker.Output> mount(Model model) {
+        /**
+         * The object the mounted picker writes into the scene's model.
+         */
+        private Mount<Model, Msg, Never, FilePickerModel, FilePicker.Msg, FilePicker.Output> mount(Model model) {
             return Mount.of(
                     ComponentId.of("picker"),
                     new FilePicker(pickerConfig(directory)),
-                    ModelLens.of(Model::picker, (Model state, FilePicker.Model child) -> state.withPicker(child)),
+                    ModelLens.of(Model::picker, (Model state, FilePickerModel child) -> state.withPicker(child)),
                     Msg.Picker::new,
                     OutputRoute.toMessage(Msg.PickerOutput::new));
         }
 
-        /** What the picker asked the scene to do. */
+        /**
+         * What the picker asked the scene to do.
+         */
         private Update<Model, Msg, Never> reported(Model model, FilePicker.Output output) {
             return switch (output) {
                 case FilePicker.Output.Chosen chosen ->
@@ -479,11 +528,13 @@ public final class FilePickerDemo {
                     Update.next(model.withRejected(model.rejected() + 1)
                             .withLast("rejected-" + relative(rejected.path()) + "-"
                                     + rejected.reason().name().toLowerCase(Locale.ROOT)));
-                case FilePicker.Output.Cancelled cancelled -> Update.next(model.withLast("cancelled"), Command.quit());
+                case FilePicker.Output.Cancelled cancelled -> Update.next(model.withLast("canceled"), Command.quit());
             };
         }
 
-        /** Removes the selected file, through a task rather than in this reduction. */
+        /**
+         * Removes the selected file, through a task rather than in this reduction.
+         */
         private Update<Model, Msg, Never> deleting(Model model) {
             FilePicker.Entry entry = FilePicker.selected(model.picker()).orElse(null);
             if (entry == null || entry.directory()) {
@@ -502,7 +553,9 @@ public final class FilePickerDemo {
                             failure -> new Msg.Failed(describe(failure))));
         }
 
-        /** Creates one file in the directory the picker shows, then asks the picker to re-read it. */
+        /**
+         * Creates one file in the directory the picker shows, then asks the picker to re-read it.
+         */
         private Update<Model, Msg, Never> adding(Model model) {
             Path name = model.picker().directory().resolve("added-" + (model.added() + 1) + ".txt");
             return Update.next(
@@ -517,7 +570,9 @@ public final class FilePickerDemo {
                             failure -> new Msg.Failed(describe(failure))));
         }
 
-        /** The phrase one picker message contributes to the scene's own status row. */
+        /**
+         * The phrase one picker message contributes to the scene's own status row.
+         */
         private static String last(FilePicker.Msg message, String current) {
             return switch (message) {
                 case FilePicker.Msg.Up up -> "up";
@@ -537,8 +592,10 @@ public final class FilePickerDemo {
             };
         }
 
-        /** The picker's request as one word. */
-        private static String state(FilePicker.Model picker) {
+        /**
+         * The picker's request as one word.
+         */
+        private static String state(FilePickerModel picker) {
             return switch (picker.request()) {
                 case FilePicker.Request.Idle idle -> "idle";
                 case FilePicker.Request.Loading loading -> "loading";

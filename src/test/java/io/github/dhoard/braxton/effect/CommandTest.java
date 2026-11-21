@@ -31,8 +31,19 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
-/** Command values reject input the runtime cannot honour. */
+/**
+ * Command values reject input the runtime cannot honor.
+ */
 class CommandTest {
+
+    @Test
+    void debugOverlayIsAnInertMappablePresentationChoice() {
+        Command<String> command = Command.debugOverlay(true);
+        assertThat(command).isEqualTo(new Command.DebugOverlay<String>(true));
+        assertThat(command.map(String::length)).isEqualTo(new Command.DebugOverlay<Integer>(true));
+        assertThatThrownBy(() -> command.map(null)).isInstanceOf(NullPointerException.class);
+        assertThat(Command.debugOverlay(false)).isEqualTo(new Command.DebugOverlay<>(false));
+    }
 
     @Test
     void batchesSnapshotCallerListsAndExposeUnmodifiableCommands() {

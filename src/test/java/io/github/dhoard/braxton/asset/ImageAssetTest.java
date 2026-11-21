@@ -33,7 +33,9 @@ import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** Decoding happens once, pixels are copied, and failures are diagnostics. */
+/**
+ * Decoding happens once, pixels are copied, and failures are diagnostics.
+ */
 class ImageAssetTest {
 
     @Test

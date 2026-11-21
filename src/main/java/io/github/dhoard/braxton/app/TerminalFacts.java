@@ -25,6 +25,7 @@ package io.github.dhoard.braxton.app;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.ColorProfile;
 import io.github.dhoard.braxton.style.Colors;
+import io.github.dhoard.braxton.terminal.Capabilities;
 
 /**
  * The attached terminal, as the running session has negotiated it.
@@ -32,34 +33,34 @@ import io.github.dhoard.braxton.style.Colors;
  * <p>These are session facts, not model state: they describe what the session is presenting with and
  * what it has learned about the terminal. A component reads them with
  * {@link io.github.dhoard.braxton.effect.Subscription#facts} and receives the current value when it
- * starts and a new one whenever a fact changes - a colour profile upgraded by a capability reply, or
- * a background colour the session reported for the first time.</p>
+ * starts and a new one whenever a fact changes - a color profile upgraded by a capability reply, or
+ * a background color the session reported for the first time.</p>
  *
  * <p>The background is {@code null} until a session asks the terminal for it
  * ({@link TerminalQuery.ColorReport} with {@link TerminalQuery.Target#BACKGROUND}); a terminal that
  * refuses the query leaves it unknown rather than guessing. Nothing here is derived from
- * {@code TERM} except what {@link TerminalCapabilities} already reports.</p>
+ * {@code TERM} except what {@link Capabilities} already reports.</p>
  *
- * @param profile the colour profile frames are encoded with; never {@link ColorProfile#AUTO}
+ * @param profile the color profile frames are encoded with; never {@link ColorProfile#AUTO}
  * @param capabilities the terminal facts the session opened with
- * @param background the terminal's background colour, or null when it has not been reported
+ * @param background the terminal's background color, or null when it has not been reported
  */
-public record TerminalFacts(ColorProfile profile, TerminalCapabilities capabilities, Color background) {
+public record TerminalFacts(ColorProfile profile, Capabilities capabilities, Color background) {
 
     /**
-     * Rejects an unresolved colour profile.
+     * Rejects an unresolved color profile.
      */
     public TerminalFacts {
         if (profile == null || profile == ColorProfile.AUTO) {
-            throw new IllegalArgumentException("a resolved colour profile is required");
+            throw new IllegalArgumentException("a resolved color profile is required");
         }
-        capabilities = capabilities == null ? TerminalCapabilities.PLAIN : capabilities;
+        capabilities = capabilities == null ? Capabilities.PLAIN : capabilities;
     }
 
     /**
-     * Whether the session emits colour at all.
+     * Whether the session emits color at all.
      *
-     * @return true when the profile names at least one colour
+     * @return true when the profile names at least one color
      */
     public boolean color() {
         return profile.color();
@@ -87,7 +88,7 @@ public record TerminalFacts(ColorProfile profile, TerminalCapabilities capabilit
     }
 
     /**
-     * The same facts with another colour profile.
+     * The same facts with another color profile.
      *
      * @param value the profile in force
      * @return the new facts
@@ -97,7 +98,7 @@ public record TerminalFacts(ColorProfile profile, TerminalCapabilities capabilit
     }
 
     /**
-     * The same facts with a reported background colour.
+     * The same facts with a reported background color.
      *
      * @param value the background, or null to forget it
      * @return the new facts, or this instance when nothing changed

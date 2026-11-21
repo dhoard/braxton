@@ -46,9 +46,9 @@ import java.util.Set;
  *
  * <p>Specification sources: the
  * <a href="https://invisible-island.net/xterm/ctlseqs/ctlseqs.html">xterm control sequences</a>
- * reference, consulted 2026-11-16, for DSR, DECRQM, XTVERSION, XTGETTCAP and the OSC colour
+ * reference, consulted 2026-11-16, for DSR, DECRQM, XTVERSION, XTGETTCAP and the OSC color
  * commands, and the X11 {@code XParseColor} specification for the {@code rgb:} form a terminal
- * answers a colour query with.</p>
+ * answers a color query with.</p>
  */
 public sealed interface TerminalQuery {
 
@@ -141,9 +141,9 @@ public sealed interface TerminalQuery {
         /**
          * The capabilities a session may ask about.
          *
-         * <p>{@code RGB} and {@code Tc} both mean "this terminal displays 24-bit colour", and either
-         * one upgrades a narrower colour profile. {@code TN} names the terminal, {@code Co} reports
-         * how many colours it has, and {@code Ms} reports whether it writes the system clipboard.</p>
+         * <p>{@code RGB} and {@code Tc} both mean "this terminal displays 24-bit color", and either
+         * one upgrades a narrower color profile. {@code TN} names the terminal, {@code Co} reports
+         * how many colors it has, and {@code Ms} reports whether it writes the system clipboard.</p>
          */
         public static final Set<String> ALLOWED = Set.of("RGB", "Tc", "TN", "Co", "Ms");
 
@@ -165,14 +165,14 @@ public sealed interface TerminalQuery {
     }
 
     /**
-     * A colour the terminal currently uses.
+     * A color the terminal currently uses.
      *
-     * <p>OSC 10, 11 and 12 answer with an X11 colour specification, usually
+     * <p>OSC 10, 11 and 12 answer with an X11 color specification, usually
      * {@code rgb:rrrr/gggg/bbbb}; each 1- to 4-digit channel is scaled to 0..255. A terminal that does
      * not implement the query answers {@code ?}, which is reported as
-     * {@link Reply.Unsupported} rather than as a colour.</p>
+     * {@link Reply.Unsupported} rather than as a color.</p>
      *
-     * @param target which colour to ask about
+     * @param target which color to ask about
      * @see Reply.ColorValue
      */
     record ColorReport(Target target) implements TerminalQuery {
@@ -182,7 +182,7 @@ public sealed interface TerminalQuery {
          */
         public ColorReport {
             if (target == null) {
-                throw new IllegalArgumentException("colour target is required");
+                throw new IllegalArgumentException("color target is required");
             }
         }
 
@@ -193,7 +193,7 @@ public sealed interface TerminalQuery {
     }
 
     /**
-     * The colour profile the session is presenting with.
+     * The color profile the session is presenting with.
      *
      * <p>A session fact rather than a terminal question: the answer comes from the runtime with no
      * escape sequence written, so it is returned immediately and never times out. It is how an
@@ -276,16 +276,24 @@ public sealed interface TerminalQuery {
         }
     }
 
-    /** Which of the terminal's three configurable colours a query asks about. */
+    /**
+     * Which of the terminal's three configurable colors a query asks about.
+     */
     enum Target {
 
-        /** The default text colour, OSC 10. */
+        /**
+         * The default text color, OSC 10.
+         */
         FOREGROUND,
 
-        /** The window background, OSC 11. The usual source of a dark/light theme decision. */
+        /**
+         * The window background, OSC 11. The usual source of a dark/light theme decision.
+         */
         BACKGROUND,
 
-        /** The terminal's cursor colour, OSC 12. */
+        /**
+         * The terminal's cursor color, OSC 12.
+         */
         CURSOR
     }
 
@@ -297,19 +305,29 @@ public sealed interface TerminalQuery {
      */
     enum Setting {
 
-        /** The mode is set. */
+        /**
+         * The mode is set.
+         */
         SET,
 
-        /** The mode is reset. */
+        /**
+         * The mode is reset.
+         */
         RESET,
 
-        /** The mode is set and cannot be reset. */
+        /**
+         * The mode is set and cannot be reset.
+         */
         PERMANENTLY_SET,
 
-        /** The mode is reset and cannot be set. */
+        /**
+         * The mode is reset and cannot be set.
+         */
         PERMANENTLY_RESET,
 
-        /** The terminal does not implement the mode. */
+        /**
+         * The terminal does not implement the mode.
+         */
         NOT_RECOGNIZED;
 
         /**
@@ -419,27 +437,27 @@ public sealed interface TerminalQuery {
         }
 
         /**
-         * A colour the terminal reports.
+         * A color the terminal reports.
          *
-         * @param target the colour that was asked about
-         * @param color the normalized colour
+         * @param target the color that was asked about
+         * @param color the normalized color
          */
         record ColorValue(Target target, Color color) implements Reply {
 
             /**
-             * Rejects a missing target or colour.
+             * Rejects a missing target or color.
              */
             public ColorValue {
                 if (target == null) {
-                    throw new IllegalArgumentException("colour target is required");
+                    throw new IllegalArgumentException("color target is required");
                 }
                 if (color == null) {
-                    throw new IllegalArgumentException("colour is required");
+                    throw new IllegalArgumentException("color is required");
                 }
             }
 
             /**
-             * Whether this colour reads as a dark background.
+             * Whether this color reads as a dark background.
              *
              * <p>The library's one classification rule, so a theme decision here and a theme decision
              * anywhere else cannot disagree.</p>
@@ -487,10 +505,14 @@ public sealed interface TerminalQuery {
          */
         record ProgramStatus(Set<String> states, Set<String> kinds) implements Reply {
 
-            /** The states a terminal supports when its reply does not list them. */
+            /**
+             * The states a terminal supports when its reply does not list them.
+             */
             public static final Set<String> DEFAULT_STATES = Set.of("idle", "working", "done", "blocked", "error");
 
-            /** The kinds a terminal supports when its reply does not list them. */
+            /**
+             * The kinds a terminal supports when its reply does not list them.
+             */
             public static final Set<String> DEFAULT_KINDS = Set.of("permission", "question", "auth");
 
             /**
@@ -547,7 +569,7 @@ public sealed interface TerminalQuery {
         }
 
         /**
-         * The colour profile the session is presenting with.
+         * The color profile the session is presenting with.
          *
          * @param profile the resolved profile, never {@link ColorProfile#AUTO}
          * @param explicit whether the session was configured with this profile rather than
@@ -559,7 +581,7 @@ public sealed interface TerminalQuery {
              */
             public Profile {
                 if (profile == null || profile == ColorProfile.AUTO) {
-                    throw new IllegalArgumentException("a resolved colour profile is required");
+                    throw new IllegalArgumentException("a resolved color profile is required");
                 }
             }
         }

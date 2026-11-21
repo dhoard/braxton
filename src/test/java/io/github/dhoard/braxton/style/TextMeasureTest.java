@@ -26,7 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-/** Grapheme segmentation and terminal-column measurement are separate contracts. */
+/**
+ * Grapheme segmentation and terminal-column measurement are separate contracts.
+ */
 class TextMeasureTest {
 
     private static final String FAMILY = new String(new int[] {0x1F469, 0x200D, 0x1F469, 0x200D, 0x1F467}, 0, 5);

@@ -30,7 +30,9 @@ import io.github.dhoard.braxton.style.StyledText;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Time-driven frames: the spinner advances and wraps, the shimmer travels and repeats. */
+/**
+ * Time-driven frames: the spinner advances and wraps, the shimmer travels and repeats.
+ */
 class AnimationTest {
 
     private static final Color BASE = Color.parse("#101010").orElseThrow();

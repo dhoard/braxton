@@ -34,7 +34,9 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** Clipboard and paste boundaries: bounded, sanitized, and truthful about transport. */
+/**
+ * Clipboard and paste boundaries: bounded, sanitized, and truthful about transport.
+ */
 class ClipboardTest {
 
     private static ClipboardService service(String term, Map<String, String> extra, List<String> writes) {

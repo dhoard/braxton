@@ -51,9 +51,21 @@ import io.github.dhoard.braxton.style.WidthPolicy;
  */
 public record Border(char topLeft, char topRight, char bottomLeft, char bottomRight, char horizontal, char vertical) {
 
+    /**
+     * No glyphs: the border occupies its cells and draws nothing.
+     */
     public static final Border NONE = new Border(' ', ' ', ' ', ' ', ' ', ' ');
+    /**
+     * Single-line box drawing.
+     */
     public static final Border SINGLE = new Border('\u250C', '\u2510', '\u2514', '\u2518', '\u2500', '\u2502');
+    /**
+     * Single-line box drawing with rounded corners.
+     */
     public static final Border ROUNDED = new Border('\u256D', '\u256E', '\u2570', '\u256F', '\u2500', '\u2502');
+    /**
+     * Double-line box drawing.
+     */
     public static final Border DOUBLE = new Border('\u2554', '\u2557', '\u255A', '\u255D', '\u2550', '\u2551');
 
     /**
@@ -67,9 +79,11 @@ public record Border(char topLeft, char topRight, char bottomLeft, char bottomRi
      * character is measured as no column, so keeping it would leave the frame row a column short of
      * the geometry its own perimeter reserved. A character measured as two columns - a fullwidth or
      * CJK bar or bracket, an emoji - leaves that row a column long instead, and a repeated edge of
-     * them leaves the top and bottom of the frame past its width. The width is read under {@link
-     * WidthPolicy#PINNED}, the policy {@code Box}, {@code Table} and the renderer measure a frame
+     * them leaves the top and bottom of the frame past its width. The width is read under {@link WidthPolicy#PINNED}, the policy {@code Box}, {@code Table} and the renderer measure a frame
      * with, so the ambiguous-width characters of the built-in borders are kept.</p>
+     *
+     * @param character the border character to resolve
+     * @return the glyph corresponding to the supplied border character
      */
     public static String glyph(char character) {
         if (Character.isISOControl(character)
@@ -85,6 +99,11 @@ public record Border(char topLeft, char topRight, char bottomLeft, char bottomRi
                 : " ";
     }
 
+    /**
+     * Tests whether the border paints visible edge glyphs.
+     *
+     * @return {@code true} if the border paints visible edge glyphs; otherwise {@code false}
+     */
     public boolean isVisible() {
         return this != NONE && vertical != ' ';
     }

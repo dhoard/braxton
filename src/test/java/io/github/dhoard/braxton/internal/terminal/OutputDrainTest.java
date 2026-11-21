@@ -44,7 +44,9 @@ class OutputDrainTest {
     private static final long MS = 1_000_000L;
     private static final long RUNNING = 30_000 * MS;
 
-    /** A scripted terminal: each step accepts that many bytes (0 = none) and advances the clock. */
+    /**
+     * A scripted terminal: each step accepts that many bytes (0 = none) and advances the clock.
+     */
     private static final class Script implements OutputDrain.Attempt {
         final AtomicLong clock = new AtomicLong();
         final ArrayDeque<int[]> steps = new ArrayDeque<>();

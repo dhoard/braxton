@@ -29,8 +29,8 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.testing.AllocationProbe;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -74,7 +74,7 @@ class GridRowCostTest {
         return xml.append("</table>").toString();
     }
 
-    private static View<TableSelector.Msg> selector(int rows, int columns) {
+    private static Element<TableSelector.Msg> selector(int rows, int columns) {
         List<String> header = new ArrayList<>(columns);
         for (int column = 0; column < columns; column++) {
             header.add("h" + column);
@@ -92,7 +92,9 @@ class GridRowCostTest {
                 .view(model, new ViewContext(new Viewport(rows, 400)));
     }
 
-    /** Allocated bytes of one unit of work, per cell it renders. */
+    /**
+     * Allocated bytes of one unit of work, per cell it renders.
+     */
     private static double bytesPerCell(long bytes, int rows, int columns) {
         return (double) bytes / ((double) rows * columns);
     }
@@ -133,9 +135,10 @@ class GridRowCostTest {
     @Test
     void aTableSelectorRowCostsTheSamePerCellAtAnyColumnCount() {
         int rows = 20;
-        ScreenRenderer renderer = new ScreenRenderer();
-        long narrow = AllocationProbe.bytes(() -> renderer.plainLines(selector(rows, 8), new Viewport(rows, 400)));
-        long wide = AllocationProbe.bytes(() -> renderer.plainLines(selector(rows, 256), new Viewport(rows, 400)));
+        long narrow = AllocationProbe.bytes(
+                () -> ElementScreen.render(selector(rows, 8), rows, 400).lines());
+        long wide = AllocationProbe.bytes(
+                () -> ElementScreen.render(selector(rows, 256), rows, 400).lines());
         assertThat(bytesPerCell(wide, rows, 256))
                 .as(
                         "per-cell bytes for 256 columns against %s for 8 (total %s / %s)",

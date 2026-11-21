@@ -27,8 +27,6 @@ import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
@@ -99,7 +97,12 @@ public final class Markup {
 
     private Markup() {}
 
-    /** Parses and renders markup; throws {@link IllegalArgumentException} for invalid input. */
+    /**
+     * Parses and renders markup; throws {@link IllegalArgumentException} for invalid input.
+     *
+     * @param xml the source XML
+     * @return the styled text produced from supported markup
+     */
     public static StyledText parse(String xml) {
         if (xml == null || xml.isBlank()) {
             throw new IllegalArgumentException("markup must not be blank");
@@ -150,7 +153,9 @@ public final class Markup {
         return out;
     }
 
-    /** True when a block child must break the line of the content already rendered before it. */
+    /**
+     * True when a block child must break the line of the content already rendered before it.
+     */
     private static boolean startsOwnLine(Node node, StyledText rendered) {
         if (node == null || node.getNodeType() != Node.ELEMENT_NODE || rendered.isEmpty()) {
             return false;
@@ -256,7 +261,9 @@ public final class Markup {
         return out;
     }
 
-    /** A list bullet prefixes one line, so CRLF, CR and LF each become one space. */
+    /**
+     * A list bullet prefixes one line, so CRLF, CR and LF each become one space.
+     */
     private static String singleLine(String value) {
         return LineBreaks.singleRow(value);
     }
@@ -409,8 +416,14 @@ public final class Markup {
         }
     }
 
-    /** A one-element view of the rendered markup. */
-    public static View<Object> view(String xml) {
-        return Views.text(parse(xml));
+    /**
+     * A one-element view of the rendered markup.
+     *
+     * @param <Msg> the message type
+     * @param xml the source XML
+     * @return a one-element view of the rendered markup
+     */
+    public static <Msg> io.github.dhoard.braxton.ui.Element<Msg> element(String xml) {
+        return RenderedText.of(cols -> parse(xml));
     }
 }

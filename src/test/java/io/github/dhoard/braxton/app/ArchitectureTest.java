@@ -192,7 +192,19 @@ class ArchitectureTest {
                 continue;
             }
             String content = Files.readString(source);
-            assertThat(content).doesNotContain("sun.misc", "jdk.internal", "TerminalBackend", "TerminalSession");
+            assertThat(content).doesNotContain("sun.misc", "jdk.internal", "TerminalBackend");
+            // The plan's public terminal API is named TerminalSession and deliberately exposes no
+            // native type. The name was the old compatibility seam, so it stays banned everywhere
+            // except its own package and the public packages whose job is to drive it: line
+            // editing (R-11) and explicit image output (R-12). The guard's subject is a second,
+            // compatibility implementation of the seam, not the API the design publishes.
+            if (!relative.startsWith("io/github/dhoard/braxton/terminal/")
+                    && !relative.startsWith("io/github/dhoard/braxton/line/")
+                    && !relative.startsWith("io/github/dhoard/braxton/image/")) {
+                assertThat(content)
+                        .as("terminal session outside its declared public consumers in %s", relative)
+                        .doesNotContain("TerminalSession");
+            }
             if (content.contains("java.lang.foreign")) {
                 assertThat(relative).matches(".*/internal/terminal/[^/]+\\.java");
             }
@@ -201,11 +213,16 @@ class ArchitectureTest {
             }
             String className = relative.substring(0, relative.length() - 5).replace('/', '.');
             Class<?> type = Class.forName(className, false, getClass().getClassLoader());
+            if (!Modifier.isPublic(type.getModifiers())) {
+                continue;
+            }
             var pending = new ArrayDeque<Class<?>>();
             pending.add(type);
             while (!pending.isEmpty()) {
                 Class<?> current = pending.removeFirst();
-                pending.addAll(List.of(current.getDeclaredClasses()));
+                for (Class<?> nested : current.getDeclaredClasses()) {
+                    if (Modifier.isPublic(nested.getModifiers())) pending.add(nested);
+                }
                 for (var method : current.getDeclaredMethods()) {
                     if (!Modifier.isPublic(method.getModifiers())) {
                         continue;

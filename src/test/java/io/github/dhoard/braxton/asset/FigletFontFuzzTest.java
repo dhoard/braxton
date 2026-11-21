@@ -110,7 +110,9 @@ class FigletFontFuzzTest {
         }
     }
 
-    /** A complete font whose glyph art is random still answers for every text it is handed. */
+    /**
+     * A complete font whose glyph art is random still answers for every text it is handed.
+     */
     @Test
     void aRandomlyFilledFontRendersEveryRowItPromised() {
         Random random = new Random(71_406L);
@@ -152,7 +154,9 @@ class FigletFontFuzzTest {
         }
     }
 
-    /** A structurally valid font still has to answer for every text it is handed. */
+    /**
+     * A structurally valid font still has to answer for every text it is handed.
+     */
     @Test
     void aWellFormedFontRendersTheRowsItPromisedForAnyText() throws IOException {
         int height = 3;
@@ -180,7 +184,9 @@ class FigletFontFuzzTest {
         assertThat(parsed.render(null)).hasSize(height);
     }
 
-    /** Runs the parser and holds the one contract: an IOException, or a font that renders. */
+    /**
+     * Runs the parser and holds the one contract: an IOException, or a font that renders.
+     */
     private static void parseAndReport(String font, String where) {
         try {
             FigletFont parsed =

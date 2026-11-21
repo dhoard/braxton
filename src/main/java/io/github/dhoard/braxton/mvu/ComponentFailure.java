@@ -38,19 +38,56 @@ import java.util.function.Supplier;
 public final class ComponentFailure extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
+    /**
+     * The component hook or routing phase in which a failure occurred.
+     */
     public enum Phase {
+        /**
+         * Component initialization.
+         */
         INIT,
+        /**
+         * Message reduction.
+         */
         UPDATE,
+        /**
+         * View or presentation declaration.
+         */
         VIEW,
+        /**
+         * Subscription declaration or validation.
+         */
         SUBSCRIPTIONS,
+        /**
+         * Child-tree declaration or validation.
+         */
         CHILDREN,
+        /**
+         * Child output routing.
+         */
         OUTPUT_ROUTE
     }
 
+    /**
+     * The component path whose hook failed.
+     */
     private final ComponentPath path;
+    /**
+     * The component hook phase that failed.
+     */
     private final Phase phase;
+    /**
+     * The structural failure detail, or null when the cause provides it.
+     */
     private final String detail;
 
+    /**
+     * Creates a {@code ComponentFailure} value.
+     *
+     * @param path the component scope path
+     * @param phase the component hook phase
+     * @param cause the underlying failure
+     */
     public ComponentFailure(ComponentPath path, Phase phase, Throwable cause) {
         this(path, phase, null, cause);
     }
@@ -59,7 +96,7 @@ public final class ComponentFailure extends RuntimeException {
      * Creates a failure whose message also states {@code detail}, a short structural reason.
      *
      * @param path full structural path of the failing component
-     * @param phase phase that failed
+     * @param phase the phase the component failed in
      * @param detail structural reason appended to the message, or null for a thrown failure
      * @param cause the failure the component or runtime reported
      */
@@ -76,10 +113,20 @@ public final class ComponentFailure extends RuntimeException {
         this.detail = detail == null || detail.isBlank() ? null : detail;
     }
 
+    /**
+     * Returns the component path whose hook failed.
+     *
+     * @return the component path whose hook failed
+     */
     public ComponentPath path() {
         return path;
     }
 
+    /**
+     * Returns the hook phase that failed.
+     *
+     * @return the hook phase that failed
+     */
     public Phase phase() {
         return phase;
     }
@@ -100,6 +147,12 @@ public final class ComponentFailure extends RuntimeException {
      * unchanged: wrapping a fatal JVM condition would allocate while the JVM is already in
      * trouble and would hide the original type. The runtime still fails the run and restores the
      * terminal for them.</p>
+     *
+     * @param <T> the value type
+     * @param path the component scope path
+     * @param phase the component hook phase
+     * @param action the action to interpret
+     * @return the value returned by the component hook
      */
     public static <T> T call(ComponentPath path, Phase phase, Supplier<T> action) {
         try {

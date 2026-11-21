@@ -30,14 +30,13 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
 
 /**
- * A {@link ProgressBar} whose fill eases towards a target instead of jumping to it.
+ * A {@link ProgressBar} whose fill eases toward a target instead of jumping to it.
  *
  * <p>The widget from the last phase that is closest to this one is {@link Spinner}: both derive
  * what they paint from a runtime-supplied time instead of storing it, both declare exactly one
@@ -50,8 +49,8 @@ import java.util.function.UnaryOperator;
  * <p>Progress is normalized: a target, a displayed position and a velocity are all measured
  * against the whole bar, so {@code 0.25} is a quarter of it however wide it is. A target is
  * always inside {@code [0,1]}: a finite value outside it clamps to an end of the scale, which is
- * what makes {@link Msg.Adjust(double)} safe to use as a nudge. A value that is not a number is
- * rejected where it is offered - {@link Msg.Set(double)}, {@link Msg.Adjust(double)} and the
+ * what makes {@link Msg.Adjust} safe to use as a nudge. A value that is not a number is
+ * rejected where it is offered - {@link Msg.Set}, {@link Msg.Adjust} and the
  * {@link Model} constructor throw an {@link IllegalArgumentException} for a NaN or an infinity -
  * because a bar that is a number the scale cannot hold has no honest rendering, and silently
  * showing nothing would hide a caller's bug.</p>
@@ -77,7 +76,7 @@ import java.util.function.UnaryOperator;
  * a smooth bar rather than a slow one.</p>
  *
  * <p>Retargeting never jumps: the position and the velocity the bar had reached become the new
- * segment's starting values, so the bar continues from where it is. A retarget towards the target
+ * segment's starting values, so the bar continues from where it is. A retarget toward the target
  * it already has changes nothing at all, and neither does a target it is already settled on.</p>
  *
  * <h2>Rest</h2>
@@ -86,12 +85,12 @@ import java.util.function.UnaryOperator;
  * fraction of the bar per second - are below {@link #SETTLE_EPSILON}. The tick that first sees
  * that lands on the target exactly and stops: {@link Model#running()} turns false, the interval
  * is no longer declared, and the bar paints the target rather than a value a hair away from it.
- * {@link Msg.Set(double)} on a bar that is already at its target declares nothing, so a settled
+ * {@link Msg.Set} on a bar that is already at its target declares nothing, so a settled
  * bar never keeps a timer alive - which is what makes an idle screen idle.</p>
  *
  * <p>{@link Config#instant(ProgressBar)} is the reduced-motion definition: every target is reached
- * at once and the component never subscribes to runtime time at all. {@link Msg.Settle()} is the
- * same gesture for one bar, for an application that has to honour a preference mid-animation.</p>
+ * at once and the component never subscribes to runtime time at all. {@link Msg.Settle} is the
+ * same gesture for one bar, for an application that has to honor a preference mid-animation.</p>
  *
  * <h2>Time and state</h2>
  *
@@ -103,7 +102,7 @@ import java.util.function.UnaryOperator;
  * overflowing, and a runtime time before the origin clamps to zero instead of reversing the
  * animation.</p>
  *
- * <p>{@link Msg.Set(double)} does not carry a time, so a retarget arms the new segment and the next
+ * <p>{@link Msg.Set} does not carry a time, so a retarget arms the new segment and the next
  * tick names its origin. Until then the bar paints the position it had reached, which is why a
  * retarget cannot make the painted value jump.</p>
  *
@@ -119,10 +118,14 @@ import java.util.function.UnaryOperator;
  */
 public final class AnimatedProgress implements Component<AnimatedProgress.Model, AnimatedProgress.Msg, Never> {
 
-    /** How long a full-scale change takes to come to rest unless a definition says otherwise. */
+    /**
+     * How long a full-scale change takes to come to rest unless a definition says otherwise.
+     */
     public static final Duration DEFAULT_RESPONSE_TIME = Duration.ofMillis(300);
 
-    /** How often a moving bar repaints unless a definition says otherwise: about sixty times a second. */
+    /**
+     * How often a moving bar repaints unless a definition says otherwise: about sixty times a second.
+     */
     public static final Duration DEFAULT_TICK_PERIOD = Duration.ofMillis(16);
 
     /**
@@ -141,7 +144,9 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
      */
     public static final long UNSET_ORIGIN = Long.MIN_VALUE;
 
-    /** The scoped identity of a moving bar's tick source. */
+    /**
+     * The scoped identity of a moving bar's tick source.
+     */
     private static final SubscriptionId TICK = SubscriptionId.of("tick");
 
     /**
@@ -164,9 +169,13 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
      */
     private static final double DECAY_LIMIT = 100.0;
 
-    /** How a bar reaches its target. */
+    /**
+     * How a bar reaches its target.
+     */
     public enum Motion {
-        /** Ease towards the target and hold it until the application names another one. */
+        /**
+         * Ease toward the target and hold it until the application names another one.
+         */
         SMOOTH,
 
         /**
@@ -180,7 +189,7 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
         /**
          * Another motion, {@code steps} away and wrapped into the set of motions.
          *
-         * @param steps how far to move; negative moves towards the first motion
+         * @param steps how far to move; negative moves toward the first motion
          * @return the selected motion
          */
         public Motion shift(int steps) {
@@ -192,7 +201,7 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
     /**
      * An immutable bar definition.
      *
-     * <p>The bar itself - its width, icons, colours, labels and its own opt-in refinements - plus
+     * <p>The bar itself - its width, icons, colors, labels and its own opt-in refinements - plus
      * the three facts this component adds: how the bar moves, how long a change takes to come to
      * rest, and how often a moving bar repaints. The bar is required; a missing motion, response
      * time or tick period is the default one, and a response time or tick period that is zero,
@@ -206,7 +215,9 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
      */
     public record Config(ProgressBar bar, Motion motion, Duration responseTime, Duration tickPeriod) {
 
-        /** Rejects a missing bar and an unusable response time or tick period. */
+        /**
+         * Rejects a missing bar and an unusable response time or tick period.
+         */
         public Config {
             Objects.requireNonNull(bar, "bar");
             motion = motion == null ? Motion.SMOOTH : motion;
@@ -288,7 +299,7 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
      * Immutable bar state.
      *
      * <p>The position is not stored: a segment is the closed-form response of
-     * {@code (from, fromVelocity)} towards {@code target} since {@code originNanos}, so equal model
+     * {@code (from, fromVelocity)} toward {@code target} since {@code originNanos}, so equal model
      * and time always paint equal positions, and the state carries no history of the ticks that
      * got it there. {@code originNanos} is {@link #UNSET_ORIGIN} between a retarget and the tick
      * that names the new segment's origin, and for a bar that is at rest.</p>
@@ -311,7 +322,9 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
             long originNanos,
             long nowNanos) {
 
-        /** Rejects a non-finite value and keeps the target on the scale. */
+        /**
+         * Rejects a non-finite value and keeps the target on the scale.
+         */
         public Model {
             target = clampScale(requiredFinite(target, "target"));
             from = requiredFinite(from, "from");
@@ -387,12 +400,16 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
             return moving() ? segmentVelocity(config) : 0.0;
         }
 
-        /** Whether the closed form still describes anything, as opposed to a resting target. */
+        /**
+         * Whether the closed form still describes anything, as opposed to a resting target.
+         */
         private boolean moving() {
             return running && originNanos != UNSET_ORIGIN;
         }
 
-        /** The segment's position at the last reported time, before clamping to the scale. */
+        /**
+         * The segment's position at the last reported time, before clamping to the scale.
+         */
         private double position(Config config) {
             if (!running) {
                 return target;
@@ -410,7 +427,9 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
             return target + (offset + slope * elapsedSeconds()) * Math.exp(-decay);
         }
 
-        /** The segment's velocity at the last reported time, in fractions of the bar per second. */
+        /**
+         * The segment's velocity at the last reported time, in fractions of the bar per second.
+         */
         private double segmentVelocity(Config config) {
             double decay = decay(config);
             if (decay > DECAY_LIMIT) {
@@ -421,22 +440,28 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
             return (fromVelocity - omega * slope * elapsedSeconds()) * Math.exp(-decay);
         }
 
-        /** How far the segment's response has decayed: its frequency times its elapsed time. */
+        /**
+         * How far the segment's response has decayed: its frequency times its elapsed time.
+         */
         private double decay(Config config) {
             return config.frequency() * elapsedSeconds();
         }
 
-        /** The elapsed time of the segment, in seconds. */
+        /**
+         * The elapsed time of the segment, in seconds.
+         */
         private double elapsedSeconds() {
             return elapsedNanos() / 1e9;
         }
     }
 
-    /** One gesture or one runtime time reading. */
+    /**
+     * One gesture or one runtime time reading.
+     */
     public sealed interface Msg {
 
         /**
-         * Animates towards a new target.
+         * Animates toward a new target.
          *
          * <p>A target outside the scale clamps to an end of it, a target the bar is already
          * heading for changes nothing, and a target it is already settled on changes nothing
@@ -446,7 +471,9 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
          */
         record Set(double target) implements Msg {
 
-            /** Rejects a target that is not a number and clamps one outside the scale. */
+            /**
+             * Rejects a target that is not a number and clamps one outside the scale.
+             */
             public Set {
                 target = clampScale(requiredFinite(target, "target"));
             }
@@ -459,13 +486,17 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
          */
         record Adjust(double delta) implements Msg {
 
-            /** Rejects a change that is not a number. */
+            /**
+             * Rejects a change that is not a number.
+             */
             public Adjust {
                 requiredFinite(delta, "delta");
             }
         }
 
-        /** Lands on the current target at once and drops the subscription. */
+        /**
+         * Lands on the current target at once and drops the subscription.
+         */
         record Settle() implements Msg {}
 
         /**
@@ -477,7 +508,9 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
         record Tick(long epoch, long nowNanos) implements Msg {}
     }
 
-    /** A reduction result. The bar has no semantic outputs, so the intent is always absent. */
+    /**
+     * A reduction result. The bar has no semantic outputs, so the intent is always absent.
+     */
     private record Result(Model state, Never intent) implements WidgetResult<Model, Never> {}
 
     private final Config config;
@@ -535,20 +568,22 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
         }
         // The interval is the only timer: one tick per repaint, scoped to this mount, and closed
         // when the bar comes to rest or is unmounted. The epoch is captured so a tick mapped before
-        // a retarget is recognisable afterwards.
+        // a retarget is recognizable afterward.
         long epoch = model.epoch();
         return Subscription.interval(TICK, config.tickPeriod(), time -> new Msg.Tick(epoch, time));
     }
 
     @Override
-    public View<Msg> view(Model model, ViewContext context) {
+    public Element<Msg> view(Model model, ViewContext context) {
         Objects.requireNonNull(model, "model");
         Objects.requireNonNull(context, "context");
         // The bar is one row of its own width; a narrower viewport clips it like any other row.
-        return Views.text(render(model, config));
+        return RenderedText.<Msg>of(cols -> render(model, config));
     }
 
-    /** Applies one gesture or one time reading. Never performs I/O. */
+    /**
+     * Applies one gesture or one time reading. Never performs I/O.
+     */
     private Model reduce(Model state, Msg action) {
         return switch (action) {
             case Msg.Set set -> retarget(state, set.target());
@@ -560,7 +595,7 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
     }
 
     /**
-     * Starts a segment towards {@code target} from the position and velocity the bar has reached.
+     * Starts a segment toward {@code target} from the position and velocity the bar has reached.
      *
      * <p>The new segment is armed rather than started, because the message carries no time: the
      * next tick names its origin. Until then the bar paints the position it already had, which is
@@ -585,7 +620,9 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
         return new Model(true, state.epoch() + 1, target, position, velocity, UNSET_ORIGIN, state.nowNanos());
     }
 
-    /** One time reading: stale segments are ignored, and the first reading of a segment is its origin. */
+    /**
+     * One time reading: stale segments are ignored, and the first reading of a segment is its origin.
+     */
     private Model ticked(Model state, Msg.Tick tick) {
         if (!state.running() || tick.epoch() != state.epoch()) {
             return state;
@@ -618,22 +655,30 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
                 : moved;
     }
 
-    /** The state of a bar at rest on a target. */
+    /**
+     * The state of a bar at rest on a target.
+     */
     private static Model resting(long epoch, double target, long nowNanos) {
         return new Model(false, epoch, target, target, 0.0, UNSET_ORIGIN, nowNanos);
     }
 
-    /** Whether a position and its velocity are both within the settle threshold of a target. */
+    /**
+     * Whether a position and its velocity are both within the settle threshold of a target.
+     */
     private static boolean atRest(double position, double velocity, double target) {
         return Math.abs(target - position) < SETTLE_EPSILON && Math.abs(velocity) < SETTLE_EPSILON;
     }
 
-    /** A value on the normalized scale: a finite value outside it clamps to an end. */
+    /**
+     * A value on the normalized scale: a finite value outside it clamps to an end.
+     */
     private static double clampScale(double value) {
         return Double.isNaN(value) ? 0.0 : Math.max(0.0, Math.min(1.0, value));
     }
 
-    /** A value that has to be a number. */
+    /**
+     * A value that has to be a number.
+     */
     private static double requiredFinite(double value, String name) {
         if (!Double.isFinite(value)) {
             throw new IllegalArgumentException(name + " must be finite: " + value);
@@ -641,7 +686,9 @@ public final class AnimatedProgress implements Component<AnimatedProgress.Model,
         return value;
     }
 
-    /** A duration a segment can be measured or repainted with. */
+    /**
+     * A duration a segment can be measured or repainted with.
+     */
     private static Duration checkedDuration(Duration duration, Duration fallback, String name) {
         if (duration == null) {
             return fallback;

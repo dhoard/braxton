@@ -25,6 +25,8 @@ package io.github.dhoard.braxton.widget;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
+import io.github.dhoard.braxton.input.PointerEvent;
+import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
@@ -34,12 +36,13 @@ import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
-import java.util.List;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.Interactive;
+import io.github.dhoard.braxton.ui.Sizing;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.function.Consumer;
 
 /**
  * Page state and a page indicator over items the application owns.
@@ -87,7 +90,7 @@ import java.util.Optional;
  *
  * <p>{@link #render} paints {@link Appearance#mode()} as either dots or a numeric
  * {@code current/total} label. The active dot and the inactive dots carry their own styles, so a
- * page indicator can be coloured without a second widget. A dot glyph is a display decision and may
+ * page indicator can be colored without a second widget. A dot glyph is a display decision and may
  * be a wide emoji; it is normalized to one row when the appearance is built.</p>
  *
  * <p>Dots are windowed, never one per page: at most {@link Appearance#maxDots()} dots are painted
@@ -109,30 +112,49 @@ import java.util.Optional;
  * #defaultKeys()} moves a page and jumps to the first or the last one; {@link #keys()} is the map
  * the component routes, so {@link Help} describes the gestures that actually fire.</p>
  *
+ * <p>A click on a dot in the indicator jumps to the page the dot names ({@link #pageAt}), which is
+ * the pointer counterpart of the page keys. A click on an ellipsis, a separator or the padding
+ * after the indicator names no page, and the numeric label is a label rather than a control.</p>
+ *
  * <p>This component has no semantic outputs; it is {@link Never}-typed, like any component whose
  * interactions are all state changes the parent can observe.</p>
  */
-public final class Paginator implements Component<Paginator.Model, Paginator.Msg, Never> {
+public final class Paginator
+        implements Component<Paginator.Model, Paginator.Msg, Never>, Interactive<Paginator.Model, Paginator.Msg> {
 
-    /** The page size a paginator uses unless it is configured otherwise. */
+    /**
+     * The page size a paginator uses unless it is configured otherwise.
+     */
     public static final int DEFAULT_PER_PAGE = 10;
 
-    /** The number of dots a default indicator paints at most. */
+    /**
+     * The number of dots a default indicator paints at most.
+     */
     public static final int DEFAULT_MAX_DOTS = 7;
 
-    /** The glyph a default indicator paints for the page being shown. */
+    /**
+     * The glyph a default indicator paints for the page being shown.
+     */
     public static final String DEFAULT_ACTIVE_DOT = "\u25CF";
 
-    /** The glyph a default indicator paints for a page that is not the current one. */
+    /**
+     * The glyph a default indicator paints for a page that is not the current one.
+     */
     public static final String DEFAULT_INACTIVE_DOT = "\u25CB";
 
-    /** Ends an indicator cut by the available width, and marks hidden pages beside the window. */
+    /**
+     * Ends an indicator cut by the available width, and marks hidden pages beside the window.
+     */
     public static final String ELLIPSIS = "\u2026";
 
-    /** The indicator zero pages paints, in both modes, instead of leaving the row blank. */
+    /**
+     * The indicator zero pages paints, in both modes, instead of leaving the row blank.
+     */
     public static final String EMPTY_INDICATOR = "0/0";
 
-    /** Separates the cells of a dot indicator. */
+    /**
+     * Separates the cells of a dot indicator.
+     */
     public static final String CELL_SEPARATOR = " ";
 
     /**
@@ -148,7 +170,9 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
     public record Appearance(
             Mode mode, String activeDot, String inactiveDot, Style activeStyle, Style inactiveStyle, int maxDots) {
 
-        /** Rejects a glyph that cannot be painted and a window that cannot hold one page. */
+        /**
+         * Rejects a glyph that cannot be painted and a window that cannot hold one page.
+         */
         public Appearance {
             mode = mode == null ? Mode.DOTS : mode;
             activeDot = glyph(activeDot, DEFAULT_ACTIVE_DOT);
@@ -244,7 +268,9 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
             return new Appearance(mode, activeDot, inactiveDot, activeStyle, inactiveStyle, value);
         }
 
-        /** A glyph as one painted cell: one row, at least one column, never blank. */
+        /**
+         * A glyph as one painted cell: one row, at least one column, never blank.
+         */
         private static String glyph(String value, String fallback) {
             // A break cannot be painted as one dot and a blank glyph would make a page invisible, so
             // both are normalized here rather than left to produce a cell nothing can read.
@@ -257,11 +283,17 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
         }
     }
 
-    /** What a page indicator paints. */
+    /**
+     * What a page indicator paints.
+     */
     public enum Mode {
-        /** One glyph per visible page, in the configured window. */
+        /**
+         * One glyph per visible page, in the configured window.
+         */
         DOTS,
-        /** One label: the displayed page, a slash, and the page count. */
+        /**
+         * One label: the displayed page, a slash, and the page count.
+         */
         NUMERIC
     }
 
@@ -275,7 +307,9 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
      */
     public record Config(int perPage, boolean wrap, Appearance appearance) {
 
-        /** Rejects a page size that cannot hold an item and substitutes the default appearance. */
+        /**
+         * Rejects a page size that cannot hold an item and substitutes the default appearance.
+         */
         public Config {
             if (perPage <= 0) {
                 throw new IllegalArgumentException("perPage must be positive");
@@ -335,7 +369,9 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
      */
     public record Bounds(int start, int end) {
 
-        /** Rejects a range that is not a non-negative half-open interval. */
+        /**
+         * Rejects a range that is not a non-negative half-open interval.
+         */
         public Bounds {
             if (start < 0) {
                 throw new IllegalArgumentException("start must not be negative");
@@ -388,7 +424,9 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
      */
     public record Model(int page, int itemCount, int perPage, boolean focused) {
 
-        /** Normalizes the count and the page and rejects an impossible page size. */
+        /**
+         * Normalizes the count and the page and rejects an impossible page size.
+         */
         public Model {
             if (perPage <= 0) {
                 throw new IllegalArgumentException("perPage must be positive");
@@ -397,7 +435,9 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
             page = clamp(page, itemCount, perPage);
         }
 
-        /** The page clamped to the pages the content has, zero when it has none. */
+        /**
+         * The page clamped to the pages the content has, zero when it has none.
+         */
         private static int clamp(int page, int itemCount, int perPage) {
             // The same ceiling division totalPages() uses, widened before it is narrowed.
             int pages = (int) (((long) itemCount + perPage - 1) / perPage);
@@ -501,19 +541,29 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
         }
     }
 
-    /** One navigation gesture or one fact about the content or the page size. */
+    /**
+     * One navigation gesture or one fact about the content or the page size.
+     */
     public sealed interface Msg {
 
-        /** Moves to the next page, wrapping to the first when the configuration allows it. */
+        /**
+         * Moves to the next page, wrapping to the first when the configuration allows it.
+         */
         record Next() implements Msg {}
 
-        /** Moves to the previous page, wrapping to the last when the configuration allows it. */
+        /**
+         * Moves to the previous page, wrapping to the last when the configuration allows it.
+         */
         record Previous() implements Msg {}
 
-        /** Moves to the first page. */
+        /**
+         * Moves to the first page.
+         */
         record First() implements Msg {}
 
-        /** Moves to the last page. */
+        /**
+         * Moves to the last page.
+         */
         record Last() implements Msg {}
 
         /**
@@ -536,6 +586,11 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
          * @param perPage the size of a page, in items; must be positive
          */
         record PageSizeChanged(int perPage) implements Msg {
+            /**
+             * Creates a {@code PageSizeChanged} value.
+             *
+             * @param perPage the size of a page, in items; must be positive
+             */
             public PageSizeChanged {
                 if (perPage <= 0) {
                     throw new IllegalArgumentException("perPage must be positive");
@@ -544,13 +599,16 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
         }
     }
 
-    /** A reduction result. The paginator has no semantic outputs, so the intent is always absent. */
+    /**
+     * A reduction result. The paginator has no semantic outputs, so the intent is always absent.
+     */
     private record Result(Model state, Never intent) implements WidgetResult<Model, Never> {}
 
-    /** The identity of the paginator's focus element; a mount scopes it to its own path. */
-    private static final ElementId ELEMENT = ElementId.of("paginator");
-
+    /**
+     * The identity of the paginator's focus element; a mount scopes it to its own path.
+     */
     private final Config config;
+
     private final KeyMap<Msg> keys;
 
     /**
@@ -626,14 +684,115 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
      * narrow pane paints fewer dots instead of overflowing its row.</p>
      */
     @Override
-    public View<Msg> view(Model model, ViewContext context) {
-        View.InputHandler<Msg> handler = this::actionFor;
-        return Views.focus(
-                ELEMENT,
-                model.focused(),
-                List.of(),
-                handler,
-                Views.sized(size -> Views.text(render(model, config, size.cols()))));
+    public Element<Msg> view(Model model, ViewContext context) {
+        return Elements.stack(
+                RenderedText.<Msg>of(cols -> render(model, config, cols)),
+                new Element.Leaf<>(this, model, Sizing.measured()));
+    }
+
+    /**
+     * The pager's keys, from the same map {@link Help} renders.
+     */
+    @Override
+    public void onKey(InputEvent.KeyInput key, Model model, Consumer<Msg> emit) {
+        keys.actionFor(key.key()).map(KeyAction::message).ifPresent(emit);
+    }
+
+    /**
+     * Focus is model data: the application sets it and the widget only reports it.
+     */
+    @Override
+    public boolean focused(Model model) {
+        return model.focused();
+    }
+
+    /**
+     * The pager's pointer handler: a click on a dot jumps to the page the dot names.
+     *
+     * <p>The column is resolved through {@link #pageAt}, the same window arithmetic the frame was
+     * painted with, so a click lands on the dot under it whether the window moved with the page or
+     * an ellipsis stands for the pages it hides. A click on an ellipsis, a separator or the padding
+     * after the indicator names no page and reports nothing.</p>
+     */
+    @Override
+    public void onPointer(PointerEvent pointer, Rect bounds, Model model, Consumer<Msg> emit) {
+        if (!pointer.isLeftPress()) {
+            return;
+        }
+        OptionalInt page = pageAt(model, config, bounds.cols(), pointer.column() - bounds.col());
+        if (page.isPresent()) {
+            emit.accept(new Msg.GoTo(page.getAsInt()));
+        }
+    }
+
+    /**
+     * The page a column of the painted indicator names, or empty when no dot covers it.
+     *
+     * <p>The window is the painter's own: the widest one whose cells fit {@code width}, so the
+     * page a click names is the page whose glyph the user saw. Only the dot indicator names pages;
+     * the numeric label is a label, and an empty paginator has no page to name.</p>
+     *
+     * @param state the state the frame was painted from; required
+     * @param config the definition whose appearance decides the indicator; null is
+     *     {@link Config#defaults()}
+     * @param width the columns the indicator was painted in
+     * @param column the column the pointer named, counted from the indicator's first cell
+     * @return the page index the dot covers, or empty for an ellipsis, separator or padding
+     */
+    public static OptionalInt pageAt(Model state, Config config, int width, int column) {
+        Objects.requireNonNull(state, "state");
+        Config opts = config == null ? Config.defaults() : config;
+        Appearance look = opts.appearance();
+        int pages = state.totalPages();
+        int columns = Math.max(0, width);
+        if (look.mode() != Mode.DOTS || pages == 0 || columns <= 0 || column < 0) {
+            return OptionalInt.empty();
+        }
+        int largest = Math.min(Math.min(look.maxDots(), pages), columns / 2 + 1);
+        int size = 1;
+        for (int candidate = largest; candidate >= 1; candidate--) {
+            if (windowLine(state.page(), pages, candidate, look).columns() <= columns) {
+                size = candidate;
+                break;
+            }
+        }
+        int start = windowStart(state.page(), pages, size);
+        int end = start + size;
+        int separator = TextMeasure.columns(CELL_SEPARATOR);
+        int cell = 0;
+        // The line is a cell, a separator and a cell: the ellipses the window hides its pages behind
+        // are cells too, and a click on one of them names no page.
+        if (start > 0) {
+            cell += TextMeasure.columns(ELLIPSIS);
+            if (column < cell) {
+                return OptionalInt.empty();
+            }
+            cell += separator;
+        }
+        for (int page = start; page < end; page++) {
+            if (page > start) {
+                if (column < cell + separator) {
+                    return OptionalInt.empty();
+                }
+                cell += separator;
+            }
+            String dot = page == state.page() ? look.activeDot() : look.inactiveDot();
+            int dotColumns = Math.max(1, TextMeasure.columns(dot));
+            if (column >= cell && column < cell + dotColumns) {
+                return OptionalInt.of(page);
+            }
+            cell += dotColumns;
+        }
+        return OptionalInt.empty();
+    }
+
+    /**
+     * The painted line of the dot window one size selects around the current page.
+     */
+    private static StyledText windowLine(int page, int pages, int size, Appearance look) {
+        int start = windowStart(page, pages, size);
+        int end = start + size;
+        return windowLine(start, end, page, start > 0, end < pages, look);
     }
 
     /**
@@ -654,7 +813,9 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
         };
     }
 
-    /** Maps one input event to a paging message, or empty when the gesture is not a pager gesture. */
+    /**
+     * Maps one input event to a paging message, or empty when the gesture is not a pager gesture.
+     */
     private Optional<Msg> actionFor(InputEvent event) {
         if (!(event instanceof InputEvent.KeyInput keyInput)) {
             return Optional.empty();
@@ -662,7 +823,9 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
         return keys.actionFor(keyInput.key()).map(KeyAction::message);
     }
 
-    /** Applies one gesture. Never performs I/O and never mutates the input state. */
+    /**
+     * Applies one gesture. Never performs I/O and never mutates the input state.
+     */
     private static Model reduce(Model state, Config config, Msg action) {
         return switch (action) {
             case Msg.Next next -> moved(state, state.page() + 1, config.wrap());
@@ -679,7 +842,9 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
         };
     }
 
-    /** One step, wrapping only where the configuration asks for it and pages exist. */
+    /**
+     * One step, wrapping only where the configuration asks for it and pages exist.
+     */
     private static Model moved(Model state, int target, boolean wrap) {
         int pages = state.totalPages();
         if (pages == 0) {
@@ -693,14 +858,18 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
         return target >= pages ? (wrap ? at(state, 0) : state) : at(state, target);
     }
 
-    /** A page, clamped; the incoming instance when the page does not change. */
+    /**
+     * A page, clamped; the incoming instance when the page does not change.
+     */
     private static Model at(Model state, int page) {
         int pages = state.totalPages();
         int target = pages == 0 ? 0 : Math.max(0, Math.min(page, pages - 1));
         return target == state.page() ? state : new Model(target, state.itemCount(), state.perPage(), state.focused());
     }
 
-    /** The dot indicator: a bounded window around the current page, with an ellipsis each side. */
+    /**
+     * The dot indicator: a bounded window around the current page, with an ellipsis each side.
+     */
     private static StyledText dots(Model state, Appearance look, int width) {
         if (width <= 0) {
             return StyledText.empty();
@@ -725,13 +894,17 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
         return fit(StyledText.of(look.activeDot(), look.activeStyle()), width);
     }
 
-    /** The first page of a window of {@code size} pages, centred on the current page where it can be. */
+    /**
+     * The first page of a window of {@code size} pages, centered on the current page where it can be.
+     */
     private static int windowStart(int page, int pages, int size) {
-        int centred = page - (size - 1) / 2;
-        return Math.max(0, Math.min(centred, pages - size));
+        int centered = page - (size - 1) / 2;
+        return Math.max(0, Math.min(centered, pages - size));
     }
 
-    /** One row of cells: ellipsis, the window's dots, ellipsis. */
+    /**
+     * One row of cells: ellipsis, the window's dots, ellipsis.
+     */
     private static StyledText windowLine(
             int start, int end, int active, boolean leading, boolean trailing, Appearance look) {
         StyledText line = StyledText.empty();
@@ -753,7 +926,9 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
         return line;
     }
 
-    /** Appends one cell with the separator a non-first cell is preceded by. */
+    /**
+     * Appends one cell with the separator a non-first cell is preceded by.
+     */
     private static StyledText append(StyledText line, StyledText cell, Appearance look) {
         return line.isEmpty()
                 ? cell
@@ -761,7 +936,9 @@ public final class Paginator implements Component<Paginator.Model, Paginator.Msg
                         .append(cell);
     }
 
-    /** The numeric indicator: the displayed page, a slash, and the page count. */
+    /**
+     * The numeric indicator: the displayed page, a slash, and the page count.
+     */
     private static StyledText numeric(Model state, Appearance look, int width) {
         if (width <= 0) {
             return StyledText.empty();

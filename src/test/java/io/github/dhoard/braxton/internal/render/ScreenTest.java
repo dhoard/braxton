@@ -29,12 +29,24 @@ import io.github.dhoard.braxton.layout.Insets;
 import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import org.junit.jupiter.api.Test;
 
-/** Wide-glyph bookkeeping in the painted cell grid. */
+/**
+ * Wide-glyph bookkeeping in the painted cell grid.
+ */
 class ScreenTest {
+
+    /**
+     * One frame of {@code tree}, painted the way the runtime paints it.
+     */
+    private static Screen paint(Element<?> tree, int rows, int cols) {
+        Screen screen = new Screen(rows, cols);
+        io.github.dhoard.braxton.ui.ElementTree.paint(
+                io.github.dhoard.braxton.ui.ElementTree.layout(tree, new Rect(0, 0, rows, cols)), screen);
+        return screen;
+    }
 
     @Test
     void excessiveDimensionsAreRejectedBeforeAllocatingOrOverflowing() {
@@ -75,10 +87,12 @@ class ScreenTest {
 
     @Test
     void aFillCoveringTheSecondHalfOfAWideGlyphDoesNotLeaveHalfAGlyph() {
-        View<?> view = Views.overlay(
-                Views.text("\u65E5"),
-                Views.row(Views.fixed(1, Views.blank()), Views.fixed(1, Views.fill(Style.bg(Colors.BLUE_400)))));
-        Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, 1, 4)).screen();
+        Element<?> view = Elements.stack(
+                Elements.text("\u65E5"),
+                Elements.row(
+                        Elements.fixed(1, Elements.spacer()),
+                        Elements.fixed(1, Elements.fill(Style.bg(Colors.BLUE_400)))));
+        Screen screen = paint(view, 1, 4);
         assertThat(screen.cell(0, 0).text()).isEmpty();
         assertThat(screen.cell(0, 1).style().background()).isEqualTo(Colors.BLUE_400);
     }
@@ -105,12 +119,12 @@ class ScreenTest {
 
     @Test
     void aWideOverlayGlyphDoesNotLeaveAStaleContinuationBehind() {
-        View<?> view = Views.overlay(
-                Views.text("\u65E5\u5F0F"),
-                Views.row(
-                        Views.fixed(4, Views.padding(Insets.symmetric(0, 1), Views.text("\u672C"))),
-                        Views.fixed(1, Views.text("x"))));
-        Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, 1, 5)).screen();
+        Element<?> view = Elements.stack(
+                Elements.text("\u65E5\u5F0F"),
+                Elements.row(
+                        Elements.fixed(4, Elements.pad(Insets.symmetric(0, 1), Elements.text("\u672C"))),
+                        Elements.fixed(1, Elements.text("x"))));
+        Screen screen = paint(view, 1, 5);
         assertThat(screen.cell(0, 1).text()).isEqualTo("\u672C");
         assertThat(screen.isContinuation(0, 2)).isTrue();
         assertThat(screen.isContinuation(0, 3)).isFalse();
@@ -119,8 +133,8 @@ class ScreenTest {
 
     @Test
     void aNarrowOverlayReplacesAWideUnderlayItFullyCovers() {
-        View<?> view = Views.overlay(Views.text("\u65E5\u672C"), Views.text("abcd"));
-        Screen screen = new LayoutEngine().layout(view, new Rect(0, 0, 1, 4)).screen();
+        Element<?> view = Elements.stack(Elements.text("\u65E5\u672C"), Elements.text("abcd"));
+        Screen screen = paint(view, 1, 4);
         assertThat(screen.plainLine(0)).isEqualTo("abcd");
     }
 }

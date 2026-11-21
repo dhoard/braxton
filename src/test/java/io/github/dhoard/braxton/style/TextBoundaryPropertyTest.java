@@ -34,7 +34,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>The editor moves its caret with {@link TextMeasure#boundaryAfter} and
  * {@link TextMeasure#previousBoundary}, while the layout segments the same text with
- * {@link Graphemes#iterate} and the truncation path walks that same segmentation. Three call sites, one
+ * {@link io.github.dhoard.braxton.internal.text.Graphemes#iterate} and the truncation path walks that same segmentation. Three call sites, one
  * fact about the text. When they disagree, the disagreement is invisible in any single component: the
  * caret sits inside a glyph the renderer draws as one unit, a truncation cuts a cluster in half and
  * leaves the second half on screen, or - worst of all - a boundary answers the position it was given,
@@ -49,7 +49,9 @@ import org.junit.jupiter.api.Test;
  */
 class TextBoundaryPropertyTest {
 
-    /** One-column text, a two-column base, a combining mark, a surrogate pair, a break, and joiners. */
+    /**
+     * One-column text, a two-column base, a combining mark, a surrogate pair, a break, and joiners.
+     */
     private static final String[] ALPHABET = {"a", "\u4E2D", "\u0301", "\uD83D\uDE00", "\n", "\t", "\u200D", "\uFE0F"};
 
     private static final int MAX_EXHAUSTIVE_LENGTH = 4;
@@ -162,7 +164,9 @@ class TextBoundaryPropertyTest {
         }
     }
 
-    /** Truncation and padding: the budget is respected, nothing is cut mid-cluster, and the result stays a prefix. */
+    /**
+     * Truncation and padding: the budget is respected, nothing is cut mid-cluster, and the result stays a prefix.
+     */
     @Test
     void truncationKeepsWholeClustersAndNeverBreaksItsOwnPrefix() {
         List<String> texts = enumerate(ALPHABET, MAX_EXHAUSTIVE_LENGTH);
@@ -211,7 +215,9 @@ class TextBoundaryPropertyTest {
         }
     }
 
-    /** Cumulative end offsets of the clusters, plus the start: every boundary of the text. */
+    /**
+     * Cumulative end offsets of the clusters, plus the start: every boundary of the text.
+     */
     private static List<Integer> boundarySet(List<Integer> segmentEnds, int length) {
         List<Integer> boundaries = new ArrayList<>();
         boundaries.add(0);
@@ -222,7 +228,9 @@ class TextBoundaryPropertyTest {
         return boundaries;
     }
 
-    /** Cumulative end offsets of the clusters, which is what a boundary has to agree with. */
+    /**
+     * Cumulative end offsets of the clusters, which is what a boundary has to agree with.
+     */
     private static List<Integer> segmentOffsets(String text) {
         List<Integer> offsets = new ArrayList<>();
         int at = 0;

@@ -24,9 +24,12 @@ package io.github.dhoard.braxton.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.input.KeyboardEnhancements;
 import org.junit.jupiter.api.Test;
 
-/** Session options are value data: every documented behaviour can be requested on its own. */
+/**
+ * Session options are value data: every documented behavior can be requested on its own.
+ */
 class TerminalOptionsTest {
 
     @Test
@@ -35,7 +38,8 @@ class TerminalOptionsTest {
                 .withAlternateScreen(false)
                 .withMouse(true)
                 .withBracketedPaste(false);
-        assertThat(options).isEqualTo(new TerminalOptions(false, true, false));
+        assertThat(options)
+                .isEqualTo(new TerminalOptions(false, MouseMode.CLICK, false, KeyboardEnhancements.NONE, false));
         assertThat(TerminalOptions.DEFAULT.bracketedPaste()).isTrue();
     }
 }

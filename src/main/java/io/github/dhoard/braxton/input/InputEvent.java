@@ -40,7 +40,8 @@ import io.github.dhoard.braxton.layout.Size;
  */
 public sealed interface InputEvent {
 
-    /** A key gesture. {@code text} is non-empty only for printable input.
+    /**
+     * A key gesture. {@code text} is non-empty only for printable input.
      *
      * <p>A gesture no enhanced terminal distinguishes reports {@link KeyEventType#PRESS}. A terminal
      * that negotiated {@link KeyboardEnhancements#reportEventTypes()} also reports repeats and
@@ -54,6 +55,14 @@ public sealed interface InputEvent {
      */
     record KeyInput(Key key, String text, KeyEventType type, long capturedAtNanos) implements InputEvent {
 
+        /**
+         * Creates a {@code KeyInput} value.
+         *
+         * @param key the normalized key identity
+         * @param text the printable text this gesture carries, or empty
+         * @param type the kind of key event
+         * @param capturedAtNanos the runtime capture time, or zero when unstamped
+         */
         public KeyInput {
             if (key == null) {
                 throw new IllegalArgumentException("key is required");
@@ -63,7 +72,8 @@ public sealed interface InputEvent {
             capturedAtNanos = Math.max(0L, capturedAtNanos);
         }
 
-        /** A press, which is every gesture an unenhanced terminal can report.
+        /**
+         * A press, which is every gesture an unenhanced terminal can report.
          *
          * @param key the normalized key identity
          * @param text the printable text this gesture carries, or empty
@@ -73,28 +83,63 @@ public sealed interface InputEvent {
             this(key, text, KeyEventType.PRESS, capturedAtNanos);
         }
 
+        /**
+         * Creates a key event with the supplied modifier and event metadata.
+         *
+         * @param key the normalized key identity
+         * @return the normalized key event
+         */
         public static KeyInput of(Key key) {
             return new KeyInput(key, "", KeyEventType.PRESS, 0L);
         }
 
+        /**
+         * Creates a key event with the supplied modifier and event metadata.
+         *
+         * @param key the normalized key identity
+         * @param text the printable text this gesture carries, or empty
+         * @return the normalized key event
+         */
         public static KeyInput of(Key key, String text) {
             return new KeyInput(key, text, KeyEventType.PRESS, 0L);
         }
 
+        /**
+         * Creates a key event with the supplied modifier and event metadata.
+         *
+         * @param key the normalized key identity
+         * @param text the printable text this gesture carries, or empty
+         * @param capturedAtNanos the runtime capture time, or zero when unstamped
+         * @return the normalized key event
+         */
         public static KeyInput of(Key key, String text, long capturedAtNanos) {
             return new KeyInput(key, text, KeyEventType.PRESS, capturedAtNanos);
         }
 
+        /**
+         * Creates a key event with the supplied modifier and event metadata.
+         *
+         * @param key the normalized key identity
+         * @param text the printable text this gesture carries, or empty
+         * @param type the kind of key event
+         * @return the normalized key event
+         */
         public static KeyInput of(Key key, String text, KeyEventType type) {
             return new KeyInput(key, text, type, 0L);
         }
 
-        /** The same gesture with a runtime capture timestamp. */
+        /**
+         * The same gesture with a runtime capture timestamp.
+         *
+         * @param nanos the monotonic capture timestamp in nanoseconds
+         * @return the same gesture with a runtime capture timestamp
+         */
         public KeyInput stamped(long nanos) {
             return new KeyInput(key, text, type, nanos);
         }
 
-        /** The same gesture reported as another kind of key event.
+        /**
+         * The same gesture reported as another kind of key event.
          *
          * @param value the kind to report
          * @return this instance when the kind did not change
@@ -117,12 +162,18 @@ public sealed interface InputEvent {
         }
     }
 
-    /** One complete bracketed-paste payload (unsanitized; sanitizing is the application's policy).
+    /**
+     * One complete bracketed-paste payload (unsanitized; sanitizing is the application's policy).
      *
      * @param text the complete paste payload, unsanitized
      */
     record PasteInput(String text) implements InputEvent {
 
+        /**
+         * Creates a {@code PasteInput} value.
+         *
+         * @param text the complete paste payload, unsanitized
+         */
         public PasteInput {
             text = text == null ? "" : text;
         }
@@ -132,16 +183,21 @@ public sealed interface InputEvent {
      * A pointer report: a press, a release, motion, or a wheel gesture at one cell.
      *
      * <p>Pointer input is not a keystroke and never runs a key binding. It is delivered to the
-     * element painted under the reported cell, translated into that element's own coordinates, so
+     * widget painted under the reported cell, translated into that widget's own coordinates, so
      * where the pointer is decides what receives it - see
-     * {@link io.github.dhoard.braxton.view.View.PointerHandler}. A gesture that no element takes - a
-     * wheel turn over a blank area, for instance - falls back to the legacy wheel gesture it used to
-     * be, so an application that only binds wheel keys keeps working.</p>
+     * {@link io.github.dhoard.braxton.ui.Widget#onPointer}. A gesture that no widget takes - a
+     * wheel turn over a blank area, for instance - falls back to the wheel gesture it used to be,
+     * so an application that only binds wheel keys keeps working.</p>
      *
      * @param pointer the normalized report
      */
     record PointerInput(PointerEvent pointer) implements InputEvent {
 
+        /**
+         * Creates a {@code PointerInput} value.
+         *
+         * @param pointer the normalized report
+         */
         public PointerInput {
             if (pointer == null) {
                 throw new IllegalArgumentException("pointer is required");
@@ -149,12 +205,18 @@ public sealed interface InputEvent {
         }
     }
 
-    /** The terminal changed size.
+    /**
+     * The terminal changed size.
      *
      * @param size the measured terminal size
      */
     record ResizeInput(Size size) implements InputEvent {
 
+        /**
+         * Creates a {@code ResizeInput} value.
+         *
+         * @param size the measured terminal size
+         */
         public ResizeInput {
             if (size == null) {
                 throw new IllegalArgumentException("size is required");
@@ -162,7 +224,8 @@ public sealed interface InputEvent {
         }
     }
 
-    /** The terminal window gained or lost focus.
+    /**
+     * The terminal window gained or lost focus.
      *
      * <p>This is a fact about the terminal, not about the view tree: it never changes which element
      * owns focus, and an application that does not subscribe can ignore it. A terminal never asked
@@ -173,7 +236,8 @@ public sealed interface InputEvent {
      * @param gained true when the terminal window gained focus, false when it lost it
      */
     record FocusInput(boolean gained) implements InputEvent {}
-    /** The terminal answered which enhanced-keyboard flags it has enabled.
+    /**
+     * The terminal answered which enhanced-keyboard flags it has enabled.
      *
      * <p>The reply is the terminal's own statement, so it is the only authority for whether an
      * enhancement took effect: a terminal that is silent about the protocol reports nothing at all.
@@ -183,6 +247,11 @@ public sealed interface InputEvent {
      */
     record KeyboardEnhancementsInput(KeyboardEnhancements flags) implements InputEvent {
 
+        /**
+         * Creates a {@code KeyboardEnhancementsInput} value.
+         *
+         * @param flags the reported flags
+         */
         public KeyboardEnhancementsInput {
             if (flags == null) {
                 throw new IllegalArgumentException("flags is required");
@@ -190,7 +259,8 @@ public sealed interface InputEvent {
         }
     }
 
-    /** The terminal answered a query.
+    /**
+     * The terminal answered a query.
      *
      * <p>The reply is framed but not interpreted: what it means depends on the query the session is
      * waiting for. The runtime delivers it to the query that asked and discards it when nothing did,
@@ -202,6 +272,11 @@ public sealed interface InputEvent {
      */
     record TerminalReplyInput(TerminalReply reply) implements InputEvent {
 
+        /**
+         * Creates a {@code TerminalReplyInput} value.
+         *
+         * @param reply the framed reply
+         */
         public TerminalReplyInput {
             if (reply == null) {
                 throw new IllegalArgumentException("reply is required");

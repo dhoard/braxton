@@ -27,6 +27,7 @@ import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -41,11 +42,13 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.Markdown;
+import io.github.dhoard.braxton.widget.MarkdownConfig;
 import io.github.dhoard.braxton.widget.TextInput;
+import io.github.dhoard.braxton.widget.TextInputConfig;
 import io.github.dhoard.braxton.widget.TextViewport;
 import java.io.IOException;
 import java.io.InputStream;
@@ -76,38 +79,58 @@ import java.util.Locale;
  */
 public final class MarkdownDemo {
 
-    /** The status rows the scene paints above the find field. */
+    /**
+     * The status rows the scene paints above the find field.
+     */
     public static final int HEADER_ROWS = 2;
 
-    /** The rows the find field occupies. */
+    /**
+     * The rows the find field occupies.
+     */
     public static final int FIELD_ROWS = 1;
 
-    /** The rows the scene paints below the pager: one help line per key map. */
+    /**
+     * The rows the scene paints below the pager: one help line per key map.
+     */
     public static final int HELP_ROWS = 2;
 
-    /** The cells the line-number gutter occupies, separator included. */
+    /**
+     * The cells the line-number gutter occupies, separator included.
+     */
     public static final int GUTTER_COLUMNS = 6;
 
-    /** The width a panned projection is made at, so panning has something to pan. */
+    /**
+     * The width a panned projection is made at, so panning has something to pan.
+     */
     public static final int PAN_WIDTH = 200;
 
-    /** The cells a strict-limit projection may paint, which this document does not fit. */
+    /**
+     * The cells a strict-limit projection may paint, which this document does not fit.
+     */
     public static final long STRICT_CELLS = 200;
 
-    /** The word the document repeats and the demo's search finds. */
+    /**
+     * The word the document repeats and the demo's search finds.
+     */
     public static final String KEYWORD = "lantern";
 
-    /** The document's source, read from the resource the jar packages beside the class. */
+    /**
+     * The document's source, read from the resource the jar packages beside the class.
+     */
     public static final String SOURCE = source();
 
-    /** The resource path the document is packaged at. */
+    /**
+     * The resource path the document is packaged at.
+     */
     private static final String RESOURCE = "/examples/parity/markdown.md";
 
     private static final Style STATUS = Style.NONE.withBold();
 
     private static final Style GUTTER = Style.NONE.withItalic();
 
-    /** The pager's rows at one terminal height. */
+    /**
+     * The pager's rows at one terminal height.
+     */
     private static final int FIXED_ROWS = HEADER_ROWS + FIELD_ROWS + HELP_ROWS;
 
     private MarkdownDemo() {}
@@ -136,7 +159,9 @@ public final class MarkdownDemo {
             boolean strict,
             String last) {
 
-        /** Substitutes the demo's own values for a missing one. */
+        /**
+         * Substitutes the demo's own values for a missing one.
+         */
         public Model {
             source = source == null ? SOURCE : source;
             document = document == null ? Markdown.of().document(source) : document;
@@ -201,7 +226,9 @@ public final class MarkdownDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -234,25 +261,39 @@ public final class MarkdownDemo {
          */
         record Resized(int rows, int columns) implements Msg {}
 
-        /** Switches between the light and the dark theme. */
+        /**
+         * Switches between the light and the dark theme.
+         */
         record ToggleTheme() implements Msg {}
 
-        /** Switches the pager between wrapping and panning, and the projection with it. */
+        /**
+         * Switches the pager between wrapping and panning, and the projection with it.
+         */
         record ToggleMode() implements Msg {}
 
-        /** Shows or hides the pager's line numbers, which takes cells off the projection. */
+        /**
+         * Shows or hides the pager's line numbers, which takes cells off the projection.
+         */
         record ToggleNumbers() implements Msg {}
 
-        /** Switches between the default bounds and limits this document does not fit. */
+        /**
+         * Switches between the default bounds and limits this document does not fit.
+         */
         record ToggleLimits() implements Msg {}
 
-        /** Moves focus to the find field. */
+        /**
+         * Moves focus to the find field.
+         */
         record Search() implements Msg {}
 
-        /** Moves focus back to the pager. */
+        /**
+         * Moves focus back to the pager.
+         */
         record Find() implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -279,7 +320,11 @@ public final class MarkdownDemo {
                 KeyMap.group("Scene", KeyAction.<Msg>of("quit", new Msg.Quit(), "ctrl+c", "quit", "ctrl+c")));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
@@ -321,8 +366,8 @@ public final class MarkdownDemo {
      * @param model the scene state
      * @return the definition, at the width this state's pager shows
      */
-    public static Markdown.Config config(Model model) {
-        Markdown.Config config = model.dark() ? Markdown.Config.dark() : Markdown.Config.defaults();
+    public static MarkdownConfig config(Model model) {
+        MarkdownConfig config = model.dark() ? MarkdownConfig.dark() : MarkdownConfig.defaults();
         return config.withWidth(projectionWidth(model)).withLimits(limits(model));
     }
 
@@ -386,13 +431,17 @@ public final class MarkdownDemo {
      *
      * @return the field's definition
      */
-    public static TextInput.Config searchConfig() {
-        return TextInput.Config.defaults()
+    public static TextInputConfig searchConfig() {
+        return TextInputConfig.defaults()
                 .withPrompt("find: ", Style.NONE.withBold())
                 .withCompletion(TextInput.Completion.disabled());
     }
 
-    /** The line-number gutter the pager paints. */
+    /**
+     * The line-number gutter the pager paints.
+     *
+     * @return the line-number gutter the pager paints
+     */
     public static TextViewport.Gutter gutter() {
         return TextViewport.Gutter.lineNumbers(GUTTER_COLUMNS, GUTTER);
     }
@@ -443,7 +492,9 @@ public final class MarkdownDemo {
         return List.copyOf(found);
     }
 
-    /** The length in UTF-16 units of the pattern matched at one offset, or zero. */
+    /**
+     * The length in UTF-16 units of the pattern matched at one offset, or zero.
+     */
     private static int matchAt(String text, int offset, int[] pattern) {
         int position = offset;
         for (int expected : pattern) {
@@ -461,8 +512,15 @@ public final class MarkdownDemo {
 
     // ── the scene ────────────────────────────────────────────────────────────
 
-    /** The status rows, the find field, the pager and the two help lines. */
+    /**
+     * The status rows, the find field, the pager and the two help lines.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         @Override
         public Update<Model, Msg, Never> init(InitContext context) {
@@ -534,22 +592,40 @@ public final class MarkdownDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
+        }
+
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys().bindings();
+        }
+
+        /**
+         * The scene as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
             int rows = context.viewport().rows();
             int cols = context.viewport().cols();
             int pagerRows = pagerRows(rows);
-            List<View<Msg>> sections = new ArrayList<>(6);
-            sections.add(Views.fixed(1, Views.text(status(model), STATUS)));
-            sections.add(Views.fixed(1, Views.text(found(model), STATUS)));
-            sections.add(Views.fixed(1, fieldMount(model).view(model, context)));
+            List<Element<Msg>> sections = new ArrayList<>(6);
+            sections.add(Elements.fixed(1, Elements.text(status(model), STATUS)));
+            sections.add(Elements.fixed(1, Elements.text(found(model), STATUS)));
+            sections.add(Elements.fixed(1, fieldMount(model).view(model, context)));
             sections.add(
-                    Views.fixed(pagerRows, pagerMount(model, pagerRows, cols).view(model, context)));
-            sections.add(Views.fixed(1, Views.text(Help.render(pagerKeys(model), false, cols))));
-            sections.add(Views.fixed(1, Views.text(Help.render(keys(), false, cols))));
-            return Views.keyed(List.of(), Views.column(sections), keys().bindings());
+                    Elements.fixed(pagerRows, pagerMount(model, pagerRows, cols).view(model, context)));
+            sections.add(Elements.fixed(1, Elements.text(Help.render(pagerKeys(model), false, cols))));
+            sections.add(Elements.fixed(1, Elements.text(Help.render(keys(), false, cols))));
+            return Elements.column(sections);
         }
 
-        /** The pager's own gestures, for the mode its definition is in. */
+        /**
+         * The pager's own gestures, for the mode its definition is in.
+         */
         private static KeyMap<TextViewport.Msg> pagerKeys(Model model) {
             return TextViewport.keys(model.pager(), pagerConfig(model, 0, 0));
         }
@@ -580,13 +656,17 @@ public final class MarkdownDemo {
                     OutputRoute.toMessage(Msg.FieldOutput::new));
         }
 
-        /** One pager message, applied through the mount that owns it. */
+        /**
+         * One pager message, applied through the mount that owns it.
+         */
         private Update<Model, Msg, Never> paneUpdate(Model model, Msg.Pane message) {
             Update<Model, Msg, Never> applied = pagerMount(model, 0, 0).update(model, message.value());
             return Update.next(applied.model().withLast("pager-" + action(message.value())), applied.command());
         }
 
-        /** One field message, applied through the field's mount and then published to the pager. */
+        /**
+         * One field message, applied through the field's mount and then published to the pager.
+         */
         private Update<Model, Msg, Never> typed(Model model, TextInput.Msg message) {
             Update<Model, Msg, Never> applied = fieldMount(model).update(model, message);
             // The ranges are this scene's search policy applied to the projection that is on screen,
@@ -623,7 +703,9 @@ public final class MarkdownDemo {
             return searched(replaced.model(), select);
         }
 
-        /** Publishes the ranges the current query matches in the current projection. */
+        /**
+         * Publishes the ranges the current query matches in the current projection.
+         */
         private Model searched(Model model, boolean select) {
             List<TextViewport.Highlight> found =
                     matches(model.document().lines(), model.search().text());
@@ -638,7 +720,9 @@ public final class MarkdownDemo {
                     .model();
         }
 
-        /** The pager's allocation for one terminal size. */
+        /**
+         * The pager's allocation for one terminal size.
+         */
         private Model geometry(Model model, int rows, int columns) {
             int cols = Math.max(0, columns);
             Update<Model, Msg, Never> resized =
@@ -646,7 +730,9 @@ public final class MarkdownDemo {
             return resized.model();
         }
 
-        /** What the renderer was asked for, so a verifier can assert it without reading cells. */
+        /**
+         * What the renderer was asked for, so a verifier can assert it without reading cells.
+         */
         private static String status(Model model) {
             return "theme=" + (model.dark() ? "dark" : "light")
                     + " mode=" + name(model.mode())
@@ -657,7 +743,9 @@ public final class MarkdownDemo {
                     + " limits=" + (model.strict() ? "strict" : "default");
         }
 
-        /** What the projection answered, what the search found, and what the scene last did. */
+        /**
+         * What the projection answered, what the search found, and what the scene last did.
+         */
         private static String found(Model model) {
             TextViewport.Model pager = model.pager();
             return "diagnostics=" + diagnostics(model.document())
@@ -669,7 +757,9 @@ public final class MarkdownDemo {
                     + " last=" + model.last();
         }
 
-        /** The diagnostics a projection published, or {@code none}. */
+        /**
+         * The diagnostics a projection published, or {@code none}.
+         */
         private static String diagnostics(Markdown.Document document) {
             if (!document.failed()) {
                 return "none";
@@ -730,6 +820,8 @@ public final class MarkdownDemo {
         }
     }
 
-    /** The terminal size, which is the one number the scene splits between its components. */
+    /**
+     * The terminal size, which is the one number the scene splits between its components.
+     */
     private static final SubscriptionId SIZE = SubscriptionId.of("size");
 }

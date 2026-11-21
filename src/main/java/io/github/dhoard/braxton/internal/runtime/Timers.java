@@ -22,17 +22,35 @@
 
 package io.github.dhoard.braxton.internal.runtime;
 
-/** A cancellable one-shot timer. */
+/**
+ * A cancellable one-shot timer.
+ */
 public interface Timers {
 
-    /** Schedules {@code task} once after {@code delayNanos}. */
+    /**
+     * Schedules {@code task} once after {@code delayNanos}.
+     *
+     * @param delayNanos the timer delay in nanoseconds
+     * @param task the action to run when the timer expires
+     * @return the cancellation handle for the admitted timer
+     */
     Handle schedule(long delayNanos, Runnable task);
 
+    /**
+     * The cancellation handle for an admitted timer.
+     */
     interface Handle {
+        /**
+         * Cancels future timer delivery.
+         */
         void cancel();
     }
 
-    /** Real time, backed by a shared scheduler whose worker is a virtual thread. */
+    /**
+     * Real time, backed by a shared scheduler whose worker is a virtual thread.
+     *
+     * @return real time, backed by a shared scheduler whose worker is a virtual thread
+     */
     static Timers system() {
         return SystemTimers.INSTANCE;
     }

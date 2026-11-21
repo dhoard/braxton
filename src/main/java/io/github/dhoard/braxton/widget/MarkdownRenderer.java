@@ -76,16 +76,22 @@ import org.commonmark.node.ThematicBreak;
  */
 final class MarkdownRenderer {
 
-    /** The bar a block quote paints in front of every row it holds. */
+    /**
+     * The bar a block quote paints in front of every row it holds.
+     */
     private static final String QUOTE_BAR = "\u2502";
 
-    /** The bullet a bullet list paints in front of an item that has no task marker. */
+    /**
+     * The bullet a bullet list paints in front of an item that has no task marker.
+     */
     private static final String BULLET = "\u2022";
 
-    /** The cells a task list's checkbox occupies, which is {@code [x] } or {@code [ ] }. */
+    /**
+     * The cells a task list's checkbox occupies, which is {@code [x] } or {@code [ ] }.
+     */
     private static final int TASK_MARKER = 4;
 
-    private final Markdown.Config config;
+    private final MarkdownConfig config;
 
     private final Markdown.Theme theme;
 
@@ -97,7 +103,7 @@ final class MarkdownRenderer {
 
     private long cells;
 
-    private MarkdownRenderer(Markdown.Config config) {
+    private MarkdownRenderer(MarkdownConfig config) {
         this.config = config;
         this.theme = config.theme();
     }
@@ -109,7 +115,7 @@ final class MarkdownRenderer {
      * @param config the definition
      * @return the projection
      */
-    static Markdown.Document render(String source, Markdown.Config config) {
+    static Markdown.Document render(String source, MarkdownConfig config) {
         return new MarkdownRenderer(config).project(source);
     }
 
@@ -151,7 +157,9 @@ final class MarkdownRenderer {
         return new Markdown.Document(rows, diagnostics);
     }
 
-    /** The source's UTF-8 size, counted without allocating the bytes. */
+    /**
+     * The source's UTF-8 size, counted without allocating the bytes.
+     */
     private static long utf8Bytes(String source) {
         long bytes = 0;
         for (int index = 0; index < source.length(); ) {
@@ -170,7 +178,9 @@ final class MarkdownRenderer {
         return bytes;
     }
 
-    /** Appends one projected line, charging it to the cell budget and splitting any break it holds. */
+    /**
+     * Appends one projected line, charging it to the cell budget and splitting any break it holds.
+     */
     private void emit(StyledText value) {
         for (StyledText line : value.lines()) {
             // A row costs at least one cell, so the budget bounds the row count as well as the
@@ -184,7 +194,9 @@ final class MarkdownRenderer {
         }
     }
 
-    /** Charges one parser node to the node budget. */
+    /**
+     * Charges one parser node to the node budget.
+     */
     private void visit() {
         visited++;
         if (visited > config.limits().nodes()) {
@@ -193,7 +205,9 @@ final class MarkdownRenderer {
         }
     }
 
-    /** Refuses a nesting the projection does not descend. */
+    /**
+     * Refuses a nesting the projection does not descend.
+     */
     private void requireDepth(int depth) {
         if (depth > config.limits().depth()) {
             throw new Limit(new Markdown.Diagnostic.NestingTooDeep(
@@ -239,7 +253,7 @@ final class MarkdownRenderer {
         requireDepth(depth);
         return switch (node) {
             case Heading heading -> heading(heading, width, depth);
-            case Paragraph paragraph -> wordWrap(inline(paragraph, theme.text(), null, depth), width);
+            case Paragraph paragraph -> paragraph(paragraph, width, depth);
             case ThematicBreak ignored -> List.of(StyledText.of("\u2500".repeat(width), theme.rule()));
             case BlockQuote quote -> quote(quote, width, depth);
             case ListBlock list -> list(list, width, depth);
@@ -249,6 +263,40 @@ final class MarkdownRenderer {
             case TableBlock table -> table(table, width, depth);
             default -> blocks(node, width, depth);
         };
+    }
+
+    /**
+     * A paragraph: its inline content word-wrapped, or the rows an image hook answers for a
+     * paragraph that holds nothing but an image.
+     *
+     * <p>The hook is asked only when the image stands alone, so the rows it answers replace one
+     * block row for row without moving text that shares the paragraph. A null answer paints the alt
+     * text the inline walk produced, which is what a renderer without a hook paints for every
+     * image.</p>
+     */
+    private List<StyledText> paragraph(Paragraph paragraph, int width, int depth) {
+        Markdown.ImageHook hook = config.imageHook();
+        Node first = paragraph.getFirstChild();
+        if (hook != null && first instanceof Image image && first.getNext() == null) {
+            visit();
+            StyledText alt = inline(image, theme.muted(), null, depth + 1);
+            List<StyledText> rows = hook.rows(
+                    new Markdown.ImageRef(image.getDestination(), alt.plainText(), image.getTitle()),
+                    Math.max(1, width));
+            if (rows != null) {
+                List<StyledText> out = new ArrayList<>();
+                for (StyledText row : rows) {
+                    if (row == null) {
+                        continue;
+                    }
+                    for (StyledText piece : row.lines()) {
+                        out.addAll(hardWrap(piece, width));
+                    }
+                }
+                return out;
+            }
+        }
+        return wordWrap(inline(paragraph, theme.text(), null, depth), width);
     }
 
     private List<StyledText> heading(Heading heading, int width, int depth) {
@@ -317,7 +365,9 @@ final class MarkdownRenderer {
         return out;
     }
 
-    /** The cells a list's marker column occupies, the same for every item in the list. */
+    /**
+     * The cells a list's marker column occupies, the same for every item in the list.
+     */
     private int markerWidth(ListBlock list) {
         int width = Math.max(2, config.indent());
         boolean task = false;
@@ -339,7 +389,9 @@ final class MarkdownRenderer {
         return width;
     }
 
-    /** The marker one item paints, padded to the list's marker column. */
+    /**
+     * The marker one item paints, padded to the list's marker column.
+     */
     private StyledText marker(ListItem item, ListBlock list, int number, int markerWidth) {
         String text;
         if (item.getFirstChild() instanceof TaskListItemMarker task) {
@@ -353,7 +405,9 @@ final class MarkdownRenderer {
         return StyledText.of(text + " ".repeat(pad), theme.marker());
     }
 
-    /** The number an ordered list starts at. */
+    /**
+     * The number an ordered list starts at.
+     */
     private static int startNumber(ListBlock list) {
         if (list instanceof OrderedList ordered) {
             Integer start = ordered.getMarkerStartNumber();
@@ -417,7 +471,9 @@ final class MarkdownRenderer {
         return table.render().lines();
     }
 
-    /** The alignment one GFM cell declares. */
+    /**
+     * The alignment one GFM cell declares.
+     */
     private static Table.Alignment alignment(TableCell cell) {
         TableCell.Alignment alignment = cell.getAlignment();
         if (alignment == null) {
@@ -478,7 +534,7 @@ final class MarkdownRenderer {
                 String destination = safeTarget(target.getDestination());
                 yield inline(target, base.merge(theme.link()), destination == null ? link : destination, depth);
             }
-            case Image image -> inline(image, base.merge(theme.muted()), null, depth);
+            case Image image -> inlineImage(image, base.merge(theme.muted()), depth);
             case SoftLineBreak ignored -> StyledText.of(" ", base);
             case HardLineBreak ignored -> StyledText.of("\n", base);
             case HtmlInline html -> StyledText.of(inlineText(html.getLiteral()), base.merge(theme.muted()), link);
@@ -487,7 +543,27 @@ final class MarkdownRenderer {
         };
     }
 
-    /** Inline text with its tabs taken out, so a projected row's cells are the cells it measures. */
+    /**
+     * The value one image paints where it stands: the hook's inline answer when it has one, and the
+     * alt text otherwise.
+     *
+     * <p>The alt text is the image's own inline content, so a nested emphasis or code span in the
+     * alt text paints the way it would anywhere else.</p>
+     */
+    private StyledText inlineImage(Image image, Style style, int depth) {
+        StyledText alt = inline(image, style, null, depth);
+        Markdown.ImageHook hook = config.imageHook();
+        if (hook == null) {
+            return alt;
+        }
+        StyledText replacement =
+                hook.inline(new Markdown.ImageRef(image.getDestination(), alt.plainText(), image.getTitle()), style);
+        return replacement == null ? alt : replacement;
+    }
+
+    /**
+     * Inline text with its tabs taken out, so a projected row's cells are the cells it measures.
+     */
     private static String inlineText(String value) {
         return value == null ? "" : value.replace('\t', ' ');
     }
@@ -530,10 +606,14 @@ final class MarkdownRenderer {
 
     // ── geometry ─────────────────────────────────────────────────────────────
 
-    /** One grapheme cluster of a projected value: where it starts, ends and how wide it paints. */
+    /**
+     * One grapheme cluster of a projected value: where it starts, ends and how wide it paints.
+     */
     private record Cluster(int start, int end, int columns) {}
 
-    /** The clusters of one line, measured the way the renderer paints them. */
+    /**
+     * The clusters of one line, measured the way the renderer paints them.
+     */
     private static List<Cluster> clusters(String plain) {
         List<Cluster> clusters = new ArrayList<>();
         int offset = 0;
@@ -646,7 +726,9 @@ final class MarkdownRenderer {
         return out.isEmpty() ? List.of(StyledText.empty()) : out;
     }
 
-    /** The same content with one style merged over every span, keeping each span's own style. */
+    /**
+     * The same content with one style merged over every span, keeping each span's own style.
+     */
     private static StyledText restyle(StyledText value, Style style) {
         if (style.isPlain()) {
             return value;
@@ -658,7 +740,9 @@ final class MarkdownRenderer {
         return out;
     }
 
-    /** The value flattened to one row, because a grid cell cannot hold a line break. */
+    /**
+     * The value flattened to one row, because a grid cell cannot hold a line break.
+     */
     private static StyledText singleRow(StyledText value) {
         String plain = value.plainText();
         if (plain.indexOf('\n') < 0 && plain.indexOf('\t') < 0) {

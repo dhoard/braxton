@@ -37,6 +37,7 @@ import io.github.dhoard.braxton.app.TerminalOptions;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.internal.render.AnsiEncoder;
@@ -51,9 +52,8 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.io.IOException;
 import java.io.PipedReader;
 import java.io.PipedWriter;
@@ -90,26 +90,38 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(120)
 class ParityIoTest {
 
-    /** One synchronized-output bracket start; a presented frame opens exactly one. */
+    /**
+     * One synchronized-output bracket start; a presented frame opens exactly one.
+     */
     private static final String BEGIN = "\u001b[?2026h";
 
-    /** One synchronized-output bracket end. */
+    /**
+     * One synchronized-output bracket end.
+     */
     private static final String END = "\u001b[?2026l";
 
-    /** An absolute cursor address, which an inline frame must never write. */
+    /**
+     * An absolute cursor address, which an inline frame must never write.
+     */
     private static final Pattern ABSOLUTE_MOVE = Pattern.compile("\u001b\\[\\d+;\\d+H");
 
-    /** An erase of the whole display, which would destroy the user's own scrollback. */
+    /**
+     * An erase of the whole display, which would destroy the user's own scrollback.
+     */
     private static final String ERASE_DISPLAY = "\u001b[2J";
 
     private static final long WAIT_SECONDS = 10L;
 
-    /** The colour the fixture's first row is drawn in, so a negotiated colour profile is observable. */
+    /**
+     * The color the fixture's first row is drawn in, so a negotiated color profile is observable.
+     */
     private static final Color ACCENT = new Color(0x21, 0xAF, 0x7A);
 
     // ── fixtures ─────────────────────────────────────────────────────────────
 
-    /** A writer the test can read while the session writes, counting flushes as frames. */
+    /**
+     * A writer the test can read while the session writes, counting flushes as frames.
+     */
     private static final class Recorder extends Writer {
 
         private final StringBuilder text = new StringBuilder();
@@ -134,7 +146,9 @@ class ParityIoTest {
             return text.toString();
         }
 
-        /** Every write the session flushed, as the transcript looked at that moment. */
+        /**
+         * Every write the session flushed, as the transcript looked at that moment.
+         */
         synchronized List<String> writes() {
             return List.copyOf(writes);
         }
@@ -173,7 +187,9 @@ class ParityIoTest {
         }
     }
 
-    /** A reader and a writer that count closes, so ownership can be asserted. */
+    /**
+     * A reader and a writer that count closes, so ownership can be asserted.
+     */
     private static final class Owner {
         private final AtomicInteger closes = new AtomicInteger();
         private final StringWriter sink = new StringWriter();
@@ -258,35 +274,42 @@ class ParityIoTest {
             }
 
             @Override
-            public View<String> view(List<String> model, ViewContext context) {
-                List<View<String>> lines = new ArrayList<>();
-                lines.add(Views.text("scene rows=" + model.size(), Style.fg(ACCENT)));
+            public Element<String> view(List<String> model, ViewContext context) {
+                List<Element<String>> lines = new ArrayList<>();
+                lines.add(Elements.text("scene rows=" + model.size(), Style.fg(ACCENT)));
                 for (String row : model) {
-                    lines.add(Views.text(row));
+                    lines.add(Elements.text(row));
                 }
-                return Views.onKeys(
-                        keys.bindings(),
-                        Views.focus(
-                                ElementId.of("rows"),
-                                true,
-                                keys.bindings(),
-                                View.InputHandler.none(),
-                                Views.column(lines)));
+                return Elements.column(lines);
+            }
+
+            /**
+             * The gestures this fixture answers, once no leaf has taken them.
+             */
+            @Override
+            public java.util.List<Binding<String>> claims(java.util.List<String> model) {
+                return keys.bindings();
             }
         };
     }
 
-    /** The quit binding every fixture scene shares. */
+    /**
+     * The quit binding every fixture scene shares.
+     */
     private static Command<String> quitOn(String message) {
         return "q".equals(message) ? Command.quit() : null;
     }
 
-    /** Options for a session that paints the terminal's own screen instead of the alternate one. */
+    /**
+     * Options for a session that paints the terminal's own screen instead of the alternate one.
+     */
     private static RuntimeOptions inline() {
         return RuntimeOptions.defaults().withTerminal(TerminalOptions.DEFAULT.withAlternateScreen(false));
     }
 
-    /** Waits until the recorder's text satisfies {@code condition}. */
+    /**
+     * Waits until the recorder's text satisfies {@code condition}.
+     */
     private static String awaitText(Recorder recorder, java.util.function.Predicate<String> condition, String what) {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
         while (System.nanoTime() < deadline) {
@@ -304,12 +327,16 @@ class ParityIoTest {
         throw new AssertionError(what + " did not happen; transcript: " + visible(recorder.text()));
     }
 
-    /** A transcript with escape sequences made visible, so a failure message is readable. */
+    /**
+     * A transcript with escape sequences made visible, so a failure message is readable.
+     */
     private static String visible(String text) {
         return text.replace("\u001b", "\\e").replace("\r", "\\r").replace("\n", "\\n");
     }
 
-    /** The frames the recorder has flushed. */
+    /**
+     * The frames the recorder has flushed.
+     */
     private static List<String> frames(Recorder recorder) {
         List<String> all = recorder.writes();
         return all.isEmpty() ? List.of() : List.copyOf(all);
@@ -421,7 +448,7 @@ class ParityIoTest {
                     IoOptions.defaults().withEnvironment(Map.of("NO_COLOR", "")));
             assertThat(coloured.run().kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
             assertThat(fixture.outputText())
-                    .as("a colour terminal frames a coloured cell with colour")
+                    .as("a color terminal frames a colored cell with color")
                     .contains("38;2;");
         }
         try (TestTerminal fixture = new TestTerminal()) {
@@ -435,7 +462,7 @@ class ParityIoTest {
                     IoOptions.defaults().withEnvironment(Map.of("NO_COLOR", "1")));
             assertThat(plain.run().kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
             assertThat(fixture.outputText())
-                    .as("NO_COLOR from the session's own environment removes colour")
+                    .as("NO_COLOR from the session's own environment removes color")
                     .doesNotContain("38;2;");
         }
         assertThat(IoOptions.defaults().withEnvironment(Map.of("NO_COLOR", "1")).environment("NO_COLOR"))
@@ -464,10 +491,10 @@ class ParityIoTest {
             }
 
             @Override
-            public View<String> view(List<String> model, ViewContext context) {
+            public Element<String> view(List<String> model, ViewContext context) {
                 viewports.add(
                         new Size(context.viewport().rows(), context.viewport().cols()));
-                return Views.text("scene sized");
+                return Elements.text("scene sized");
             }
         };
         Recorder output = new Recorder();
@@ -920,7 +947,9 @@ class ParityIoTest {
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    /** The failing task both diagnostic cases need: its work fails and its failure mapper throws. */
+    /**
+     * The failing task both diagnostic cases need: its work fails and its failure mapper throws.
+     */
     private static Command<String> failingTask(String message) {
         if (!"p".equals(message)) {
             return quitOn(message);
@@ -936,7 +965,9 @@ class ParityIoTest {
                 });
     }
 
-    /** Runs one loop on its own thread, feeding each key once the previous frame was painted. */
+    /**
+     * Runs one loop on its own thread, feeding each key once the previous frame was painted.
+     */
     private static void drive(TestTerminal fixture, RuntimeLoop<List<String>, String> loop, String... keys)
             throws InterruptedException {
         Thread owner = Thread.ofVirtual().start(loop::run);
@@ -950,7 +981,9 @@ class ParityIoTest {
                 .isFalse();
     }
 
-    /** One command flattened into its steps, so a batch's contents can be asserted. */
+    /**
+     * One command flattened into its steps, so a batch's contents can be asserted.
+     */
     private static <Msg> List<Command<Msg>> flatten(Command<Msg> command) {
         if (command instanceof Command.None<Msg>) {
             return List.of();

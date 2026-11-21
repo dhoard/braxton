@@ -28,7 +28,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
-/** Runtime limits are validated where they are accepted, not when shutdown uses them. */
+/**
+ * Runtime limits are validated where they are accepted, not when shutdown uses them.
+ */
 class RuntimeOptionsTest {
 
     private static RuntimeOptions options(Duration grace) {
@@ -42,7 +44,12 @@ class RuntimeOptionsTest {
                 RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
                 null,
                 null,
-                null);
+                null,
+                RuntimeOptions.DEFAULT_COLOR_PROFILE,
+                null,
+                RuntimeOptions.DEFAULT_FPS,
+                false,
+                true);
     }
 
     @Test

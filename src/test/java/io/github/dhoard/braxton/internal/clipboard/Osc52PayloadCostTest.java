@@ -37,7 +37,9 @@ import org.junit.jupiter.api.Test;
  */
 class Osc52PayloadCostTest {
 
-    /** Translated text: two-unit clusters, so every unit reaches the break iterator. */
+    /**
+     * Translated text: two-unit clusters, so every unit reaches the break iterator.
+     */
     private static String wide(int chars) {
         StringBuilder text = new StringBuilder(chars + 2);
         while (text.length() < chars) {

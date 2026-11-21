@@ -223,6 +223,7 @@
                     <configuration>
                         <release>${maven.compiler.release}</release>
                         <encoding>UTF-8</encoding>
+                        <failOnWarning>true</failOnWarning>
                         <compilerArgs>
                             <arg>-Xlint:all</arg>
                         </compilerArgs>
@@ -399,6 +400,34 @@
                                 -->
                                 <rules>
                                     <rule>
+                                        <element>BUNDLE</element>
+                                        <limits>
+                                            <limit>
+                                                <counter>LINE</counter>
+                                                <value>COVEREDRATIO</value>
+                                                <minimum>0.90</minimum>
+                                            </limit>
+                                            <limit>
+                                                <counter>BRANCH</counter>
+                                                <value>COVEREDRATIO</value>
+                                                <minimum>0.80</minimum>
+                                            </limit>
+                                        </limits>
+                                    </rule>
+                                    <rule>
+                                        <element>PACKAGE</element>
+                                        <includes>
+                                            <include>io.github.dhoard.braxton.internal.terminal</include>
+                                        </includes>
+                                        <limits>
+                                            <limit>
+                                                <counter>LINE</counter>
+                                                <value>COVEREDRATIO</value>
+                                                <minimum>0.80</minimum>
+                                            </limit>
+                                        </limits>
+                                    </rule>
+                                    <rule>
                                         <element>CLASS</element>
                                         <includes>
                                             <include>io.github.dhoard.braxton.internal.render.AnsiEncoder</include>
@@ -448,6 +477,11 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-javadoc-plugin</artifactId>
                     <version>${maven-javadoc-plugin.version}</version>
+                    <configuration>
+                        <doclint>all</doclint>
+                        <failOnError>true</failOnError>
+                        <failOnWarnings>true</failOnWarnings>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -471,6 +505,17 @@
         </pluginManagement>
 
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>verify-api-documentation</id>
+                        <phase>verify</phase>
+                        <goals><goal>javadoc</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
@@ -499,7 +544,7 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Ship the project licence and notices inside the jar. -->
+            <!-- Ship the project license and notices inside the jar. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-resources-plugin</artifactId>
