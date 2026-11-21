@@ -27,17 +27,17 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.internal.render.LayoutEngine;
-import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-/** The single-choice list marks its selection, styles it, and maps its keys. */
+/**
+ * The single-choice list marks its selection, styles it, and maps its keys.
+ */
 class SelectorTest {
 
     private static final Style ACTIVE = Style.NONE.withInvert();
@@ -47,7 +47,7 @@ class SelectorTest {
         return Selector.Model.of(List.of(options));
     }
 
-    private static View<String> view(Selector.Model state, boolean focused) {
+    private static Element<String> view(Selector.Model state, boolean focused) {
         return new Selector(new Selector.Config(java.util.List.of(), ACTIVE, INACTIVE))
                 .view(
                         (state).withFocus(focused),
@@ -60,13 +60,14 @@ class SelectorTest {
     }
 
     private static List<String> lines(Selector.Model state, boolean focused, int rows) {
-        return new ScreenRenderer().plainLines(view(state, focused), new Viewport(rows, 40));
+        return ElementScreen.render(view(state, focused), rows, 40).lines();
     }
 
     private static Optional<String> actionFor(Key key) {
-        return view(state("a", "b"), true) instanceof View.Focused<String> focused
-                ? focused.input().handle(InputEvent.KeyInput.of(key, ""))
-                : Optional.empty();
+        List<Selector.Msg> produced = new java.util.ArrayList<>(1);
+        new Selector(new Selector.Config(java.util.List.of(), ACTIVE, INACTIVE))
+                .onKey(InputEvent.KeyInput.of(key, ""), state("a", "b").withFocus(true), produced::add);
+        return produced.stream().findFirst().map(action -> action.getClass().getSimpleName());
     }
 
     @Test
@@ -79,7 +80,7 @@ class SelectorTest {
                 .allSatisfy(line -> assertThat(TextMeasure.columns(line))
                         .isEqualTo(2 + TextMeasure.columns(line.stripLeading().isEmpty() ? " " : line.substring(2))));
 
-        var screen = new ScreenRenderer().screen(view(state("alpha", "beta"), true), new Viewport(6, 40));
+        var screen = ElementScreen.render(view(state("alpha", "beta"), true), 6, 40);
         assertThat(activeFlags(screen, 0, 0)).as("selected row").isEqualTo("invert");
         assertThat(activeFlags(screen, 1, 0)).as("other row").isEqualTo("italic");
     }
@@ -90,7 +91,7 @@ class SelectorTest {
         // marker stays so the selection is still legible, and the active style is withheld - the
         // same rule TableSelector follows and the same one Editor follows by dropping its caret.
         assertThat(lines(state("alpha", "beta"), false)).containsExactly("\u276F alpha", "  beta");
-        var screen = new ScreenRenderer().screen(view(state("alpha", "beta"), false), new Viewport(6, 40));
+        var screen = ElementScreen.render(view(state("alpha", "beta"), false), 6, 40);
         assertThat(activeFlags(screen, 0, 0)).as("selected row").isEqualTo("italic");
         assertThat(activeFlags(screen, 1, 0)).as("other row").isEqualTo("italic");
     }
@@ -99,43 +100,43 @@ class SelectorTest {
     void bothSelectorsAgreeOnWhenTheActiveStyleIsUsed() {
         // The two selectors take the same parameters; they must now also behave the same way, so
         // an application cannot get two different answers from one focus state.
-        var focused = new ScreenRenderer().screen(view(state("alpha", "beta"), true), new Viewport(6, 40));
+        var focused = ElementScreen.render(view(state("alpha", "beta"), true), 6, 40);
         assertThat(activeFlags(focused, 0, 0)).as("focused selector").isEqualTo("invert");
-        var blurred = new ScreenRenderer().screen(view(state("alpha", "beta"), false), new Viewport(6, 40));
+        var blurred = ElementScreen.render(view(state("alpha", "beta"), false), 6, 40);
         assertThat(activeFlags(blurred, 0, 0)).as("unfocused selector").isEqualTo("italic");
 
-        var tableFocused = new ScreenRenderer()
-                .screen(
-                        new TableSelector(new TableSelector.Config(
-                                        TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
-                                        ACTIVE,
-                                        INACTIVE,
-                                        INACTIVE))
-                                .view(
-                                        (TableSelector.Model.of(
-                                                        List.of("id"), List.of(List.of("alpha"), List.of("beta"))))
-                                                .withFocus(true),
-                                        new io.github.dhoard.braxton.mvu.ViewContext(
-                                                io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                                .map(action -> action.getClass().getSimpleName()),
-                        new Viewport(3, 40));
-        assertThat(tableFocused.cell(1, 0).style().invert()).as("focused table").isTrue();
-        var tableBlurred = new ScreenRenderer()
-                .screen(
-                        new TableSelector(new TableSelector.Config(
-                                        TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
-                                        ACTIVE,
-                                        INACTIVE,
-                                        INACTIVE))
-                                .view(
-                                        (TableSelector.Model.of(
-                                                        List.of("id"), List.of(List.of("alpha"), List.of("beta"))))
-                                                .withFocus(false),
-                                        new io.github.dhoard.braxton.mvu.ViewContext(
-                                                io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                                .map(action -> action.getClass().getSimpleName()),
-                        new Viewport(3, 40));
-        assertThat(tableBlurred.cell(1, 0).style().invert())
+        var tableFocused = ElementScreen.render(
+                new TableSelector(new TableSelector.Config(
+                                TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
+                                ACTIVE,
+                                INACTIVE,
+                                INACTIVE))
+                        .view(
+                                (TableSelector.Model.of(List.of("id"), List.of(List.of("alpha"), List.of("beta"))))
+                                        .withFocus(true),
+                                new io.github.dhoard.braxton.mvu.ViewContext(
+                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                        .map(action -> action.getClass().getSimpleName()),
+                3,
+                40);
+        assertThat(tableFocused.canvas().style(1, 0).invert())
+                .as("focused table")
+                .isTrue();
+        var tableBlurred = ElementScreen.render(
+                new TableSelector(new TableSelector.Config(
+                                TableSelector.Model.of(java.util.List.of(), java.util.List.of()),
+                                ACTIVE,
+                                INACTIVE,
+                                INACTIVE))
+                        .view(
+                                (TableSelector.Model.of(List.of("id"), List.of(List.of("alpha"), List.of("beta"))))
+                                        .withFocus(false),
+                                new io.github.dhoard.braxton.mvu.ViewContext(
+                                        io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                        .map(action -> action.getClass().getSimpleName()),
+                3,
+                40);
+        assertThat(tableBlurred.canvas().style(1, 0).invert())
                 .as("unfocused table")
                 .isFalse();
     }
@@ -190,7 +191,9 @@ class SelectorTest {
         assertThat(lines(three, true, 3)).containsExactly("\u276F a b", "  c d", "  e f");
         // The list also measures one row per option, so a taller viewport cannot paint the breaks
         // as extra rows that the marker does not name.
-        assertThat(new LayoutEngine().intrinsicHeight(view(three, true), 40))
+        assertThat(io.github.dhoard.braxton.ui.ElementTree.measure(
+                                view(three, true), new io.github.dhoard.braxton.layout.Size(40, 40))
+                        .rows())
                 .as("rows measured for three options")
                 .isEqualTo(3);
     }
@@ -237,13 +240,16 @@ class SelectorTest {
         assertThat(actionFor(Key.ENTER)).contains("Confirm");
         assertThat(actionFor(Key.ESCAPE)).contains("Cancel");
         assertThat(actionFor(Key.of("x"))).isEmpty();
-        assertThat(view(state("a"), true)).isInstanceOf(View.Focused.class);
-        assertThat(view(state("a"), false)).isInstanceOf(View.Focused.class);
+        // The rows paint whether or not the selector owns focus; only the active style follows it.
+        assertThat(lines(state("a"), true)).isNotEmpty();
+        assertThat(lines(state("a"), false)).isNotEmpty();
     }
 
-    /** The cell's style flags these tests set, so the assertion is about style, not identity. */
-    private static String activeFlags(io.github.dhoard.braxton.view.RenderedScreen screen, int row, int col) {
-        Style style = screen.cell(row, col).style();
+    /**
+     * The cell's style flags these tests set, so the assertion is about style, not identity.
+     */
+    private static String activeFlags(io.github.dhoard.braxton.testing.ElementScreen screen, int row, int col) {
+        Style style = screen.canvas().style(row, col);
         List<String> flags = new java.util.ArrayList<>();
         if (style.invert()) {
             flags.add("invert");

@@ -22,7 +22,6 @@
 
 package io.github.dhoard.braxton.benchmark;
 
-import io.github.dhoard.braxton.internal.render.LayoutEngine;
 import io.github.dhoard.braxton.style.StyledText;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -56,7 +55,7 @@ public class WrapBenchmark {
     @Param({"80", "2048"})
     public int cols;
 
-    private final LayoutEngine engine = new LayoutEngine();
+    private final io.github.dhoard.braxton.style.WidthPolicy policy = io.github.dhoard.braxton.style.WidthPolicy.PINNED;
 
     private StyledText text;
 
@@ -67,6 +66,6 @@ public class WrapBenchmark {
 
     @Benchmark
     public void wrapLines(Blackhole sink) {
-        sink.consume(engine.wrapLines(text, cols));
+        sink.consume(io.github.dhoard.braxton.style.TextWrap.wrap(text, policy, cols));
     }
 }

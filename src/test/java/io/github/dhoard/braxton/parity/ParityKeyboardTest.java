@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import examples.parity.KeyboardFocusDemo;
 import io.github.dhoard.braxton.app.ExitResult;
+import io.github.dhoard.braxton.app.MouseMode;
 import io.github.dhoard.braxton.app.RuntimeOptions;
 import io.github.dhoard.braxton.app.TerminalOptions;
 import io.github.dhoard.braxton.effect.Command;
@@ -37,7 +38,6 @@ import io.github.dhoard.braxton.input.KeyEventType;
 import io.github.dhoard.braxton.input.KeyboardEnhancements;
 import io.github.dhoard.braxton.input.Modifiers;
 import io.github.dhoard.braxton.internal.input.InputDecoder;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.internal.input.TestReaders;
 import io.github.dhoard.braxton.internal.runtime.ManualTimers;
 import io.github.dhoard.braxton.internal.runtime.RuntimeLoop;
@@ -52,17 +52,17 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.InteractionRouter;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
+import io.github.dhoard.braxton.widget.Elements;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -84,12 +84,16 @@ class ParityKeyboardTest {
 
     private static final ViewContext CONTEXT = new ViewContext(new Viewport(24, 80));
 
-    /** The flags the demo requests: disambiguation, event types, every key, associated text. */
+    /**
+     * The flags the demo requests: disambiguation, event types, every key, associated text.
+     */
     private static final int REQUESTED = 1 | 2 | 8 | 16;
 
     // ── R-01: decoding enhanced key events ───────────────────────────────────
 
-    /** Serves one byte per read, so UTF-8 scalars and escape sequences are genuinely split. */
+    /**
+     * Serves one byte per read, so UTF-8 scalars and escape sequences are genuinely split.
+     */
     private static final class ByteAtATime extends InputStream {
         private final byte[] data;
         private final int stallBefore;
@@ -101,7 +105,9 @@ class ParityKeyboardTest {
             this(text, -1, 0L);
         }
 
-        /** Waits {@code stallMillis} before serving byte {@code stallBefore}. */
+        /**
+         * Waits {@code stallMillis} before serving byte {@code stallBefore}.
+         */
         ByteAtATime(String text, int stallBefore, long stallMillis) {
             this.data = text.getBytes(UTF_8);
             this.stallBefore = stallBefore;
@@ -141,7 +147,9 @@ class ParityKeyboardTest {
         return (InputEvent.KeyInput) events.get(0);
     }
 
-    /** A fixture's bytes as the escapes a failure message can read. */
+    /**
+     * A fixture's bytes as the escapes a failure message can read.
+     */
     private static String printable(String text) {
         StringBuilder shown = new StringBuilder();
         text.codePoints().forEach(code -> {
@@ -334,7 +342,9 @@ class ParityKeyboardTest {
 
     // ── R-02: negotiation and restoration ────────────────────────────────────
 
-    /** Records every input event the runtime routes, in order. */
+    /**
+     * Records every input event the runtime routes, in order.
+     */
     private static final class Observer implements Component<List<String>, Object, Never> {
 
         @Override
@@ -350,9 +360,16 @@ class ParityKeyboardTest {
         }
 
         @Override
-        public View<Object> view(List<String> model, ViewContext context) {
-            return Views.<Object>keyed(
-                    List.of(), event -> Optional.of(event), Views.text("observed " + model.size()), List.of());
+        public Element<Object> view(List<String> model, ViewContext context) {
+            return Elements.text("observed " + model.size());
+        }
+
+        /**
+         * Every event becomes a message, so the session records what arrived.
+         */
+        @Override
+        public java.util.List<Object> observed(InputEvent event) {
+            return List.of(event);
         }
 
         private static String describe(Object message) {
@@ -370,7 +387,9 @@ class ParityKeyboardTest {
         }
     }
 
-    /** One owned session: the events it observed and the bytes it wrote. */
+    /**
+     * One owned session: the events it observed and the bytes it wrote.
+     */
     private record Session(List<String> observed, String transcript, ExitResult result) {}
 
     /**
@@ -483,7 +502,9 @@ class ParityKeyboardTest {
         assertThat(second.observed()).containsExactly("caps:1");
     }
 
-    /** A program whose first update throws, so the session ends in failure rather than a quit. */
+    /**
+     * A program whose first update throws, so the session ends in failure rather than a quit.
+     */
     private static final class Failing implements Component<Integer, String, Never> {
 
         @Override
@@ -497,8 +518,16 @@ class ParityKeyboardTest {
         }
 
         @Override
-        public View<String> view(Integer model, ViewContext context) {
-            return Views.keyed(List.of(), event -> Optional.of("first"), Views.text("failing"), List.of());
+        public Element<String> view(Integer model, ViewContext context) {
+            return Elements.text("failing");
+        }
+
+        /**
+         * Every event becomes a message, so the very first one fails the update.
+         */
+        @Override
+        public java.util.List<String> observed(InputEvent event) {
+            return List.of("first");
         }
     }
 
@@ -568,23 +597,19 @@ class ParityKeyboardTest {
     @Test
     void aTerminalBlurNeverRewritesEditorModelFocus() {
         List<InputEvent> seen = new ArrayList<>();
-        Editor editor = new Editor(Editor.Config.defaults());
+        Editor editor = new Editor(EditorConfig.defaults());
         Editor.Model draft = Editor.Model.of("draft");
-        View<Editor.Msg> body = editor.view(draft, CONTEXT);
-        View<String> view = Views.focus(
-                ElementId.of("input"),
-                true,
-                List.of(),
-                event -> {
+        Element<Editor.Msg> body = editor.view(draft, CONTEXT);
+        Component<String, String, Never> component =
+                component(model -> body.map(message -> "editor:" + message), model -> List.of(), event -> {
                     seen.add(event);
-                    return Optional.of("saw:" + event);
-                },
-                body.map(message -> "editor:" + message));
+                    return List.of("saw:" + event);
+                });
 
         assertThat(draft.focused()).as("the draft starts focused").isTrue();
-        assertThat(InputRouter.route(view, new InputEvent.FocusInput(false)))
+        assertThat(route(component, "m", new InputEvent.FocusInput(false)))
                 .contains("saw:" + new InputEvent.FocusInput(false));
-        assertThat(InputRouter.route(view, new InputEvent.FocusInput(true)))
+        assertThat(route(component, "m", new InputEvent.FocusInput(true)))
                 .contains("saw:" + new InputEvent.FocusInput(true));
 
         // The notifications reached routing and the editor's state and painting are untouched: a
@@ -599,46 +624,73 @@ class ParityKeyboardTest {
 
     @Test
     void aReleaseRunsNoBindingAndInsertsNoText() {
-        AtomicInteger handled = new AtomicInteger();
-        View<String> view = Views.keyed(
-                List.of(Binding.of("a", "captured")),
-                Views.focus(
-                        ElementId.of("field"),
-                        true,
-                        List.of(Binding.of("a", "local")),
-                        event -> {
-                            handled.incrementAndGet();
-                            return Optional.of("inserted:" + ((InputEvent.KeyInput) event).text());
-                        },
-                        Views.text("field")),
-                List.of(Binding.of("a", "bubbled")));
+        Component<String, String, Never> component = component(
+                model -> Elements.text(model), model -> List.of(Binding.of("a", "captured")), event -> List.of());
 
         InputEvent.KeyInput press = InputEvent.KeyInput.of(Key.of("a"), "a");
-        assertThat(InputRouter.route(view, press)).as("a press is captured").contains("captured");
+        assertThat(route(component, "m", press)).as("a press is claimed").contains("captured");
 
         // The same gesture on the way up reports the same key and text, and does nothing at all.
         InputEvent.KeyInput release = press.withType(KeyEventType.RELEASE);
-        assertThat(InputRouter.route(view, release)).isEmpty();
-        assertThat(handled).as("neither the focused handler nor a binding ran").hasValue(0);
+        assertThat(route(component, "m", release)).isEmpty();
 
         // A repeat still activates, so holding a key down keeps typing.
-        assertThat(InputRouter.route(view, press.withType(KeyEventType.REPEAT))).contains("captured");
+        assertThat(route(component, "m", press.withType(KeyEventType.REPEAT))).contains("captured");
     }
 
     @Test
-    void aReleaseStillReachesAnInterceptorSoAnApplicationCanObserveIt() {
+    void aReleaseStillReachesObservedSoAnApplicationCanSeeIt() {
         List<String> seen = new ArrayList<>();
-        View<String> view = Views.keyed(
-                List.of(),
-                event -> {
+        Component<String, String, Never> component =
+                component(model -> Elements.text("x"), model -> List.of(), event -> {
                     seen.add(String.valueOf(event));
-                    return Optional.empty();
-                },
-                Views.text("x"),
-                List.of());
+                    return List.of();
+                });
         InputEvent.KeyInput release = InputEvent.KeyInput.of(Key.of("a"), "a", KeyEventType.RELEASE);
-        assertThat(InputRouter.route(view, release)).isEmpty();
-        assertThat(seen).as("the interceptor is the full-event hook").hasSize(1);
+        assertThat(route(component, "m", release)).isEmpty();
+        assertThat(seen).as("observing is the full-event hook").hasSize(1);
+    }
+
+    /**
+     * A component whose whole behavior is the three hooks a key path reads.
+     */
+    private static Component<String, String, Never> component(
+            java.util.function.Function<String, Element<String>> view,
+            java.util.function.Function<String, List<Binding<String>>> claims,
+            java.util.function.Function<InputEvent, List<String>> observed) {
+        return new Component<>() {
+            @Override
+            public Update<String, String, Never> init(InitContext context) {
+                return Update.next("");
+            }
+
+            @Override
+            public Update<String, String, Never> update(String model, String message) {
+                return Update.next(message);
+            }
+
+            @Override
+            public Element<String> view(String model, ViewContext context) {
+                return view.apply(model);
+            }
+
+            @Override
+            public List<Binding<String>> claims(String model) {
+                return claims.apply(model);
+            }
+
+            @Override
+            public List<String> observed(InputEvent event) {
+                return observed.apply(event);
+            }
+        };
+    }
+
+    /**
+     * One event through the runtime's own steps: claims, then the tree, then the last tier.
+     */
+    private static List<String> route(Component<String, String, Never> component, String model, InputEvent event) {
+        return io.github.dhoard.braxton.testing.Routing.route(component, model, CONTEXT, event);
     }
 
     // ── R-04: the demo scene ────────────────────────────────────────────────
@@ -651,11 +703,15 @@ class ParityKeyboardTest {
         return lines(driver.view(CONTEXT));
     }
 
-    private static List<String> lines(View<?> view) {
-        return new ScreenRenderer().plainLines(view, CONTEXT.viewport());
+    private static List<String> lines(Element<?> view) {
+        return ElementScreen.render(
+                        view, CONTEXT.viewport().rows(), CONTEXT.viewport().cols())
+                .lines();
     }
 
-    /** Routes one decoded event through the driver's current view and applies the message. */
+    /**
+     * Routes one decoded event through the driver's current view and applies the message.
+     */
     private static void press(
             ComponentDriver<KeyboardFocusDemo.Model, KeyboardFocusDemo.Msg, Never> driver, String bytes) {
         List<InputEvent> events;
@@ -665,7 +721,11 @@ class ParityKeyboardTest {
             throw new AssertionError(failure);
         }
         for (InputEvent event : events) {
-            InputRouter.route(driver.view(CONTEXT), event).ifPresent(message -> deliver(driver, message));
+            // The runtime's two steps: route the event, then dispatch what the scene made of it.
+            for (KeyboardFocusDemo.Msg message : io.github.dhoard.braxton.testing.Routing.route(
+                    driver.component(), driver.model(), CONTEXT, event)) {
+                deliver(driver, message);
+            }
         }
     }
 
@@ -771,7 +831,12 @@ class ParityKeyboardTest {
     @Test
     void theDemoStopsApplyingEditorActionsToAnUnfocusedField() {
         var driver = demo();
-        assertThat(InputRouter.route(driver.view(CONTEXT), InputEvent.KeyInput.of(Key.of("f"), "")))
+        // The scene claims its own keys, so the focused field never sees this one.
+        assertThat(InteractionRouter.route(
+                        driver.view(CONTEXT),
+                        InputEvent.KeyInput.of(Key.of("f"), ""),
+                        driver.component().claims(driver.model()),
+                        driver.component().bindings(driver.model())))
                 .contains(new KeyboardFocusDemo.Msg.ToggleField());
         driver.send(new KeyboardFocusDemo.Msg.ToggleField());
         assertThat(driver.model().editor().focused()).isFalse();
@@ -786,9 +851,17 @@ class ParityKeyboardTest {
     @Test
     void theDemoQuitsOnItsOwnActions() {
         var driver = demo();
-        assertThat(InputRouter.route(driver.view(CONTEXT), InputEvent.KeyInput.of(Key.of("q"), "")))
+        assertThat(InteractionRouter.route(
+                        driver.view(CONTEXT),
+                        InputEvent.KeyInput.of(Key.of("q"), ""),
+                        driver.component().claims(driver.model()),
+                        driver.component().bindings(driver.model())))
                 .contains(new KeyboardFocusDemo.Msg.Quit());
-        assertThat(InputRouter.route(driver.view(CONTEXT), InputEvent.KeyInput.of(Key.parse("ctrl+c"), "")))
+        assertThat(InteractionRouter.route(
+                        driver.view(CONTEXT),
+                        InputEvent.KeyInput.of(Key.parse("ctrl+c"), ""),
+                        driver.component().claims(driver.model()),
+                        driver.component().bindings(driver.model())))
                 .contains(new KeyboardFocusDemo.Msg.Quit());
         assertThat(driver.send(new KeyboardFocusDemo.Msg.Quit()).command()).isNotNull();
     }
@@ -819,15 +892,18 @@ class ParityKeyboardTest {
                 .as("higher flag bits are dropped, the five defined ones are kept")
                 .isEqualTo(31);
 
-        assertThat(new TerminalOptions(true, false, true).keyboardEnhancements())
+        assertThat(new TerminalOptions(true, MouseMode.NONE, true, KeyboardEnhancements.NONE, false)
+                        .keyboardEnhancements())
                 .as("the legacy constructor asks for nothing")
                 .isEqualTo(KeyboardEnhancements.NONE);
-        assertThat(new TerminalOptions(true, false, true).focusReporting()).isFalse();
+        assertThat(new TerminalOptions(true, MouseMode.NONE, true, KeyboardEnhancements.NONE, false).focusReporting())
+                .isFalse();
         assertThat(TerminalOptions.DEFAULT.withFocusReporting(true).focusReporting())
                 .isTrue();
         assertThat(TerminalOptions.DEFAULT.withKeyboardEnhancements(null).keyboardEnhancements())
                 .isEqualTo(KeyboardEnhancements.NONE);
-        assertThat(TerminalOptions.DEFAULT).isEqualTo(new TerminalOptions(true, false, true));
+        assertThat(TerminalOptions.DEFAULT)
+                .isEqualTo(new TerminalOptions(true, MouseMode.NONE, true, KeyboardEnhancements.NONE, false));
 
         assertThat(KeyEventType.fromCode(1)).isEqualTo(KeyEventType.PRESS);
         assertThat(KeyEventType.fromCode(2)).isEqualTo(KeyEventType.REPEAT);

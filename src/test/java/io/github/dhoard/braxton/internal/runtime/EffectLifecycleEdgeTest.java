@@ -34,7 +34,9 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** Cancelling a finished effect is a no-op and cancelAll does not block new work afterwards. */
+/**
+ * Canceling a finished effect is a no-op and cancelAll does not block new work afterward.
+ */
 class EffectLifecycleEdgeTest {
 
     @Test

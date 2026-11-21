@@ -288,6 +288,32 @@ class NativeLibraryLoaderTest {
     }
 
     @Test
+    void platformSelectionCoversLinuxAndBothMacArchitectures() {
+        String originalOs = System.getProperty("os.name");
+        String originalArch = System.getProperty("os.arch");
+        try {
+            System.setProperty("os.name", "Linux");
+            System.setProperty("os.arch", "amd64");
+            assertThat(NativeTerminal.platform()).isEqualTo("linux-x86_64");
+            System.setProperty("os.name", "Mac OS X");
+            System.setProperty("os.arch", "aarch64");
+            assertThat(NativeTerminal.platform()).isEqualTo("macos-aarch64");
+            System.setProperty("os.arch", "x86_64");
+            assertThat(NativeTerminal.platform()).isEqualTo("macos-x86_64");
+            System.setProperty("os.arch", "sparc");
+            assertThatThrownBy(NativeTerminal::platform).isInstanceOf(IllegalStateException.class);
+        } finally {
+            restore("os.name", originalOs);
+            restore("os.arch", originalArch);
+        }
+    }
+
+    private static void restore(String name, String value) {
+        if (value == null) System.clearProperty(name);
+        else System.setProperty(name, value);
+    }
+
+    @Test
     void packagedVersionMatchesTheLibraryBuildRatherThanAConsumerManifest() throws Exception {
         String platform = NativeTerminal.platform();
         String extension = platform.startsWith("macos") ? "dylib" : "so";

@@ -40,10 +40,13 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public final class Mailbox {
 
-    /** One item in the hand-off queue. */
+    /**
+     * One item in the hand-off queue.
+     */
     public sealed interface Envelope permits AppMessage, Input, Close, Resume, Quit {}
 
-    /** An application message produced by routing, a command, or a source.
+    /**
+     * An application message produced by routing, a command, or a source.
      *
      * @param payload the application message value
      * @param origin the scope that produced it, or null for the root
@@ -56,31 +59,59 @@ public final class Mailbox {
         private static final java.util.function.BooleanSupplier ALWAYS = () -> true;
         private static final Runnable NOTHING = () -> {};
 
+        /**
+         * Creates a {@code AppMessage} value.
+         *
+         * @param payload the application message value
+         * @param origin the scope that produced it, or null for the root
+         * @param valid whether it may still be delivered when the owner takes it
+         * @param afterApply what to run once the transition it causes has committed, or a no-op
+         */
         public AppMessage {
             valid = valid == null ? ALWAYS : valid;
             afterApply = afterApply == null ? NOTHING : afterApply;
         }
 
+        /**
+         * Creates a {@code AppMessage} value.
+         *
+         * @param payload the application message value
+         */
         public AppMessage(Object payload) {
             this(payload, null, ALWAYS, NOTHING);
         }
 
+        /**
+         * Creates a {@code AppMessage} value.
+         *
+         * @param payload the application message value
+         * @param origin the scope that produced it, or null for the root
+         */
         public AppMessage(Object payload, ScopeManager.Origin origin) {
             this(payload, origin, ALWAYS, NOTHING);
         }
 
+        /**
+         * Creates a {@code AppMessage} value.
+         *
+         * @param payload the application message value
+         * @param origin the scope that produced it, or null for the root
+         * @param valid whether it may still be delivered when the owner takes it
+         */
         public AppMessage(Object payload, ScopeManager.Origin origin, java.util.function.BooleanSupplier valid) {
             this(payload, origin, valid, NOTHING);
         }
     }
 
-    /** Raw normalized input, routed later against the latest committed view.
+    /**
+     * Raw normalized input, routed later against the latest committed view.
      *
      * @param event the normalized input event
      */
     public record Input(InputEvent event) implements Envelope {}
 
-    /** A request to stop the runtime; generated inside the runtime or by a backend.
+    /**
+     * A request to stop the runtime; generated inside the runtime or by a backend.
      *
      * @param result how the run ended
      */
@@ -117,7 +148,9 @@ public final class Mailbox {
         }
     }
 
-    /** Largest millisecond timeout that still converts to nanoseconds without overflowing. */
+    /**
+     * Largest millisecond timeout that still converts to nanoseconds without overflowing.
+     */
     private static final long MAX_WAIT_MILLIS = Long.MAX_VALUE / 1_000_000L;
 
     private final Deque<Envelope> queue = new ArrayDeque<>();
@@ -125,7 +158,9 @@ public final class Mailbox {
     private final Condition notEmpty = lock.newCondition();
     private final Condition notFull = lock.newCondition();
     private final int capacity;
-    /** Whether each queued envelope, in queue order, was enqueued by the owner. */
+    /**
+     * Whether each queued envelope, in queue order, was enqueued by the owner.
+     */
     private final Deque<Boolean> ownerEnqueued = new ArrayDeque<>();
 
     private int ownerQueued;
@@ -142,15 +177,27 @@ public final class Mailbox {
      * race: the owner takes one envelope from a full mailbox, a blocked producer refills the slot
      * at once, and a delivery from the owner in the same turn would overflow. Producer back pressure
      * is unchanged, and an owner burst larger than {@code capacity} is still the fatal overflow.</p>
+     *
+     * @param capacity the maximum buffered item count
      */
     public Mailbox(int capacity) {
         this.capacity = Math.max(1, capacity);
     }
 
+    /**
+     * Returns the configured mailbox capacity.
+     *
+     * @return the configured mailbox capacity
+     */
     public int capacity() {
         return capacity;
     }
 
+    /**
+     * Returns the current number of queued envelopes.
+     *
+     * @return the current number of queued envelopes
+     */
     public int size() {
         lock.lock();
         try {
@@ -160,6 +207,11 @@ public final class Mailbox {
         }
     }
 
+    /**
+     * Tests whether mailbox admission has closed.
+     *
+     * @return {@code true} if mailbox admission has closed; otherwise {@code false}
+     */
     public boolean isClosed() {
         return closed;
     }
@@ -167,6 +219,12 @@ public final class Mailbox {
     /**
      * Enqueues from a non-owner thread, blocking at most {@code timeoutMillis} while the queue is
      * full. Returns false when the runtime closed or the wait was interrupted.
+     *
+     * @param envelope the mailbox envelope to admit
+     * @param timeoutMillis the maximum wait in milliseconds
+     * @return {@code true} if enqueues from a non-owner thread, blocking at most {@code timeoutMillis} while the queue is
+     * full; otherwise {@code false}
+     * @throws java.lang.InterruptedException if the waiting thread is interrupted
      */
     public boolean enqueue(Envelope envelope, long timeoutMillis) throws InterruptedException {
         long remaining = waitNanos(timeoutMillis);
@@ -193,6 +251,7 @@ public final class Mailbox {
     /**
      * Enqueues from the owner thread without waiting.
      *
+     * @param envelope the mailbox envelope to admit
      * @throws IllegalStateException when the queue is closed or already holds {@code capacity}
      *     owner-enqueued envelopes; the runtime treats this as a fatal overflow instead of dropping the message or recursing into {@code update}
      */
@@ -211,7 +270,9 @@ public final class Mailbox {
         }
     }
 
-    /** Notifies the owner without blocking a signal thread on the mailbox lock. */
+    /**
+     * Notifies the owner without blocking a signal thread on the mailbox lock.
+     */
     public void wake() {
         if (lock.tryLock()) {
             try {
@@ -226,7 +287,9 @@ public final class Mailbox {
     /**
      * Waits up to {@code timeoutMillis} for the next envelope.
      *
+     * @param timeoutMillis the maximum wait in milliseconds
      * @return the envelope, or null on timeout or when the mailbox is closed
+     * @throws java.lang.InterruptedException if the waiting thread is interrupted
      */
     public Envelope poll(long timeoutMillis) throws InterruptedException {
         long remaining = waitNanos(timeoutMillis);
@@ -251,7 +314,9 @@ public final class Mailbox {
         }
     }
 
-    /** Discards undeliverable envelopes and wakes every blocked producer and consumer. Idempotent. */
+    /**
+     * Discards undeliverable envelopes and wakes every blocked producer and consumer. Idempotent.
+     */
     public void close() {
         lock.lock();
         try {
@@ -266,7 +331,9 @@ public final class Mailbox {
         }
     }
 
-    /** Nanoseconds to wait, clamped so a huge millisecond value cannot overflow the conversion. */
+    /**
+     * Nanoseconds to wait, clamped so a huge millisecond value cannot overflow the conversion.
+     */
     private static long waitNanos(long timeoutMillis) {
         return TimeUnit.MILLISECONDS.toNanos(Math.max(0L, Math.min(timeoutMillis, MAX_WAIT_MILLIS)));
     }

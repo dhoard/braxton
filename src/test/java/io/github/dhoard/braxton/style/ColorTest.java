@@ -26,7 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-/** Colour parsing accepts only the documented {@code #RRGGBB} form. */
+/**
+ * Color parsing accepts only the documented {@code #RRGGBB} form.
+ */
 class ColorTest {
 
     @Test
@@ -56,7 +58,7 @@ class ColorTest {
 
     @Test
     void parseOrFallsBackForInvalidInput() {
-        assertThat(Color.parseOr("not-a-colour", Color.BLACK)).isEqualTo(Color.BLACK);
+        assertThat(Color.parseOr("not-a-color", Color.BLACK)).isEqualTo(Color.BLACK);
         assertThat(Color.parseOr("#123456", Color.BLACK)).isEqualTo(new Color(0x12, 0x34, 0x56));
     }
 }

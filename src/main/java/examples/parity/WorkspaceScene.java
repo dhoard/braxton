@@ -1,0 +1,751 @@
+/*
+ * Copyright (c) 2026-present Douglas Hoard
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package examples.parity;
+
+import static examples.parity.WorkspaceDemo.*;
+
+import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.input.Binding;
+import io.github.dhoard.braxton.input.KeyMap;
+import io.github.dhoard.braxton.layout.Border;
+import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.mvu.Component;
+import io.github.dhoard.braxton.mvu.ComponentId;
+import io.github.dhoard.braxton.mvu.ComponentTree;
+import io.github.dhoard.braxton.mvu.InitContext;
+import io.github.dhoard.braxton.mvu.ModelLens;
+import io.github.dhoard.braxton.mvu.Mount;
+import io.github.dhoard.braxton.mvu.Never;
+import io.github.dhoard.braxton.mvu.OutputRoute;
+import io.github.dhoard.braxton.mvu.Update;
+import io.github.dhoard.braxton.mvu.ViewContext;
+import io.github.dhoard.braxton.style.Style;
+import io.github.dhoard.braxton.style.StyledText;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.AnimatedProgress;
+import io.github.dhoard.braxton.widget.Countdown;
+import io.github.dhoard.braxton.widget.DataTable;
+import io.github.dhoard.braxton.widget.DataTableConfig;
+import io.github.dhoard.braxton.widget.DataTableContent;
+import io.github.dhoard.braxton.widget.DataTableModel;
+import io.github.dhoard.braxton.widget.DataTableMsg;
+import io.github.dhoard.braxton.widget.Elements;
+import io.github.dhoard.braxton.widget.FilePicker;
+import io.github.dhoard.braxton.widget.FilePickerModel;
+import io.github.dhoard.braxton.widget.Help;
+import io.github.dhoard.braxton.widget.Markdown;
+import io.github.dhoard.braxton.widget.MarkdownConfig;
+import io.github.dhoard.braxton.widget.Tabs;
+import io.github.dhoard.braxton.widget.TextInput;
+import io.github.dhoard.braxton.widget.TextViewport;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
+
+/**
+ * The composed workspace: six mounted widgets, two status rows and one dialog.
+ */
+public final class WorkspaceScene implements Component<Model, Msg, Never> {
+
+    private final Path fixture;
+
+    private final KeyMap<Msg> keys = keys();
+
+    private final Tabs bar = new Tabs(barConfig());
+
+    private final FilePicker files;
+
+    private final TextInput find = new TextInput(findConfig());
+
+    private final TextInput note = new TextInput(noteConfig());
+
+    private final AnimatedProgress progress = new AnimatedProgress(progressConfig());
+
+    private final Countdown timer = new Countdown(timerConfig());
+
+    private final Mount<Model, Msg, Never, Tabs.Model, Tabs.Msg, Tabs.Output> barMount = Mount.of(
+            ComponentId.of("bar"),
+            bar,
+            ModelLens.of(Model::bar, Model::withBar),
+            Msg.Bar::new,
+            OutputRoute.toMessage(Msg.BarOutput::new));
+
+    private final Mount<Model, Msg, Never, FilePickerModel, FilePicker.Msg, FilePicker.Output> filesMount;
+
+    private final Mount<Model, Msg, Never, TextInput.Model, TextInput.Msg, TextInput.Output> findMount = Mount.of(
+            ComponentId.of("find"),
+            find,
+            ModelLens.of(Model::find, Model::withFind),
+            Msg.Find::new,
+            OutputRoute.toMessage(Msg.FindOutput::new));
+
+    private final Mount<Model, Msg, Never, TextInput.Model, TextInput.Msg, TextInput.Output> noteMount = Mount.of(
+            ComponentId.of("note"),
+            note,
+            ModelLens.of(Model::note, Model::withNote),
+            Msg.Note::new,
+            OutputRoute.toMessage(Msg.NoteOutput::new));
+
+    private final Mount<Model, Msg, Never, AnimatedProgress.Model, AnimatedProgress.Msg, Never> progressMount =
+            Mount.of(
+                    ComponentId.of("progress"),
+                    progress,
+                    ModelLens.of(Model::progress, Model::withProgress),
+                    Msg.Progress::new,
+                    output -> {
+                        throw new IllegalStateException("the bar reports no outputs");
+                    });
+
+    private final Mount<Model, Msg, Never, Countdown.Model, Countdown.Msg, Countdown.Output> timerMount = Mount.of(
+            ComponentId.of("timer"),
+            timer,
+            ModelLens.of(Model::timer, Model::withTimer),
+            Msg.Timer::new,
+            OutputRoute.toMessage(output -> new Msg.TimedOut()));
+
+    /**
+     * A workspace over one owned fixture directory.
+     *
+     * @param fixture the directory the picker browses; required
+     */
+    public WorkspaceScene(Path fixture) {
+        this.fixture = Objects.requireNonNull(fixture, "fixture");
+        this.files = new FilePicker(filesConfig(fixture));
+        this.filesMount = Mount.of(
+                ComponentId.of("files"),
+                files,
+                ModelLens.of(Model::files, Model::withFiles),
+                Msg.Files::new,
+                OutputRoute.toMessage(Msg.FileOutput::new));
+    }
+
+    /**
+     * The directory this workspace browses.
+     *
+     * @return the directory
+     */
+    public Path fixture() {
+        return fixture;
+    }
+
+    @Override
+    public Update<Model, Msg, Never> init(InitContext context) {
+        int rows = context.viewport().rows() > 0 ? context.viewport().rows() : 24;
+        int columns = context.viewport().cols() > 0 ? context.viewport().cols() : 80;
+        var started = filesMount.initialize(context);
+        Model empty = new Model(
+                barMount.initialize(context).model().withTabs(pages()),
+                started.model(),
+                TextViewport.Model.of(TextViewport.Content.empty()),
+                find.validated(TextInput.Model.empty()),
+                tasksMount(0, 0).initialize(context).model(),
+                note.validated(TextInput.Model.empty()).withFocus(false),
+                progressMount.initialize(context).model(),
+                timerMount.initialize(context).model(),
+                Markdown.of().document(""),
+                "",
+                Pane.FILES,
+                false,
+                0,
+                0,
+                0,
+                0,
+                rows,
+                columns,
+                "started");
+        // The picker is told its listing first, then the pager and the table their geometry:
+        // each mounted component owns its own state, and the scene is what knows the split.
+        Model sized = target(focused(published(geometry(empty, rows, columns))));
+        return new Update<>(sized, started.command(), started.outputs());
+    }
+
+    @Override
+    public Update<Model, Msg, Never> update(Model model, Msg message) {
+        return switch (message) {
+            case Msg.Bar value -> barMount.update(model, value.value());
+            case Msg.BarOutput value -> Update.next(application(model, value.value()));
+            case Msg.Files value -> filesMount.update(model, value.value());
+            case Msg.FileOutput value -> reported(model, value.value());
+            case Msg.Pager value -> pagerMount(model).update(model, value.value());
+            case Msg.Find value -> typed(model, value.value());
+            case Msg.FindOutput value -> found(model, value.value());
+            case Msg.Table value -> tasksMount(0, 0).update(model, value.value());
+            case Msg.TableOutput value -> changed(model, value.value());
+            case Msg.Note value -> typedNote(model, value.value());
+            case Msg.NoteOutput value -> noted(model, value.value());
+            case Msg.Progress value -> progressMount.update(model, value.value());
+            case Msg.Timer value -> timerMount.update(model, value.value());
+            case Msg.TimedOut timeout ->
+                Update.next(model.withCounts(model.synced(), model.notes(), model.refused(), model.timeouts() + 1)
+                        .withLast("timer-timeout"));
+            case Msg.Resized resized ->
+                Update.next(published(geometry(model, resized.rows(), resized.columns()))
+                        .withLast("resized"));
+            case Msg.FocusNext focus ->
+                Update.next(focused(nextPane(model, focus.delta())).withLast("focus"));
+            case Msg.ShowTab show -> shown(model, show.id());
+            case Msg.Sync sync -> Update.next(model.withDialog(true).withLast("sync-ask"));
+            case Msg.ConfirmSync confirm -> Update.next(published(confirmed(model)));
+            case Msg.CancelSync cancel -> Update.next(model.withDialog(false).withLast("sync-canceled"));
+            case Msg.ToggleTimer toggle ->
+                Update.next(timerMount
+                        .update(model, new Countdown.Msg.Toggle())
+                        .model()
+                        .withLast("timer"));
+            case Msg.AddTask add -> added(model);
+            case Msg.RemoveTask remove -> removed(model);
+            case Msg.Quit quit -> Update.next(model, Command.quit());
+        };
+    }
+
+    /**
+     * One resize source for the whole scene.
+     *
+     * <p>The scene owns the split between its status rows, its pages and its help, so it is the
+     * only thing that can tell the pager and the table what they were allocated.</p>
+     */
+    @Override
+    public Subscription<Msg> subscriptions(Model model) {
+        return Subscription.batch(
+                Subscription.resize(SIZE, size -> new Msg.Resized(size.rows(), size.cols())),
+                filesMount.subscriptions(model),
+                findMount.subscriptions(model),
+                noteMount.subscriptions(model),
+                progressMount.subscriptions(model),
+                timerMount.subscriptions(model),
+                barMount.subscriptions(model),
+                pagerMount(model).subscriptions(model),
+                tasksMount(0, 0).subscriptions(model));
+    }
+
+    @Override
+    public ComponentTree children(Model model) {
+        return ComponentTree.of(
+                barMount.tree(model),
+                filesMount.tree(model),
+                findMount.tree(model),
+                noteMount.tree(model),
+                progressMount.tree(model),
+                timerMount.tree(model),
+                pagerMount(model).tree(model),
+                tasksMount(0, 0).tree(model));
+    }
+
+    @Override
+    public Element<Msg> view(Model model, ViewContext context) {
+        return scene(model, context);
+    }
+
+    /**
+     * The gestures this model answers: the dialog's own pair while it is open, the scene's
+     * otherwise.
+     *
+     * <p>A dialog is a route of its own - the page under it is unreachable until it is answered -
+     * so its two gestures are the ones that apply while it is up, and they are matched before
+     * the scene's own map rather than after it.</p>
+     */
+    @Override
+    public List<Binding<Msg>> bindings(Model model) {
+        if (!model.dialog()) {
+            return keys.bindings();
+        }
+        List<Binding<Msg>> routes = new ArrayList<>(DIALOG_BINDINGS);
+        routes.addAll(keys.bindings());
+        return List.copyOf(routes);
+    }
+
+    /**
+     * The chrome, the page, the help lines and the dialog when it is open.
+     */
+    private Element<Msg> scene(Model model, ViewContext context) {
+        int rows = context.viewport().rows();
+        int cols = context.viewport().cols();
+        int body = Math.max(0, rows - CHROME_ROWS);
+        List<Element<Msg>> sections = new ArrayList<>(CHROME_ROWS + 2);
+        sections.add(Elements.fixed(1, Elements.text(status(model), STATUS)));
+        sections.add(Elements.fixed(1, Elements.text(search(model), STATUS)));
+        sections.add(Elements.fixed(1, Elements.text(counts(model), STATUS)));
+        sections.add(Elements.fixed(1, Elements.text(log(model), STATUS)));
+        sections.add(Elements.fixed(1, barMount.view(model, context)));
+        sections.add(Elements.fixed(body, page(model, body, cols)));
+        sections.add(Elements.fixed(1, Elements.text(Help.render(keys, false, cols))));
+        sections.add(Elements.fixed(1, Elements.text(paneHelp(model, cols))));
+        Element<Msg> base = Elements.column(sections);
+        if (!model.dialog()) {
+            return base;
+        }
+        // The dialog is a route of its own: the page under it is unreachable until it is answered.
+        return Elements.stack(base, Elements.modal(dialog()));
+    }
+
+    // ── the pages ───────────────────────────────────────────────────────
+
+    private Element<Msg> page(Model model, int rows, int cols) {
+        return PREVIEW_PAGE.equals(model.page()) ? previewPage(model, rows, cols) : tasksPage(model, rows, cols);
+    }
+
+    private Element<Msg> previewPage(Model model, int rows, int cols) {
+        int pagerRows = Math.max(0, rows - 1);
+        int content = Math.max(1, cols - FILES_WIDTH - 1);
+        Element<Msg> right = Elements.column(
+                Elements.fixed(1, findMount.view(model, new ViewContext(new Viewport(1, content)))),
+                Elements.fixed(
+                        pagerRows, pagerMount(model).view(model, new ViewContext(new Viewport(pagerRows, content)))));
+        Element<Msg> left = Elements.column(
+                Elements.fixed(1, Elements.text("Files", TITLE)),
+                Elements.fixed(
+                        Math.max(0, rows - 1),
+                        filesMount.view(model, new ViewContext(new Viewport(Math.max(0, rows - 1), FILES_WIDTH)))));
+        return Elements.row(
+                Elements.fixed(FILES_WIDTH, left),
+                Elements.fixed(1, Elements.text(StyledText.plain("\u2502"))),
+                Elements.grow(right));
+    }
+
+    private Element<Msg> tasksPage(Model model, int rows, int cols) {
+        int tableRows = Math.max(1, rows - 1);
+        int tableCols = Math.max(1, cols - NOTE_WIDTH - 1);
+        Element<Msg> table =
+                tasksMount(tableRows, tableCols).view(model, new ViewContext(new Viewport(tableRows, tableCols)));
+        List<Element<Msg>> noteRows = new ArrayList<>(5);
+        noteRows.add(Elements.fixed(1, Elements.text("Review", TITLE)));
+        noteRows.add(Elements.fixed(1, noteMount.view(model, new ViewContext(new Viewport(1, NOTE_WIDTH)))));
+        noteRows.add(Elements.fixed(1, Elements.text("progress " + progressText(model))));
+        noteRows.add(Elements.fixed(1, Elements.text("review " + timerText(model))));
+        return Elements.row(
+                Elements.grow(Elements.column(Elements.fixed(1, Elements.text("Tasks", TITLE)), table)),
+                Elements.fixed(1, Elements.text(StyledText.plain("\u2502"))),
+                Elements.fixed(NOTE_WIDTH, Elements.column(noteRows)));
+    }
+
+    private static Element<Msg> dialog() {
+        return Elements.frame(
+                Border.ROUNDED,
+                StyledText.plain("Sync"),
+                Style.NONE,
+                Elements.column(
+                        Elements.text("Apply the workspace changes?"),
+                        Elements.spacer(1),
+                        Elements.text("enter confirm \u2022 esc cancel", TITLE)));
+    }
+
+    // ── the reductions ──────────────────────────────────────────────────
+
+    /**
+     * A page change: the keyboard moves to the new page's first pane, never a hidden one.
+     */
+    private Update<Model, Msg, Never> shown(Model model, String id) {
+        Update<Model, Msg, Never> applied = barMount.update(model, new Tabs.Msg.Activate(id));
+        return new Update<>(
+                application(
+                        applied.model(),
+                        new Tabs.Output.Activated(applied.model().page())),
+                applied.command(),
+                applied.outputs());
+    }
+
+    /**
+     * The bar decided which page is shown; the scene follows it with the keyboard.
+     */
+    private Model application(Model model, Tabs.Output output) {
+        if (!(output instanceof Tabs.Output.Activated activated)) {
+            return model.withLast("bar");
+        }
+        Pane pane = model.pane().on(activated.id()) ? model.pane() : Pane.first(activated.id());
+        return focused(model.withPane(pane).withLast("tab-" + activated.id()));
+    }
+
+    /**
+     * One picker output: a chosen entry becomes the preview's source.
+     */
+    private Update<Model, Msg, Never> reported(Model model, FilePicker.Output output) {
+        return switch (output) {
+            case FilePicker.Output.Chosen chosen -> {
+                String name = chosen.path().getFileName().toString();
+                if (!SceneCatalog.DOCUMENTS.containsKey(name)) {
+                    // The fixture is the only source: a file the demo was not given is reported
+                    // rather than read, so the workspace never opens something it did not own.
+                    yield Update.next(
+                            model.withCounts(model.synced(), model.notes(), model.refused() + 1, model.timeouts())
+                                    .withLast("refused-unknown-" + name));
+                }
+                Model opened = published(model.withDocument(
+                                document(name, Math.max(1, model.columns() - FILES_WIDTH - 1)), name)
+                        .withPane(Pane.PREVIEW));
+                yield Update.next(focused(opened).withLast("chosen-" + name));
+            }
+            case FilePicker.Output.Rejected rejected ->
+                Update.next(model.withCounts(model.synced(), model.notes(), model.refused() + 1, model.timeouts())
+                        .withLast("refused-" + rejected.path().getFileName() + "-"
+                                + rejected.reason().name().toLowerCase(Locale.ROOT)));
+            case FilePicker.Output.Cancelled canceled -> Update.next(model.withLast("picker-canceled"));
+        };
+    }
+
+    /**
+     * One find-field message: the query republishes the ranges it matches.
+     */
+    private Update<Model, Msg, Never> typed(Model model, TextInput.Msg message) {
+        Update<Model, Msg, Never> applied = findMount.update(model, message);
+        return stamped(applied, searched(applied.model(), true).withLast("typed"));
+    }
+
+    /**
+     * One child reduction with the scene's own log line on its model.
+     *
+     * <p>The child's command and outputs are kept: a mounted widget reports its semantic output
+     * through the mount's dispatch, and dropping the command here would silently lose it.</p>
+     */
+    private static Update<Model, Msg, Never> stamped(Update<Model, Msg, Never> applied, Model model) {
+        return new Update<>(model, applied.command(), applied.outputs());
+    }
+
+    private Update<Model, Msg, Never> found(Model model, TextInput.Output output) {
+        return Update.next(model.withLast("find-" + output(output)));
+    }
+
+    /**
+     * One note-field message: the field validates its own draft on every edit.
+     */
+    private Update<Model, Msg, Never> typedNote(Model model, TextInput.Msg message) {
+        Update<Model, Msg, Never> applied = noteMount.update(model, message);
+        return stamped(applied, applied.model().withLast("note-typed"));
+    }
+
+    private Update<Model, Msg, Never> noted(Model model, TextInput.Output output) {
+        return switch (output) {
+            case TextInput.Output.Submit submit -> {
+                // One reduction clears the field; the answer it publishes is the field's own.
+                Update<Model, Msg, Never> cleared = noteMount.update(model, new TextInput.Msg.Clear());
+                yield stamped(
+                        cleared,
+                        cleared.model()
+                                .withCounts(model.synced(), model.notes() + 1, model.refused(), model.timeouts())
+                                .withLast("note-submitted"));
+            }
+            case TextInput.Output.Rejected rejected ->
+                Update.next(model.withCounts(model.synced(), model.notes(), model.refused() + 1, model.timeouts())
+                        .withLast("note-refused"));
+            default -> Update.next(model.withLast("note-" + output(output)));
+        };
+    }
+
+    /**
+     * One table output: the chosen task toggles, which moves the progress target.
+     */
+    private Update<Model, Msg, Never> changed(Model model, DataTable.Output output) {
+        if (!(output instanceof DataTable.Output.Chosen chosen)) {
+            return Update.next(model.withLast("table-canceled"));
+        }
+        Optional<DataTable.Row> selected = model.tasks().content().rows().stream()
+                .filter(row -> row.id().equals(chosen.rowId()))
+                .findFirst();
+        if (selected.isEmpty()) {
+            return Update.next(model.withLast("table-empty"));
+        }
+        DataTable.Row row = selected.get();
+        String state = DONE.equals(row.cell(1).plainText()) ? OPEN : DONE;
+        DataTable.Row toggled = DataTable.Row.of(row.id(), row.cell(0).plainText(), state);
+        return taskUpdate(model, new DataTableMsg.Replace(toggled), "task-" + row.id() + "-" + state);
+    }
+
+    private Update<Model, Msg, Never> added(Model model) {
+        DataTableContent content = model.tasks().content();
+        String id = "t" + (content.rowCount() + 1);
+        DataTable.Row row = DataTable.Row.of(id, "task " + (content.rowCount() + 1), OPEN);
+        return taskUpdate(model, new DataTableMsg.Insert(content.rowCount(), row), "task-added-" + id);
+    }
+
+    private Update<Model, Msg, Never> removed(Model model) {
+        return model.tasks()
+                .selectedRow()
+                .map(row -> taskUpdate(model, new DataTableMsg.Remove(row.id()), "task-removed-" + row.id()))
+                .orElseGet(() -> Update.next(model.withLast("table-empty")));
+    }
+
+    /**
+     * One table change, followed by the progress target it implies.
+     *
+     * <p>This is the composed step the catalog cannot show: the table's content is the bar's
+     * input, and neither component knows about the other.</p>
+     */
+    private Update<Model, Msg, Never> taskUpdate(Model model, DataTableMsg message, String last) {
+        Update<Model, Msg, Never> applied = tasksMount(0, 0).update(model, message);
+        Model settled = target(applied.model());
+        return new Update<>(settled.withLast(last), applied.command(), applied.outputs());
+    }
+
+    /**
+     * The bar's settled target is the completed fraction of the table.
+     */
+    private Model target(Model model) {
+        DataTableContent content = model.tasks().content();
+        double fraction = content.rowCount() == 0 ? 0.0 : (double) complete(content) / content.rowCount();
+        return progressMount
+                .update(model, new AnimatedProgress.Msg.Set(fraction))
+                .model();
+    }
+
+    /**
+     * How many task rows are complete.
+     */
+    private static int complete(DataTableContent content) {
+        int count = 0;
+        for (DataTable.Row row : content.rows()) {
+            if (DONE.equals(row.cell(1).plainText())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * A confirmation: the workspace is applied, so the projection and the bar both move.
+     */
+    private Model confirmed(Model model) {
+        Model landed = progressMount
+                .update(model.withDialog(false), new AnimatedProgress.Msg.Set(1.0))
+                .model();
+        return published(landed.withCounts(model.synced() + 1, model.notes(), model.refused(), model.timeouts()))
+                .withLast("sync-confirmed");
+    }
+
+    // ── the projection ──────────────────────────────────────────────────
+
+    /**
+     * Projects the chosen source at the pager's width and publishes it.
+     */
+    private Model published(Model model) {
+        int width = Math.max(1, model.columns() - FILES_WIDTH - 1);
+        Markdown.Document document = document(model.source(), width);
+        Model projected = model.withDocument(document, model.source());
+        Model published = pagerMount(projected)
+                .update(projected, new TextViewport.Msg.ContentChanged(document.content()))
+                .model();
+        return searched(published, false);
+    }
+
+    /**
+     * Publishes the ranges the current query matches in the projection on screen.
+     *
+     * <p>Publishing ranges clears the active one, because an index into the previous list names
+     * nothing in this one. {@code select} is the scene's decision: a keystroke selects the first
+     * match, while a re-projection selects nothing, so choosing a file or resizing never moves a
+     * reader to a match they were not looking at.</p>
+     */
+    private Model searched(Model model, boolean select) {
+        List<TextViewport.Highlight> found =
+                matches(model.document().lines(), model.find().text());
+        Model withMatches = pagerMount(model)
+                .update(model, new TextViewport.Msg.Highlights(found))
+                .model();
+        if (!select || found.isEmpty()) {
+            return withMatches;
+        }
+        return pagerMount(withMatches)
+                .update(withMatches, new TextViewport.Msg.NextMatch())
+                .model();
+    }
+
+    /**
+     * The fixture source one name stands for, projected at one width.
+     */
+    private static Markdown.Document document(String name, int width) {
+        String source = SceneCatalog.DOCUMENTS.getOrDefault(name, "");
+        return Markdown.of(MarkdownConfig.defaults().withWidth(Math.max(1, width)))
+                .document(source);
+    }
+
+    /**
+     * The geometry the scene's own layout gives its mounted pager, table and fields.
+     */
+    private Model geometry(Model model, int rows, int columns) {
+        int body = Math.max(1, rows - CHROME_ROWS);
+        int content = Math.max(1, columns - FILES_WIDTH - 1);
+        Model sized = model.withGeometry(rows, columns);
+        Model pager = pagerMount(sized)
+                .update(sized, new TextViewport.Msg.Resized(Math.max(0, body - 1), content))
+                .model();
+        Model table = tasksMount(body, Math.max(1, columns - NOTE_WIDTH - 1))
+                .update(pager, new DataTableMsg.Resized(body, Math.max(1, columns - NOTE_WIDTH - 1)))
+                .model();
+        return table;
+    }
+
+    /**
+     * Every mounted widget's focus, from the one pane the scene says the keyboard is in.
+     */
+    private Model focused(Model model) {
+        return model.withBar(model.bar().withFocus(model.pane() == Pane.BAR))
+                .withFiles(model.files().withFocus(model.pane() == Pane.FILES))
+                .withPreview(model.preview().withFocus(model.pane() == Pane.PREVIEW))
+                .withFind(model.find().withFocus(model.pane() == Pane.FIND))
+                .withTasks(model.tasks().withFocus(model.pane() == Pane.TABLE))
+                .withNote(model.note().withFocus(model.pane() == Pane.NOTE));
+    }
+
+    /**
+     * The next painted pane, wrapping inside the shown page.
+     *
+     * <p>The bar comes last: it is where a reader goes on the way out of a page, not the first
+     * thing the keyboard lands on, and putting it last also means the content panes are one
+     * gesture apart.</p>
+     */
+    private static Model nextPane(Model model, int delta) {
+        List<Pane> panes = new ArrayList<>(4);
+        for (Pane pane : Pane.values()) {
+            if (pane != Pane.BAR && pane.on(model.page())) {
+                panes.add(pane);
+            }
+        }
+        panes.add(Pane.BAR);
+        int at = panes.indexOf(model.pane());
+        int next = Math.floorMod(at < 0 ? 0 : at + delta, panes.size());
+        return model.withPane(panes.get(next));
+    }
+
+    // ── the mounts with geometry ────────────────────────────────────────
+
+    private Mount<Model, Msg, Never, TextViewport.Model, TextViewport.Msg, Never> pagerMount(Model model) {
+        int rows = Math.max(1, model.rows() - CHROME_ROWS - 1);
+        int columns = Math.max(1, model.columns() - FILES_WIDTH - 1);
+        return Mount.of(
+                ComponentId.of("preview"),
+                new TextViewport(pagerConfig(rows, columns)),
+                ModelLens.of(Model::preview, Model::withPreview),
+                Msg.Pager::new,
+                output -> {
+                    throw new IllegalStateException("the pager reports no outputs");
+                });
+    }
+
+    private Mount<Model, Msg, Never, DataTableModel, DataTableMsg, DataTable.Output> tasksMount(int rows, int columns) {
+        int height = rows > 0 ? rows : Math.max(1, 24 - CHROME_ROWS);
+        int width = columns > 0 ? columns : 46;
+        return Mount.of(
+                ComponentId.of("tasks"),
+                new DataTable(DataTableConfig.defaults()
+                        .withContent(taskContent())
+                        .withHeight(height)
+                        .withWidth(width)),
+                ModelLens.of(Model::tasks, Model::withTasks),
+                Msg.Table::new,
+                OutputRoute.toMessage(Msg.TableOutput::new));
+    }
+
+    /**
+     * The pager's definition for one allocation: wrapping, no gutter, following off.
+     */
+    private static TextViewport.Config pagerConfig(int rows, int columns) {
+        return TextViewport.Config.defaults()
+                .withMode(TextViewport.Mode.WRAP)
+                .withFollowEnd(false)
+                .withRows(rows)
+                .withColumns(columns);
+    }
+
+    // ── the status rows ─────────────────────────────────────────────────
+
+    /**
+     * What the workspace is showing, in the terms the verifier asserts.
+     */
+    private static String status(Model model) {
+        return "page=" + model.page()
+                + " focus=" + model.pane().name().toLowerCase(Locale.ROOT)
+                + " source=" + (model.source().isEmpty() ? "-" : model.source())
+                + " lines=" + model.document().lineCount()
+                + " limits=" + (model.document().failed() ? "exceeded" : "none");
+    }
+
+    /**
+     * What the query found in the projection on screen.
+     */
+    private static String search(Model model) {
+        TextViewport.Model pager = model.preview();
+        return "query="
+                + (model.find().text().isEmpty() ? "-" : model.find().text())
+                + " matches=" + pager.highlights().size()
+                + " active=" + (pager.active() + 1)
+                + " follow=" + (pager.followEnd() ? "on" : "off");
+    }
+
+    /**
+     * What the workspace changed, and what it is waiting for.
+     */
+    private static String counts(Model model) {
+        return "tasks=" + model.tasks().content().rowCount()
+                + " done=" + complete(model.tasks().content())
+                + " target="
+                + String.format(Locale.ROOT, "%.2f", model.progress().target())
+                + " timer=" + timerText(model)
+                + " run=" + (model.timer().running() ? "on" : "off")
+                + " dialog=" + (model.dialog() ? "open" : "closed");
+    }
+
+    /**
+     * What the workspace has done, and what a test asserts about it.
+     */
+    private static String log(Model model) {
+        return "synced=" + model.synced()
+                + " notes=" + model.notes()
+                + " refused=" + model.refused()
+                + " timeouts=" + model.timeouts()
+                + " last=" + model.last();
+    }
+
+    private static String progressText(Model model) {
+        return AnimatedProgress.render(model.progress(), progressConfig()).plainText();
+    }
+
+    private static String timerText(Model model) {
+        return Countdown.render(model.timer(), timerConfig()).plainText();
+    }
+
+    /**
+     * The focused pane's own actions, or the scene's when the scene owns the keyboard.
+     */
+    private String paneHelp(Model model, int cols) {
+        KeyMap<?> map = switch (model.pane()) {
+            case TABLE -> DataTable.keys(model.tasks());
+            case PREVIEW -> TextViewport.keys(model.preview(), pagerConfig(1, 1));
+            case FILES -> FilePicker.keys(model.files());
+            default -> null;
+        };
+        return map == null ? "" : Help.render(map, false, cols).plainText();
+    }
+
+    private static String output(TextInput.Output output) {
+        return switch (output) {
+            case TextInput.Output.Submit submit -> "submitted";
+            case TextInput.Output.Rejected rejected -> "rejected";
+            case TextInput.Output.ValidationChanged changed -> "validated";
+            case TextInput.Output.SuggestionsRequested requested -> "suggestions";
+            case TextInput.Output.Copy copy -> "copy";
+            case TextInput.Output.PasteRequest paste -> "paste";
+        };
+    }
+}

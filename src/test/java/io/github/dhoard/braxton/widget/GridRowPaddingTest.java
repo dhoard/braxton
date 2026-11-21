@@ -42,7 +42,9 @@ import org.junit.jupiter.api.Test;
  */
 class GridRowPaddingTest {
 
-    /** Pieces whose seam with a previous cluster is the whole point of the row charge. */
+    /**
+     * Pieces whose seam with a previous cluster is the whole point of the row charge.
+     */
     private static final String[] PIECES = {
         "a",
         "bc",
@@ -67,7 +69,9 @@ class GridRowPaddingTest {
         "\uDB40\uDC01"
     };
 
-    /** The pre-change charge: the columns the whole row gains when {@code cell} is appended. */
+    /**
+     * The pre-change charge: the columns the whole row gains when {@code cell} is appended.
+     */
     private static int wholeRowPad(String row, String cell, int width) {
         int before = TextMeasure.columns(row);
         return Math.max(0, width - (TextMeasure.columns(row + cell) - before));

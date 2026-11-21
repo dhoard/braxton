@@ -38,7 +38,9 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 
-/** Application projection is measured separately from indexed ScrollView frame work. */
+/**
+ * Application projection is measured separately from indexed ScrollView frame work.
+ */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)

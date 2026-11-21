@@ -32,8 +32,7 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
@@ -95,7 +94,7 @@ import java.util.function.UnaryOperator;
  * no running countdown and are ignored, so a duplicate tick, a queued emission or a paused
  * countdown's leftover reading can never report a second timeout. Every gesture the application
  * sends - and so every transition between runs - increments {@link Model#epoch()}, which is what
- * lets a reading that belongs to an older run be recognised and dropped; the expiry itself keeps
+ * lets a reading that belongs to an older run be recognized and dropped; the expiry itself keeps
  * the epoch of the run it ended, because that run is over rather than replaced.</p>
  *
  * <h2>Formatting</h2>
@@ -126,7 +125,9 @@ import java.util.function.UnaryOperator;
  */
 public final class Countdown implements Component<Countdown.Model, Countdown.Msg, Countdown.Output> {
 
-    /** How often a running countdown is asked to repaint unless a definition says otherwise. */
+    /**
+     * How often a running countdown is asked to repaint unless a definition says otherwise.
+     */
     public static final Duration DEFAULT_TICK_PERIOD = Duration.ofMillis(100);
 
     /**
@@ -137,17 +138,23 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
      */
     public static final long UNSET_DEADLINE = Long.MIN_VALUE;
 
-    /** The default formatter: whole seconds as {@code mm:ss}, or {@code h:mm:ss} past an hour. */
+    /**
+     * The default formatter: whole seconds as {@code mm:ss}, or {@code h:mm:ss} past an hour.
+     */
     public static final Formatter CLOCK = Countdown::clock;
 
-    /** The scoped identity of a running countdown's tick source. */
+    /**
+     * The scoped identity of a running countdown's tick source.
+     */
     private static final SubscriptionId TICK = SubscriptionId.of("tick");
 
     private static final long SECONDS_PER_HOUR = 3_600L;
 
     private static final long SECONDS_PER_MINUTE = 60L;
 
-    /** How the remaining time of a countdown is written. */
+    /**
+     * How the remaining time of a countdown is written.
+     */
     @FunctionalInterface
     public interface Formatter {
 
@@ -172,7 +179,7 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
      * allowed because a countdown of no length expires once as soon as it is started. A missing
      * tick period, formatter or style is the default one; a tick period that is zero, negative or
      * too large to express in nanoseconds is rejected, because it would be a schedule the runtime
-     * cannot honour.</p>
+     * cannot honor.</p>
      *
      * @param duration how long the countdown lasts; not negative
      * @param tickPeriod how often a running countdown repaints; null is
@@ -182,7 +189,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
      */
     public record Config(Duration duration, Duration tickPeriod, Formatter formatter, Style style) {
 
-        /** Rejects an unusable duration or tick period and substitutes the defaults. */
+        /**
+         * Rejects an unusable duration or tick period and substitutes the defaults.
+         */
         public Config {
             duration = checkedDuration(duration);
             tickPeriod = checkedTickPeriod(tickPeriod);
@@ -267,7 +276,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
      */
     public record Model(boolean running, long epoch, long remainingNanos, long deadlineNanos, long nowNanos) {
 
-        /** Clamps a negative remaining time to zero, so a countdown can never run backwards. */
+        /**
+         * Clamps a negative remaining time to zero, so a countdown can never run backwards.
+         */
         public Model {
             remainingNanos = Math.max(0L, remainingNanos);
         }
@@ -316,7 +327,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
         }
     }
 
-    /** One lifecycle gesture or one runtime time reading. */
+    /**
+     * One lifecycle gesture or one runtime time reading.
+     */
     public sealed interface Msg {
 
         /**
@@ -350,7 +363,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
          */
         record Toggle() implements Msg {}
 
-        /** Stops the countdown and puts the configured duration back. */
+        /**
+         * Stops the countdown and puts the configured duration back.
+         */
         record Reset() implements Msg {}
 
         /**
@@ -366,7 +381,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
         record Reading(long epoch, long nowNanos) implements Msg {}
     }
 
-    /** What a countdown reports to its owner. */
+    /**
+     * What a countdown reports to its owner.
+     */
     public sealed interface Output {
 
         /**
@@ -378,7 +395,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
         record Timeout() implements Output {}
     }
 
-    /** A reduction result: what the countdown asks its owner to observe, if anything. */
+    /**
+     * A reduction result: what the countdown asks its owner to observe, if anything.
+     */
     private record Result(Model state, Output intent) implements WidgetResult<Model, Output> {}
 
     private final Config config;
@@ -523,19 +542,21 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
         }
         // The interval is only a repaint cadence: the remaining time is derived from the deadline, so
         // one late tick lands on the right value instead of replaying the ticks it missed. The epoch
-        // is captured so a tick mapped before a stop or restart is recognisable afterwards.
+        // is captured so a tick mapped before a stop or restart is recognizable afterward.
         long epoch = model.epoch();
         return Subscription.interval(TICK, config.tickPeriod(), time -> new Msg.Reading(epoch, time));
     }
 
     @Override
-    public View<Msg> view(Model model, ViewContext context) {
+    public Element<Msg> view(Model model, ViewContext context) {
         Objects.requireNonNull(model, "model");
         Objects.requireNonNull(context, "context");
-        return Views.sized(size -> Views.text(render(model, config, size.cols())));
+        return RenderedText.<Msg>of(cols -> render(model, config, cols));
     }
 
-    /** The timestamp an armed run waits for: a run with no deadline asks for exactly one. */
+    /**
+     * The timestamp an armed run waits for: a run with no deadline asks for exactly one.
+     */
     private static Command<Msg> request(Model state) {
         if (!state.armed()) {
             return Command.none();
@@ -544,7 +565,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
         return Command.monotonicTime(time -> new Msg.Reading(epoch, time));
     }
 
-    /** Applies one lifecycle gesture or one time reading. Never performs I/O. */
+    /**
+     * Applies one lifecycle gesture or one time reading. Never performs I/O.
+     */
     private Result reduce(Model state, Msg message) {
         return switch (message) {
             case Msg.Start start -> start(state);
@@ -556,7 +579,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
         };
     }
 
-    /** Begins a run of the configured duration, or does nothing when one is already live. */
+    /**
+     * Begins a run of the configured duration, or does nothing when one is already live.
+     */
     private Result start(Model state) {
         if (state.running()) {
             return new Result(state, null);
@@ -571,7 +596,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
         return new Result(new Model(true, epoch, configured, UNSET_DEADLINE, state.nowNanos()), null);
     }
 
-    /** Freezes the remaining time at the last reading the run had. */
+    /**
+     * Freezes the remaining time at the last reading the run had.
+     */
     private static Result stop(Model state) {
         if (!state.running()) {
             return new Result(state, null);
@@ -580,7 +607,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
                 new Model(false, state.epoch() + 1L, state.remainingNanos(), UNSET_DEADLINE, state.nowNanos()), null);
     }
 
-    /** Continues a paused countdown from its remainder, or does nothing when there is none. */
+    /**
+     * Continues a paused countdown from its remainder, or does nothing when there is none.
+     */
     private Result resume(Model state) {
         if (state.running() || state.expired()) {
             return new Result(state, null);
@@ -589,7 +618,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
                 new Model(true, state.epoch() + 1L, state.remainingNanos(), UNSET_DEADLINE, state.nowNanos()), null);
     }
 
-    /** The one-key gesture: stop while running, resume while paused, start once finished or idle. */
+    /**
+     * The one-key gesture: stop while running, resume while paused, start once finished or idle.
+     */
     private Result toggle(Model state) {
         if (state.running()) {
             return stop(state);
@@ -597,13 +628,17 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
         return state.expired() ? start(state) : resume(state);
     }
 
-    /** Puts the configured duration back, stopped, under a new epoch. */
+    /**
+     * Puts the configured duration back, stopped, under a new epoch.
+     */
     private Result reset(Model state) {
         return new Result(
                 new Model(false, state.epoch() + 1L, config.durationNanos(), UNSET_DEADLINE, state.nowNanos()), null);
     }
 
-    /** One time reading: names the deadline, measures the distance to it, or reports the expiry. */
+    /**
+     * One time reading: names the deadline, measures the distance to it, or reports the expiry.
+     */
     private static Result read(Model state, Msg.Reading reading) {
         if (!state.running() || reading.epoch() != state.epoch()) {
             // A stopped run has nothing to measure, and a reading from another run can neither name a
@@ -623,7 +658,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
         return new Result(new Model(false, state.epoch(), 0L, UNSET_DEADLINE, now), new Output.Timeout());
     }
 
-    /** A configured duration or remainder, saturated to what a monotonic reading can carry. */
+    /**
+     * A configured duration or remainder, saturated to what a monotonic reading can carry.
+     */
     private static long nanos(Duration duration) {
         try {
             return duration.toNanos();
@@ -632,7 +669,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
         }
     }
 
-    /** A duration a countdown can be configured with. */
+    /**
+     * A duration a countdown can be configured with.
+     */
     private static Duration checkedDuration(Duration duration) {
         Objects.requireNonNull(duration, "duration");
         if (duration.isNegative()) {
@@ -646,7 +685,9 @@ public final class Countdown implements Component<Countdown.Model, Countdown.Msg
         return duration;
     }
 
-    /** A repaint cadence the runtime can schedule. */
+    /**
+     * A repaint cadence the runtime can schedule.
+     */
     private static Duration checkedTickPeriod(Duration tickPeriod) {
         if (tickPeriod == null) {
             return DEFAULT_TICK_PERIOD;

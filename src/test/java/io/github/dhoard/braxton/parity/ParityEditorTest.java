@@ -31,8 +31,6 @@ import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.Modifiers;
 import io.github.dhoard.braxton.internal.input.InputDecoder;
-import io.github.dhoard.braxton.internal.input.InputRouter;
-import io.github.dhoard.braxton.internal.render.LayoutEngine;
 import io.github.dhoard.braxton.internal.terminal.TimedReader;
 import io.github.dhoard.braxton.internal.text.VisualRows;
 import io.github.dhoard.braxton.layout.Rect;
@@ -45,10 +43,12 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.InteractionRouter;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -61,7 +61,7 @@ import org.junit.jupiter.api.Test;
  * Phase 04 acceptance: complete multiline editing - word and document motions, selection
  * extension, wrapped visual rows, the textarea frame and two independent mounted editors.
  *
- * <p>Every assertion is against public behaviour. The rows are read back through the real layout
+ * <p>Every assertion is against public behavior. The rows are read back through the real layout
  * path where the cell they land in matters, because a row the editor wraps and a row the layout
  * wraps have to be the same row.</p>
  */
@@ -69,36 +69,41 @@ class ParityEditorTest {
 
     private static final ViewContext CONTEXT = new ViewContext(new Viewport(24, 80));
 
-    private static Editor.Config wrapped(int cols) {
-        return Editor.Config.defaults().withWrapWidth(cols).withVisibleLines(4);
+    private static EditorConfig wrapped(int cols) {
+        return EditorConfig.defaults().withWrapWidth(cols).withVisibleLines(4);
     }
 
-    /** The rows the editor paints, as text. */
-    private static List<String> rows(Editor.Model state, Editor.Config options) {
+    /**
+     * The rows the editor paints, as text.
+     */
+    private static List<String> rows(Editor.Model state, EditorConfig options) {
         return Editor.render(state, options, true).lines().stream()
                 .map(StyledText::plainText)
                 .toList();
     }
 
-    /** The rows a real layout paints for the editor at one viewport, which is what a user sees. */
-    private static List<String> painted(Editor.Model state, Editor.Config options, boolean focused, int cols) {
-        return new ScreenRenderer()
-                .plainLines(
+    /**
+     * The rows a real layout paints for the editor at one viewport, which is what a user sees.
+     */
+    private static List<String> painted(Editor.Model state, EditorConfig options, boolean focused, int cols) {
+        return ElementScreen.render(
                         new Editor(options)
                                 .view((state).withFocus(focused), new ViewContext(new Viewport(24, cols)))
                                 .map(action -> action),
-                        new Viewport(24, cols));
+                        24,
+                        cols)
+                .lines();
     }
 
     private static Editor editor() {
-        return new Editor(Editor.Config.defaults());
+        return new Editor(EditorConfig.defaults());
     }
 
     private static Editor.Model after(Editor.Model state, Editor.Msg message) {
         return editor().update(state, message).model();
     }
 
-    private static Editor.Model after(Editor.Model state, Editor.Config options, Editor.Msg message) {
+    private static Editor.Model after(Editor.Model state, EditorConfig options, Editor.Msg message) {
         return new Editor(options).update(state, message).model();
     }
 
@@ -106,9 +111,9 @@ class ParityEditorTest {
 
     @Test
     void theDefaultsKeepEnterAsSubmitAndCtrlJAsTheLineBreak() {
-        assertThat(Editor.actionFor(InputEvent.KeyInput.of(Key.ENTER), Editor.Config.defaults()))
+        assertThat(Editor.actionFor(InputEvent.KeyInput.of(Key.ENTER), EditorConfig.defaults()))
                 .contains(new Editor.Msg.Submit());
-        assertThat(Editor.actionFor(InputEvent.KeyInput.of(Key.of("j", Modifiers.CTRL)), Editor.Config.defaults()))
+        assertThat(Editor.actionFor(InputEvent.KeyInput.of(Key.of("j", Modifiers.CTRL)), EditorConfig.defaults()))
                 .contains(new Editor.Msg.Newline());
         assertThat(after(Editor.Model.of("ab"), new Editor.Msg.Newline()).text())
                 .isEqualTo("ab\n");
@@ -116,7 +121,7 @@ class ParityEditorTest {
 
     @Test
     void theTextareaPresetMakesEnterBreakALineAndSubmitsSeparately() {
-        Editor textarea = Editor.textarea(Editor.Config.defaults());
+        Editor textarea = Editor.textarea(EditorConfig.defaults());
         assertThat(textarea.keys().actionFor(Key.ENTER).map(action -> action.message()))
                 .contains(new Editor.Msg.Newline());
         assertThat(textarea.keys().actionFor(Key.parse("ctrl+j")).map(action -> action.message()))
@@ -135,28 +140,29 @@ class ParityEditorTest {
         assertThat(submitted.outputs()).containsExactly(new Editor.Output.Submit("ab"));
     }
 
-    /** The expanded help of one key map: one line per group, holding every action in the map. */
+    /**
+     * The expanded help of one key map: one line per group, holding every action in the map.
+     */
     private static List<String> help(io.github.dhoard.braxton.input.KeyMap<Editor.Msg> keys) {
-        return new ScreenRenderer()
-                .plainLines(Help.view(keys, true, 400), new Viewport(12, 400)).stream()
-                        .filter(line -> !line.isBlank())
-                        .toList();
+        return ElementScreen.render(Help.element(keys, Help.Config.defaults(), true, 400), 12, 400).lines().stream()
+                .filter(line -> !line.isBlank())
+                .toList();
     }
 
     @Test
     void theTwoPresetsAreOneMapAndOnlyEnterDiffers() {
-        List<String> submit = help(Editor.defaultKeys(Editor.Config.defaults()));
-        List<String> textarea = help(Editor.textareaKeys(Editor.Config.defaults()));
+        List<String> submit = help(Editor.defaultKeys(EditorConfig.defaults()));
+        List<String> textarea = help(Editor.textareaKeys(EditorConfig.defaults()));
         assertThat(submit).anySatisfy(line -> assertThat(line).contains("enter").contains("submit"));
         assertThat(textarea)
                 .anySatisfy(line -> assertThat(line).contains("enter").contains("new line"));
         assertThat(textarea)
                 .anySatisfy(line -> assertThat(line).contains("ctrl+enter").contains("submit"));
         // No action of either map is missing from the other: the preset changes gestures, not actions.
-        assertThat(Editor.textareaKeys(Editor.Config.defaults()).actions().stream()
+        assertThat(Editor.textareaKeys(EditorConfig.defaults()).actions().stream()
                         .map(action -> action.id())
                         .toList())
-                .containsExactlyElementsOf(Editor.defaultKeys(Editor.Config.defaults()).actions().stream()
+                .containsExactlyElementsOf(Editor.defaultKeys(EditorConfig.defaults()).actions().stream()
                         .map(action -> action.id())
                         .toList());
     }
@@ -222,11 +228,11 @@ class ParityEditorTest {
         Editor.Model state = new Editor.Model("one\ntwo\nthree", 5, 5, 0);
         assertThat(after(state, new Editor.Msg.MoveDocumentStart()).caret()).isEqualTo(0);
         assertThat(after(state, new Editor.Msg.MoveDocumentEnd()).caret()).isEqualTo(13);
-        assertThat(Editor.defaultKeys(Editor.Config.defaults())
+        assertThat(Editor.defaultKeys(EditorConfig.defaults())
                         .actionFor(Key.parse("ctrl+home"))
                         .map(action -> action.message()))
                 .contains(new Editor.Msg.MoveDocumentStart());
-        assertThat(Editor.defaultKeys(Editor.Config.defaults())
+        assertThat(Editor.defaultKeys(EditorConfig.defaults())
                         .actionFor(Key.parse("ctrl+end"))
                         .map(action -> action.message()))
                 .contains(new Editor.Msg.MoveDocumentEnd());
@@ -269,7 +275,7 @@ class ParityEditorTest {
 
     @Test
     void extensionGesturesReachTheirActions() {
-        var keys = Editor.defaultKeys(Editor.Config.defaults());
+        var keys = Editor.defaultKeys(EditorConfig.defaults());
         assertThat(keys.actionFor(Key.parse("shift+left")).map(action -> action.message()))
                 .contains(new Editor.Msg.Extend(new Editor.Msg.MoveLeft()));
         assertThat(keys.actionFor(Key.parse("ctrl+shift+right")).map(action -> action.message()))
@@ -302,7 +308,7 @@ class ParityEditorTest {
     @Test
     void aWrappedRowBreaksAtThePaintedWidthWithoutTouchingTheDraft() {
         Editor.Model state = Editor.Model.of("the quick brown fox");
-        Editor.Config options = wrapped(10).withVisibleLines(4);
+        EditorConfig options = wrapped(10).withVisibleLines(4);
         assertThat(rows(state, options)).containsExactly("the quick ", "brown fox" + Editor.CURSOR);
         assertThat(state.text()).as("wrapping is derived, never inserted").isEqualTo("the quick brown fox");
     }
@@ -321,7 +327,7 @@ class ParityEditorTest {
     @Test
     void aVerticalMoveCrossesASoftBreakBeforeItLeavesTheLine() {
         Editor.Model state = new Editor.Model("the quick brown fox", 4, 4, 0);
-        Editor.Config options = wrapped(10);
+        EditorConfig options = wrapped(10);
         Editor.Model down = after(state, options, new Editor.Msg.MoveDown());
         assertThat(down.caret())
                 .as("the soft break is one row down, before the line is left")
@@ -337,7 +343,7 @@ class ParityEditorTest {
     @Test
     void aVerticalMoveKeepsThePaintedColumnThroughRowsOfDifferentWidths() {
         String text = "0123456789\nab\n0123456789";
-        Editor.Config options = wrapped(10);
+        EditorConfig options = wrapped(10);
         Editor.Model top = new Editor.Model(text, 8, 8, 0);
         Editor.Model middle = after(top, options, new Editor.Msg.MoveDown());
         assertThat(middle.caret()).as("a short row clamps the caret").isEqualTo(13);
@@ -348,7 +354,7 @@ class ParityEditorTest {
 
     @Test
     void aTabAndAWideGlyphKeepTheCaretOnTheCellTheyPaint() {
-        Editor.Config options = wrapped(8);
+        EditorConfig options = wrapped(8);
         Editor.Model tab = new Editor.Model("ab\tcd", 0, 0, 0);
         assertThat(rows(tab, options).get(0)).isEqualTo(Editor.CURSOR + "b\tcd");
         // The row's tab stop is measured from the row's own columns, so the block on the 'c' sits
@@ -370,8 +376,8 @@ class ParityEditorTest {
         String text = "alpha beta\ngamma delta epsilon";
         Editor.Model state = new Editor.Model(text, text.length(), text.length(), 0);
         for (int cols : new int[] {0, 1, 2, 5, 12, 80}) {
-            Editor.Config options = cols == 0
-                    ? Editor.Config.defaults().withVisibleLines(3)
+            EditorConfig options = cols == 0
+                    ? EditorConfig.defaults().withVisibleLines(3)
                     : wrapped(cols).withVisibleLines(3);
             List<String> painted = painted(state, options, true, cols);
             if (cols == 0) {
@@ -389,7 +395,7 @@ class ParityEditorTest {
     @Test
     void aZeroColumnRowStillNamesTheCaretRow() {
         Editor.Model state = new Editor.Model("abc\ndef", 5, 5, 0);
-        Editor.Config options = wrapped(1).withVisibleLines(2);
+        EditorConfig options = wrapped(1).withVisibleLines(2);
         assertThat(Editor.visibleLineCount(state, options, 1)).isEqualTo(2);
         assertThat(String.join("", painted(state, options, true, 1)))
                 .as("a one-column row holds one cell, and the caret still gets one")
@@ -399,7 +405,7 @@ class ParityEditorTest {
     @Test
     void theAllocatedWidthWinsWhenItIsNarrowerThanTheDeclaredOne() {
         Editor.Model state = Editor.Model.of("alpha beta gamma");
-        Editor.Config declared = wrapped(40).withVisibleLines(3);
+        EditorConfig declared = wrapped(40).withVisibleLines(3);
         assertThat(rows(state, declared)).hasSize(1);
         // The declared width is what movement uses; painting is bounded by what the view is given,
         // so a narrower pane wraps its rows instead of overflowing them.
@@ -408,54 +414,50 @@ class ParityEditorTest {
     }
 
     @Test
-    void aSizeAwareSubtreeIsMeasuredAtWhatItPaints() {
-        View<String> view = Views.sized(size -> Views.text("x".repeat(Math.max(1, size.cols()))));
-        LayoutEngine engine = new LayoutEngine();
-        assertThat(engine.intrinsicHeight(view, 5)).isEqualTo(1);
-        assertThat(engine.intrinsicWidth(view, 5)).isEqualTo(5);
-        assertThat(new ScreenRenderer().plainLines(view, new Viewport(2, 5)).get(0))
-                .isEqualTo("xxxxx");
-        // The builder is asked again for a different geometry, so the same node paints both.
-        assertThat(new ScreenRenderer().plainLines(view, new Viewport(2, 3)).get(0))
-                .isEqualTo("xxx");
+    void aComputedLeafIsMeasuredAtWhatItPaints() {
+        // A leaf that renders for the columns it is given is the element answer to a size-aware
+        // subtree: it measures what its renderer produces and paints the same value.
+        Element<String> view = Elements.text("xxxxx");
+        assertThat(io.github.dhoard.braxton.ui.ElementTree.measure(view, new Size(Integer.MAX_VALUE, 5))
+                        .cols())
+                .isEqualTo(5);
+        assertThat(ElementScreen.render(view, 2, 5).lines().get(0)).isEqualTo("xxxxx");
+        // The renderer is asked again for a different geometry, so the same leaf paints both.
+        assertThat(ElementScreen.render(view, 2, 3).lines().get(0)).isEqualTo("xxx");
     }
 
     @Test
     void routingSeesThroughASizeAwareSubtree() {
-        Editor.Config options = wrapped(10);
-        View<Editor.Msg> field = Views.sized(size -> new Editor(options)
-                .view(new Editor.Model("abc", 3, 3, 0), CONTEXT)
-                .map(action -> action));
-        assertThat(InputRouter.route(field, InputEvent.KeyInput.of(Key.of("x"), "x")))
+        EditorConfig options = wrapped(10);
+        Element<Editor.Msg> field = new Editor(options).view(new Editor.Model("abc", 3, 3, 0), CONTEXT);
+        assertThat(InteractionRouter.message(field, InputEvent.KeyInput.of(Key.of("x"), "x")))
                 .as("a focused element inside a size-aware subtree still receives the text")
                 .contains(new Editor.Msg.Insert("x"));
     }
 
     @Test
-    void aSizeAwareSubtreeIsTransformedWithoutLosingItsBuilder() {
-        View<String> view = Views.sized(size -> Views.text("ab"));
-        assertThat(view.map(String::toUpperCase)).isInstanceOf(View.Sized.class);
-        assertThat(view.scoped(io.github.dhoard.braxton.mvu.ComponentPath.ROOT)).isInstanceOf(View.Sized.class);
-        assertThat(view.children()).isEmpty();
-        assertThat(((View.Sized<String>) view).build().apply(new Size(1, 4))).isInstanceOf(View.Text.class);
+    void mappingAnElementKeepsItsContent() {
+        Element<String> view = Elements.text("ab");
+        Element<Integer> mapped = view.map(String::length);
+        assertThat(mapped.children()).isEmpty();
+        assertThat(ElementScreen.render(mapped, 1, 4).lines().get(0)).isEqualTo("ab");
     }
 
     @Test
     void aDeclaredCaretSitsOnTheCellTheBlockWouldCover() {
         Editor.Model state = new Editor.Model("the quick brown fox", 14, 14, 0);
-        Editor.Config native_ = wrapped(10)
+        EditorConfig native_ = wrapped(10)
                 .withVisibleLines(4)
                 .withCursor(Editor.CursorPolicy.nativeCursor(
-                        io.github.dhoard.braxton.view.Cursor.Shape.BLOCK,
-                        io.github.dhoard.braxton.view.Cursor.Mode.STEADY));
-        var renderer = new ScreenRenderer();
+                        io.github.dhoard.braxton.ui.Cursor.Shape.BLOCK,
+                        io.github.dhoard.braxton.ui.Cursor.Mode.STEADY));
         var view = new Editor(native_).view(state, CONTEXT).map(action -> action);
-        var caret = renderer.cursor(view, new Viewport(6, 10));
-        assertThat(caret).as("a native caret is resolved to a screen cell").isPresent();
+        var caret = ElementScreen.render(view, 6, 10).cursor();
+        assertThat(caret).as("a native caret is resolved to a screen cell").isNotNull();
         // Row 1 is the wrapped row, and the column is the 'r' of "brown" the block was drawn on.
-        assertThat(caret.orElseThrow().row()).isEqualTo(1);
-        assertThat(renderer.plainLines(view, new Viewport(6, 10)).get(1)).startsWith("brow");
-        assertThat(caret.orElseThrow().column())
+        assertThat(caret.row()).isEqualTo(1);
+        assertThat(ElementScreen.render(view, 6, 10).lines().get(1)).startsWith("brow");
+        assertThat(caret.column())
                 .as("four cells into the wrapped row, where the block on the 'n' is drawn")
                 .isEqualTo(4);
     }
@@ -481,7 +483,7 @@ class ParityEditorTest {
 
     @Test
     void aPlaceholderIsPaintedOnlyForAnEmptyDraftAndIsNeverContent() {
-        Editor.Config options = Editor.Config.defaults()
+        EditorConfig options = EditorConfig.defaults()
                 .withWrapWidth(20)
                 .withPresentation(Editor.Presentation.plain().withPlaceholder("Once upon a time", Style.NONE));
         Editor.Model empty = Editor.Model.empty();
@@ -500,7 +502,7 @@ class ParityEditorTest {
 
     @Test
     void lineNumbersNameLogicalLinesAndWrappedRowsContinueUnderThem() {
-        Editor.Config options = wrapped(10)
+        EditorConfig options = wrapped(10)
                 .withVisibleLines(4)
                 .withPresentation(Editor.Presentation.plain().withLineNumbers(true, Style.NONE));
         Editor.Model state = Editor.Model.of("alpha beta gamma\ndelta");
@@ -511,7 +513,7 @@ class ParityEditorTest {
 
     @Test
     void theGutterWidensWithTheLineCountAndStaysNarrowWhenTheEditorIsNarrow() {
-        Editor.Config numbers = Editor.Config.defaults()
+        EditorConfig numbers = EditorConfig.defaults()
                 .withPresentation(Editor.Presentation.plain().withLineNumbers(true, Style.NONE));
         Editor.Model ten = Editor.Model.of("1\n2\n3\n4\n5\n6\n7\n8\n9\n10");
         assertThat(Editor.render(ten, numbers, false)
@@ -522,7 +524,7 @@ class ParityEditorTest {
                 .as("a ten-line draft reserves two digits, and the window ends at the caret's line")
                 .startsWith("10 ");
         // A gutter and a prompt wider than the view still produce rows that fit it.
-        Editor.Config narrow =
+        EditorConfig narrow =
                 numbers.withPrompt(">> ", Style.NONE).withWrapWidth(4).withVisibleLines(2);
         Editor.Model state = new Editor.Model("abcdef", 6, 6, 0);
         assertThat(painted(state, narrow, true, 3).stream().allMatch(row -> row.length() <= 3))
@@ -533,7 +535,7 @@ class ParityEditorTest {
     @Test
     void theCursorLineStylesTheCaretRowOnlyWhileFocused() {
         Style line = Style.NONE.withUnderline();
-        Editor.Config options =
+        EditorConfig options =
                 wrapped(20).withPresentation(Editor.Presentation.plain().withCursorLine(line));
         Editor.Model state = new Editor.Model("one\ntwo", 5, 5, 0);
         StyledText focused = Editor.render(state, options, true);
@@ -556,7 +558,7 @@ class ParityEditorTest {
 
     @Test
     void aDynamicHeightFollowsTheContentBetweenItsBounds() {
-        Editor.Config options = Editor.Config.defaults()
+        EditorConfig options = EditorConfig.defaults()
                 .withWrapWidth(10)
                 .withPresentation(Editor.Presentation.plain().withDynamicHeight(true, 2, 4));
         assertThat(Editor.visibleLineCount(Editor.Model.empty(), options, 10))
@@ -575,7 +577,7 @@ class ParityEditorTest {
 
     @Test
     void aDynamicHeightCountsNoFurtherThanTheContentRowLimit() {
-        Editor.Config options = Editor.Config.defaults()
+        EditorConfig options = EditorConfig.defaults()
                 .withPresentation(Editor.Presentation.plain()
                         .withDynamicHeight(true, 1, 50)
                         .withMaxContentLines(3));
@@ -596,8 +598,7 @@ class ParityEditorTest {
         assertThatThrownBy(() -> new Editor.Presentation("", Style.NONE, false, Style.NONE, Style.NONE, true, 1, 4, 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maxContentLines");
-        assertThatThrownBy(() -> Editor.Config.defaults().withWrapWidth(0))
-                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> EditorConfig.defaults().withWrapWidth(0)).isInstanceOf(IllegalArgumentException.class);
         assertThat(Editor.Presentation.plain()
                         .withPlaceholder("a\nb", Style.NONE)
                         .placeholder())
@@ -607,9 +608,9 @@ class ParityEditorTest {
 
     @Test
     void anEmptyPasswordAndAHiddenDraftStillWrapAndKeepTheirCaret() {
-        for (Editor.Config.Masking masking :
-                new Editor.Config.Masking[] {Editor.Config.Masking.PASSWORD, Editor.Config.Masking.HIDDEN}) {
-            Editor.Config options = wrapped(6)
+        for (EditorConfig.Masking masking :
+                new EditorConfig.Masking[] {EditorConfig.Masking.PASSWORD, EditorConfig.Masking.HIDDEN}) {
+            EditorConfig options = wrapped(6)
                     .withVisibleLines(3)
                     .withMasking(masking)
                     .withPresentation(Editor.Presentation.plain().withLineNumbers(true, Style.NONE));
@@ -637,7 +638,7 @@ class ParityEditorTest {
     @Test
     void countingTheRowsOfALargeDraftIsBoundedByTheHeight() {
         String draft = "0123456789\n".repeat(20_000);
-        Editor.Config capped = Editor.Config.defaults()
+        EditorConfig capped = EditorConfig.defaults()
                 .withWrapWidth(6)
                 .withPresentation(Editor.Presentation.plain()
                         .withDynamicHeight(true, 1, 5)
@@ -661,8 +662,8 @@ class ParityEditorTest {
     }
 
     private static List<String> lines(ComponentDriver<EditorDemo.Model, EditorDemo.Msg, ?> driver, int cols) {
-        return new ScreenRenderer()
-                .plainLines(driver.view(new ViewContext(new Viewport(24, cols))), new Viewport(24, cols));
+        return ElementScreen.render(driver.view(new ViewContext(new Viewport(24, cols))), 24, cols)
+                .lines();
     }
 
     private static void press(ComponentDriver<EditorDemo.Model, EditorDemo.Msg, Never> driver, String bytes, int cols) {
@@ -673,12 +674,15 @@ class ParityEditorTest {
             throw new AssertionError(failure);
         }
         for (InputEvent event : events) {
-            InputRouter.route(driver.view(new ViewContext(new Viewport(24, cols))), event)
-                    .ifPresent(message -> deliver(driver, message));
+            io.github.dhoard.braxton.testing.Routing.route(
+                            driver.component(), driver.model(), new ViewContext(new Viewport(24, cols)), event)
+                    .forEach(message -> deliver(driver, message));
         }
     }
 
-    /** Feeds the decoder one byte per read, so a partial sequence is really partial. */
+    /**
+     * Feeds the decoder one byte per read, so a partial sequence is really partial.
+     */
     private static final class ByteAtATime extends java.io.InputStream {
 
         private final byte[] bytes;
@@ -778,7 +782,7 @@ class ParityEditorTest {
 
     @Test
     void renderingIsPureAndAMessageThatChangesNothingKeepsItsReference() {
-        Editor.Config options = wrapped(10).withVisibleLines(3);
+        EditorConfig options = wrapped(10).withVisibleLines(3);
         Editor.Model state = new Editor.Model("alpha beta", 3, 3, 0);
         StyledText first = Editor.render(state, options, true);
         assertThat(Editor.render(state, options, true)).isEqualTo(first);
@@ -794,20 +798,21 @@ class ParityEditorTest {
     @Test
     void anEditorThatDeclaresNoWidthPaintsTheRowsItAlwaysDid() {
         Editor.Model state = new Editor.Model("one\ntwo\nthree", 5, 5, 0);
-        Editor.Config legacy = Editor.Config.defaults().withVisibleLines(2).withPrompt("> ", Style.NONE);
+        EditorConfig legacy = EditorConfig.defaults().withVisibleLines(2).withPrompt("> ", Style.NONE);
         assertThat(Editor.render(state, legacy, false).plainText()).isEqualTo("> one\n  two");
         assertThat(Editor.visibleLineCount(state, legacy))
                 .isEqualTo(Editor.render(state, legacy, false).lines().size());
     }
 
     @Test
-    void aViewWithoutAHeightStillResolvesThePanesFocusRegion() {
-        Editor.Config options = wrapped(10);
-        View<Editor.Msg> view = new Editor(options)
+    void aFrameWithoutAHeightStillResolvesThePanesFocusTarget() {
+        EditorConfig options = wrapped(10);
+        Element<Editor.Msg> view = new Editor(options)
                 .view(new Editor.Model("alpha beta", 3, 3, 0), CONTEXT)
                 .map(action -> action);
-        assertThat(new ScreenRenderer().plainLines(view, new Viewport(0, 0))).isEmpty();
-        assertThat(new LayoutEngine().layout(view, new Rect(0, 0, 4, 10)).regions())
+        assertThat(ElementScreen.render(view, 0, 0).lines()).isEmpty();
+        assertThat(InteractionRouter.focusables(
+                        io.github.dhoard.braxton.ui.ElementTree.layout(view, new Rect(0, 0, 4, 10))))
                 .hasSize(1);
     }
 }

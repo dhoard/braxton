@@ -59,23 +59,35 @@ import java.util.Optional;
  */
 public final class ProgramHandle<M, Msg> {
 
-    /** What happened to one message a host tried to send. */
+    /**
+     * What happened to one message a host tried to send.
+     */
     public enum Send {
-        /** The runtime accepted the message. */
+        /**
+         * The runtime accepted the message.
+         */
         ACCEPTED,
-        /** The mailbox is full; the runtime is still working through what it already holds. */
+        /**
+         * The mailbox is full; the runtime is still working through what it already holds.
+         */
         FULL,
-        /** The run is over, or never started; nothing was delivered. */
+        /**
+         * The run is over, or never started; nothing was delivered.
+         */
         CLOSED
     }
 
-    /** How long one producer wait is, before the mailbox state is checked again. */
+    /**
+     * How long one producer wait is, before the mailbox state is checked again.
+     */
     private static final long WAIT_MILLIS = 100L;
 
     private final RuntimeLoop<M, Msg> loop;
     private final Mailbox mailbox;
     private final Thread thread;
-    /** The final state, published before the runtime thread ends. */
+    /**
+     * The final state, published before the runtime thread ends.
+     */
     private volatile ProgramResult<M> outcome;
 
     /**
@@ -93,12 +105,16 @@ public final class ProgramHandle<M, Msg> {
         this.thread = Thread.ofPlatform().name("braxton-runtime").unstarted(this::runProgram);
     }
 
-    /** Starts the runtime thread. Called once, by the factory that built this handle. */
+    /**
+     * Starts the runtime thread. Called once, by the factory that built this handle.
+     */
     void start() {
         thread.start();
     }
 
-    /** Runs the program on its own thread and publishes the final state. */
+    /**
+     * Runs the program on its own thread and publishes the final state.
+     */
     private void runProgram() {
         ProgramResult<M> result;
         try {
@@ -259,14 +275,18 @@ public final class ProgramHandle<M, Msg> {
         return Optional.ofNullable(outcome);
     }
 
-    /** Refuses an await that could only wait for the current thread. */
+    /**
+     * Refuses an await that could only wait for the current thread.
+     */
     private void requireCallerThread() {
         if (Thread.currentThread() == thread) {
             throw new IllegalStateException("await() on the program's own runtime thread would deadlock");
         }
     }
 
-    /** Diagnostic summary; never includes model values or terminal escape output. */
+    /**
+     * Diagnostic summary; never includes model values or terminal escape output.
+     */
     @Override
     public String toString() {
         return "ProgramHandle[" + (isRunning() ? "running" : "finished") + "]";

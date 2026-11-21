@@ -40,6 +40,15 @@ import java.util.List;
 public record HarnessTranscript(
         List<HarnessTurn> turns, Profile profile, Usage usage, int contextWindow, List<String> warnings) {
 
+    /**
+     * Creates a {@code HarnessTranscript} value.
+     *
+     * @param turns the parsed turns, in recorded order
+     * @param profile the provider/model identity shown in the footer
+     * @param usage the token and rate observations shown in the footer
+     * @param contextWindow the context window used for the context gauge
+     * @param warnings reader diagnostics, one per skipped or malformed record
+     */
     public HarnessTranscript {
         turns = List.copyOf(turns);
         warnings = List.copyOf(warnings);
@@ -58,6 +67,14 @@ public record HarnessTranscript(
      */
     public record HarnessTurn(String userText, List<HarnessEntry> responses, Usage usage, Profile profile) {
 
+        /**
+         * Creates a {@code HarnessTurn} value.
+         *
+         * @param userText the recorded prompt, or empty
+         * @param responses the response blocks to replay, in order
+         * @param usage the token observations for this turn
+         * @param profile the provider/model identity reported for this turn
+         */
         public HarnessTurn {
             userText = userText == null ? "" : userText;
             responses = List.copyOf(responses);
@@ -87,16 +104,35 @@ public record HarnessTranscript(
      */
     public record Profile(String provider, String model, String reasoning) {
 
+        /**
+         * The context window assumed when the transcript names none: 1,048,576 tokens.
+         */
         public static final int DEFAULT_CONTEXT_WINDOW = 1_048_576;
+
+        /**
+         * The profile an unnamed transcript is shown under: the local Qwen model at high reasoning
+         * effort.
+         */
         public static final Profile DEFAULT = new Profile("local", "qwen3.8-flash-next", "high");
 
+        /**
+         * Creates a {@code Profile} value.
+         *
+         * @param provider the provider name; blank becomes {@code local}
+         * @param model the model name; blank becomes the example default
+         * @param reasoning the reasoning effort suffix, or empty
+         */
         public Profile {
             provider = blankToDefault(provider, "local");
             model = blankToDefault(model, "mock-harness");
             reasoning = reasoning == null ? "" : reasoning;
         }
 
-        /** The footer's provider/model line, including the reasoning suffix when present. */
+        /**
+         * The footer's provider/model line, including the reasoning suffix when present.
+         *
+         * @return the footer's provider/model line, including the reasoning suffix when present
+         */
         public String label() {
             return provider + " | " + model + (reasoning.isBlank() ? "" : " \u2022 " + reasoning);
         }
@@ -124,8 +160,21 @@ public record HarnessTranscript(
             long contextTokens,
             Double generationRate) {
 
+        /**
+         * A usage record with no tokens spent and no measured rate.
+         */
         public static final Usage EMPTY = new Usage(0, 0, 0, 0, 0, null);
 
+        /**
+         * Creates a {@code Usage} value.
+         *
+         * @param inputTokens input tokens reported for the session
+         * @param outputTokens output tokens reported for the session
+         * @param cachedInputTokens the part of the input that was cached
+         * @param uncachedInputTokens the part of the input that was not cached
+         * @param contextTokens tokens currently occupying the context window
+         * @param generationRate tokens per second, or null when unreported
+         */
         public Usage {
             inputTokens = Math.max(0, inputTokens);
             outputTokens = Math.max(0, outputTokens);

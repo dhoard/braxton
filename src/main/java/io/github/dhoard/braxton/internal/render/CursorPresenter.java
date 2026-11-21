@@ -23,7 +23,7 @@
 package io.github.dhoard.braxton.internal.render;
 
 import io.github.dhoard.braxton.style.Color;
-import io.github.dhoard.braxton.view.Cursor;
+import io.github.dhoard.braxton.ui.Cursor;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -32,7 +32,7 @@ import java.util.Optional;
  *
  * <p>The runtime owns one presenter for the session. Each frame hands it the cursor the layout
  * resolved, and it answers with the sequences that take the terminal from what this session last
- * applied to what the frame asks for - the move, the shape, the blink state, the colour and the
+ * applied to what the frame asks for - the move, the shape, the blink state, the color and the
  * visibility, each only when it differs. A frame that does not move the caret writes nothing for it,
  * and an idle application keeps emitting no traffic at all.</p>
  *
@@ -43,10 +43,10 @@ import java.util.Optional;
  * the line it sits on.</p>
  *
  * <p>The presenter starts where the session opens: the runtime hides the cursor before the first
- * frame, so nothing is shown and no shape or colour has been applied. {@link #reset()} returns the
+ * frame, so nothing is shown and no shape or color has been applied. {@link #reset()} returns the
  * terminal to the properties this session changed and nothing more: a session that never touched
  * the cursor writes no reset at all. Because the terminal's own preferences cannot be read here,
- * the resets are the DEC defaults (a default shape, the configured colour) rather than a restore of
+ * the resets are the DEC defaults (a default shape, the configured color) rather than a restore of
  * a style the user may have customized.</p>
  *
  * <p>Only a {@link Cursor.Strategy#NATIVE native} cursor is presented this way. A virtual cursor is
@@ -68,21 +68,21 @@ public final class CursorPresenter {
     /**
      * Creates a presenter for a session whose frames start with the cursor hidden.
      *
-     * @param color whether colour output is enabled; a session that emits no colour emits no cursor
-     *     colour either
+     * @param color whether color output is enabled; a session that emits no color emits no cursor
+     *     color either
      */
     public CursorPresenter(boolean color) {
         this.color = color;
     }
 
     /**
-     * Changes whether a cursor colour is presented.
+     * Changes whether a cursor color is presented.
      *
-     * <p>A session that loses colour keeps the caret's shape and blink state but gives up its colour;
-     * the next frame writes the terminal's own colour back, because the colour this session applied
-     * would otherwise outlive it. Turning colour on again lets the frame's colour apply as usual.</p>
+     * <p>A session that loses color keeps the caret's shape and blink state but gives up its color;
+     * the next frame writes the terminal's own color back, because the color this session applied
+     * would otherwise outlive it. Turning color on again lets the frame's color apply as usual.</p>
      *
-     * @param value whether a cursor colour may be emitted
+     * @param value whether a cursor color may be emitted
      */
     public void colorEnabled(boolean value) {
         this.color = value;
@@ -122,11 +122,11 @@ public final class CursorPresenter {
     }
 
     /**
-     * The sequences that change the caret's shape, blink state and colour, and move it nowhere.
+     * The sequences that change the caret's shape, blink state and color, and move it nowhere.
      *
      * <p>An inline frame cannot use {@link #frame(Optional)}: it addresses cells relative to its own
      * live region, so the move is the frame's business. Splitting the two keeps one ledger for what
-     * the session has applied - a caret whose shape or colour the frame changed is still exactly what
+     * the session has applied - a caret whose shape or color the frame changed is still exactly what
      * the exit path has to give back - while each renderer decides where the caret goes.</p>
      *
      * @param cursor the cursor the layout resolved, or empty when nothing is to be shown
@@ -147,7 +147,7 @@ public final class CursorPresenter {
         }
         Color wantedColor = color ? wanted.color() : null;
         if (!Objects.equals(wantedColor, appliedColor)) {
-            // The reset is the only way back to the terminal's own colour: OSC 12 has no "default".
+            // The reset is the only way back to the terminal's own color: OSC 12 has no "default".
             out.append(wantedColor == null ? AnsiEncoder.RESET_CURSOR_COLOR : AnsiEncoder.cursorColor(wantedColor));
             appliedColor = wantedColor;
         }
@@ -175,7 +175,9 @@ public final class CursorPresenter {
         return AnsiEncoder.SHOW_CURSOR;
     }
 
-    /** The native caret a frame asks for, or null when the terminal's own cursor stays hidden. */
+    /**
+     * The native caret a frame asks for, or null when the terminal's own cursor stays hidden.
+     */
     private static Cursor nativeCursor(Optional<Cursor> cursor) {
         if (cursor == null) {
             return null;
@@ -184,7 +186,9 @@ public final class CursorPresenter {
                 .orElse(null);
     }
 
-    /** Hides the cursor when it is shown; the position is forgotten, so showing it moves again. */
+    /**
+     * Hides the cursor when it is shown; the position is forgotten, so showing it moves again.
+     */
     private String hide() {
         if (!shown) {
             row = -1;

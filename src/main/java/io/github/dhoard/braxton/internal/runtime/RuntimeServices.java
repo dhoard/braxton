@@ -33,6 +33,7 @@ import java.util.function.LongSupplier;
  * each task a virtual thread (e.g. a waiting task parks instead of pinning a platform thread).
  * Tests provide manual timers and a controlled executor; production injection points stay small so
  * applications cannot accidentally reach terminal or thread state from pure code.</p>
+ *
  * @param nanoTime the monotonic clock used for pacing
  * @param effectExecutor runs application task bodies
  * @param timers schedules one-shot work
@@ -41,6 +42,14 @@ import java.util.function.LongSupplier;
 public record RuntimeServices(
         LongSupplier nanoTime, Executor effectExecutor, Timers timers, Consumer<String> diagnostics) {
 
+    /**
+     * Creates a {@code RuntimeServices} value.
+     *
+     * @param nanoTime the monotonic clock used for pacing
+     * @param effectExecutor runs application task bodies
+     * @param timers schedules one-shot work
+     * @param diagnostics receives runtime diagnostic messages
+     */
     public RuntimeServices {
         nanoTime = nanoTime == null ? System::nanoTime : nanoTime;
         effectExecutor = effectExecutor == null ? Runnable::run : effectExecutor;
@@ -48,23 +57,51 @@ public record RuntimeServices(
         diagnostics = diagnostics == null ? message -> {} : diagnostics;
     }
 
-    /** Real time, real timers, and a shared virtual-thread executor for effect tasks. */
+    /**
+     * Real time, real timers, and a shared virtual-thread executor for effect tasks.
+     *
+     * @return real time, real timers, and a shared virtual-thread executor for effect tasks
+     */
     public static RuntimeServices system() {
         return new RuntimeServices(System::nanoTime, EffectExecutors.shared(), Timers.system(), message -> {});
     }
 
+    /**
+     * Returns the same value with effect executor replaced.
+     *
+     * @param executor the effect task executor
+     * @return the value with the requested effect executor
+     */
     public RuntimeServices withEffectExecutor(Executor executor) {
         return new RuntimeServices(nanoTime, executor, timers, diagnostics);
     }
 
+    /**
+     * Returns the same value with timers replaced.
+     *
+     * @param value the requested timers
+     * @return the value with the requested timers
+     */
     public RuntimeServices withTimers(Timers value) {
         return new RuntimeServices(nanoTime, effectExecutor, value, diagnostics);
     }
 
+    /**
+     * Returns the same value with nano time replaced.
+     *
+     * @param value the requested nano time
+     * @return the value with the requested nano time
+     */
     public RuntimeServices withNanoTime(LongSupplier value) {
         return new RuntimeServices(value, effectExecutor, timers, diagnostics);
     }
 
+    /**
+     * Returns the same value with diagnostics replaced.
+     *
+     * @param sink the diagnostic message consumer
+     * @return the value with the requested diagnostics
+     */
     public RuntimeServices withDiagnostics(Consumer<String> sink) {
         return new RuntimeServices(nanoTime, effectExecutor, timers, sink);
     }

@@ -57,11 +57,16 @@ public interface OutputRoute<Out, Msg, ParentOut> {
     /**
      * A parent message, dispatched in the parent's scope after the commit.
      *
-     * @param value the parent message to dispatch
      * @param <Msg> the parent message type
      * @param <Out> the parent output type
+     * @param value the parent message to dispatch
      */
     record Message<Msg, Out>(Msg value) implements Destination<Msg, Out> {
+        /**
+         * Creates a {@code Message} value.
+         *
+         * @param value the parent message to dispatch
+         */
         public Message {
             Objects.requireNonNull(value, "message");
         }
@@ -70,22 +75,45 @@ public interface OutputRoute<Out, Msg, ParentOut> {
     /**
      * A parent output, returned upward in the parent's own {@code Update.outputs}.
      *
-     * @param value the parent output to return upward
      * @param <Msg> the parent message type
      * @param <Out> the parent output type
+     * @param value the parent output to return upward
      */
     record Output<Msg, Out>(Out value) implements Destination<Msg, Out> {
+        /**
+         * Creates a {@code Output} value.
+         *
+         * @param value the parent output to return upward
+         */
         public Output {
             Objects.requireNonNull(value, "output");
         }
     }
 
+    /**
+     * Routes a child output to a parent update message.
+     *
+     * @param <Out> the child output type this route consumes
+     * @param <Msg> the parent message type
+     * @param <ParentOut> the parent output type
+     * @param mapper the value-to-message mapper
+     * @return routes a child output to a parent update message
+     */
     static <Out, Msg, ParentOut> OutputRoute<Out, Msg, ParentOut> toMessage(
             Function<? super Out, ? extends Msg> mapper) {
         Objects.requireNonNull(mapper, "mapper");
         return output -> new Message<>(mapper.apply(output));
     }
 
+    /**
+     * Forwards a child output as a parent output.
+     *
+     * @param <Out> the child output type this route consumes
+     * @param <Msg> the parent message type
+     * @param <ParentOut> the parent output type
+     * @param mapper the value-to-message mapper
+     * @return forwards a child output as a parent output
+     */
     static <Out, Msg, ParentOut> OutputRoute<Out, Msg, ParentOut> toOutput(
             Function<? super Out, ? extends ParentOut> mapper) {
         Objects.requireNonNull(mapper, "mapper");

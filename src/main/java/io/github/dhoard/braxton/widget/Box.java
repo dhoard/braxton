@@ -23,13 +23,17 @@
 package io.github.dhoard.braxton.widget;
 
 import io.github.dhoard.braxton.layout.Border;
+import io.github.dhoard.braxton.layout.Rect;
+import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.render.Surface;
 import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.style.WidthPolicy;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.Sizing;
+import io.github.dhoard.braxton.ui.Widget;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,6 +44,11 @@ import java.util.List;
  * the available width, while a fixed-width box truncates content to its inner width. Tabs are
  * expanded to the same four-column stops the text view uses, so a measured line and a painted line
  * always agree.</p>
+ *
+ * <p>The box is configuration; the content it frames is captured when the box is built, so an
+ * application places it with {@link #element()} and the frame renders at whatever width the layout
+ * gives it. {@link #render(int)} stays the pure renderer the element delegates to, which is what
+ * makes a box assertable without a screen.</p>
  *
  * <p>A frame reserves one cell per edge character, so every rendered row occupies exactly the box
  * width. The content and the title are therefore measured inside the frame: a row is painted as one
@@ -111,7 +120,7 @@ public final class Box {
      */
     public Box title(String value) {
         // Prepare the raw title before the span boundary: Span deletes a bare CR as a control, so
-        // flattening afterwards painted "one\rtwo" as "onetwo" while LF and CRLF kept a space.
+        // flattening afterward painted "one\rtwo" as "onetwo" while LF and CRLF kept a space.
         title = value == null || value.isEmpty()
                 ? StyledText.empty()
                 : StyledText.plain(LineBreaks.singleRowAndTabs(value));
@@ -241,7 +250,7 @@ public final class Box {
             // decoration cell beside it, so the label's columns are counted inside that sequence.
             int painted = TextMeasure.columns(horizontal + " " + fitted.plainText() + " ");
             if (painted > inner) {
-                // Even the label's own columns no longer fit the space a labelled edge reserves, so
+                // Even the label's own columns no longer fit the space a labeled edge reserves, so
                 // the edge is drawn plain rather than leaving a hole where the label was dropped.
                 out = out.append(StyledText.of(horizontal.repeat(inner), style));
                 return out.append(StyledText.of(topRight, style));
@@ -253,7 +262,9 @@ public final class Box {
         return out.append(StyledText.of(topRight, style));
     }
 
-    /** Applies the frame style to every span, keeping each span's own styling and link. */
+    /**
+     * Applies the frame style to every span, keeping each span's own styling and link.
+     */
     private static StyledText restyle(StyledText text, Style style) {
         StyledText result = StyledText.empty();
         for (StyledText.Span span : text.spans()) {
@@ -262,7 +273,9 @@ public final class Box {
         return result;
     }
 
-    /** Truncates to {@code maxColumns} without splitting a cluster, preserving span styling. */
+    /**
+     * Truncates to {@code maxColumns} without splitting a cluster, preserving span styling.
+     */
     private static StyledText truncate(StyledText text, int maxColumns) {
         return truncate("", text, maxColumns);
     }
@@ -329,13 +342,55 @@ public final class Box {
     }
 
     /**
-     * A one-element view of the rendered box.
+     * The box as a leaf of an element tree.
      *
-     * @param width the available width when the box is responsive
-     * @return a text view holding {@link #render(int)}
+     * <p>The box is measured at the width it renders to, so it occupies exactly the cells it
+     * paints: as many rows as the frame and the content need, and as many columns as the frame is
+     * wide. A responsive box takes the width it is offered; a fixed-width one keeps its own and is
+     * clipped when the region is narrower.</p>
+     *
+     * @param <Msg> the message type of the tree the box is placed in
+     * @return the element
      */
-    public View<Object> view(int width) {
-        return Views.text(render(width));
+    public <Msg> Element<Msg> element() {
+        return new Element.Leaf<Void, Msg>(new Renderer<Msg>(), null, Sizing.measured());
+    }
+
+    /**
+     * The leaf widget behind {@link #element()}.
+     *
+     * <p>It holds configuration rather than a model, because a box has no state of its own: what it
+     * frames was decided when it was built. The configuration is read at paint time and never
+     * mutated, so one built box can be placed in a tree that is rebuilt every frame.</p>
+     *
+     * @param <Msg> the message type of the tree
+     */
+    private final class Renderer<Msg> implements Widget<Void, Msg> {
+
+        @Override
+        public Size measure(Size max, Void model) {
+            if (max.rows() <= 0 || max.cols() <= 0) {
+                return new Size(0, 0);
+            }
+            List<StyledText> lines = render(max.cols()).lines();
+            int cols = fixedWidth > 0 ? Math.min(max.cols(), Math.max(2, fixedWidth)) : max.cols();
+            return new Size(Math.min(max.rows(), lines.size()), cols);
+        }
+
+        @Override
+        public void paint(Surface surface, Rect bounds, Void model) {
+            if (bounds.rows() <= 0 || bounds.cols() <= 0) {
+                return;
+            }
+            List<StyledText> lines = render(bounds.cols()).lines();
+            int limit = Math.min(bounds.rows(), lines.size());
+            for (int index = 0; index < limit; index++) {
+                // The renderer already clipped each row to the box width, so the writer only has to
+                // place them: a row is painted whole, never wrapped again.
+                surface.writeLine(
+                        bounds.row() + index, bounds.col(), bounds.cols(), lines.get(index), WidthPolicy.PINNED);
+            }
+        }
     }
 
     /**

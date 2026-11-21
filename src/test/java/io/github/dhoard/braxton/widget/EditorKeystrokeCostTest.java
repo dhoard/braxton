@@ -41,7 +41,7 @@ class EditorKeystrokeCostTest {
 
     @Test
     void oneInsertAtTheEndOfALargeDraftDoesNotScanTheDraft() {
-        Editor editor = new Editor(Editor.Config.defaults());
+        Editor editor = new Editor(EditorConfig.defaults());
         Editor.Model state = Editor.Model.of(DRAFT);
         assertThat(AllocationProbe.bytes(() -> editor.update(state, new Editor.Msg.Insert("x"))))
                 .as("an insert at the end of a draft asks only about the end of the text, which "
@@ -51,7 +51,7 @@ class EditorKeystrokeCostTest {
 
     @Test
     void anInsertAtTheEndOfALargeDraftLandsAfterTheLastCharacter() {
-        Editor.Model next = new Editor(Editor.Config.defaults())
+        Editor.Model next = new Editor(EditorConfig.defaults())
                 .update(Editor.Model.of(DRAFT), new Editor.Msg.Insert("x"))
                 .model();
         assertThat(next.text()).isEqualTo(DRAFT + "x");
@@ -62,7 +62,7 @@ class EditorKeystrokeCostTest {
 
     @Test
     void aBackspaceAtTheEndOfALargeDraftLandsBeforeTheLastCharacter() {
-        Editor.Model next = new Editor(Editor.Config.defaults())
+        Editor.Model next = new Editor(EditorConfig.defaults())
                 .update(Editor.Model.of(DRAFT), new Editor.Msg.Backspace())
                 .model();
         assertThat(next.text()).isEqualTo(DRAFT.substring(0, DRAFT_LENGTH - 1));

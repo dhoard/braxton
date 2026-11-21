@@ -31,19 +31,20 @@ import io.github.dhoard.braxton.style.ColorProfile;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.Views;
 import org.junit.jupiter.api.Test;
 
-/** The encoder is the only place escape sequences are produced. */
+/**
+ * The encoder is the only place escape sequences are produced.
+ */
 class AnsiEncoderTest {
 
     @Test
     void presentationSequencesRefuseAMissingValueAndCarryAnEmptyOne() {
         assertThatThrownBy(() -> AnsiEncoder.defaultColor(10, null))
-                .as("a default colour needs a colour")
+                .as("a default color needs a color")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> AnsiEncoder.defaultColor(9, Color.WHITE))
-                .as("only the three configurable colours have a default form")
+                .as("only the three configurable colors have a default form")
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("10, 11 or 12");
         assertThatThrownBy(() -> AnsiEncoder.progress(null)).isInstanceOf(IllegalArgumentException.class);
@@ -142,7 +143,11 @@ class AnsiEncoderTest {
             screen.put(2, 0, "d", Style.NONE, null, 1);
         }
         next.put(0, 1, "x", Style.NONE, null, 1);
-        assertThat(AnsiEncoder.diff(previous, next, true)).isEqualTo(AnsiEncoder.frame(next, true));
+        String diff = AnsiEncoder.diff(previous, next, true);
+        assertThat(diff)
+                .as("the one changed cell, and then the two rows a full row can spill into")
+                .contains("\u001B[1;2H")
+                .contains("\u001B[2;1H", "\u001B[3;1H");
         assertThat(AnsiEncoder.diff(next, next, true)).isEmpty();
     }
 
@@ -340,9 +345,12 @@ class AnsiEncoderTest {
     @Test
     void dataCannotInjectEscapesBecauseContentIsSanitizedBeforeEncoding() {
         var content = StyledText.of("x\u001B[31my", Style.NONE);
-        var screen = new io.github.dhoard.braxton.internal.render.LayoutEngine()
-                .layout(Views.text(content), new Rect(0, 0, 1, 10))
-                .screen();
+        io.github.dhoard.braxton.internal.render.Screen screen =
+                new io.github.dhoard.braxton.internal.render.Screen(1, 10);
+        io.github.dhoard.braxton.ui.ElementTree.paint(
+                io.github.dhoard.braxton.ui.ElementTree.layout(
+                        io.github.dhoard.braxton.widget.Elements.text(content), new Rect(0, 0, 1, 10)),
+                screen);
         String row = AnsiEncoder.encodeRow(screen, 0, true);
         assertThat(row).contains("x[31my");
         assertThat(row).doesNotContain("\u001B[31m");
@@ -403,14 +411,14 @@ class AnsiEncoderTest {
         assertThat(AnsiEncoder.sgr(style, ColorProfile.TRUECOLOR))
                 .isEqualTo("\u001B[1;38;2;240;68;56;48;2;46;144;250m");
         assertThat(AnsiEncoder.sgr(style, ColorProfile.ANSI256))
-                .as("a 256-colour session names palette indices, nearest first")
+                .as("a 256-color session names palette indices, nearest first")
                 .isEqualTo("\u001B[1;38;5;" + Colors.nearestAnsi256(Colors.ERROR_400) + ";48;5;"
                         + Colors.nearestAnsi256(Colors.BLUE_400) + "m");
         assertThat(AnsiEncoder.sgr(style, ColorProfile.ANSI16))
-                .as("a 16-colour session uses the classic foreground and background codes")
+                .as("a 16-color session uses the classic foreground and background codes")
                 .isEqualTo("\u001B[1;91;44m");
         assertThat(AnsiEncoder.sgr(style, ColorProfile.NONE))
-                .as("losing colour keeps the attribute")
+                .as("losing color keeps the attribute")
                 .isEqualTo("\u001B[1m");
         assertThat(AnsiEncoder.sgr(style, ColorProfile.AUTO))
                 .as("an unresolved profile never encodes a frame; it encodes as truecolor")
@@ -426,7 +434,7 @@ class AnsiEncoderTest {
                 .as("a bright background uses the bright background codes")
                 .isEqualTo("\u001B[1;101m");
         assertThat(AnsiEncoder.sgr(Style.NONE.withBold(), ColorProfile.ANSI256))
-                .as("a style with no colour asks the palette for nothing")
+                .as("a style with no color asks the palette for nothing")
                 .isEqualTo("\u001B[1m");
     }
 
@@ -441,7 +449,7 @@ class AnsiEncoderTest {
         assertThat(truecolor).contains("38;2;240;68;56");
         assertThat(ansi256).contains("38;5;").doesNotContain("38;2;");
         assertThat(plain)
-                .as("a session without colour still writes the hyperlink")
+                .as("a session without color still writes the hyperlink")
                 .contains("\u001B]8;;https://example.com\u001B\\")
                 .doesNotContain("38;2;", "38;5;", "38;");
     }

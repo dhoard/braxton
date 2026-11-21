@@ -27,16 +27,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import examples.parity.MarkdownDemo;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Markdown;
+import io.github.dhoard.braxton.widget.MarkdownConfig;
 import io.github.dhoard.braxton.widget.Table;
 import io.github.dhoard.braxton.widget.TextViewport;
 import java.util.ArrayList;
@@ -49,7 +50,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Phase 15 acceptance: the markdown dialect, its styling, its bounds, its cache and the demo pager.
  *
- * <p>Every assertion is against public behaviour: the rows a projection publishes, the styles and
+ * <p>Every assertion is against public behavior: the rows a projection publishes, the styles and
  * hyperlink targets its spans carry, the typed diagnostics a bound answers with, the instance a
  * repeated projection returns, and what a routed key does to the demo scene. The renderer a test
  * drives is the shipped {@link Markdown}, the pane it pages with is the shipped
@@ -63,26 +64,34 @@ class ParityMarkdownTest {
 
     private static final int SCREEN_COLS = 80;
 
-    /** The cells one CJK glyph occupies under the pinned width policy. */
+    /**
+     * The cells one CJK glyph occupies under the pinned width policy.
+     */
     private static final String WIDE = "\u63d0\u706f";
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    /** A renderer at one width with the default theme, highlighter and bounds. */
+    /**
+     * A renderer at one width with the default theme, highlighter and bounds.
+     */
     private static Markdown renderer(int width) {
-        return Markdown.of(Markdown.Config.defaults().withWidth(width));
+        return Markdown.of(MarkdownConfig.defaults().withWidth(width));
     }
 
     private static Markdown.Document render(String source, int width) {
         return renderer(width).document(source);
     }
 
-    /** The projected rows as plain text. */
+    /**
+     * The projected rows as plain text.
+     */
     private static List<String> rows(Markdown.Document document) {
         return document.lines().stream().map(StyledText::plainText).toList();
     }
 
-    /** Every span of a projection, in paint order. */
+    /**
+     * Every span of a projection, in paint order.
+     */
     private static List<StyledText.Span> spans(Markdown.Document document) {
         List<StyledText.Span> spans = new ArrayList<>();
         for (StyledText line : document.lines()) {
@@ -91,7 +100,9 @@ class ParityMarkdownTest {
         return spans;
     }
 
-    /** Every hyperlink target a projection published, in paint order. */
+    /**
+     * Every hyperlink target a projection published, in paint order.
+     */
     private static List<String> links(Markdown.Document document) {
         return spans(document).stream()
                 .map(StyledText.Span::link)
@@ -99,7 +110,9 @@ class ParityMarkdownTest {
                 .toList();
     }
 
-    /** The style of the span whose text is {@code text}, or of the first one holding it. */
+    /**
+     * The style of the span whose text is {@code text}, or of the first one holding it.
+     */
     private static Style styleOf(Markdown.Document document, String text) {
         List<StyledText.Span> spans = spans(document);
         return spans.stream()
@@ -113,7 +126,9 @@ class ParityMarkdownTest {
                 .orElseThrow(() -> new AssertionError("no span holding " + text + " in " + rows(document)));
     }
 
-    /** The columns a projection's rows occupy, as the pane would charge them. */
+    /**
+     * The columns a projection's rows occupy, as the pane would charge them.
+     */
     private static List<Integer> columns(Markdown.Document document) {
         return document.lines().stream()
                 .map(line -> TextMeasure.columns(line.plainText()))
@@ -259,7 +274,7 @@ class ParityMarkdownTest {
                 render("| part | count | notes |\n| :--- | ----: | :---: |\n| a | 2 | x |\n| bbbb | 12 | y |", 40);
 
         // A framed grid whose columns keep their widths: the count column is right-aligned, so its
-        // one- and two-digit cells share an edge, and the notes column is centred with its header.
+        // one- and two-digit cells share an edge, and the notes column is centered with its header.
         assertThat(rows(document))
                 .containsExactly(
                         "\u250c" + "\u2500".repeat(20) + "\u2510",
@@ -314,7 +329,7 @@ class ParityMarkdownTest {
         assertThat(document.text().plainText()).isEqualTo("Title\n\nbody text");
         assertThat(document.text()).isSameAs(document.text());
         // A one-element view of the projection paints the same value a text view would.
-        assertThat(new ScreenRenderer().plainLines(document.view(), new Viewport(6, 20)))
+        assertThat(ElementScreen.render(Elements.text(document.text()), 6, 20).lines())
                 .containsExactly("Title", "", "body text", "", "", "");
     }
 
@@ -383,7 +398,7 @@ class ParityMarkdownTest {
                         .isEqualTo(Style.bg(Markdown.Theme.light().codeBlock().background())));
 
         Markdown plain =
-                Markdown.of(Markdown.Config.defaults().withWidth(40).withHighlighter(Markdown.Highlighter.plain()));
+                Markdown.of(MarkdownConfig.defaults().withWidth(40).withHighlighter(Markdown.Highlighter.plain()));
         Markdown.Document document = plain.document("```java\npublic int a = 1;\n```");
         assertThat(document.lines().getFirst().spans())
                 .allSatisfy(span -> assertThat(span.style().foreground()).isNull());
@@ -394,12 +409,12 @@ class ParityMarkdownTest {
         String source = "# Title\n\nbody *emphasis*\n";
         Markdown.Document light = render(source, 40);
         Markdown.Document dark =
-                Markdown.of(Markdown.Config.dark().withWidth(40)).document(source);
+                Markdown.of(MarkdownConfig.dark().withWidth(40)).document(source);
 
         assertThat(rows(light)).isEqualTo(rows(dark));
         assertThat(styleOf(light, "Title")).isNotEqualTo(styleOf(dark, "Title"));
         assertThat(styleOf(dark, "Title")).isEqualTo(Markdown.Theme.dark().heading(1));
-        assertThat(Markdown.Config.dark().highlighter()).isEqualTo(Markdown.Highlighter.dark());
+        assertThat(MarkdownConfig.dark().highlighter()).isEqualTo(Markdown.Highlighter.dark());
     }
 
     @Test
@@ -411,7 +426,7 @@ class ParityMarkdownTest {
                 .withRule(distinctive)
                 .withDiagnostic(distinctive);
         Markdown.Document document = Markdown.of(
-                        Markdown.Config.defaults().withTheme(theme).withWidth(40))
+                        MarkdownConfig.defaults().withTheme(theme).withWidth(40))
                 .document("- bullet\n\n---\n");
 
         assertThat(styleOf(document, "\u2022")).isEqualTo(distinctive);
@@ -434,8 +449,8 @@ class ParityMarkdownTest {
 
     @Test
     void anInputOverTheByteLimitIsATypedFailure() {
-        Markdown tiny = Markdown.of(
-                Markdown.Config.defaults().withWidth(40).withLimits(new Markdown.Limits(16, 1000, 8, 1000)));
+        Markdown tiny =
+                Markdown.of(MarkdownConfig.defaults().withWidth(40).withLimits(new Markdown.Limits(16, 1000, 8, 1000)));
         Markdown.Document document = tiny.document("A source string longer than sixteen bytes.");
 
         assertThat(document.failed()).isTrue();
@@ -454,7 +469,7 @@ class ParityMarkdownTest {
 
     @Test
     void aNodeBudgetIsATypedFailure() {
-        Markdown bounded = Markdown.of(Markdown.Config.defaults()
+        Markdown bounded = Markdown.of(MarkdownConfig.defaults()
                 .withWidth(40)
                 .withLimits(new Markdown.Limits(Markdown.DEFAULT_MAX_INPUT_BYTES, 4, 8, 1000)));
         Markdown.Document document = bounded.document("one\n\ntwo\n\nthree\n");
@@ -466,7 +481,7 @@ class ParityMarkdownTest {
 
     @Test
     void aDepthBudgetIsATypedFailure() {
-        Markdown bounded = Markdown.of(Markdown.Config.defaults()
+        Markdown bounded = Markdown.of(MarkdownConfig.defaults()
                 .withWidth(40)
                 .withLimits(new Markdown.Limits(Markdown.DEFAULT_MAX_INPUT_BYTES, 1000, 2, 1000)));
         Markdown.Document document = bounded.document("> > > deep\n");
@@ -478,7 +493,7 @@ class ParityMarkdownTest {
 
     @Test
     void aCellBudgetIsATypedFailure() {
-        Markdown bounded = Markdown.of(Markdown.Config.defaults()
+        Markdown bounded = Markdown.of(MarkdownConfig.defaults()
                 .withWidth(40)
                 .withLimits(new Markdown.Limits(Markdown.DEFAULT_MAX_INPUT_BYTES, 1000, 8, 10)));
         Markdown.Document document = bounded.document("one two three four five six seven eight nine ten\n");
@@ -504,7 +519,7 @@ class ParityMarkdownTest {
     @Test
     void aFailedProjectionDoesNotPoisonTheNextOne() {
         Markdown renderer = renderer(40);
-        Markdown.Document strict = Markdown.of(Markdown.Config.defaults()
+        Markdown.Document strict = Markdown.of(MarkdownConfig.defaults()
                         .withWidth(40)
                         .withLimits(new Markdown.Limits(Markdown.DEFAULT_MAX_INPUT_BYTES, 1000, 8, 4)))
                 .document("# Title\n\nbody\n");
@@ -534,13 +549,13 @@ class ParityMarkdownTest {
         String source = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi";
         Markdown.Document narrow = renderer.document(source);
         Markdown.Document wide =
-                Markdown.of(Markdown.Config.defaults().withWidth(80)).document(source);
+                Markdown.of(MarkdownConfig.defaults().withWidth(80)).document(source);
 
         assertThat(narrow).isNotSameAs(wide);
         assertThat(rows(narrow).size()).isGreaterThan(rows(wide).size());
 
         Markdown.Document theme =
-                Markdown.of(Markdown.Config.dark().withWidth(40)).document(source);
+                Markdown.of(MarkdownConfig.dark().withWidth(40)).document(source);
         assertThat(theme).isNotSameAs(narrow);
         assertThat(theme.diagnostics()).isEmpty();
 
@@ -620,7 +635,8 @@ class ParityMarkdownTest {
     }
 
     private static Optional<MarkdownDemo.Msg> route(MarkdownDemo.Model state, InputEvent event) {
-        return InputRouter.route(demo().view(state, CONTEXT), event);
+        return io.github.dhoard.braxton.testing.Routing.route(demo(), state, CONTEXT, event).stream()
+                .findFirst();
     }
 
     private static MarkdownDemo.Model send(MarkdownDemo.Model state, String keySpec) {
@@ -639,8 +655,8 @@ class ParityMarkdownTest {
     }
 
     private static List<String> demoLines(MarkdownDemo.Model state) {
-        View<MarkdownDemo.Msg> view = demo().view(state, CONTEXT);
-        return new ScreenRenderer().plainLines(view, new Viewport(SCREEN_ROWS, SCREEN_COLS));
+        Element<MarkdownDemo.Msg> view = demo().view(state, CONTEXT);
+        return ElementScreen.render(view, SCREEN_ROWS, SCREEN_COLS).lines();
     }
 
     private static String demoRow(MarkdownDemo.Model state, int row) {
@@ -865,7 +881,7 @@ class ParityMarkdownTest {
         }
     }
 
-    // ── R-05: preserved behaviour and additive table alignment ──────────────
+    // ── R-05: preserved behavior and additive table alignment ──────────────
 
     @Test
     void tableAlignmentIsAdditiveAndDefaultsToLeft() {
@@ -890,7 +906,7 @@ class ParityMarkdownTest {
         List<String> rows =
                 right.renderLines().stream().map(StyledText::plainText).toList();
         assertThat(rows.getFirst().stripTrailing())
-                .as("the right column's short cell is centred")
+                .as("the right column's short cell is centered")
                 .isNotEqualTo(left.renderLines().getFirst().plainText().stripTrailing());
         assertThat(rows.getFirst().length())
                 .isEqualTo(plain.renderLines().getFirst().plainText().length());

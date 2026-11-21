@@ -28,16 +28,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.app.MouseMode;
 import io.github.dhoard.braxton.app.RuntimeOptions;
-import io.github.dhoard.braxton.app.TerminalCapabilities;
 import io.github.dhoard.braxton.app.TerminalOptions;
+import io.github.dhoard.braxton.app.TerminalPresentation;
+import io.github.dhoard.braxton.app.TerminalPresentation.Progress;
+import io.github.dhoard.braxton.app.TerminalPresentation.Status;
 import io.github.dhoard.braxton.app.TerminalQuery;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.input.Binding;
-import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.TerminalReply;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.internal.render.AnsiEncoder;
 import io.github.dhoard.braxton.internal.runtime.ManualTimers;
 import io.github.dhoard.braxton.internal.runtime.ScopeManager;
@@ -46,22 +46,20 @@ import io.github.dhoard.braxton.internal.runtime.TerminalQueries;
 import io.github.dhoard.braxton.internal.runtime.TestTerminal;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.Component;
+import io.github.dhoard.braxton.mvu.ComponentId;
 import io.github.dhoard.braxton.mvu.ComponentPath;
 import io.github.dhoard.braxton.mvu.InitContext;
+import io.github.dhoard.braxton.mvu.ModelLens;
+import io.github.dhoard.braxton.mvu.Mount;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.ColorProfile;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.RenderedScreen;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.TerminalPresentation;
-import io.github.dhoard.braxton.view.TerminalPresentation.Progress;
-import io.github.dhoard.braxton.view.TerminalPresentation.Status;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.terminal.Capabilities;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -78,7 +76,7 @@ import org.junit.jupiter.api.Timeout;
  * terminal handle appears in, it is layout-transparent, and the frame's tree may declare exactly one
  * of them. Its text is bounded and stripped of control characters, so no title or status message can
  * end the sequence it is written into and start another. The encoder writes the documented wire forms
- * for the title, the terminal's default colours, progress and program status, and the session writes
+ * for the title, the terminal's default colors, progress and program status, and the session writes
  * only what changed. The exit path gives back everything the session changed, while a finished
  * {@code done} or {@code error} status stays, which is what the protocol asks for.</p>
  *
@@ -91,7 +89,9 @@ class ParityPresentationTest {
 
     private static final Viewport VIEWPORT = new Viewport(6, 32);
 
-    /** The scene's own text, so a painted frame is recognizable in the transcript. */
+    /**
+     * The scene's own text, so a painted frame is recognizable in the transcript.
+     */
     private static final String SCENE_TEXT = "scene";
 
     private static final Color DEFAULT_TEXT = new Color(0x10, 0x20, 0x30);
@@ -147,62 +147,52 @@ class ParityPresentationTest {
     }
 
     @Test
-    void aFrameMayDeclareOnePresentationAndTwoDifferentOnesAreRejected() {
+    void theFramesIntentIsTheRootComponentsAnswerAndOneIntentPerFrame() {
+        // A frame's presentation is model data, so the root component is its only writer: there is
+        // no second declaration anywhere in a tree that could win or lose by paint order.
         TerminalPresentation intent = TerminalPresentation.title("root");
-        assertThat(TerminalPresentation.resolve(Views.text("plain"))).isEmpty();
-        assertThat(TerminalPresentation.resolve(Views.presentation(intent, Views.text("wrapped"))))
-                .contains(intent);
-        assertThat(TerminalPresentation.resolve(
-                        Views.column(Views.text("top"), Views.presentation(intent, Views.text("inner")))))
-                .as("the declaration is found wherever the root placed it")
-                .contains(intent);
-        assertThat(TerminalPresentation.resolve(Views.presentation(
-                        intent, Views.presentation(TerminalPresentation.title("root"), Views.text("inner")))))
-                .as("re-stating the same intent twice is one intent")
-                .contains(intent);
-
-        assertThatThrownBy(() -> TerminalPresentation.resolve(Views.presentation(
-                        TerminalPresentation.title("outer"),
-                        Views.presentation(TerminalPresentation.title("inner"), Views.text("x")))))
-                .as("a nested declaration cannot win or lose by paint order")
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("two different terminal presentations");
-
-        assertThat(TerminalPresentation.resolve(Views.presentation(
-                        intent,
-                        Views.sized(size -> Views.presentation(TerminalPresentation.title("inner"), Views.text("x"))))))
-                .as("a size-dependent subtree is not part of the frame's declared intent")
-                .contains(intent);
+        assertThat(TerminalPresentation.EMPTY.alternateScreen())
+                .as("no intent leaves the session's own choice")
+                .isNull();
+        assertThat(intent.title()).isEqualTo("root");
+        assertThat(intent).isNotEqualTo(TerminalPresentation.title("other"));
+        assertThat(TerminalPresentation.title("same")).isEqualTo(TerminalPresentation.title("same"));
     }
 
     @Test
-    void thePresentationWrapperChangesNothingTheLayoutDraws() {
-        RenderedScreen bare =
-                new ScreenRenderer().screen(Views.column(Views.text("top"), Views.text("bottom")), VIEWPORT);
-        RenderedScreen wrapped = new ScreenRenderer()
-                .screen(
-                        Views.presentation(
-                                TerminalPresentation.title("t"), Views.column(Views.text("top"), Views.text("bottom"))),
-                        VIEWPORT);
-        assertThat(wrapped.plainLines()).isEqualTo(bare.plainLines());
-        assertThat(wrapped.plainText()).isEqualTo(bare.plainText());
-        assertThat(new ScreenRenderer()
-                        .screen(Views.presentation(TerminalPresentation.EMPTY, Views.text("x")), VIEWPORT)
-                        .plainLines())
-                .isEqualTo(
-                        new ScreenRenderer().screen(Views.text("x"), VIEWPORT).plainLines());
-    }
+    void aMountedChildsPresentationIsLiftedThroughItsMount() {
+        // The mount asks its child and maps the answer, so a parent that composes a scene still
+        // presents the scene's own intent; two children that declared different intents would be
+        // the parent's composition problem, not the tree's.
+        TerminalPresentation child = TerminalPresentation.title("scene");
+        Mount<Integer, String, Never, String, String, Integer> mount = Mount.of(
+                ComponentId.of("scene"),
+                new Component<String, String, Integer>() {
+                    @Override
+                    public Update<String, String, Integer> init(InitContext context) {
+                        return Update.next("scene", Command.none());
+                    }
 
-    @Test
-    void mappingOrScopingAPresentationKeepsTheIntent() {
-        TerminalPresentation intent = TerminalPresentation.title("mapped");
-        View<String> mapped = Views.presentation(intent, Views.text("x")).map(message -> message + "!");
-        assertThat(TerminalPresentation.resolve(mapped)).contains(intent);
-        assertThat(Views.presentation(intent, Views.text("x")).scoped(ComponentPath.ROOT))
-                .isInstanceOf(View.Presentation.class);
-        assertThat(TerminalPresentation.resolve(
-                        Views.presentation(intent, Views.text("x")).scoped(ComponentPath.ROOT)))
-                .contains(intent);
+                    @Override
+                    public Update<String, String, Integer> update(String model, String message) {
+                        return Update.next(model, Command.none());
+                    }
+
+                    @Override
+                    public Element<String> view(String model, ViewContext context) {
+                        return Elements.text(model);
+                    }
+
+                    @Override
+                    public TerminalPresentation presentation(String model) {
+                        return child;
+                    }
+                },
+                ModelLens.of(model -> String.valueOf(model), (parent, next) -> next.length()),
+                message -> message,
+                io.github.dhoard.braxton.mvu.OutputRoute.toMessage(output -> String.valueOf(output)));
+
+        assertThat(mount.presentation(0)).isEqualTo(child);
     }
 
     // ── R-02: bounded text that cannot inject a sequence ─────────────────────
@@ -392,7 +382,7 @@ class ParityPresentationTest {
         assertThat(AnsiEncoder.defaultColor(11, DEFAULT_BACKDROP)).isEqualTo("\u001B]11;rgb:0a/0b/0c\u001B\\");
         assertThat(AnsiEncoder.defaultColor(12, DEFAULT_CARET)).isEqualTo("\u001B]12;rgb:11/22/33\u001B\\");
         assertThat(AnsiEncoder.cursorColor(DEFAULT_CARET))
-                .as("the caret colour and the default cursor colour are one wire form")
+                .as("the caret color and the default cursor color are one wire form")
                 .isEqualTo(AnsiEncoder.defaultColor(12, DEFAULT_CARET));
         assertThat(AnsiEncoder.RESET_FOREGROUND).isEqualTo("\u001B]110\u001B\\");
         assertThat(AnsiEncoder.RESET_BACKGROUND).isEqualTo("\u001B]111\u001B\\");
@@ -407,7 +397,7 @@ class ParityPresentationTest {
     @Test
     void planIsPureAndCommitIsWhatRecordsTheChange() {
         TerminalPresenter presenter = new TerminalPresenter(
-                TerminalOptions.DEFAULT, new TerminalCapabilities(true, true, true, true, "xterm-256color"), true);
+                TerminalOptions.DEFAULT, Capabilities.of(true, true, true, true, "xterm-256color"), true);
         TerminalPresentation intent = TerminalPresentation.title("once");
 
         TerminalPresenter.Transition first = presenter.plan(intent);
@@ -427,7 +417,7 @@ class ParityPresentationTest {
 
     @Test
     void theSessionDefaultsComeFromTheOptionsAndTheTerminal() {
-        TerminalCapabilities caps = new TerminalCapabilities(true, true, true, true, "xterm-256color");
+        Capabilities caps = Capabilities.of(true, true, true, true, "xterm-256color");
         TerminalPresenter presenter = new TerminalPresenter(
                 new TerminalOptions(
                         false, MouseMode.CLICK, false, io.github.dhoard.braxton.input.KeyboardEnhancements.NONE, false),
@@ -448,7 +438,7 @@ class ParityPresentationTest {
                 .as("only what the session reports is given back")
                 .isEmpty();
 
-        TerminalPresenter plain = new TerminalPresenter(TerminalOptions.DEFAULT, TerminalCapabilities.PLAIN, true);
+        TerminalPresenter plain = new TerminalPresenter(TerminalOptions.DEFAULT, Capabilities.PLAIN, true);
         assertThat(plain.open())
                 .as("a terminal that offers nothing is asked for nothing")
                 .isEmpty();
@@ -465,7 +455,7 @@ class ParityPresentationTest {
     @Test
     void metadataIsWrittenWhenItChangesAndGivenBackOnTheWayOut() {
         TerminalPresenter presenter = new TerminalPresenter(
-                TerminalOptions.DEFAULT, new TerminalCapabilities(true, true, true, true, "xterm-256color"), true);
+                TerminalOptions.DEFAULT, Capabilities.of(true, true, true, true, "xterm-256color"), true);
         TerminalPresentation intent = TerminalPresentation.EMPTY
                 .withTitle("braxton")
                 .withForeground(DEFAULT_TEXT)
@@ -497,35 +487,35 @@ class ParityPresentationTest {
     @Test
     void aColourlessSessionNeverSetsAColourAndGivesBackTheOnesItHad() {
         TerminalPresenter presenter = new TerminalPresenter(
-                TerminalOptions.DEFAULT, new TerminalCapabilities(true, true, true, true, "xterm-256color"), true);
+                TerminalOptions.DEFAULT, Capabilities.of(true, true, true, true, "xterm-256color"), true);
         TerminalPresentation intent =
                 TerminalPresentation.EMPTY.withForeground(DEFAULT_TEXT).withBackground(DEFAULT_BACKDROP);
         presenter.commit(presenter.plan(intent));
 
         presenter.colorEnabled(false);
         assertThat(presenter.plan(intent).sequences())
-                .as("losing colour resets the defaults instead of leaving them applied")
+                .as("losing color resets the defaults instead of leaving them applied")
                 .isEqualTo(AnsiEncoder.RESET_FOREGROUND + AnsiEncoder.RESET_BACKGROUND);
         presenter.commit(presenter.plan(intent));
 
-        TerminalPresenter colourless = new TerminalPresenter(
-                TerminalOptions.DEFAULT, new TerminalCapabilities(false, true, true, true, "dumb"), false);
+        TerminalPresenter colourless =
+                new TerminalPresenter(TerminalOptions.DEFAULT, Capabilities.of(false, true, true, true, "dumb"), false);
         assertThat(colourless.plan(intent).sequences())
-                .as("a session without colour never sets a terminal default colour")
+                .as("a session without color never sets a terminal default color")
                 .isEmpty();
     }
 
     @Test
     void aFinalStatusIsRetainedWhileARunInProgressIsCleared() {
         TerminalPresenter presenter = new TerminalPresenter(
-                TerminalOptions.DEFAULT, new TerminalCapabilities(true, true, true, true, "xterm-256color"), true);
+                TerminalOptions.DEFAULT, Capabilities.of(true, true, true, true, "xterm-256color"), true);
         presenter.commit(presenter.plan(TerminalPresentation.EMPTY.withStatus(Status.of(Status.State.DONE))));
         assertThat(presenter.restoreMetadata())
                 .as("a finished result is what the protocol keeps for the user")
                 .isEmpty();
 
         TerminalPresenter working = new TerminalPresenter(
-                TerminalOptions.DEFAULT, new TerminalCapabilities(true, true, true, true, "xterm-256color"), true);
+                TerminalOptions.DEFAULT, Capabilities.of(true, true, true, true, "xterm-256color"), true);
         working.commit(working.plan(TerminalPresentation.EMPTY.withStatus(
                 Status.working("demo", "Working").withId("build"))));
         assertThat(working.restoreMetadata())
@@ -533,7 +523,7 @@ class ParityPresentationTest {
                 .isEqualTo("\u001B]7501;state=clear:id=build\u001B\\");
 
         TerminalPresenter cleared = new TerminalPresenter(
-                TerminalOptions.DEFAULT, new TerminalCapabilities(true, true, true, true, "xterm-256color"), true);
+                TerminalOptions.DEFAULT, Capabilities.of(true, true, true, true, "xterm-256color"), true);
         cleared.commit(cleared.plan(TerminalPresentation.EMPTY.withStatus(
                 Status.of(Status.State.CLEAR).withId("us-east"))));
         assertThat(cleared.restoreMetadata())
@@ -543,13 +533,19 @@ class ParityPresentationTest {
 
     // ── R-01/R-04: the mounted session presents and restores ─────────────────
 
-    /** One message the scene handles. */
+    /**
+     * One message the scene handles.
+     */
     private sealed interface Msg {
 
-        /** Advance to the next presentation the scene was given. */
+        /**
+         * Advance to the next presentation the scene was given.
+         */
         record Advance() implements Msg {}
 
-        /** End the session. */
+        /**
+         * End the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -575,26 +571,32 @@ class ParityPresentationTest {
             }
 
             @Override
-            public View<Msg> view(Integer step, ViewContext context) {
-                return Views.presentation(
-                        steps.get(step),
-                        Views.focus(
-                                ElementId.of("scene"),
-                                true,
-                                List.of(
-                                        new Binding<>(Key.of("a"), new Msg.Advance()),
-                                        new Binding<>(Key.of("q"), new Msg.Quit())),
-                                View.InputHandler.none(),
-                                Views.text(SCENE_TEXT + step)));
+            public Element<Msg> view(Integer step, ViewContext context) {
+                return Elements.text(SCENE_TEXT + step);
+            }
+
+            @Override
+            public TerminalPresentation presentation(Integer step) {
+                return steps.get(step);
+            }
+
+            @Override
+            public java.util.List<Binding<Msg>> claims(Integer step) {
+                return List.of(Binding.of("a", new Msg.Advance()), Binding.of("q", new Msg.Quit()));
             }
         };
     }
 
-    /** Runs one scene, answering each painted step with {@code a} and finishing with {@code q}. */
+    /**
+     * Runs one scene, answering each painted step with {@code a} and finishing with {@code q}.
+     */
     private static ExitResult runSteps(TestTerminal fixture, List<TerminalPresentation> steps, RuntimeOptions options) {
         AtomicInteger fed = new AtomicInteger();
         fixture.onOutput(text -> {
-            if (text.contains(SCENE_TEXT)) {
+            // A frame is the unit to answer, not the scene's text: after the first frame the session
+            // writes only the cells that changed, so the text of a later step may arrive as one
+            // corrected digit and never appear as a whole line again.
+            if (text.contains("\u001B[?2026h")) {
                 // Each frame is answered once, so every step is its own input turn and is presented.
                 if (fed.incrementAndGet() < steps.size()) {
                     fixture.feed("a");
@@ -631,7 +633,7 @@ class ParityPresentationTest {
                     .contains("\u001B]9;4;1;40\u001B\\")
                     .contains("\u001B]7501;state=working:app=demo:msg=V29ya2luZw==\u001B\\");
             assertThat(output)
-                    .as("the exit pops the title, resets the colours, removes the progress and clears the run")
+                    .as("the exit pops the title, resets the colors, removes the progress and clears the run")
                     .contains(AnsiEncoder.POP_TITLE)
                     .contains(AnsiEncoder.RESET_FOREGROUND)
                     .contains(AnsiEncoder.RESET_BACKGROUND)
@@ -749,7 +751,7 @@ class ParityPresentationTest {
         // The ledger is committed only after the write, so a plan repeated before a commit is what a
         // failed frame looks like: the session never believes it entered the mode.
         TerminalPresenter presenter = new TerminalPresenter(
-                TerminalOptions.DEFAULT, new TerminalCapabilities(true, true, true, true, "xterm-256color"), true);
+                TerminalOptions.DEFAULT, Capabilities.of(true, true, true, true, "xterm-256color"), true);
         TerminalPresenter.Transition transition = presenter.plan(TerminalPresentation.EMPTY.withAlternateScreen(false));
         assertThat(transition.bufferChanged()).isTrue();
         assertThat(transition.sequences()).isEqualTo(AnsiEncoder.ALT_SCREEN_OFF);
@@ -780,18 +782,21 @@ class ParityPresentationTest {
                 }
 
                 @Override
-                public View<Msg> view(Integer frame, ViewContext context) {
+                public Element<Msg> view(Integer frame, ViewContext context) {
                     if (frame > 0) {
                         throw new IllegalStateException("the scene cannot paint");
                     }
-                    return Views.presentation(
-                            TerminalPresentation.EMPTY.withTitle("braxton").withProgress(Progress.normal(40)),
-                            Views.focus(
-                                    ElementId.of("scene"),
-                                    true,
-                                    List.of(new Binding<>(Key.of("a"), new Msg.Advance())),
-                                    View.InputHandler.none(),
-                                    Views.text(SCENE_TEXT + frame)));
+                    return Elements.text(SCENE_TEXT + frame);
+                }
+
+                @Override
+                public TerminalPresentation presentation(Integer frame) {
+                    return TerminalPresentation.EMPTY.withTitle("braxton").withProgress(Progress.normal(40));
+                }
+
+                @Override
+                public java.util.List<Binding<Msg>> claims(Integer frame) {
+                    return List.of(new Binding<>(Key.of("a"), new Msg.Advance()));
                 }
             };
             fixture.onOutput(text -> {
@@ -812,61 +817,11 @@ class ParityPresentationTest {
         }
     }
 
-    @Test
-    void declaringTwoPresentationsFailsTheRunWithAStructuralDiagnostic() {
-        try (TestTerminal fixture = new TestTerminal()) {
-            Component<Integer, Msg, Never> program = new Component<>() {
-                @Override
-                public Update<Integer, Msg, Never> init(InitContext context) {
-                    return Update.next(0, Command.quit());
-                }
-
-                @Override
-                public Update<Integer, Msg, Never> update(Integer model, Msg message) {
-                    return Update.next(model);
-                }
-
-                @Override
-                public View<Msg> view(Integer model, ViewContext context) {
-                    return Views.presentation(
-                            TerminalPresentation.title("outer"),
-                            Views.column(
-                                    Views.text(SCENE_TEXT),
-                                    Views.presentation(TerminalPresentation.title("inner"), Views.text("inner"))));
-                }
-            };
-            ExitResult result = TestTerminal.run(program, RuntimeOptions.defaults(), fixture);
-            assertThat(result.failure()).isNotNull();
-            assertThat(result.failure().getMessage()).as("the failing phase").contains("VIEW");
-            assertThat(result.failure().getCause())
-                    .as("the structural reason")
-                    .hasMessageContaining("two different terminal presentations");
-            assertThat(fixture.outputText())
-                    .as("the terminal is still restored after the structural failure")
-                    .contains(AnsiEncoder.ALT_SCREEN_OFF, AnsiEncoder.SHOW_CURSOR);
-        }
-    }
-
-    @Test
-    void aSceneWrappedInAPresentationStillRoutesItsOwnKeys() {
-        View<String> scene = Views.presentation(
-                TerminalPresentation.EMPTY,
-                Views.onKeys(List.of(new Binding<>(Key.of("a"), "advanced")), Views.text(SCENE_TEXT)));
-        assertThat(InputRouter.route(scene, new InputEvent.KeyInput(Key.of("a"), "a", 0L)))
-                .as("a pure-presentation wrapper is not structure: the scene's bindings still match")
-                .contains("advanced");
-        assertThat(InputRouter.route(
-                        Views.cursor(io.github.dhoard.braxton.view.Cursor.at(0, 0), scene),
-                        new InputEvent.KeyInput(Key.of("a"), "a", 0L)))
-                .as("and a caret wrapper is transparent for the same reason")
-                .contains("advanced");
-        assertThat(InputRouter.route(scene, new InputEvent.KeyInput(Key.of("z"), "z", 0L)))
-                .isEmpty();
-    }
-
     // ── R-03: the program-status support query ──────────────────────────────
 
-    /** An engine wired to an owned timer, a recorded output and a delivered-answer list. */
+    /**
+     * An engine wired to an owned timer, a recorded output and a delivered-answer list.
+     */
     private static final class Engine {
         final ManualTimers timers = new ManualTimers();
         final List<String> written = new CopyOnWriteArrayList<>();

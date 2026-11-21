@@ -32,7 +32,6 @@ import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.KeyMap;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
@@ -42,10 +41,16 @@ import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.RichList;
+import io.github.dhoard.braxton.widget.RichListConfig;
+import io.github.dhoard.braxton.widget.RichListDefaultRenderer;
+import io.github.dhoard.braxton.widget.RichListFilter;
+import io.github.dhoard.braxton.widget.RichListModel;
+import io.github.dhoard.braxton.widget.RichListMsg;
+import io.github.dhoard.braxton.widget.RichListOutput;
 import io.github.dhoard.braxton.widget.TextInput;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -56,7 +61,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Phase 11 acceptance: item identity, filtering, paging, chrome, feedback and the demo scene.
  *
- * <p>Every assertion is against public behaviour: the model a message produces, the pages it
+ * <p>Every assertion is against public behavior: the model a message produces, the pages it
  * reports, the cells a width paints, the subscriptions a state owns and what a routed key does to
  * the demo scene. The list a test drives is the shipped component with the demo's own definition
  * where the demo is the subject, so a mounted integration is the composition an application
@@ -70,20 +75,24 @@ class ParityListTest {
 
     private static final int SCREEN_COLS = 80;
 
-    /** The rows the demo's own status block occupies, which its list definition reserves. */
+    /**
+     * The rows the demo's own status block occupies, which its list definition reserves.
+     */
     private static final int DEMO_STATUS_ROWS = RichListDemo.STATUS_ROWS;
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private static RichList list() {
-        return new RichList(RichList.Config.defaults().withRows(21).withItems(items()));
+        return new RichList(RichListConfig.defaults().withRows(21).withItems(items()));
     }
 
-    private static RichList list(RichList.Config config) {
+    private static RichList list(RichListConfig config) {
         return new RichList(config);
     }
 
-    /** A small fixture: one row an item, so a page holds as many items as it has rows. */
+    /**
+     * A small fixture: one row an item, so a page holds as many items as it has rows.
+     */
     private static List<RichList.Item> items() {
         return List.of(
                 RichList.Item.of("a", "alpha", "first"),
@@ -94,15 +103,15 @@ class ParityListTest {
                 RichList.Item.of("f", "zeta", "sixth"));
     }
 
-    private static RichList.Model model(List<RichList.Item> items, int rows) {
-        return RichList.Model.of(items, rows);
+    private static RichListModel model(List<RichList.Item> items, int rows) {
+        return RichListModel.of(items, rows);
     }
 
-    private static RichList.Model apply(RichList component, RichList.Model state, RichList.Msg message) {
+    private static RichListModel apply(RichList component, RichListModel state, RichListMsg message) {
         return component.update(state, message).model();
     }
 
-    private static RichList.Model apply(RichList.Model state, RichList.Msg message) {
+    private static RichListModel apply(RichListModel state, RichListMsg message) {
         return list().update(state, message).model();
     }
 
@@ -111,21 +120,23 @@ class ParityListTest {
         return InputEvent.KeyInput.of(parsed, parsed.name());
     }
 
-    /** A key with the text a terminal reports for it, which is what types into the filter field. */
+    /**
+     * A key with the text a terminal reports for it, which is what types into the filter field.
+     */
     private static InputEvent.KeyInput typed(String text) {
         Key parsed = Key.parse(text);
         return InputEvent.KeyInput.of(parsed, text);
     }
 
-    private static List<String> painted(View<?> view) {
+    private static List<String> painted(Element<?> view) {
         return painted(view, SCREEN_ROWS, SCREEN_COLS);
     }
 
-    private static List<String> painted(View<?> view, int rows, int cols) {
-        return new ScreenRenderer().plainLines(view, new Viewport(rows, cols));
+    private static List<String> painted(Element<?> view, int rows, int cols) {
+        return ElementScreen.render(view, rows, cols).lines();
     }
 
-    private static List<String> painted(RichList component, RichList.Model state, int rows, int cols) {
+    private static List<String> painted(RichList component, RichListModel state, int rows, int cols) {
         return painted(component.view(state, new ViewContext(new Viewport(rows, cols))), rows, cols);
     }
 
@@ -133,11 +144,13 @@ class ParityListTest {
         return matches.stream().map(RichList.Match::id).toList();
     }
 
-    private static String screen(RichList component, RichList.Model state) {
+    private static String screen(RichList component, RichListModel state) {
         return String.join("\n", painted(component, state, SCREEN_ROWS, SCREEN_COLS));
     }
 
-    /** The demo the packaged launch runs, driven as its own component. */
+    /**
+     * The demo the packaged launch runs, driven as its own component.
+     */
     private static RichListDemo.Scene demo() {
         return new RichListDemo.Scene();
     }
@@ -151,9 +164,12 @@ class ParityListTest {
         return demo().update(state, message).model();
     }
 
-    /** What one key does to the demo's screen, as the scene's own message. */
+    /**
+     * What one key does to the demo's screen, as the scene's own message.
+     */
     private static Optional<RichListDemo.Msg> route(RichListDemo.Model state, InputEvent event) {
-        return InputRouter.route(demo().view(state, CONTEXT), event);
+        return io.github.dhoard.braxton.testing.Routing.route(demo(), state, CONTEXT, event).stream()
+                .findFirst();
     }
 
     private static RichListDemo.Model send(RichListDemo.Model state, String keySpec) {
@@ -184,7 +200,7 @@ class ParityListTest {
     @Test
     void anEmptyListHasNoSelectionAndPaintsItsEmptyState() {
         RichList component = list();
-        RichList.Model state = model(List.of(), 10);
+        RichListModel state = model(List.of(), 10);
         assertThat(state.items()).isEmpty();
         assertThat(state.selectedId()).isEmpty();
         assertThat(state.selectedItem()).isEmpty();
@@ -193,7 +209,7 @@ class ParityListTest {
         assertThat(RichList.pageIndex(state, component.config())).isZero();
         assertThat(screen(component, state)).contains(RichList.NO_ITEMS);
         // A choice with nothing selected is not a choice, so the list reports nothing at all.
-        assertThat(component.update(state, new RichList.Msg.Choose()).outputs()).isEmpty();
+        assertThat(component.update(state, new RichListMsg.Choose()).outputs()).isEmpty();
     }
 
     @Test
@@ -221,34 +237,34 @@ class ParityListTest {
         assertThat(byDescription.filterText()).isEqualTo("alpha first");
         assertThat(ids(RichList.visible(apply(
                                 model(List.of(byDescription), 10),
-                                new RichList.Msg.SetFilterMode(RichList.FilterMode.PREFIX))
-                        .withFilter(new RichList.Filter(
+                                new RichListMsg.SetFilterMode(RichList.FilterMode.PREFIX))
+                        .withFilter(new RichListFilter(
                                 TextInput.Model.of("first").withFocus(false), "", RichList.FilterMode.PREFIX, "")))))
                 .containsExactly("a");
     }
 
     @Test
     void theDefaultRendererMeasuresAnItemByItsDescription() {
-        RichList.DefaultRenderer renderer = RichList.DefaultRenderer.defaults();
+        RichListDefaultRenderer renderer = RichListDefaultRenderer.defaults();
         assertThat(renderer.height(RichList.Item.of("a", "alpha"))).isEqualTo(1);
         assertThat(renderer.height(RichList.Item.of("a", "alpha", "one line"))).isEqualTo(2);
         assertThat(renderer.height(RichList.Item.of("a", "alpha", "one\ntwo")))
                 .as("a description bound of one row keeps the item two rows tall")
                 .isEqualTo(2);
-        assertThat(new RichList.DefaultRenderer(null, true, 3)
+        assertThat(new RichListDefaultRenderer(null, true, 3)
                         .height(RichList.Item.of("a", "alpha", "one\ntwo\nthree\nfour")))
                 .isEqualTo(4);
-        assertThat(new RichList.DefaultRenderer(null, false, 3).height(RichList.Item.of("a", "alpha", "one\ntwo")))
+        assertThat(new RichListDefaultRenderer(null, false, 3).height(RichList.Item.of("a", "alpha", "one\ntwo")))
                 .as("a hidden description takes no rows")
                 .isEqualTo(1);
-        assertThat(new RichList.DefaultRenderer(null, true, 2).height(RichList.Item.of("a", "alpha", "")))
+        assertThat(new RichListDefaultRenderer(null, true, 2).height(RichList.Item.of("a", "alpha", "")))
                 .as("an empty description takes no rows")
                 .isEqualTo(1);
     }
 
     @Test
     void theDefaultRendererPaintsAMarkerTitleAndDescription() {
-        RichList.DefaultRenderer renderer = RichList.DefaultRenderer.defaults();
+        RichListDefaultRenderer renderer = RichListDefaultRenderer.defaults();
         RichList.Item item = RichList.Item.of("a", "alpha", "first");
         assertThat(renderer.render(new RichList.Row(item, true, 40, List.of())))
                 .extracting(StyledText::plainText)
@@ -275,8 +291,8 @@ class ParityListTest {
             }
         };
         RichList component =
-                list(RichList.Config.defaults().withItems(items()).withRows(9).withRenderer(tall));
-        RichList.Model state =
+                list(RichListConfig.defaults().withItems(items()).withRows(9).withRenderer(tall));
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
         List<String> lines = painted(component, state, 12, 40);
         assertThat(lines).anyMatch(line -> line.contains("[one] alpha"));
@@ -295,9 +311,9 @@ class ParityListTest {
 
     @Test
     void insertingAboveTheSelectionKeepsItSelected() {
-        RichList.Model state = apply(model(items(), 10), new RichList.Msg.Down());
+        RichListModel state = apply(model(items(), 10), new RichListMsg.Down());
         assertThat(state.selectedId()).isEqualTo("b");
-        RichList.Model inserted = apply(state, new RichList.Msg.InsertItem(0, RichList.Item.of("new", "new item")));
+        RichListModel inserted = apply(state, new RichListMsg.InsertItem(0, RichList.Item.of("new", "new item")));
         assertThat(inserted.items()).hasSize(7);
         assertThat(inserted.items().get(0).id())
                 .as("the new item is where it was asked for")
@@ -309,39 +325,39 @@ class ParityListTest {
 
     @Test
     void replacingTheSelectedItemKeepsTheSelection() {
-        RichList.Model state = apply(model(items(), 10), new RichList.Msg.Down());
-        RichList.Model replaced =
-                apply(state, new RichList.Msg.ReplaceItem(RichList.Item.of("b", "beta two", "changed")));
+        RichListModel state = apply(model(items(), 10), new RichListMsg.Down());
+        RichListModel replaced =
+                apply(state, new RichListMsg.ReplaceItem(RichList.Item.of("b", "beta two", "changed")));
         assertThat(replaced.selectedId()).isEqualTo("b");
         assertThat(replaced.selectedItem())
                 .get()
                 .extracting(RichList.Item::title)
                 .isEqualTo("beta two");
-        assertThat(apply(replaced, new RichList.Msg.ReplaceItem(RichList.Item.of("zz", "absent"))))
+        assertThat(apply(replaced, new RichListMsg.ReplaceItem(RichList.Item.of("zz", "absent"))))
                 .as("replacing an item the list does not hold is a no-op")
                 .isSameAs(replaced);
     }
 
     @Test
     void removingTheSelectedItemSelectsTheNearestSurvivingItem() {
-        RichList.Model state = apply(model(items(), 10), new RichList.Msg.Down());
+        RichListModel state = apply(model(items(), 10), new RichListMsg.Down());
         assertThat(state.selectedId()).isEqualTo("b");
-        RichList.Model removed = apply(state, new RichList.Msg.RemoveItem("b"));
+        RichListModel removed = apply(state, new RichListMsg.RemoveItem("b"));
         assertThat(removed.items()).hasSize(5);
         assertThat(removed.selectedId())
                 .as("the next item takes the place the removed one held")
                 .isEqualTo("c");
-        RichList.Model lastRemoved = apply(apply(removed, new RichList.Msg.Last()), new RichList.Msg.RemoveItem("f"));
+        RichListModel lastRemoved = apply(apply(removed, new RichListMsg.Last()), new RichListMsg.RemoveItem("f"));
         assertThat(lastRemoved.selectedId())
                 .as("removing the last item selects the one before it")
                 .isEqualTo("e");
-        assertThat(apply(removed, new RichList.Msg.RemoveItem("zz"))).isSameAs(removed);
+        assertThat(apply(removed, new RichListMsg.RemoveItem("zz"))).isSameAs(removed);
     }
 
     @Test
     void removingTheOnlyItemLeavesNothingSelected() {
-        RichList.Model single = model(List.of(RichList.Item.of("only", "only")), 10);
-        RichList.Model removed = apply(single, new RichList.Msg.RemoveItem("only"));
+        RichListModel single = model(List.of(RichList.Item.of("only", "only")), 10);
+        RichListModel removed = apply(single, new RichListMsg.RemoveItem("only"));
         assertThat(removed.items()).isEmpty();
         assertThat(removed.selectedId()).isEmpty();
         assertThat(RichList.visible(removed)).isEmpty();
@@ -349,28 +365,28 @@ class ParityListTest {
 
     @Test
     void aModelBuiltWithAnAbsentSelectionSelectsTheFirstItem() {
-        RichList.Model state = new RichList.Model(
+        RichListModel state = new RichListModel(
                 items(),
                 "zz",
-                RichList.Filter.of(RichList.FilterMode.FUZZY),
+                RichListFilter.of(RichList.FilterMode.FUZZY),
                 RichList.Chrome.defaults(),
                 10,
                 null,
                 null,
                 true);
         assertThat(state.selectedId()).isEqualTo("a");
-        assertThat(new RichList.Model(items(), "c", null, null, 10, null, null, true).selectedId())
+        assertThat(new RichListModel(items(), "c", null, null, 10, null, null, true).selectedId())
                 .as("a selection the list holds is kept")
                 .isEqualTo("c");
     }
 
     @Test
     void aMultilineTitleIsPaintedOnOneRow() {
-        RichList component = list(RichList.Config.defaults()
+        RichList component = list(RichListConfig.defaults()
                 .withItems(List.of(new RichList.Item("a", "alpha\nbeta", "first\r\nsecond", null)))
                 .withRows(8)
-                .withRenderer(new RichList.DefaultRenderer(null, true, 2)));
-        RichList.Model state =
+                .withRenderer(new RichListDefaultRenderer(null, true, 2)));
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
         List<String> lines = painted(component, state, 10, 40);
         assertThat(lines).anyMatch(line -> line.contains(RichList.MARKER + "alpha beta"));
@@ -382,39 +398,42 @@ class ParityListTest {
     @Test
     void anUnfocusedListStillMarksItsSelectionAndRoutesNothing() {
         RichList component = list();
-        RichList.Model state = model(items(), 10).withFocus(false);
+        RichListModel state = model(items(), 10).withFocus(false);
         assertThat(screen(component, state)).contains(RichList.MARKER + "alpha");
         assertThat(routeList(component, state, key("down"))).isEmpty();
     }
 
     // ── R-02: filtering and pagination ──────────────────────────────────────
 
-    private static Optional<RichList.Msg> routeList(RichList component, RichList.Model state, InputEvent event) {
-        return InputRouter.route(component.view(state, CONTEXT), event);
+    private static Optional<RichListMsg> routeList(RichList component, RichListModel state, InputEvent event) {
+        return io.github.dhoard.braxton.testing.Routing.route(component, state, CONTEXT, event).stream()
+                .findFirst();
     }
 
-    /** A list with a query already applied, built the way the component builds it. */
-    private static RichList.Model filtered(RichList.Model state, String query, RichList.FilterMode mode) {
-        return state.withFilter(new RichList.Filter(TextInput.Model.of(query).withFocus(false), query, mode, ""));
+    /**
+     * A list with a query already applied, built the way the component builds it.
+     */
+    private static RichListModel filtered(RichListModel state, String query, RichList.FilterMode mode) {
+        return state.withFilter(new RichListFilter(TextInput.Model.of(query).withFocus(false), query, mode, ""));
     }
 
     @Test
     void matchingIsCaseInsensitiveByCodePoint() {
-        RichList.Model state = model(items(), 10);
+        RichListModel state = model(items(), 10);
         assertThat(ids(RichList.visible(filtered(state, "GAMMA", RichList.FilterMode.PREFIX))))
                 .containsExactly("c");
         assertThat(ids(RichList.visible(filtered(state, "gAm", RichList.FilterMode.FUZZY))))
                 .containsExactly("c");
         // U+0130 lowercases to a single 'i' code point under the simple mapping, so folding never
         // moves an offset inside the value.
-        RichList.Model dotted = model(List.of(RichList.Item.of("i", "İstanbul")), 10);
+        RichListModel dotted = model(List.of(RichList.Item.of("i", "İstanbul")), 10);
         assertThat(ids(RichList.visible(filtered(dotted, "istanbul", RichList.FilterMode.PREFIX))))
                 .containsExactly("i");
     }
 
     @Test
     void everyTermOfAQueryMustMatch() {
-        RichList.Model state = model(
+        RichListModel state = model(
                 List.of(new RichList.Item("a", "alpha", "first", "alpha first"), RichList.Item.of("b", "beta")), 10);
         assertThat(ids(RichList.visible(filtered(state, "alpha first", RichList.FilterMode.PREFIX))))
                 .as("every term has to match, in any position")
@@ -433,7 +452,7 @@ class ParityListTest {
     void prefixModeKeepsItemOrder() {
         List<RichList.Item> fixture =
                 List.of(RichList.Item.of("1", "abc"), RichList.Item.of("2", "xabc"), RichList.Item.of("3", "abc x"));
-        RichList.Model state = model(fixture, 10);
+        RichListModel state = model(fixture, 10);
         assertThat(ids(RichList.visible(filtered(state, "abc", RichList.FilterMode.PREFIX))))
                 .containsExactly("1", "2", "3");
     }
@@ -445,7 +464,7 @@ class ParityListTest {
                 RichList.Item.of("late", "xabc"),
                 RichList.Item.of("exact", "abc"),
                 RichList.Item.of("second", "ab c"));
-        RichList.Model state = model(fixture, 10);
+        RichListModel state = model(fixture, 10);
         assertThat(ids(RichList.visible(filtered(state, "abc", RichList.FilterMode.FUZZY))))
                 .as("shortest span first, then earliest start, then item order")
                 .containsExactly("exact", "late", "second", "wide");
@@ -455,7 +474,7 @@ class ParityListTest {
     void fuzzyModeRanksEqualMatchesByItemOrder() {
         List<RichList.Item> fixture = List.of(
                 RichList.Item.of("1", "abc one"), RichList.Item.of("2", "abc two"), RichList.Item.of("3", "abc three"));
-        RichList.Model state = model(fixture, 10);
+        RichListModel state = model(fixture, 10);
         assertThat(ids(RichList.visible(filtered(state, "abc", RichList.FilterMode.FUZZY))))
                 .containsExactly("1", "2", "3");
     }
@@ -474,12 +493,12 @@ class ParityListTest {
     @Test
     void beginningAFilterKeepsTheSelectionUntilTheQueryHidesIt() {
         RichList component = list();
-        RichList.Model state = apply(component, model(items(), 10), new RichList.Msg.Down());
-        RichList.Model editing = apply(component, state, new RichList.Msg.BeginFilter());
+        RichListModel state = apply(component, model(items(), 10), new RichListMsg.Down());
+        RichListModel editing = apply(component, state, new RichListMsg.BeginFilter());
         assertThat(editing.filter().editing()).isTrue();
         assertThat(editing.selectedId()).as("starting an edit moves nothing").isEqualTo("b");
         assertThat(editing.filter().prefilterSelection()).isEqualTo("b");
-        RichList.Model typed = apply(component, editing, new RichList.Msg.FilterInput(new TextInput.Msg.Insert("gam")));
+        RichListModel typed = apply(component, editing, new RichListMsg.FilterInput(new TextInput.Msg.Insert("gam")));
         assertThat(ids(RichList.visible(typed))).containsExactly("c");
         assertThat(typed.selectedId())
                 .as("a hidden selection falls to the first item the query shows")
@@ -489,24 +508,23 @@ class ParityListTest {
     @Test
     void cancellingAFilterRestoresThePrefilterSelectionAndQuery() {
         RichList component = list();
-        RichList.Model state = apply(component, model(items(), 10), new RichList.Msg.Down());
-        RichList.Model accepted = apply(
+        RichListModel state = apply(component, model(items(), 10), new RichListMsg.Down());
+        RichListModel accepted = apply(
                 component,
                 apply(
                         component,
-                        apply(component, state, new RichList.Msg.BeginFilter()),
-                        new RichList.Msg.FilterInput(new TextInput.Msg.Insert("alpha"))),
-                new RichList.Msg.AcceptFilter());
+                        apply(component, state, new RichListMsg.BeginFilter()),
+                        new RichListMsg.FilterInput(new TextInput.Msg.Insert("alpha"))),
+                new RichListMsg.AcceptFilter());
         assertThat(accepted.filter().query()).isEqualTo("alpha");
         assertThat(accepted.filter().applied()).isEqualTo("alpha");
         assertThat(accepted.filter().editing()).isFalse();
         assertThat(accepted.selectedId()).isEqualTo("a");
 
-        RichList.Model editing = apply(component, accepted, new RichList.Msg.BeginFilter());
-        RichList.Model extended =
-                apply(component, editing, new RichList.Msg.FilterInput(new TextInput.Msg.Insert("x")));
+        RichListModel editing = apply(component, accepted, new RichListMsg.BeginFilter());
+        RichListModel extended = apply(component, editing, new RichListMsg.FilterInput(new TextInput.Msg.Insert("x")));
         assertThat(ids(RichList.visible(extended))).isEmpty();
-        RichList.Model cancelled = apply(component, extended, new RichList.Msg.Cancel());
+        RichListModel cancelled = apply(component, extended, new RichListMsg.Cancel());
         assertThat(cancelled.filter().editing()).isFalse();
         assertThat(cancelled.filter().query())
                 .as("cancel restores the applied query")
@@ -517,13 +535,12 @@ class ParityListTest {
     @Test
     void cancellingAFreshFilterRestoresTheSelectionItHid() {
         RichList component = list();
-        RichList.Model state = apply(component, model(items(), 10), new RichList.Msg.Last());
+        RichListModel state = apply(component, model(items(), 10), new RichListMsg.Last());
         assertThat(state.selectedId()).isEqualTo("f");
-        RichList.Model editing = apply(component, state, new RichList.Msg.BeginFilter());
-        RichList.Model typed =
-                apply(component, editing, new RichList.Msg.FilterInput(new TextInput.Msg.Insert("alpha")));
+        RichListModel editing = apply(component, state, new RichListMsg.BeginFilter());
+        RichListModel typed = apply(component, editing, new RichListMsg.FilterInput(new TextInput.Msg.Insert("alpha")));
         assertThat(typed.selectedId()).isEqualTo("a");
-        RichList.Model cancelled = apply(component, typed, new RichList.Msg.Cancel());
+        RichListModel cancelled = apply(component, typed, new RichListMsg.Cancel());
         assertThat(cancelled.filter().query()).isEmpty();
         assertThat(cancelled.selectedId())
                 .as("the item selected before the edit is selected again")
@@ -533,17 +550,17 @@ class ParityListTest {
     @Test
     void aCancelWithNothingLeftToUndoReportsCancellation() {
         RichList component = list();
-        Update<RichList.Model, RichList.Msg, RichList.Output> update =
-                component.update(model(items(), 10), new RichList.Msg.Cancel());
-        assertThat(update.outputs()).containsExactly(new RichList.Output.Cancelled());
+        Update<RichListModel, RichListMsg, RichListOutput> update =
+                component.update(model(items(), 10), new RichListMsg.Cancel());
+        assertThat(update.outputs()).containsExactly(new RichListOutput.Canceled());
     }
 
     @Test
     void clearingAnAppliedQueryKeepsASelectionThatSurvives() {
         RichList component = list();
-        RichList.Model state = filtered(model(items(), 10), "gamma", RichList.FilterMode.PREFIX);
+        RichListModel state = filtered(model(items(), 10), "gamma", RichList.FilterMode.PREFIX);
         assertThat(state.selectedId()).isEqualTo("c");
-        RichList.Model cleared = apply(component, state, new RichList.Msg.ClearFilter());
+        RichListModel cleared = apply(component, state, new RichListMsg.ClearFilter());
         assertThat(cleared.filter().query()).isEmpty();
         assertThat(cleared.selectedId()).isEqualTo("c");
         assertThat(ids(RichList.visible(cleared))).containsExactly("a", "b", "c", "d", "e", "f");
@@ -552,13 +569,13 @@ class ParityListTest {
     @Test
     void aFilterModeCanBeSwitchedAndSet() {
         RichList component = list();
-        RichList.Model state = apply(component, model(items(), 10), new RichList.Msg.ToggleFilterMode());
+        RichListModel state = apply(component, model(items(), 10), new RichListMsg.ToggleFilterMode());
         assertThat(state.filter().mode()).isEqualTo(RichList.FilterMode.PREFIX);
-        assertThat(apply(component, state, new RichList.Msg.ToggleFilterMode())
+        assertThat(apply(component, state, new RichListMsg.ToggleFilterMode())
                         .filter()
                         .mode())
                 .isEqualTo(RichList.FilterMode.FUZZY);
-        assertThat(apply(component, state, new RichList.Msg.SetFilterMode(RichList.FilterMode.FUZZY))
+        assertThat(apply(component, state, new RichListMsg.SetFilterMode(RichList.FilterMode.FUZZY))
                         .filter()
                         .mode())
                 .isEqualTo(RichList.FilterMode.FUZZY);
@@ -586,7 +603,7 @@ class ParityListTest {
 
     @Test
     void anItemThatMatchesOnlyThroughItsFilterTextPaintsNoHighlight() {
-        RichList.Model state = model(List.of(new RichList.Item("a", "alpha", "first", "alpha first")), 10);
+        RichListModel state = model(List.of(new RichList.Item("a", "alpha", "first", "alpha first")), 10);
         RichList.Match match = RichList.visible(filtered(state, "first", RichList.FilterMode.PREFIX))
                 .get(0);
         assertThat(match.highlights()).as("the title has nothing to highlight").isEmpty();
@@ -597,11 +614,11 @@ class ParityListTest {
 
     @Test
     void pagesCoverEveryVisibleItemExactlyOnce() {
-        RichList component = list(RichList.Config.defaults()
+        RichList component = list(RichListConfig.defaults()
                 .withItems(RichListDemo.ITEMS)
-                .withRows(16
-                        + RichList.chromeRows(RichList.Model.of(RichListDemo.ITEMS, 21), RichList.Config.defaults())));
-        RichList.Model state =
+                .withRows(
+                        16 + RichList.chromeRows(RichListModel.of(RichListDemo.ITEMS, 21), RichListConfig.defaults())));
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
         List<RichList.Page> pages = RichList.pages(state, component.config());
         assertThat(pages).hasSize(30);
@@ -617,35 +634,35 @@ class ParityListTest {
     @Test
     void pageMovementSelectsTheFirstItemOfThePageArrivedAt() {
         RichList component =
-                list(RichList.Config.defaults().withItems(RichListDemo.ITEMS).withRows(21));
-        RichList.Model state =
+                list(RichListConfig.defaults().withItems(RichListDemo.ITEMS).withRows(21));
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
-        RichList.Model second = apply(component, state, new RichList.Msg.NextPage());
+        RichListModel second = apply(component, state, new RichListMsg.NextPage());
         assertThat(second.selectedId()).isEqualTo("item-009");
         assertThat(RichList.pageIndex(second, component.config())).isEqualTo(1);
-        RichList.Model first = apply(component, second, new RichList.Msg.PreviousPage());
+        RichListModel first = apply(component, second, new RichListMsg.PreviousPage());
         assertThat(first.selectedId()).isEqualTo("item-001");
-        assertThat(apply(component, first, new RichList.Msg.PreviousPage()))
+        assertThat(apply(component, first, new RichListMsg.PreviousPage()))
                 .as("paging before the first page changes nothing")
                 .isSameAs(first);
-        RichList.Model last = apply(component, first, new RichList.Msg.Last());
+        RichListModel last = apply(component, first, new RichListMsg.Last());
         assertThat(RichList.pageIndex(last, component.config())).isEqualTo(29);
-        assertThat(apply(component, last, new RichList.Msg.NextPage())).isSameAs(last);
+        assertThat(apply(component, last, new RichListMsg.NextPage())).isSameAs(last);
     }
 
     @Test
     void movingTheSelectionAcrossAPageBoundaryFollowsIt() {
         RichList component =
-                list(RichList.Config.defaults().withItems(RichListDemo.ITEMS).withRows(21));
-        RichList.Model state =
+                list(RichListConfig.defaults().withItems(RichListDemo.ITEMS).withRows(21));
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
-        RichList.Model eighth = state;
+        RichListModel eighth = state;
         for (int step = 0; step < 7; step++) {
-            eighth = apply(component, eighth, new RichList.Msg.Down());
+            eighth = apply(component, eighth, new RichListMsg.Down());
         }
         assertThat(eighth.selectedId()).isEqualTo("item-008");
         assertThat(RichList.pageIndex(eighth, component.config())).isZero();
-        RichList.Model ninth = apply(component, eighth, new RichList.Msg.Down());
+        RichListModel ninth = apply(component, eighth, new RichListMsg.Down());
         assertThat(ninth.selectedId()).isEqualTo("item-009");
         assertThat(RichList.pageIndex(ninth, component.config()))
                 .as("the page follows the selection instead of being stored")
@@ -655,15 +672,15 @@ class ParityListTest {
     @Test
     void aResizeRepacksThePagesAndKeepsTheSelection() {
         RichList component =
-                list(RichList.Config.defaults().withItems(RichListDemo.ITEMS).withRows(21));
-        RichList.Model state =
+                list(RichListConfig.defaults().withItems(RichListDemo.ITEMS).withRows(21));
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
         for (int step = 0; step < 100; step++) {
-            state = apply(component, state, new RichList.Msg.Down());
+            state = apply(component, state, new RichListMsg.Down());
         }
         assertThat(state.selectedId()).isEqualTo("item-101");
         int before = RichList.pages(state, component.config()).size();
-        RichList.Model shorter = apply(component, state, new RichList.Msg.RowsChanged(12));
+        RichListModel shorter = apply(component, state, new RichListMsg.RowsChanged(12));
         assertThat(shorter.rows()).isEqualTo(12);
         assertThat(shorter.selectedId()).as("a resize keeps the selected item").isEqualTo("item-101");
         assertThat(RichList.pages(shorter, component.config()))
@@ -676,11 +693,11 @@ class ParityListTest {
 
     @Test
     void tallItemsTakeMoreOfAPage() {
-        RichList tall = list(RichList.Config.defaults()
+        RichList tall = list(RichListConfig.defaults()
                 .withItems(items())
                 .withRows(8)
-                .withRenderer(new RichList.DefaultRenderer(null, true, 3)));
-        RichList.Model state =
+                .withRenderer(new RichListDefaultRenderer(null, true, 3)));
+        RichListModel state =
                 tall.init(new InitContext(new Viewport(0, 0), null)).model();
         // Four rows are left after the chrome (title, counts, dots and one compact help line), and
         // a two-row item means two of them fit a page.
@@ -689,11 +706,11 @@ class ParityListTest {
 
         List<RichList.Item> tallItems = List.of(
                 RichList.Item.of("a", "alpha", "one\ntwo\nthree"), RichList.Item.of("b", "beta", "one\ntwo\nthree"));
-        RichList four = list(RichList.Config.defaults()
+        RichList four = list(RichListConfig.defaults()
                 .withItems(tallItems)
                 .withRows(8)
-                .withRenderer(new RichList.DefaultRenderer(null, true, 3)));
-        RichList.Model fourState =
+                .withRenderer(new RichListDefaultRenderer(null, true, 3)));
+        RichListModel fourState =
                 four.init(new InitContext(new Viewport(0, 0), null)).model();
         assertThat(RichList.pages(fourState, four.config()).get(0))
                 .as("a four-row item fills the page on its own")
@@ -718,8 +735,8 @@ class ParityListTest {
             }
         };
         RichList component =
-                list(RichList.Config.defaults().withItems(items()).withRows(7).withRenderer(tall));
-        RichList.Model state =
+                list(RichListConfig.defaults().withItems(items()).withRows(7).withRenderer(tall));
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
         assertThat(RichList.contentRows(state, component.config())).isEqualTo(3);
         assertThat(RichList.pages(state, component.config())).hasSize(6);
@@ -734,9 +751,9 @@ class ParityListTest {
 
     @Test
     void insertingWhileFilteringKeepsTheSelectionWhenItStillMatches() {
-        RichList.Model state = filtered(model(items(), 10), "a", RichList.FilterMode.PREFIX);
+        RichListModel state = filtered(model(items(), 10), "a", RichList.FilterMode.PREFIX);
         assertThat(ids(RichList.visible(state))).containsExactly("a", "b", "c", "d", "f");
-        RichList.Model inserted = apply(state, new RichList.Msg.InsertItem(0, RichList.Item.of("new", "an item")));
+        RichListModel inserted = apply(state, new RichListMsg.InsertItem(0, RichList.Item.of("new", "an item")));
         assertThat(inserted.selectedId()).isEqualTo("a");
     }
 
@@ -745,28 +762,28 @@ class ParityListTest {
     @Test
     void eachChromeToggleGivesItsRowsBackToTheContent() {
         RichList component = list();
-        RichList.Model state = model(items(), 21);
+        RichListModel state = model(items(), 21);
         assertThat(RichList.chromeRows(state, component.config())).isEqualTo(4);
         assertThat(RichList.contentRows(state, component.config())).isEqualTo(17);
-        assertThat(RichList.contentRows(apply(component, state, new RichList.Msg.ToggleTitle()), component.config()))
+        assertThat(RichList.contentRows(apply(component, state, new RichListMsg.ToggleTitle()), component.config()))
                 .isEqualTo(18);
-        assertThat(RichList.contentRows(apply(component, state, new RichList.Msg.ToggleStatus()), component.config()))
+        assertThat(RichList.contentRows(apply(component, state, new RichListMsg.ToggleStatus()), component.config()))
                 .isEqualTo(18);
         assertThat(RichList.contentRows(
-                        apply(component, state, new RichList.Msg.TogglePagination()), component.config()))
+                        apply(component, state, new RichListMsg.TogglePagination()), component.config()))
                 .isEqualTo(18);
-        assertThat(RichList.contentRows(apply(component, state, new RichList.Msg.ToggleHelp()), component.config()))
+        assertThat(RichList.contentRows(apply(component, state, new RichListMsg.ToggleHelp()), component.config()))
                 .isEqualTo(18);
-        RichList.Model bare = apply(
+        RichListModel bare = apply(
                 component,
                 apply(
                         component,
                         apply(
                                 component,
-                                apply(component, state, new RichList.Msg.ToggleTitle()),
-                                new RichList.Msg.ToggleStatus()),
-                        new RichList.Msg.TogglePagination()),
-                new RichList.Msg.ToggleHelp());
+                                apply(component, state, new RichListMsg.ToggleTitle()),
+                                new RichListMsg.ToggleStatus()),
+                        new RichListMsg.TogglePagination()),
+                new RichListMsg.ToggleHelp());
         assertThat(RichList.chromeRows(bare, component.config())).isZero();
         assertThat(RichList.contentRows(bare, component.config())).isEqualTo(21);
     }
@@ -774,10 +791,10 @@ class ParityListTest {
     @Test
     void theFilterBarIsPaintedEvenWhenTheTitleIsSwitchedOff() {
         RichList component = list();
-        RichList.Model state = apply(
+        RichListModel state = apply(
                 component,
-                apply(component, model(items(), 10), new RichList.Msg.ToggleTitle()),
-                new RichList.Msg.BeginFilter());
+                apply(component, model(items(), 10), new RichListMsg.ToggleTitle()),
+                new RichListMsg.BeginFilter());
         assertThat(RichList.chromeRows(state, component.config())).isEqualTo(4);
         assertThat(String.join("\n", painted(component, state, 12, 40))).contains("alpha");
         assertThat(painted(component, state, 12, 40).get(0))
@@ -789,7 +806,7 @@ class ParityListTest {
     @Test
     void zeroAvailableRowsPaintsNoContentAndNoError() {
         RichList component = list();
-        RichList.Model state = model(items(), 0);
+        RichListModel state = model(items(), 0);
         assertThat(RichList.contentRows(state, component.config())).isZero();
         assertThat(RichList.pages(state, component.config())).hasSize(6);
         String painted = screen(component, state);
@@ -802,16 +819,16 @@ class ParityListTest {
     @Test
     void theNoticeIsPaintedAfterTheCountsAndExpires() {
         RichList component = list();
-        Update<RichList.Model, RichList.Msg, RichList.Output> update =
-                component.update(model(items(), 10), new RichList.Msg.Notice("added one"));
-        RichList.Model noticed = update.model();
+        Update<RichListModel, RichListMsg, RichListOutput> update =
+                component.update(model(items(), 10), new RichListMsg.Notice("added one"));
+        RichListModel noticed = update.model();
         assertThat(noticed.notice().text()).isEqualTo("added one");
         assertThat(noticed.notice().epoch()).isEqualTo(1);
         assertThat(screen(component, noticed)).contains("6 items" + RichList.STATUS_SEPARATOR + "added one");
         assertThat(update.command())
                 .as("the notice owns the scope that clears it")
                 .isInstanceOf(Command.Delay.class);
-        RichList.Model expired = apply(component, noticed, new RichList.Msg.NoticeExpired(1));
+        RichListModel expired = apply(component, noticed, new RichListMsg.NoticeExpired(1));
         assertThat(expired.notice().present()).isFalse();
         assertThat(screen(component, expired)).doesNotContain("added one");
     }
@@ -819,17 +836,17 @@ class ParityListTest {
     @Test
     void aStaleExpiryDoesNotClearANewerNotice() {
         RichList component = list();
-        RichList.Model first = component
-                .update(model(items(), 10), new RichList.Msg.Notice("one"))
+        RichListModel first = component
+                .update(model(items(), 10), new RichListMsg.Notice("one"))
                 .model();
-        RichList.Model second =
-                component.update(first, new RichList.Msg.Notice("two")).model();
+        RichListModel second =
+                component.update(first, new RichListMsg.Notice("two")).model();
         assertThat(second.notice().epoch()).isEqualTo(2);
-        RichList.Model stale = apply(component, second, new RichList.Msg.NoticeExpired(1));
+        RichListModel stale = apply(component, second, new RichListMsg.NoticeExpired(1));
         assertThat(stale)
                 .as("an expiry for a notice that no longer exists changes nothing")
                 .isSameAs(second);
-        assertThat(apply(component, second, new RichList.Msg.NoticeExpired(2))
+        assertThat(apply(component, second, new RichListMsg.NoticeExpired(2))
                         .notice()
                         .present())
                 .isFalse();
@@ -838,11 +855,11 @@ class ParityListTest {
     @Test
     void aNoticeIsScheduledOnce() {
         RichList component = list();
-        Update<RichList.Model, RichList.Msg, RichList.Output> noticed =
-                component.update(model(items(), 10), new RichList.Msg.Notice("one"));
+        Update<RichListModel, RichListMsg, RichListOutput> noticed =
+                component.update(model(items(), 10), new RichListMsg.Notice("one"));
         assertThat(noticed.command()).isInstanceOf(Command.Delay.class);
-        Update<RichList.Model, RichList.Msg, RichList.Output> moved =
-                component.update(noticed.model(), new RichList.Msg.Down());
+        Update<RichListModel, RichListMsg, RichListOutput> moved =
+                component.update(noticed.model(), new RichListMsg.Down());
         assertThat(moved.command())
                 .as("a state that did not set a notice schedules nothing")
                 .isInstanceOf(Command.None.class);
@@ -851,17 +868,17 @@ class ParityListTest {
     @Test
     void theSpinnerRunsOnlyWhileLoading() {
         RichList component = list();
-        RichList.Model state = model(items(), 10);
-        List<Subscription<RichList.Msg>> idle = Subscription.leaves(component.subscriptions(state));
+        RichListModel state = model(items(), 10);
+        List<Subscription<RichListMsg>> idle = Subscription.leaves(component.subscriptions(state));
         assertThat(idle).hasSize(1);
         assertThat(idle.get(0)).isInstanceOf(Subscription.Resize.class);
-        RichList.Model loading = apply(component, state, new RichList.Msg.ToggleLoading());
+        RichListModel loading = apply(component, state, new RichListMsg.ToggleLoading());
         assertThat(loading.chrome().loading()).isTrue();
         assertThat(loading.spinner().running()).isTrue();
-        List<Subscription<RichList.Msg>> busy = Subscription.leaves(component.subscriptions(loading));
+        List<Subscription<RichListMsg>> busy = Subscription.leaves(component.subscriptions(loading));
         assertThat(busy).hasSize(2);
         assertThat(busy).anyMatch(leaf -> leaf instanceof Subscription.Interval<?>);
-        RichList.Model stopped = apply(component, loading, new RichList.Msg.ToggleLoading());
+        RichListModel stopped = apply(component, loading, new RichListMsg.ToggleLoading());
         assertThat(stopped.chrome().loading()).isFalse();
         assertThat(stopped.spinner().running()).isFalse();
         assertThat(Subscription.leaves(component.subscriptions(stopped)))
@@ -872,11 +889,11 @@ class ParityListTest {
     @Test
     void theTitleBarPaintsTheSpinnerOnlyWhileLoading() {
         RichList component =
-                list(RichList.Config.defaults().withItems(items()).withRows(10).withTitle("Things"));
-        RichList.Model state =
+                list(RichListConfig.defaults().withItems(items()).withRows(10).withTitle("Things"));
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
         assertThat(painted(component, state, 12, 40).get(0)).isEqualTo("Things");
-        RichList.Model loading = apply(component, state, new RichList.Msg.ToggleLoading());
+        RichListModel loading = apply(component, state, new RichListMsg.ToggleLoading());
         assertThat(painted(component, loading, 12, 40).get(0))
                 .contains("Things")
                 .isNotEqualTo("Things");
@@ -885,10 +902,10 @@ class ParityListTest {
     @Test
     void fullHelpListsEveryGroupAndCompactHelpOneLine() {
         RichList component = list();
-        RichList.Model state = model(items(), 21);
+        RichListModel state = model(items(), 21);
         List<String> compact = painted(component, state, 24, 120);
         assertThat(compact.stream().filter(line -> line.contains("up \u2022"))).hasSize(1);
-        RichList.Model full = apply(component, state, new RichList.Msg.ToggleExpandedHelp());
+        RichListModel full = apply(component, state, new RichListMsg.ToggleExpandedHelp());
         List<String> expanded = painted(component, full, 32, 120);
         assertThat(expanded).anyMatch(line -> line.contains("Move"));
         assertThat(expanded).anyMatch(line -> line.contains("Chrome"));
@@ -901,20 +918,20 @@ class ParityListTest {
     @Test
     void helpDescribesTheGesturesOneStateHandles() {
         RichList component = list();
-        RichList.Model state = model(items(), 10);
+        RichListModel state = model(items(), 10);
         List<String> browsing = helpLines(component, state);
         assertThat(browsing).anyMatch(line -> line.contains("enter choose"));
         assertThat(browsing).anyMatch(line -> line.contains("esc cancel"));
-        RichList.Model editing = apply(component, state, new RichList.Msg.BeginFilter());
+        RichListModel editing = apply(component, state, new RichListMsg.BeginFilter());
         List<String> filtering = helpLines(component, editing);
         assertThat(filtering).anyMatch(line -> line.contains("enter apply filter"));
         assertThat(filtering).anyMatch(line -> line.contains("esc cancel edit"));
         assertThat(filtering).noneMatch(line -> line.contains("choose"));
-        RichList.Model applied = filtered(state, "alpha", RichList.FilterMode.PREFIX);
+        RichListModel applied = filtered(state, "alpha", RichList.FilterMode.PREFIX);
         assertThat(helpLines(component, applied)).anyMatch(line -> line.contains("esc clear filter"));
     }
 
-    private static List<String> helpLines(RichList component, RichList.Model state) {
+    private static List<String> helpLines(RichList component, RichListModel state) {
         return painted(component, state, 24, 120).stream()
                 .filter(line -> line.contains("\u2022") || line.contains("Move"))
                 .toList();
@@ -924,8 +941,8 @@ class ParityListTest {
     void theApplicationAddsItsOwnHelpWithoutClaimingItsGestures() {
         KeyMap<RichListDemo.Msg> app = RichListDemo.keys();
         RichList component =
-                list(RichList.Config.defaults().withItems(items()).withRows(16).withExtraHelp(app));
-        RichList.Model state =
+                list(RichListConfig.defaults().withItems(items()).withRows(16).withExtraHelp(app));
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
         assertThat(painted(component, state, 20, 120)).anyMatch(line -> line.contains("a add item"));
         assertThat(routeList(component, state, key("a")))
@@ -936,11 +953,11 @@ class ParityListTest {
     @Test
     void theResizeSubscriptionReportsTheTerminalHeight() {
         RichList component =
-                list(RichList.Config.defaults().withItems(items()).withRows(21).withReservedRows(3));
-        List<Subscription<RichList.Msg>> leaves = Subscription.leaves(component.subscriptions(model(items(), 21)));
-        Subscription.Resize<RichList.Msg> resize = (Subscription.Resize<RichList.Msg>) leaves.get(0);
-        RichList.Msg message = resize.onResize().apply(new io.github.dhoard.braxton.layout.Size(24, 80));
-        RichList.Model state = apply(component, model(items(), 21), message);
+                list(RichListConfig.defaults().withItems(items()).withRows(21).withReservedRows(3));
+        List<Subscription<RichListMsg>> leaves = Subscription.leaves(component.subscriptions(model(items(), 21)));
+        Subscription.Resize<RichListMsg> resize = (Subscription.Resize<RichListMsg>) leaves.get(0);
+        RichListMsg message = resize.onResize().apply(new io.github.dhoard.braxton.layout.Size(24, 80));
+        RichListModel state = apply(component, model(items(), 21), message);
         assertThat(state.rows())
                 .as("the application's reserved rows are taken out")
                 .isEqualTo(21);
@@ -961,7 +978,7 @@ class ParityListTest {
                 .contains("filter=-")
                 .contains("mode=fuzzy")
                 .contains("matches=240");
-        assertThat(demoRow(state, 3)).isEqualTo("Favourite things");
+        assertThat(demoRow(state, 3)).isEqualTo("Favorite things");
         assertThat(demoRow(state, 4)).isEqualTo("240 items");
         assertThat(demoRow(state, 5)).contains(RichList.MARKER + "Raspberry jam");
         assertThat(demoRow(state, 22)).contains("\u2191 up");
@@ -1038,15 +1055,15 @@ class ParityListTest {
     @Test
     void theDemoChoosesAnItemAndDispatchesANoticeThroughTheMount() {
         Update<RichListDemo.Model, RichListDemo.Msg, Never> update =
-                demo().update(start(), new RichListDemo.Msg.List(new RichList.Msg.Choose()));
+                demo().update(start(), new RichListDemo.Msg.List(new RichListMsg.Choose()));
         assertThat(update.outputs()).isEmpty();
         assertThat(update.command())
                 .as("the choice is routed to the scene as a message")
                 .isInstanceOf(Command.Dispatch.class);
         RichListDemo.Msg chosen = ((Command.Dispatch<RichListDemo.Msg>) update.command()).message();
         assertThat(chosen)
-                .isEqualTo(new RichListDemo.Msg.Output(
-                        new RichList.Output.Chosen(start().list().selectedItem().orElseThrow())));
+                .isEqualTo(new RichListDemo.Msg.Output(new RichListOutput.Chosen(
+                        List.of(start().list().selectedItem().orElseThrow()))));
         Update<RichListDemo.Model, RichListDemo.Msg, Never> reported = demo().update(update.model(), chosen);
         assertThat(reported.model().last()).isEqualTo("chose-item-001");
         assertThat(reported.command())
@@ -1062,12 +1079,12 @@ class ParityListTest {
     @Test
     void theDemoQuitsWhenTheListReportsCancellation() {
         Update<RichListDemo.Model, RichListDemo.Msg, Never> cancelled =
-                demo().update(start(), new RichListDemo.Msg.List(new RichList.Msg.Cancel()));
+                demo().update(start(), new RichListDemo.Msg.List(new RichListMsg.Cancel()));
         RichListDemo.Msg routed = ((Command.Dispatch<RichListDemo.Msg>) cancelled.command()).message();
-        assertThat(routed).isEqualTo(new RichListDemo.Msg.Output(new RichList.Output.Cancelled()));
+        assertThat(routed).isEqualTo(new RichListDemo.Msg.Output(new RichListOutput.Canceled()));
         Update<RichListDemo.Model, RichListDemo.Msg, Never> quit = demo().update(cancelled.model(), routed);
         assertThat(quit.command()).isInstanceOf(Command.Quit.class);
-        assertThat(quit.model().last()).isEqualTo("cancelled");
+        assertThat(quit.model().last()).isEqualTo("canceled");
     }
 
     @Test
@@ -1075,7 +1092,7 @@ class ParityListTest {
         RichListDemo.Model state = send(start(), "down");
         int rows = state.list().rows();
         RichListDemo.Model shorter =
-                apply(state, new RichListDemo.Msg.List(new RichList.Msg.RowsChanged(rows + DEMO_STATUS_ROWS - 6)));
+                apply(state, new RichListDemo.Msg.List(new RichListMsg.RowsChanged(rows + DEMO_STATUS_ROWS - 6)));
         assertThat(shorter.list().rows()).isEqualTo(rows - 6);
         assertThat(shorter.list().selectedId())
                 .as("a resize keeps the selected item")
@@ -1119,22 +1136,22 @@ class ParityListTest {
     @Test
     void aMessageThatChangesNothingKeepsTheIncomingInstance() {
         RichList component = list();
-        RichList.Model state = model(items(), 10);
-        assertThat(apply(component, state, new RichList.Msg.Up())).isSameAs(state);
-        assertThat(apply(component, state, new RichList.Msg.BeginFilter()).selectedId())
+        RichListModel state = model(items(), 10);
+        assertThat(apply(component, state, new RichListMsg.Up())).isSameAs(state);
+        assertThat(apply(component, state, new RichListMsg.BeginFilter()).selectedId())
                 .isEqualTo("a");
-        assertThat(apply(component, state, new RichList.Msg.SetItems(items()))).isSameAs(state);
+        assertThat(apply(component, state, new RichListMsg.SetItems(items()))).isSameAs(state);
         assertThat(apply(
                         component,
-                        apply(component, state, new RichList.Msg.ToggleTitle()),
-                        new RichList.Msg.ToggleTitle()))
+                        apply(component, state, new RichListMsg.ToggleTitle()),
+                        new RichListMsg.ToggleTitle()))
                 .isEqualTo(state);
     }
 
     @Test
     void theViewIsAPureFunctionOfTheModel() {
         RichList component = list();
-        RichList.Model state = filtered(model(items(), 12), "a", RichList.FilterMode.FUZZY);
+        RichListModel state = filtered(model(items(), 12), "a", RichList.FilterMode.FUZZY);
         List<String> first = painted(component, state, SCREEN_ROWS, SCREEN_COLS);
         List<String> second = painted(component, state, SCREEN_ROWS, SCREEN_COLS);
         assertThat(second).isEqualTo(first);
@@ -1165,8 +1182,8 @@ class ParityListTest {
             }
         };
         RichList component =
-                list(RichList.Config.defaults().withItems(items).withRows(21).withRenderer(counting));
-        RichList.Model state =
+                list(RichListConfig.defaults().withItems(items).withRows(21).withRenderer(counting));
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
         assertTimeout(Duration.ofSeconds(2), () -> painted(component, state, SCREEN_ROWS, SCREEN_COLS));
         assertThat(rendered[0]).as("only one page of items is rendered").isEqualTo(17);
@@ -1189,8 +1206,8 @@ class ParityListTest {
             }
         };
         RichList component =
-                list(RichList.Config.defaults().withItems(items()).withRows(8).withRenderer(wide));
-        RichList.Model state =
+                list(RichListConfig.defaults().withItems(items()).withRows(8).withRenderer(wide));
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
         for (String line : painted(component, state, 12, 40)) {
             assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(40);
@@ -1211,8 +1228,8 @@ class ParityListTest {
             }
         };
         RichList component =
-                list(RichList.Config.defaults().withItems(items()).withRows(9).withRenderer(silent));
-        RichList.Model state =
+                list(RichListConfig.defaults().withItems(items()).withRows(9).withRenderer(silent));
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
         assertThat(painted(component, state, 12, 40)).anyMatch(line -> line.contains("first alpha"));
 
@@ -1230,8 +1247,8 @@ class ParityListTest {
             }
         };
         RichList tall = new RichList(
-                RichList.Config.defaults().withItems(items()).withRows(9).withRenderer(chatty));
-        RichList.Model chattyState =
+                RichListConfig.defaults().withItems(items()).withRows(9).withRenderer(chatty));
+        RichListModel chattyState =
                 tall.init(new InitContext(new Viewport(0, 0), null)).model();
         List<String> lines = painted(tall, chattyState, 12, 40);
         assertThat(lines.stream().filter(line -> line.startsWith("a alpha"))).hasSize(1);
@@ -1243,9 +1260,8 @@ class ParityListTest {
     @Test
     void aTickFromAStoppedSpinnerIsIgnored() {
         RichList component = list();
-        RichList.Model state = model(items(), 10);
-        RichList.Msg stale =
-                new RichList.Msg.SpinnerMessage(new io.github.dhoard.braxton.widget.Spinner.Msg.Tick(0, 5));
+        RichListModel state = model(items(), 10);
+        RichListMsg stale = new RichListMsg.SpinnerMessage(new io.github.dhoard.braxton.widget.Spinner.Msg.Tick(0, 5));
         assertThat(apply(component, state, stale)).isSameAs(state);
     }
 
@@ -1263,29 +1279,29 @@ class ParityListTest {
             "\uD83D\uDC69\u200D\uD83D\uDCBB join",
             "x".repeat(30)
         };
-        RichList.Msg[] browse = {
-            new RichList.Msg.Up(),
-            new RichList.Msg.Down(),
-            new RichList.Msg.NextPage(),
-            new RichList.Msg.PreviousPage(),
-            new RichList.Msg.First(),
-            new RichList.Msg.Last(),
-            new RichList.Msg.ToggleTitle(),
-            new RichList.Msg.ToggleStatus(),
-            new RichList.Msg.TogglePagination(),
-            new RichList.Msg.ToggleHelp(),
-            new RichList.Msg.ToggleExpandedHelp(),
-            new RichList.Msg.ToggleLoading(),
-            new RichList.Msg.BeginFilter(),
-            new RichList.Msg.AcceptFilter(),
-            new RichList.Msg.Cancel(),
-            new RichList.Msg.ClearFilter(),
-            new RichList.Msg.ToggleFilterMode(),
-            new RichList.Msg.FilterInput(new TextInput.Msg.Insert("a")),
-            new RichList.Msg.FilterInput(new TextInput.Msg.Backspace()),
-            new RichList.Msg.Notice("a transient message"),
-            new RichList.Msg.NoticeExpired(0),
-            new RichList.Msg.RowsChanged(1 + random.nextInt(30))
+        RichListMsg[] browse = {
+            new RichListMsg.Up(),
+            new RichListMsg.Down(),
+            new RichListMsg.NextPage(),
+            new RichListMsg.PreviousPage(),
+            new RichListMsg.First(),
+            new RichListMsg.Last(),
+            new RichListMsg.ToggleTitle(),
+            new RichListMsg.ToggleStatus(),
+            new RichListMsg.TogglePagination(),
+            new RichListMsg.ToggleHelp(),
+            new RichListMsg.ToggleExpandedHelp(),
+            new RichListMsg.ToggleLoading(),
+            new RichListMsg.BeginFilter(),
+            new RichListMsg.AcceptFilter(),
+            new RichListMsg.Cancel(),
+            new RichListMsg.ClearFilter(),
+            new RichListMsg.ToggleFilterMode(),
+            new RichListMsg.FilterInput(new TextInput.Msg.Insert("a")),
+            new RichListMsg.FilterInput(new TextInput.Msg.Backspace()),
+            new RichListMsg.Notice("a transient message"),
+            new RichListMsg.NoticeExpired(0),
+            new RichListMsg.RowsChanged(1 + random.nextInt(30))
         };
         for (int round = 0; round < 200; round++) {
             List<RichList.Item> items = new ArrayList<>();
@@ -1293,14 +1309,14 @@ class ParityListTest {
                 String title = titles[random.nextInt(titles.length)];
                 items.add(new RichList.Item("id-" + index, title, titles[random.nextInt(titles.length)], null));
             }
-            RichList component = list(RichList.Config.defaults()
+            RichList component = list(RichListConfig.defaults()
                     .withItems(items)
                     .withRows(1 + random.nextInt(24))
                     .withRenderer(
                             random.nextInt(3) == 0
-                                    ? new RichList.DefaultRenderer(null, true, 2)
-                                    : RichList.DefaultRenderer.defaults()));
-            RichList.Model state =
+                                    ? new RichListDefaultRenderer(null, true, 2)
+                                    : RichListDefaultRenderer.defaults()));
+            RichListModel state =
                     component.init(new InitContext(new Viewport(0, 0), null)).model();
             for (int step = 1 + random.nextInt(8); step > 0; step--) {
                 state = component
@@ -1326,16 +1342,16 @@ class ParityListTest {
 
     @Test
     void theDefinitionRejectsAnImpossibleHeightOrLifetime() {
-        assertThatThrownBy(() -> RichList.Config.defaults().withRows(-1))
+        assertThatThrownBy(() -> RichListConfig.defaults().withRows(-1))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("rows");
-        assertThatThrownBy(() -> RichList.Config.defaults().withReservedRows(-1))
+        assertThatThrownBy(() -> RichListConfig.defaults().withReservedRows(-1))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("reservedRows");
-        assertThatThrownBy(() -> RichList.Config.defaults().withNoticeLifetime(Duration.ofMillis(-1)))
+        assertThatThrownBy(() -> RichListConfig.defaults().withNoticeLifetime(Duration.ofMillis(-1)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("noticeLifetime");
-        assertThat(RichList.Config.defaults().withRows(3).rows()).isEqualTo(3);
+        assertThat(RichListConfig.defaults().withRows(3).rows()).isEqualTo(3);
     }
 
     @Test
@@ -1343,7 +1359,7 @@ class ParityListTest {
         assertThatThrownBy(() -> new RichList.Notice("x", -1))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("epoch");
-        RichList.Model state = new RichList.Model(null, null, null, null, -5, null, null, true);
+        RichListModel state = new RichListModel(null, null, null, null, -5, null, null, true);
         assertThat(state.items()).isEmpty();
         assertThat(state.rows()).isZero();
         assertThat(state.notice()).isEqualTo(RichList.Notice.none());
@@ -1352,10 +1368,10 @@ class ParityListTest {
 
     @Test
     void oneCellViewportsAndWideGlyphsStayInsideTheirColumns() {
-        RichList component = list(RichList.Config.defaults()
+        RichList component = list(RichListConfig.defaults()
                 .withItems(List.of(RichList.Item.of("a", "\u4E2D\u6587", "\uD83D\uDE00 tail")))
                 .withRows(10));
-        RichList.Model state =
+        RichListModel state =
                 component.init(new InitContext(new Viewport(0, 0), null)).model();
         for (String line : painted(component, state, 12, 1)) {
             assertThat(TextMeasure.columns(line)).isLessThanOrEqualTo(1);
@@ -1368,24 +1384,24 @@ class ParityListTest {
     @Test
     void aKeyTheListConsumesNeverReachesTheApplication() {
         RichList component = list();
-        RichList.Model state = model(items(), 10);
-        assertThat(routeList(component, state, key("down"))).contains(new RichList.Msg.Down());
-        assertThat(routeList(component, state, key("/"))).contains(new RichList.Msg.BeginFilter());
+        RichListModel state = model(items(), 10);
+        assertThat(routeList(component, state, key("down"))).contains(new RichListMsg.Down());
+        assertThat(routeList(component, state, key("/"))).contains(new RichListMsg.BeginFilter());
         assertThat(routeList(component, state, typed("a")))
                 .as("a printable key that is not a list gesture is left for the application")
                 .isEmpty();
-        RichList.Model editing = apply(component, state, new RichList.Msg.BeginFilter());
+        RichListModel editing = apply(component, state, new RichListMsg.BeginFilter());
         assertThat(routeList(component, editing, typed("j")))
                 .as("while editing, a printable key types instead of moving")
-                .contains(new RichList.Msg.FilterInput(new TextInput.Msg.Insert("j")));
-        assertThat(routeList(component, editing, key("escape"))).contains(new RichList.Msg.Cancel());
-        assertThat(routeList(component, editing, key("enter"))).contains(new RichList.Msg.AcceptFilter());
+                .contains(new RichListMsg.FilterInput(new TextInput.Msg.Insert("j")));
+        assertThat(routeList(component, editing, key("escape"))).contains(new RichListMsg.Cancel());
+        assertThat(routeList(component, editing, key("enter"))).contains(new RichListMsg.AcceptFilter());
     }
 
     @Test
     void helpNeverAdvertisesAGestureTheStateDisabled() {
-        RichList.Model editing = apply(list(), model(items(), 10), new RichList.Msg.BeginFilter());
-        KeyMap<RichList.Msg> keys = RichList.keys(editing);
+        RichListModel editing = apply(list(), model(items(), 10), new RichListMsg.BeginFilter());
+        KeyMap<RichListMsg> keys = RichList.keys(editing);
         assertThat(keys.action("choose").orElseThrow().enabled()).isFalse();
         assertThat(keys.action("up").orElseThrow().enabled()).isFalse();
         assertThat(keys.action("accept-filter").orElseThrow().enabled()).isTrue();
@@ -1406,7 +1422,7 @@ class ParityListTest {
         RichListDemo.Scene scene = demo();
         RichListDemo.Model state = start();
         Update<RichListDemo.Model, RichListDemo.Msg, ?> update =
-                scene.update(state, new RichListDemo.Msg.List(new RichList.Msg.Notice("scoped")));
+                scene.update(state, new RichListDemo.Msg.List(new RichListMsg.Notice("scoped")));
         assertThat(update.command()).isInstanceOf(Command.Scoped.class);
         Command.Scoped<RichListDemo.Msg> scoped = (Command.Scoped<RichListDemo.Msg>) update.command();
         assertThat(scoped.path().toString()).contains("list");
@@ -1415,19 +1431,18 @@ class ParityListTest {
 
     @Test
     void theDriverRunsTheShippedDefinitionWithoutATerminal() {
-        ComponentDriver<RichList.Model, RichList.Msg, RichList.Output> driver = ComponentDriver.initialize(
-                list(RichList.Config.defaults().withItems(items()).withRows(12)),
+        ComponentDriver<RichListModel, RichListMsg, RichListOutput> driver = ComponentDriver.initialize(
+                list(RichListConfig.defaults().withItems(items()).withRows(12)),
                 new InitContext(new Viewport(12, 40), null));
-        driver.send(new RichList.Msg.Down());
-        driver.send(new RichList.Msg.BeginFilter());
-        driver.send(new RichList.Msg.FilterInput(new TextInput.Msg.Insert("a")));
+        driver.send(new RichListMsg.Down());
+        driver.send(new RichListMsg.BeginFilter());
+        driver.send(new RichListMsg.FilterInput(new TextInput.Msg.Insert("a")));
         assertThat(driver.model().filter().query()).isEqualTo("a");
         assertThat(ids(RichList.visible(driver.model())))
                 .as("fuzzy ranking orders the matches by where the query matched")
                 .containsExactly("a", "c", "b", "f", "d");
         assertThat(driver.model().selectedId()).isEqualTo("b");
-        assertThat(driver.screen(new ViewContext(new Viewport(12, 40))).plainLines())
-                .isNotEmpty();
+        assertThat(driver.screen(new ViewContext(new Viewport(12, 40))).lines()).isNotEmpty();
         assertThat(driver.children().nodes()).isEmpty();
     }
 }

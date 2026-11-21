@@ -30,7 +30,6 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.internal.runtime.Mailbox;
 import io.github.dhoard.braxton.internal.runtime.ManualTimers;
 import io.github.dhoard.braxton.internal.runtime.SubscriptionManager;
@@ -42,8 +41,8 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Animation;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.Spinner;
@@ -62,7 +61,7 @@ import org.junit.jupiter.api.Timeout;
  * exact and involves no sleeps. The lifecycle cases reconcile the demo's own subscription
  * declarations against {@link ManualTimers}, so "stopped" and "unmounted" are proven by the ticks
  * that stop being scheduled rather than by a frame that happened to stay still. The terminal
- * behaviour of the packaged demo is verified separately by
+ * behavior of the packaged demo is verified separately by
  * {@code python3 tools/terminal/verify_terminal.py --parity-phase 07}.</p>
  */
 @Timeout(20)
@@ -90,12 +89,16 @@ class ParitySpinnerTest {
         return spinner.update(model, message).model();
     }
 
-    /** One tick of the model's current cycle, at an absolute monotonic time in milliseconds. */
+    /**
+     * One tick of the model's current cycle, at an absolute monotonic time in milliseconds.
+     */
     private static Spinner.Model at(Spinner spinner, Spinner.Model model, long millis) {
         return after(spinner, model, new Spinner.Msg.Tick(model.epoch(), millis * MILLIS));
     }
 
-    /** A running spinner whose origin has been recorded at {@code originMillis}. */
+    /**
+     * A running spinner whose origin has been recorded at {@code originMillis}.
+     */
     private static Spinner.Model origin(Spinner spinner, long originMillis) {
         return at(spinner, Spinner.Model.starting(), originMillis);
     }
@@ -109,19 +112,21 @@ class ParitySpinnerTest {
         return InputEvent.KeyInput.of(gesture, gesture.name());
     }
 
-    private static List<String> painted(View<?> view) {
-        return new ScreenRenderer().plainLines(view, new Viewport(SCREEN_ROWS, SCREEN_COLS));
+    private static List<String> painted(Element<?> view) {
+        return ElementScreen.render(view, SCREEN_ROWS, SCREEN_COLS).lines();
     }
 
-    private static List<String> painted(View<?> view, int cols) {
-        return new ScreenRenderer().plainLines(view, new Viewport(SCREEN_ROWS, cols));
+    private static List<String> painted(Element<?> view, int cols) {
+        return ElementScreen.render(view, SCREEN_ROWS, cols).lines();
     }
 
-    private static List<String> painted(View<?> view, int rows, int cols) {
-        return new ScreenRenderer().plainLines(view, new Viewport(rows, cols));
+    private static List<String> painted(Element<?> view, int rows, int cols) {
+        return ElementScreen.render(view, rows, cols).lines();
     }
 
-    /** The demo the packaged launch runs, driven as its own component. */
+    /**
+     * The demo the packaged launch runs, driven as its own component.
+     */
     private static SpinnerDemo.Scene demo() {
         return new SpinnerDemo.Scene();
     }
@@ -134,21 +139,28 @@ class ParitySpinnerTest {
         return demo().update(model, message).model();
     }
 
-    /** What one key does to the demo's screen, as the scene's own message. */
+    /**
+     * What one key does to the demo's screen, as the scene's own message.
+     */
     private static Optional<SpinnerDemo.Msg> route(SpinnerDemo.Model model, String keyName) {
-        return InputRouter.route(demo().view(model, CONTEXT), key(keyName));
+        return io.github.dhoard.braxton.testing.Routing.route(demo(), model, CONTEXT, key(keyName)).stream()
+                .findFirst();
     }
 
     private static SpinnerDemo.Model send(SpinnerDemo.Model model, String keyName) {
         return apply(model, route(model, keyName).orElseThrow(() -> new AssertionError("no message for " + keyName)));
     }
 
-    /** The demo's status rows, so a test can assert the scene without decoding styles. */
+    /**
+     * The demo's status rows, so a test can assert the scene without decoding styles.
+     */
     private static String row(SpinnerDemo.Model model, int index) {
         return painted(demo().view(model, CONTEXT)).get(index).strip();
     }
 
-    /** Feeds one tick to one mount of the demo, as the runtime's mapper would. */
+    /**
+     * Feeds one tick to one mount of the demo, as the runtime's mapper would.
+     */
     private static SpinnerDemo.Model tick(SpinnerDemo.Model model, boolean leftPane, long millis) {
         Spinner.Model state = model.slot(leftPane).model();
         Spinner.Msg message = new Spinner.Msg.Tick(state.epoch(), millis * MILLIS);
@@ -736,9 +748,10 @@ class ParitySpinnerTest {
         assertThat(route(model, "escape")).contains(new SpinnerDemo.Msg.Quit());
         assertThat(route(model, "q")).as("an unbound key reaches nothing").isEmpty();
 
-        List<String> help = painted(Help.view(SpinnerDemo.defaultKeys(), true, 200), 8, 200).stream()
-                .filter(line -> !line.isBlank())
-                .toList();
+        List<String> help =
+                painted(Help.element(SpinnerDemo.defaultKeys(), Help.Config.defaults(), true, 200), 8, 200).stream()
+                        .filter(line -> !line.isBlank())
+                        .toList();
         assertThat(help).hasSize(2);
         assertThat(help.get(0))
                 .contains("previous")
@@ -775,7 +788,7 @@ class ParitySpinnerTest {
         driver.send(new SpinnerDemo.Msg.Left(new Spinner.Msg.Tick(0L, 0L)));
         driver.send(new SpinnerDemo.Msg.Right(new Spinner.Msg.Tick(0L, 0L)));
         driver.send(new SpinnerDemo.Msg.Left(new Spinner.Msg.Tick(0L, 350 * MILLIS)));
-        assertThat(driver.screen(CONTEXT).plainLine(0)).isEqualTo("left=line frame=4/4 run=on t=350ms");
+        assertThat(driver.screen(CONTEXT).line(0)).isEqualTo("left=line frame=4/4 run=on t=350ms");
         assertThat(Subscription.leaves(driver.subscriptions()))
                 .as("both mounted spinners are subscribed")
                 .hasSize(2);
@@ -866,14 +879,16 @@ class ParitySpinnerTest {
         assertThat(interval.period()).isEqualTo(Spinner.Config.defaults().frameDuration());
 
         // The mapper carries the epoch of the model it was declared from, which is what makes a stale
-        // tick recognisable after the cycle it belonged to ended.
+        // tick recognizable after the cycle it belonged to ended.
         Spinner.Model cycle = new Spinner.Model(true, 7L, 0L, 0L);
         Subscription.Interval<Spinner.Msg> mapped = (Subscription.Interval<Spinner.Msg>)
                 Subscription.leaves(spinner.subscriptions(cycle)).get(0);
         assertThat(mapped.onTick().apply(5_000L)).isEqualTo(new Spinner.Msg.Tick(7L, 5_000L));
     }
 
-    /** Every message one advance left in the mailbox, up to a count. */
+    /**
+     * Every message one advance left in the mailbox, up to a count.
+     */
     private static List<SpinnerDemo.Msg> drain(Mailbox mailbox, int expected) {
         List<SpinnerDemo.Msg> messages = new ArrayList<>();
         for (int index = 0; index < expected; index++) {

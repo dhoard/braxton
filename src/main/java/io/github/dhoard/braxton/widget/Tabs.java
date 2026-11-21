@@ -25,7 +25,9 @@ package io.github.dhoard.braxton.widget;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
+import io.github.dhoard.braxton.input.PointerEvent;
 import io.github.dhoard.braxton.layout.Border;
+import io.github.dhoard.braxton.layout.Rect;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.ComponentId;
 import io.github.dhoard.braxton.mvu.InitContext;
@@ -34,16 +36,16 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.Interactive;
+import io.github.dhoard.braxton.ui.Sizing;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -80,7 +82,7 @@ import java.util.function.Function;
  *
  * <h2>The bar, the frame and the join</h2>
  *
- * <p>{@link #frame} paints the bar and frames the content the parent passes in, and the active tab
+ * <p>{@link #render} paints the bar and frames the content the parent passes in, and the active tab
  * opens into that frame: its bottom edge is the gap the content is visible through, so the selected
  * tab reads as one shape with the page below it. The bar windows rather than overflowing - a bar
  * narrower than its tabs shows the tabs around the active one and marks each side where tabs were
@@ -89,9 +91,9 @@ import java.util.function.Function;
  * boundary and ends with {@value #ELLIPSIS}, never through the middle of a wide glyph.</p>
  *
  * <p>{@link #render} answers the same composition as styled text for a program that paints its own
- * content, {@link #view(Model, View, Function)} is that composition as a view and routes the bar's own keys
+ * content, {@link #element(Model, Element, Function)} is that composition as a view and routes the bar's own keys
  * while it has focus, and {@link #view(Model, ViewContext)} is the bar alone, for a page area the
- * application draws itself. {@link #frame} paints the same composition without declaring a focus
+ * application draws itself. {@link #render} paints the same composition without declaring a focus
  * target, for an application that routes {@link #keys()} itself.</p>
  *
  * <h2>Composition and keep-alive pages</h2>
@@ -125,35 +127,52 @@ import java.util.function.Function;
  *
  * <p>A click activates the tab whose cell it landed in, and the wheel steps the bar. The cell is
  * resolved from the width the bar was painted in, so the click and the painted cells cannot
- * disagree; a click on an overflow marker, or past the last cell, activates nothing. A press never
- * moves focus by itself: {@link Msg.Activate} is what the bar reports, and the application decides
- * where the keyboard goes.</p>
+ * disagree. The marker a window paints when it hides tabs is the bar's own control: pressing the
+ * leading one steps back and the trailing one steps on, which is the move the horizontal arrows
+ * make, and a click past the last cell does nothing. A press never moves focus by itself: {@link
+ * Msg.Activate} is what the bar reports, and the application decides where the keyboard goes.</p>
  */
-public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> {
+public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output>, Interactive<Tabs.Model, Tabs.Msg> {
 
-    /** The blank cells painted each side of a label. */
+    /**
+     * The blank cells painted each side of a label.
+     */
     public static final int PADDING = 1;
 
-    /** The cells a tab cell spends on its own chrome: two borders and the padding inside them. */
+    /**
+     * The cells a tab cell spends on its own chrome: two borders and the padding inside them.
+     */
     public static final int CHROME = 2 + 2 * PADDING;
 
-    /** The narrowest cell a tab is painted in; below it the bar is only the frame's edge. */
+    /**
+     * The narrowest cell a tab is painted in; below it the bar is only the frame's edge.
+     */
     public static final int MIN_CELL = CHROME;
 
-    /** The narrowest bar that can hold a window marker beside a tab. */
+    /**
+     * The narrowest bar that can hold a window marker beside a tab.
+     */
     public static final int MIN_OVERFLOW = MIN_CELL + 1 + 2;
 
-    /** Ends a label cut by the cells it was given. */
+    /**
+     * Ends a label cut by the cells it was given.
+     */
     public static final String ELLIPSIS = "\u2026";
 
-    /** Marks the tabs left out on the left of a window. */
+    /**
+     * Marks the tabs left out on the left of a window.
+     */
     public static final String OVERFLOW_LEFT = "\u2039";
 
-    /** Marks the tabs left out on the right of a window. */
+    /**
+     * Marks the tabs left out on the right of a window.
+     */
     public static final String OVERFLOW_RIGHT = "\u203A";
 
-    /** One cell of the bar: a tab, or the marker that says tabs were left out. */
-    private record Cell(int tab, boolean overflow, String label, int width) {}
+    /**
+     * One cell of the bar: a tab, or the marker that says tabs were left out.
+     */
+    record Cell(int tab, boolean overflow, String label, int width) {}
 
     /**
      * What a bar paints: the frame characters, the label styles and the frame's own style.
@@ -170,7 +189,9 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
      */
     public record Appearance(Border border, Style activeTab, Style inactiveTab, Style disabledTab, Style frame) {
 
-        /** Substitutes defaults for missing values and rejects a frame that draws nothing. */
+        /**
+         * Substitutes defaults for missing values and rejects a frame that draws nothing.
+         */
         public Appearance {
             border = border == null ? Border.ROUNDED : border;
             if (!border.isVisible()) {
@@ -234,7 +255,9 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
      */
     public record Config(boolean wrap, Appearance appearance) {
 
-        /** Substitutes the default appearance for a missing one. */
+        /**
+         * Substitutes the default appearance for a missing one.
+         */
         public Config {
             appearance = appearance == null ? Appearance.rounded() : appearance;
         }
@@ -278,7 +301,9 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
      */
     public record Tab(String id, String label, boolean enabled) {
 
-        /** Validates the identity and flattens the label to the one row it is painted on. */
+        /**
+         * Validates the identity and flattens the label to the one row it is painted on.
+         */
         public Tab {
             id = ComponentId.of(id).value();
             // A label is one painted row: a break would split the cell and push every later tab
@@ -348,7 +373,9 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
      */
     public record Model(List<Tab> tabs, String activeId, boolean focused) {
 
-        /** Rejects duplicate ids and keeps the active id pointing at an enabled tab. */
+        /**
+         * Rejects duplicate ids and keeps the active id pointing at an enabled tab.
+         */
         public Model {
             tabs = List.copyOf(tabs == null ? List.of() : tabs);
             Set<String> ids = new LinkedHashSet<>();
@@ -370,7 +397,9 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
             return new Model(tabs, null, true);
         }
 
-        /** The enabled tab named by {@code wanted}, else the first enabled tab, else null. */
+        /**
+         * The enabled tab named by {@code wanted}, else the first enabled tab, else null.
+         */
         private static String resolve(List<Tab> tabs, String wanted) {
             if (wanted != null) {
                 for (Tab tab : tabs) {
@@ -504,19 +533,29 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
         }
     }
 
-    /** One navigation, activation or tab-list change. */
+    /**
+     * One navigation, activation or tab-list change.
+     */
     public sealed interface Msg {
 
-        /** Moves to the next enabled tab, wrapping to the first when the configuration allows it. */
+        /**
+         * Moves to the next enabled tab, wrapping to the first when the configuration allows it.
+         */
         record Next() implements Msg {}
 
-        /** Moves to the previous enabled tab, wrapping to the last when the configuration allows it. */
+        /**
+         * Moves to the previous enabled tab, wrapping to the last when the configuration allows it.
+         */
         record Previous() implements Msg {}
 
-        /** Moves to the first enabled tab. */
+        /**
+         * Moves to the first enabled tab.
+         */
         record First() implements Msg {}
 
-        /** Moves to the last enabled tab. */
+        /**
+         * Moves to the last enabled tab.
+         */
         record Last() implements Msg {}
 
         /**
@@ -525,6 +564,11 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
          * @param id the id of the tab to show; never null
          */
         record Activate(String id) implements Msg {
+            /**
+             * Creates a {@code Activate} value.
+             *
+             * @param id the id of the tab to show; never null
+             */
             public Activate {
                 Objects.requireNonNull(id, "id");
             }
@@ -536,6 +580,11 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
          * @param tabs the tabs, in the order they are painted; null is no tabs
          */
         record SetTabs(List<Tab> tabs) implements Msg {
+            /**
+             * Creates a {@code SetTabs} value.
+             *
+             * @param tabs the tabs, in the order they are painted; null is no tabs
+             */
             public SetTabs {
                 tabs = List.copyOf(tabs == null ? List.of() : tabs);
             }
@@ -548,6 +597,12 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
          * @param tab the tab to insert; never null, and its id must not already be present
          */
         record InsertTab(int index, Tab tab) implements Msg {
+            /**
+             * Creates a {@code InsertTab} value.
+             *
+             * @param index the position to insert at, clamped to the list; negative is the front
+             * @param tab the tab to insert; never null, and its id must not already be present
+             */
             public InsertTab {
                 Objects.requireNonNull(tab, "tab");
             }
@@ -559,13 +614,20 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
          * @param id the id of the tab to remove; never null
          */
         record RemoveTab(String id) implements Msg {
+            /**
+             * Creates a {@code RemoveTab} value.
+             *
+             * @param id the id of the tab to remove; never null
+             */
             public RemoveTab {
                 Objects.requireNonNull(id, "id");
             }
         }
     }
 
-    /** What the owner should do after an action. */
+    /**
+     * What the owner should do after an action.
+     */
     public sealed interface Output {
 
         /**
@@ -578,19 +640,27 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
          * @param id the id of the tab now shown; never null
          */
         record Activated(String id) implements Output {
+            /**
+             * Creates a {@code Activated} value.
+             *
+             * @param id the id of the tab now shown; never null
+             */
             public Activated {
                 Objects.requireNonNull(id, "id");
             }
         }
     }
 
-    /** A reduction result; the intent is present only when the shown tab changed. */
-    private record Result(Model state, Output intent) implements WidgetResult<Model, Output> {}
+    /**
+     * A reduction result; the intent is present only when the shown tab changed.
+     */
+    record Result(Model state, Output intent) implements WidgetResult<Model, Output> {}
 
-    /** The identity of the bar's focus element; a composition keeps it at the root scope. */
-    private static final ElementId ELEMENT = ElementId.of("tabs");
-
+    /**
+     * The identity of the bar's focus element; a composition keeps it at the root scope.
+     */
     private final Config config;
+
     private final KeyMap<Msg> keys;
 
     /**
@@ -653,105 +723,78 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
     }
 
     @Override
-    public View<Msg> view(Model model, ViewContext context) {
-        return Views.focus(
-                ELEMENT,
-                model.focused(),
-                List.of(),
-                this::actionFor,
-                pointer(model),
-                Views.sized(size -> Views.text(standalone(model, config, size.cols()))));
+    public Element<Msg> view(Model model, ViewContext context) {
+        return Elements.stack(
+                RenderedText.<Msg>of(cols -> TabsRendering.standalone(model, config, cols)),
+                new Element.Leaf<>(this, model, Sizing.measured()));
     }
 
     /**
-     * Paints the bar over the page it selects and routes the bar's own keys while it has focus.
-     *
-     * <p>This is {@link #frame} plus the focus target and handler {@link #view(Model, ViewContext)}
-     * declares: the bar's rows are the focused element, so the page below them keeps its own focus
-     * element and the two never compete for the same gesture. The bar's own messages are mapped
-     * through {@code mapper}, which is what lets the bar and a child page share one message type.
-     * Use this when the page is an interactive child of the composition; use the static
-     * {@link #frame} when the application routes {@link #keys()} itself, and the static
-     * {@link #render} when it paints text.</p>
-     *
-     * <p>The composed view belongs to the parent's tree rather than to the bar's own mount, so the
-     * bar's focus element keeps the root scope: one composed bar per application. The pages inside
-     * it are the stateful children and are scoped by their own mounts as usual.</p>
-     *
-     * @param state the bar's state; required
-     * @param content the page to show inside the frame
-     * @param mapper maps the bar's messages into the parent's message type; required
-     * @param <Out> the message type the composition produces
-     * @return the composed view
+     * The bar's keys, from the same map {@link Help} renders.
      */
-    public <Out> View<Out> view(Model state, View<Out> content, Function<? super Msg, ? extends Out> mapper) {
+    @Override
+    public void onKey(InputEvent.KeyInput key, Model model, Consumer<Msg> emit) {
+        keys.actionFor(key.key()).map(KeyAction::message).ifPresent(emit);
+    }
+
+    /**
+     * Focus is model data: the application sets it and the widget only reports it.
+     */
+    @Override
+    public boolean focused(Model model) {
+        return model.focused();
+    }
+
+    /**
+     * The bar's pointer handler: a click activates the tab whose cell it landed in, and the wheel
+     * steps through the bar. The cells are resolved from the columns the bar was painted in, so the
+     * click and the painted cells cannot disagree.
+     */
+    @Override
+    public void onPointer(PointerEvent pointer, Rect bounds, Model model, Consumer<Msg> emit) {
+        pointer(pointer.localTo(bounds.row(), bounds.col()), model, bounds.cols())
+                .ifPresent(emit);
+    }
+
+    /**
+     * The bar and its framed page as one element tree.
+     *
+     * <p>The bar is the interaction leaf, mapped into the parent's message type, so the bar's keys
+     * and clicks belong to the parent's tree; the page is the caller's, composed and never rebuilt.
+     * The bar's own element keeps the root scope, so there is one composed bar per application.</p>
+     *
+     * @param <Out> the message type the composition produces
+     * @param state the bar's state; required
+     * @param content the page to show inside the frame; required
+     * @param mapper maps the bar's messages into the parent's message type; required
+     * @return the composed element
+     */
+    public <Out> Element<Out> element(Model state, Element<Out> content, Function<? super Msg, ? extends Out> mapper) {
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(content, "content");
         Objects.requireNonNull(mapper, "mapper");
-        return compose(state, config, bar(state).map(mapper), content);
-    }
-
-    /** The bar's own rows as the focus target that routes this component's keys and clicks. */
-    private View<Msg> bar(Model state) {
-        return Views.focus(
-                ELEMENT,
-                state.focused(),
-                List.of(),
-                this::actionFor,
-                pointer(state),
-                Views.column(
-                        Views.sized(size -> Views.text(tops(state, config, size.cols()))),
-                        Views.sized(size -> Views.text(labels(state, config, size.cols())))));
-    }
-
-    /**
-     * Paints the bar, frames {@code content} with it, and joins the shown tab to that frame.
-     *
-     * <p>The bar's rows are built from the columns the composition is given, so the cells, the frame
-     * and the tab that opens into it stay aligned at any width. A model with no tabs frames the
-     * content without a bar: an empty bar is a blank two rows and a rule, which is not what "this
-     * page has no tabs" should look like.</p>
-     *
-     * @param state the bar's state; required
-     * @param config the definition; null is {@link Config#defaults()}
-     * @param content the page to show inside the frame
-     * @param <Msg> the message type the content produces
-     * @return the composed view
-     */
-    public static <Msg> View<Msg> frame(Model state, Config config, View<Msg> content) {
-        Objects.requireNonNull(state, "state");
-        Objects.requireNonNull(content, "content");
-        Config opts = config == null ? Config.defaults() : config;
-        return compose(
-                state,
-                opts,
-                Views.column(
-                        Views.sized(size -> Views.text(tops(state, opts, size.cols()))),
-                        Views.sized(size -> Views.text(labels(state, opts, size.cols())))),
-                content);
-    }
-
-    /**
-     * The one composition: the bar's rows, the frame, and the shown tab's opening between them.
-     *
-     * <p>Both the painted and the routed form build their bar rows their own way and hand them here,
-     * so the join, the frame and the empty-bar case cannot differ between them.</p>
-     */
-    private static <Msg> View<Msg> compose(Model state, Config config, View<Msg> bar, View<Msg> content) {
         Appearance look = config.appearance();
+        Element<Out> bar = Elements.stack(
+                // The bar's open rows: the joined top edge below them closes the bar and opens into
+                // the page in one row, which is what keeps the tabs and the frame aligned.
+                RenderedText.<Out>of(cols -> TabsRendering.barRows(state, config, cols)),
+                new Element.Leaf<Tabs.Model, Msg>(this, state, Sizing.measured()).map(mapper));
         if (state.tabs().isEmpty()) {
-            return Views.border(look.border(), StyledText.empty(), look.frame(), content);
+            return Elements.frame(look.border(), StyledText.empty(), look.frame(), content);
         }
-        return Views.column(
+        return Elements.column(
                 bar,
-                Views.grow(Views.topEdge(
-                        look.border(), look.frame(), cols -> bottom(state, config, cols, true), content)));
+                Elements.grow(Elements.topEdge(
+                        look.border(),
+                        look.frame(),
+                        cols -> TabsRendering.bottom(state, config, cols, true),
+                        content)));
     }
 
     /**
      * Paints the bar and the framed content as one block of text.
      *
-     * <p>It is the same composition {@link #frame} builds, for content that is already text: the
+     * <p>It is the same composition {@link #element} builds, for content that is already text: the
      * bar, the top edge the shown tab opens into, the content cut to the frame's inner width and
      * padded to it, and the bottom edge.</p>
      *
@@ -775,7 +818,9 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
             // is the content's own first column.
             StyledText column = StyledText.empty();
             for (StyledText line : page.lines()) {
-                column = column.isEmpty() ? cut(line, 1) : column.append("\n").append(cut(line, 1));
+                column = column.isEmpty()
+                        ? TabsRendering.cut(line, 1)
+                        : column.append("\n").append(TabsRendering.cut(line, 1));
             }
             return column;
         }
@@ -783,19 +828,20 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
         StyledText block = StyledText.empty();
         if (state.tabs().isEmpty()) {
             // No bar: the content is framed like any other, so the top edge is painted here too.
-            block = block.append(StyledText.of(edge(border, width, false), frameStyle))
+            block = block.append(StyledText.of(TabsRendering.edge(border, width, false), frameStyle))
                     .append("\n");
         } else {
-            for (StyledText row : List.of(tops(state, opts, width), labels(state, opts, width))) {
+            for (StyledText row :
+                    List.of(TabsRendering.tops(state, opts, width), TabsRendering.labels(state, opts, width))) {
                 if (!row.isEmpty()) {
                     block = block.append(row).append("\n");
                 }
             }
-            block = block.append(bottom(state, opts, width, true)).append("\n");
+            block = block.append(TabsRendering.bottom(state, opts, width, true)).append("\n");
         }
         String vertical = Border.glyph(border.vertical());
         for (StyledText line : page.lines()) {
-            StyledText clipped = cut(line, inner);
+            StyledText clipped = TabsRendering.cut(line, inner);
             int pad = inner - clipped.columns();
             block = block.append(StyledText.of(vertical, frameStyle))
                     .append(clipped)
@@ -803,7 +849,7 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
                     .append(StyledText.of(vertical, frameStyle))
                     .append("\n");
         }
-        return block.append(StyledText.of(edge(border, width, true), frameStyle));
+        return block.append(StyledText.of(TabsRendering.edge(border, width, true), frameStyle));
     }
 
     /**
@@ -812,38 +858,46 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
      *
      * <p>The cells are the ones the bar paints at this width, worked out again from the region the
      * report arrived in rather than remembered from a build: the region is what the user clicked on,
-     * so the two can never disagree about which cell a column belongs to. A click on an overflow
-     * marker, or past the last cell, activates nothing - a marker is not a tab.</p>
+     * so the two can never disagree about which cell a column belongs to. A marker is not a tab, so
+     * pressing one scrolls the window instead of activating what it stands for, and a click past the
+     * last cell reports nothing.</p>
      */
-    private View.PointerHandler<Msg> pointer(Model state) {
-        return (event, region) -> {
-            if (event.isWheel()) {
-                // The wheel steps the bar the way the horizontal arrows step it: up and left go back,
-                // down and right go on.
-                return Optional.of(
-                        switch (event.button()) {
-                            case WHEEL_UP, WHEEL_LEFT -> new Msg.Previous();
-                            default -> new Msg.Next();
-                        });
-            }
-            if (!event.isLeftPress() || event.column() < 0) {
-                return Optional.empty();
-            }
-            int used = 0;
-            for (Cell cell : cells(state, config, region.cols())) {
-                if (event.column() < used + cell.width()) {
-                    return cell.overflow() || cell.tab() < 0
-                            ? Optional.empty()
-                            : Optional.of(new Msg.Activate(
-                                    state.tabs().get(cell.tab()).id()));
-                }
-                used += cell.width();
-            }
+    private Optional<Msg> pointer(PointerEvent event, Model state, int cols) {
+        if (event.isWheel()) {
+            // The wheel steps the bar the way the horizontal arrows step it: up and left go back,
+            // down and right go on.
+            return Optional.of(
+                    switch (event.button()) {
+                        case WHEEL_UP, WHEEL_LEFT -> new Msg.Previous();
+                        default -> new Msg.Next();
+                    });
+        }
+        if (!event.isLeftPress() || event.column() < 0) {
             return Optional.empty();
-        };
+        }
+        int used = 0;
+        for (Cell cell : TabsRendering.cells(state, config, cols)) {
+            if (event.column() < used + cell.width()) {
+                if (cell.tab() >= 0) {
+                    return Optional.of(
+                            new Msg.Activate(state.tabs().get(cell.tab()).id()));
+                }
+                // The marker a window paints when it hides tabs is the bar's own control: the
+                // leading one steps back and the trailing one steps on, which is the same move
+                // the horizontal arrows make.
+                if (!cell.overflow()) {
+                    return Optional.empty();
+                }
+                return Optional.of(OVERFLOW_LEFT.equals(cell.label()) ? new Msg.Previous() : new Msg.Next());
+            }
+            used += cell.width();
+        }
+        return Optional.empty();
     }
 
-    /** Maps one input event to a tab message, or empty when the gesture is not a tab gesture. */
+    /**
+     * Maps one input event to a tab message, or empty when the gesture is not a tab gesture.
+     */
     private Optional<Msg> actionFor(InputEvent event) {
         if (!(event instanceof InputEvent.KeyInput keyInput)) {
             return Optional.empty();
@@ -851,7 +905,9 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
         return keys.actionFor(keyInput.key()).map(KeyAction::message);
     }
 
-    /** Applies one gesture or list change. Never performs I/O and never mutates the input state. */
+    /**
+     * Applies one gesture or list change. Never performs I/O and never mutates the input state.
+     */
     private Model applied(Model state, Msg action) {
         return switch (action) {
             case Msg.Next next -> moved(state, 1);
@@ -865,14 +921,16 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
         };
     }
 
-    /** The reduction plus the output a changed selection produces. */
+    /**
+     * The reduction plus the output a changed selection produces.
+     */
     private Result reduce(Model model, Msg action) {
         Model reduced = applied(model, action);
         String shown = Objects.equals(reduced.activeId(), model.activeId()) ? null : reduced.activeId();
         return new Result(reduced, shown == null ? null : new Output.Activated(shown));
     }
 
-    private static int firstEnabled(List<Tab> tabs) {
+    static int firstEnabled(List<Tab> tabs) {
         for (int index = 0; index < tabs.size(); index++) {
             if (tabs.get(index).enabled()) {
                 return index;
@@ -881,7 +939,7 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
         return -1;
     }
 
-    private static int lastEnabled(List<Tab> tabs) {
+    static int lastEnabled(List<Tab> tabs) {
         for (int index = tabs.size() - 1; index >= 0; index--) {
             if (tabs.get(index).enabled()) {
                 return index;
@@ -920,8 +978,10 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
         return state;
     }
 
-    /** A tab by index, guarded; the incoming instance when it is not a different reachable tab. */
-    private static Model at(Model state, int target) {
+    /**
+     * A tab by index, guarded; the incoming instance when it is not a different reachable tab.
+     */
+    static Model at(Model state, int target) {
         List<Tab> tabs = state.tabs();
         if (target < 0 || target >= tabs.size() || !tabs.get(target).enabled()) {
             return state;
@@ -930,7 +990,7 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
         return id.equals(state.activeId()) ? state : new Model(tabs, id, state.focused());
     }
 
-    private static int indexOf(List<Tab> tabs, String id) {
+    static int indexOf(List<Tab> tabs, String id) {
         for (int index = 0; index < tabs.size(); index++) {
             if (tabs.get(index).id().equals(id)) {
                 return index;
@@ -939,8 +999,10 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
         return -1;
     }
 
-    /** Inserts one tab at a position, clamped to the list. */
-    private static Model inserted(Model state, int index, Tab tab) {
+    /**
+     * Inserts one tab at a position, clamped to the list.
+     */
+    static Model inserted(Model state, int index, Tab tab) {
         List<Tab> tabs = state.tabs();
         if (indexOf(tabs, tab.id()) >= 0) {
             throw new IllegalArgumentException("duplicate tab id: " + tab.id());
@@ -950,8 +1012,10 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
         return state.withTabs(next);
     }
 
-    /** Removes one tab; the nearest enabled survivor takes over when the shown tab was removed. */
-    private static Model removed(Model state, String id) {
+    /**
+     * Removes one tab; the nearest enabled survivor takes over when the shown tab was removed.
+     */
+    static Model removed(Model state, String id) {
         int index = indexOf(state.tabs(), id);
         if (index < 0) {
             return state;
@@ -963,323 +1027,4 @@ public final class Tabs implements Component<Tabs.Model, Tabs.Msg, Tabs.Output> 
 
     // ── rendering ────────────────────────────────────────────────────────────
 
-    /**
-     * The cells the bar paints at this width.
-     *
-     * <p>Every tab at its own width when they fit. Otherwise the widest window of consecutive tabs
-     * that fits around the shown one, with a marker on each side where tabs were left out - so the
-     * label the user selected is always on screen, and the cost of a frame follows the width
-     * rather than the number of tabs. When not even the shown tab fits with its own label, it is
-     * the only cell and its label is cut.</p>
-     */
-    private static List<Cell> cells(Model state, Config config, int width) {
-        List<Tab> tabs = state.tabs();
-        int count = tabs.size();
-        if (count == 0 || width < MIN_CELL) {
-            return List.of();
-        }
-        int anchor = Math.max(0, state.activeIndex());
-        // Prefix sums keep the widest fitting window a linear scan rather than a quadratic one: a
-        // list of thousands of tabs costs the same as a list of three.
-        long[] prefix = new long[count + 1];
-        for (int index = 0; index < count; index++) {
-            prefix[index + 1] = prefix[index] + cellWidth(tabs.get(index).label());
-        }
-        for (int size = count; size >= 1; size--) {
-            int start = windowStart(anchor, count, size);
-            int end = start + size;
-            long total = prefix[end] - prefix[start];
-            if (start > 0) {
-                total += overflowWidth();
-            }
-            if (end < count) {
-                total += overflowWidth();
-            }
-            if (total <= width) {
-                return window(tabs, start, end);
-            }
-        }
-        return cut(tabs, anchor, width);
-    }
-
-    /** The window's cells, with a marker on each side that left tabs out. */
-    private static List<Cell> window(List<Tab> tabs, int start, int end) {
-        List<Cell> cells = new ArrayList<>(end - start + 2);
-        if (start > 0) {
-            cells.add(new Cell(-1, true, OVERFLOW_LEFT, overflowWidth()));
-        }
-        for (int index = start; index < end; index++) {
-            cells.add(cell(tabs, index, tabs.get(index).label()));
-        }
-        if (end < tabs.size()) {
-            cells.add(new Cell(-1, true, OVERFLOW_RIGHT, overflowWidth()));
-        }
-        return cells;
-    }
-
-    /** One tab's cell, with its label cut to whatever the markers beside it leave. */
-    private static List<Cell> cut(List<Tab> tabs, int anchor, int width) {
-        int markers = (anchor > 0 ? overflowWidth() : 0) + (anchor < tabs.size() - 1 ? overflowWidth() : 0);
-        // A marker is worth a cell only when the shown label keeps a column to paint in: two markers
-        // that leave an empty cell reveal nothing, which is the one thing a window must not do.
-        if (width - markers < MIN_CELL + 1) {
-            markers = 0;
-        }
-        Tab tab = tabs.get(anchor);
-        int budget = Math.min(width - markers, cellWidth(tab.label()));
-        List<Cell> cells = new ArrayList<>(3);
-        if (anchor > 0 && markers > 0) {
-            cells.add(new Cell(-1, true, OVERFLOW_LEFT, overflowWidth()));
-        }
-        cells.add(cell(tabs, anchor, fit(tab.label(), budget - CHROME)));
-        if (anchor < tabs.size() - 1 && markers > 0) {
-            cells.add(new Cell(-1, true, OVERFLOW_RIGHT, overflowWidth()));
-        }
-        return cells;
-    }
-
-    private static Cell cell(List<Tab> tabs, int index, String label) {
-        return new Cell(index, false, label, cellWidth(label));
-    }
-
-    /** The first tab of a window of {@code size} tabs, centred on {@code anchor} where it can be. */
-    private static int windowStart(int anchor, int count, int size) {
-        int centred = anchor - (size - 1) / 2;
-        return Math.max(0, Math.min(centred, count - size));
-    }
-
-    private static int cellWidth(String label) {
-        return TextMeasure.columns(label) + CHROME;
-    }
-
-    private static int overflowWidth() {
-        return 1 + 2;
-    }
-
-    /** A label cut to the columns it has, ending in an ellipsis when anything was dropped. */
-    private static String fit(String label, int columns) {
-        if (columns <= 0) {
-            return "";
-        }
-        if (TextMeasure.columns(label) <= columns) {
-            return label;
-        }
-        int ellipsis = TextMeasure.columns(ELLIPSIS);
-        return columns <= ellipsis
-                ? TextMeasure.truncate(label, columns)
-                : TextMeasure.truncate(label, columns - ellipsis) + ELLIPSIS;
-    }
-
-    /** The bar alone: the cell tops, the labels, and the bar's own closed bottom edge. */
-    private static StyledText standalone(Model state, Config config, int width) {
-        if (width <= 0 || state.tabs().isEmpty()) {
-            return StyledText.empty();
-        }
-        StyledText row = tops(state, config, width);
-        StyledText labelRow = labels(state, config, width);
-        StyledText bar = row;
-        if (!labelRow.isEmpty()) {
-            bar = bar.isEmpty() ? labelRow : bar.append("\n").append(labelRow);
-        }
-        return bar.isEmpty()
-                ? bottom(state, config, width, false)
-                : bar.append("\n").append(bottom(state, config, width, false));
-    }
-
-    /** The top row of every cell: its corners and the horizontal run between them. */
-    private static StyledText tops(Model state, Config config, int width) {
-        if (width <= 0) {
-            return StyledText.empty();
-        }
-        List<Cell> cells = cells(state, config, width);
-        if (cells.isEmpty()) {
-            // No cell fits: the bar is only the frame's edge below the content, not two blank rows
-            // where cells would have been.
-            return StyledText.empty();
-        }
-        Border border = config.appearance().border();
-        String horizontal = Border.glyph(border.horizontal());
-        StyledText row = StyledText.empty();
-        int used = 0;
-        for (Cell cell : cells) {
-            row = row.append(StyledText.of(
-                    Border.glyph(border.topLeft())
-                            + horizontal.repeat(Math.max(0, cell.width() - 2))
-                            + Border.glyph(border.topRight()),
-                    style(config, state, cell)));
-            used += cell.width();
-        }
-        if (used < width) {
-            row = row.append(StyledText.of(" ".repeat(width - used), Style.NONE));
-        }
-        return row;
-    }
-
-    /** The label row: one padded label per cell. */
-    private static StyledText labels(Model state, Config config, int width) {
-        if (width <= 0) {
-            return StyledText.empty();
-        }
-        List<Cell> cells = cells(state, config, width);
-        if (cells.isEmpty()) {
-            return StyledText.empty();
-        }
-        Border border = config.appearance().border();
-        String vertical = Border.glyph(border.vertical());
-        StyledText row = StyledText.empty();
-        int used = 0;
-        for (Cell cell : cells) {
-            int inner = Math.max(0, cell.width() - 2);
-            // A marker has no padding to spend: its three columns are a border, the glyph and a
-            // border. A tab's content is its label inside the padding, and `fit` is what keeps the
-            // row exactly as wide as the cell it belongs to.
-            String content = cell.overflow()
-                    ? TextMeasure.fit(cell.label(), inner)
-                    : TextMeasure.fit(" ".repeat(PADDING) + cell.label() + " ".repeat(PADDING), inner);
-            row = row.append(StyledText.of(vertical + content + vertical, style(config, state, cell)));
-            used += cell.width();
-        }
-        if (used < width) {
-            row = row.append(StyledText.of(" ".repeat(width - used), Style.NONE));
-        }
-        return row;
-    }
-
-    /**
-     * The bar's last row: the edge the shown tab opens into, or the bar's closed bottom.
-     *
-     * <p>Joined, the cells are the top edge of the frame below them and the shown tab's span is the
-     * opening the content shows through, so the two read as one shape. Standalone, every cell is
-     * closed and the rest of the row is the bar's own rule.</p>
-     */
-    private static StyledText bottom(Model state, Config config, int width, boolean joined) {
-        if (width <= 0) {
-            return StyledText.empty();
-        }
-        Border border = config.appearance().border();
-        Style frameStyle = config.appearance().frame();
-        List<Cell> cells = cells(state, config, width);
-        if (cells.isEmpty()) {
-            // No cell to join: a joined bar is the frame's top edge, and a standalone one is the
-            // rule its cells would have drawn, open at both ends because there is no cell there.
-            return StyledText.of(
-                    joined
-                            ? edge(border, width, false)
-                            : Border.glyph(border.horizontal()).repeat(width),
-                    frameStyle);
-        }
-        Joins joins = Joins.of(border);
-        String horizontal = Border.glyph(border.horizontal());
-        StyledText row = StyledText.empty();
-        int used = 0;
-        for (Cell cell : cells) {
-            boolean shown = !cell.overflow() && isActive(state, cell);
-            boolean opening = joined && shown;
-            boolean first = used == 0;
-            boolean last = used + cell.width() == width;
-            String left = junction(border, joins, first, true, shown, joined);
-            String right = junction(border, joins, last, false, shown, joined);
-            String middle = opening
-                    ? " ".repeat(Math.max(0, cell.width() - 2))
-                    : horizontal.repeat(Math.max(0, cell.width() - 2));
-            row = row.append(StyledText.of(left + middle + right, style(config, state, cell)));
-            used += cell.width();
-        }
-        if (used < width) {
-            int run = width - used;
-            String rest = joined
-                    ? horizontal.repeat(Math.max(0, run - 1)) + Border.glyph(border.topRight())
-                    : horizontal.repeat(run);
-            row = row.append(StyledText.of(rest, frameStyle));
-        }
-        return row;
-    }
-
-    /**
-     * One end of a cell's bottom edge.
-     *
-     * <p>Four things meet there: the cell's own side, the cell beside it, the frame below, and
-     * whether the shown tab is open. The character says which of them continue - the frame's own
-     * vertical through a closed end at the edge, a tee where a closed cell meets its neighbour, and
-     * an open corner where the shown tab's opening meets one.</p>
-     */
-    private static String junction(
-            Border border, Joins joins, boolean atEdge, boolean left, boolean shown, boolean joined) {
-        if (atEdge) {
-            if (joined) {
-                // The frame's own edge runs through this cell: down into the frame, and up into the
-                // cell that owns the column.
-                return shown ? Border.glyph(border.vertical()) : String.valueOf(left ? joins.left() : joins.right());
-            }
-            return Border.glyph(left ? border.bottomLeft() : border.bottomRight());
-        }
-        if (shown && joined) {
-            return String.valueOf(left ? joins.openLeft() : joins.openRight());
-        }
-        return String.valueOf(joins.tee());
-    }
-
-    /** The frame's top or bottom edge: its corners and a full run of its horizontal character. */
-    private static String edge(Border border, int width, boolean bottom) {
-        if (width <= 0) {
-            return "";
-        }
-        String horizontal = Border.glyph(border.horizontal());
-        char first = bottom ? border.bottomLeft() : border.topLeft();
-        char last = bottom ? border.bottomRight() : border.topRight();
-        if (width == 1) {
-            return Border.glyph(first);
-        }
-        return Border.glyph(first) + horizontal.repeat(width - 2) + Border.glyph(last);
-    }
-
-    private static boolean isActive(Model state, Cell cell) {
-        if (cell.overflow() || cell.tab() < 0) {
-            return false;
-        }
-        return state.tabs().get(cell.tab()).id().equals(state.activeId());
-    }
-
-    private static Style style(Config config, Model state, Cell cell) {
-        Appearance look = config.appearance();
-        if (cell.overflow() || cell.tab() < 0) {
-            return look.inactiveTab();
-        }
-        Tab tab = state.tabs().get(cell.tab());
-        if (!tab.enabled()) {
-            return look.disabledTab();
-        }
-        return isActive(state, cell) ? look.activeTab() : look.inactiveTab();
-    }
-
-    /** Styled text cut to the columns it has, on a grapheme boundary. */
-    private static StyledText cut(StyledText text, int columns) {
-        if (columns <= 0) {
-            return StyledText.empty();
-        }
-        String plain = text.plainText();
-        if (TextMeasure.columns(plain) <= columns) {
-            return text;
-        }
-        String truncated = TextMeasure.truncate(plain, columns);
-        return text.slice(0, truncated.length());
-    }
-
-    /**
-     * The junction glyphs a bar needs, chosen for the frame it joins.
-     *
-     * <p>A double frame joins with double junctions and every other frame with single ones, so the
-     * cells and the frame below them read as one line rather than as a frame with mismatched
-     * corners. A custom border keeps the single-line junctions: its own characters are still what a
-     * cell and a frame draw, and the junction is the only part this widget chooses.</p>
-     */
-    private record Joins(char left, char right, char tee, char openLeft, char openRight) {
-
-        private static Joins of(Border border) {
-            if (Border.DOUBLE.equals(border)) {
-                return new Joins('\u2560', '\u2563', '\u2569', '\u255D', '\u255A');
-            }
-            return new Joins('\u251C', '\u2524', '\u2534', '\u2518', '\u2514');
-        }
-    }
 }

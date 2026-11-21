@@ -43,8 +43,8 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.OutputRoute;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,8 +66,8 @@ class HierarchicalRuntimeTest {
     }
 
     private abstract static class Definition<M> implements Component<M, String, Never> {
-        public View<String> view(M model, ViewContext context) {
-            return Views.text("ready");
+        public Element<String> view(M model, ViewContext context) {
+            return Elements.text("ready");
         }
     }
 
@@ -461,8 +461,8 @@ class HierarchicalRuntimeTest {
                 return Update.emit(model + message, "submitted:" + (model + message));
             }
 
-            public View<Integer> view(Integer model, ViewContext context) {
-                return Views.text("" + model);
+            public Element<Integer> view(Integer model, ViewContext context) {
+                return Elements.text("" + model);
             }
         };
         var mount = Mount.<OutputModel, OutputMsg, Never, Integer, Integer, String>of(
@@ -498,8 +498,8 @@ class HierarchicalRuntimeTest {
                 return model.composerPresent() ? ComponentTree.of(mount.tree(model)) : ComponentTree.empty();
             }
 
-            public View<OutputMsg> view(OutputModel model, ViewContext context) {
-                return Views.text("ok");
+            public Element<OutputMsg> view(OutputModel model, ViewContext context) {
+                return Elements.text("ok");
             }
         };
         try (var terminal = new TestTerminal()) {

@@ -26,6 +26,7 @@ import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -40,12 +41,18 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Paginator;
 import io.github.dhoard.braxton.widget.RichList;
+import io.github.dhoard.braxton.widget.RichListConfig;
+import io.github.dhoard.braxton.widget.RichListDefaultRenderer;
+import io.github.dhoard.braxton.widget.RichListFilter;
+import io.github.dhoard.braxton.widget.RichListModel;
+import io.github.dhoard.braxton.widget.RichListMsg;
+import io.github.dhoard.braxton.widget.RichListOutput;
 import io.github.dhoard.braxton.widget.Spinner;
-import io.github.dhoard.braxton.widget.TextInput;
+import io.github.dhoard.braxton.widget.TextInputConfig;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -122,25 +129,39 @@ public final class RichListDemo {
             "A small luxury",
             "The best part of the day");
 
-    /** The rows the scene paints above the mounted list. */
+    /**
+     * The rows the scene paints above the mounted list.
+     */
     public static final int STATUS_ROWS = 3;
 
-    /** The items the demo filters and pages: a static fixture, so nothing is read or fetched. */
+    /**
+     * The items the demo filters and pages: a static fixture, so nothing is read or fetched.
+     */
     public static final List<RichList.Item> ITEMS = items(240);
 
-    /** The number of items the fixture holds. */
+    /**
+     * The number of items the fixture holds.
+     */
     public static final int ITEM_COUNT = ITEMS.size();
 
-    /** The three ways the demo paints its items. */
+    /**
+     * The three ways the demo paints its items.
+     */
     public enum Preset {
 
-        /** One row an item: the title only. */
+        /**
+         * One row an item: the title only.
+         */
         SIMPLE,
 
-        /** Two rows an item: the title and its description. */
+        /**
+         * Two rows an item: the title and its description.
+         */
         DEFAULT,
 
-        /** Three rows an item, painted by the demo's own renderer. */
+        /**
+         * Three rows an item, painted by the demo's own renderer.
+         */
         FANCY
     }
 
@@ -154,16 +175,18 @@ public final class RichListDemo {
      * @param added how many items the scene has added, so an added id is never reused
      * @param last what the scene or the list last did
      */
-    public record Model(RichList.Model list, Preset preset, int added, String last) {
+    public record Model(RichListModel list, Preset preset, int added, String last) {
 
-        /** Substitutes the default preset for a missing one. */
+        /**
+         * Substitutes the default preset for a missing one.
+         */
         public Model {
-            list = list == null ? RichList.Model.of(ITEMS, 24 - STATUS_ROWS) : list;
+            list = list == null ? RichListModel.of(ITEMS, 24 - STATUS_ROWS) : list;
             preset = preset == null ? Preset.DEFAULT : preset;
             last = last == null ? "none" : last;
         }
 
-        Model withList(RichList.Model value) {
+        Model withList(RichListModel value) {
             return new Model(value, preset, added, last);
         }
 
@@ -180,7 +203,9 @@ public final class RichListDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -188,14 +213,14 @@ public final class RichListDemo {
          *
          * @param value the list's message
          */
-        record List(RichList.Msg value) implements Msg {}
+        record List(RichListMsg value) implements Msg {}
 
         /**
          * An output the mounted list routed to the scene.
          *
          * @param value the list's output
          */
-        record Output(RichList.Output value) implements Msg {}
+        record Output(RichListOutput value) implements Msg {}
 
         /**
          * Switches the preset the items are painted with.
@@ -204,13 +229,19 @@ public final class RichListDemo {
          */
         record Use(Preset value) implements Msg {}
 
-        /** Inserts one item at the top of the list. */
+        /**
+         * Inserts one item at the top of the list.
+         */
         record Add() implements Msg {}
 
-        /** Removes the selected item, if there is one. */
+        /**
+         * Removes the selected item, if there is one.
+         */
         record Remove() implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -240,7 +271,11 @@ public final class RichListDemo {
                 KeyMap.group("Scene", KeyAction.<Msg>of("quit", new Msg.Quit(), "ctrl+c", "quit", "ctrl+c")));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
@@ -268,17 +303,17 @@ public final class RichListDemo {
      * @param model the scene state
      * @return the list definition
      */
-    public static RichList.Config config(Model model) {
-        return RichList.Config.defaults()
+    public static RichListConfig config(Model model) {
+        return RichListConfig.defaults()
                 .withItems(ITEMS)
-                .withTitle("Favourite things")
+                .withTitle("Favorite things")
                 .withRenderer(renderer(model.preset()))
                 .withMode(RichList.FilterMode.FUZZY)
-                .withFilterInput(TextInput.Config.defaults().withPrompt("Filter: ", Style.NONE.withBold()))
+                .withFilterInput(TextInputConfig.defaults().withPrompt("Filter: ", Style.NONE.withBold()))
                 .withPagination(Paginator.Appearance.dots())
                 .withSpinner(Spinner.Config.preset(Spinner.Preset.DOT))
                 .withExtraHelp(keys())
-                .withStyles(RichList.Config.Styles.defaults())
+                .withStyles(RichListConfig.Styles.defaults())
                 .withRows(24 - STATUS_ROWS)
                 .withReservedRows(STATUS_ROWS);
     }
@@ -291,8 +326,8 @@ public final class RichListDemo {
      */
     public static RichList.Renderer renderer(Preset preset) {
         return switch (preset) {
-            case SIMPLE -> new RichList.DefaultRenderer(null, false, 0);
-            case DEFAULT -> RichList.DefaultRenderer.defaults();
+            case SIMPLE -> new RichListDefaultRenderer(null, false, 0);
+            case DEFAULT -> RichListDefaultRenderer.defaults();
             case FANCY -> new FancyRenderer();
         };
     }
@@ -315,12 +350,16 @@ public final class RichListDemo {
         return List.copyOf(items);
     }
 
-    /** A stable item id for one-based position, so a verifier can name an item. */
+    /**
+     * A stable item id for one-based position, so a verifier can name an item.
+     */
     private static String id(int number) {
         return number < 10 ? "item-00" + number : number < 100 ? "item-0" + number : "item-" + number;
     }
 
-    /** The scene's own renderer: three rows an item, and a mark on a row the query matched. */
+    /**
+     * The scene's own renderer: three rows an item, and a mark on a row the query matched.
+     */
     private static final class FancyRenderer implements RichList.Renderer {
 
         @Override
@@ -347,8 +386,15 @@ public final class RichListDemo {
         }
     }
 
-    /** The status rows, the mounted list and the scene's own help. */
+    /**
+     * The status rows, the mounted list and the scene's own help.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         @Override
         public Update<Model, Msg, Never> init(InitContext context) {
@@ -371,7 +417,9 @@ public final class RichListDemo {
             };
         }
 
-        /** The list's own scope: its size subscription and, while shown, its spinner interval. */
+        /**
+         * The list's own scope: its size subscription and, while shown, its spinner interval.
+         */
         @Override
         public Subscription<Msg> subscriptions(Model model) {
             return mount(model).subscriptions(model);
@@ -383,19 +431,37 @@ public final class RichListDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
-            KeyMap<Msg> keys = keys();
-            List<View<Msg>> rows = new ArrayList<>(STATUS_ROWS + 1);
-            // Status rows are one row each however narrow the terminal is: a wrapped diagnostic
-            // would push the list's chrome and its items down and move what a verifier asserts.
-            rows.add(Views.fixed(1, Views.text(fixture(model), STATUS)));
-            rows.add(Views.fixed(1, Views.text(query(model), STATUS)));
-            rows.add(Views.fixed(1, Views.text(chrome(model), STATUS)));
-            rows.add(mount(model).view(model, context));
-            return Views.onKeys(keys.bindings(), Views.column(rows));
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
         }
 
-        /** The application's own data: what the fixture holds and what is selected in it. */
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys().bindings();
+        }
+
+        /**
+         * The scene's rows as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
+            KeyMap<Msg> keys = keys();
+            List<Element<Msg>> rows = new ArrayList<>(STATUS_ROWS + 1);
+            // Status rows are one row each however narrow the terminal is: a wrapped diagnostic
+            // would push the list's chrome and its items down and move what a verifier asserts.
+            rows.add(Elements.fixed(1, Elements.text(fixture(model), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(query(model), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(chrome(model), STATUS)));
+            rows.add(mount(model).view(model, context));
+            return Elements.column(rows);
+        }
+
+        /**
+         * The application's own data: what the fixture holds and what is selected in it.
+         */
         private static String fixture(Model model) {
             return "preset=" + name(model.preset())
                     + " items=" + model.list().items().size()
@@ -404,9 +470,11 @@ public final class RichListDemo {
                     + " last=" + model.last();
         }
 
-        /** The query and what it shows, from the list's own public projections. */
+        /**
+         * The query and what it shows, from the list's own public projections.
+         */
         private static String query(Model model) {
-            RichList.Filter filter = model.list().filter();
+            RichListFilter filter = model.list().filter();
             return "filter=" + (filter.query().isEmpty() ? "-" : filter.query())
                     + " mode=" + filter.mode().name().toLowerCase(Locale.ROOT)
                     + " editing=" + onOff(filter.editing())
@@ -417,7 +485,9 @@ public final class RichListDemo {
                     + Math.max(1, RichList.pages(model.list(), config(model)).size());
         }
 
-        /** The chrome the list paints and whether its spinner runs. */
+        /**
+         * The chrome the list paints and whether its spinner runs.
+         */
         private static String chrome(Model model) {
             RichList.Chrome chrome = model.list().chrome();
             return "title=" + onOff(chrome.title())
@@ -429,23 +499,27 @@ public final class RichListDemo {
                     + " content=" + RichList.contentRows(model.list(), config(model));
         }
 
-        /** One item is added at the top, so the list has to keep a selection that moved. */
+        /**
+         * One item is added at the top, so the list has to keep a selection that moved.
+         */
         private Update<Model, Msg, Never> added(Model model) {
             int number = model.added() + 1;
             RichList.Item item =
                     new RichList.Item("added-" + number, "added item " + number, "added by the demo", null);
             Model changed = model.withAdded(number);
-            Update<Model, Msg, Never> applied = mount(changed).update(changed, new RichList.Msg.InsertItem(0, item));
+            Update<Model, Msg, Never> applied = mount(changed).update(changed, new RichListMsg.InsertItem(0, item));
             return Update.next(applied.model().withLast("added-" + number), applied.command());
         }
 
-        /** The selected item is removed, and the list chooses the nearest surviving item. */
+        /**
+         * The selected item is removed, and the list chooses the nearest surviving item.
+         */
         private Update<Model, Msg, Never> removed(Model model) {
             String selected = model.list().selectedId();
             if (selected.isEmpty()) {
                 return Update.next(model.withLast("removed-none"));
             }
-            Update<Model, Msg, Never> applied = mount(model).update(model, new RichList.Msg.RemoveItem(selected));
+            Update<Model, Msg, Never> applied = mount(model).update(model, new RichListMsg.RemoveItem(selected));
             return Update.next(applied.model().withLast("removed-" + selected), applied.command());
         }
 
@@ -453,16 +527,16 @@ public final class RichListDemo {
          * What the list asked the scene to do: a choice is reported and a notice is dispatched back
          * through the mount, so the notice's own timer is the list's effect and not a second one.
          */
-        private Update<Model, Msg, Never> output(Model model, RichList.Output value) {
+        private Update<Model, Msg, Never> output(Model model, RichListOutput value) {
             return switch (value) {
-                case RichList.Output.Chosen chosen -> {
+                case RichListOutput.Chosen chosen -> {
                     Model reported = model.withLast("chose-" + chosen.item().id());
                     yield Update.next(
                             reported,
-                            Command.dispatch(new Msg.List(new RichList.Msg.Notice(
+                            Command.dispatch(new Msg.List(new RichListMsg.Notice(
                                     "chose " + chosen.item().title()))));
                 }
-                case RichList.Output.Cancelled cancelled -> Update.next(model.withLast("cancelled"), Command.quit());
+                case RichListOutput.Canceled cancelled -> Update.next(model.withLast("canceled"), Command.quit());
             };
         }
 
@@ -472,11 +546,11 @@ public final class RichListDemo {
          * <p>The component is built from the scene's policy on every use. Nothing else about the
          * mount changes: its identity, its lens and its route are the same values every time.</p>
          */
-        private Mount<Model, Msg, Never, RichList.Model, RichList.Msg, RichList.Output> mount(Model model) {
+        private Mount<Model, Msg, Never, RichListModel, RichListMsg, RichListOutput> mount(Model model) {
             return Mount.of(
                     ComponentId.of("list"),
                     new RichList(config(model)),
-                    ModelLens.of(Model::list, (Model state, RichList.Model child) -> state.withList(child)),
+                    ModelLens.of(Model::list, (Model state, RichListModel child) -> state.withList(child)),
                     Msg.List::new,
                     OutputRoute.toMessage(Msg.Output::new));
         }

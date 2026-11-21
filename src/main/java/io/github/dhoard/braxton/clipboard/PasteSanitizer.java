@@ -52,12 +52,23 @@ public final class PasteSanitizer {
 
     private PasteSanitizer() {}
 
-    /** Normalizes pasted text with {@link PasteMode#NORMAL}. */
+    /**
+     * Normalizes pasted text with {@link PasteMode#NORMAL}.
+     *
+     * @param text the pasted text to sanitize
+     * @return the sanitized single- or multiline paste text
+     */
     public static String sanitize(String text) {
         return sanitize(text, PasteMode.NORMAL);
     }
 
-    /** Normalizes pasted text with the requested mode. */
+    /**
+     * Normalizes pasted text with the requested mode.
+     *
+     * @param text the pasted text to sanitize
+     * @param mode the requested behavior mode
+     * @return the text normalized under the selected paste policy
+     */
     public static String sanitize(String text, PasteMode mode) {
         return sanitize(text, mode, defaultCollapseBlankLines(mode));
     }
@@ -65,9 +76,12 @@ public final class PasteSanitizer {
     /**
      * Normalizes pasted text with the requested mode.
      *
+     * @param text the pasted text to sanitize
+     * @param mode the requested behavior mode
      * @param collapseBlankLines whether runs of internal blank lines collapse to one. Defaults to
      *     {@code true} for {@link PasteMode#AGGRESSIVE} and {@code false} for
      *     {@link PasteMode#NORMAL}.
+     * @return the text normalized under the selected paste policy
      */
     public static String sanitize(String text, PasteMode mode, boolean collapseBlankLines) {
         if (text == null || text.isEmpty()) {
@@ -117,6 +131,9 @@ public final class PasteSanitizer {
      * ANSI/OSC/DCS sequences, control characters, BOMs, zero-width spaces, nonbreaking spaces, and
      * unpaired surrogates are removed or normalized. Unlike the paste modes, this method does not trim lines or remove
      * blank lines, so copying a source selection preserves it exactly.
+     *
+     * @param text the text to copy; null or empty yields an empty payload
+     * @return the normalized text with terminal control sequences removed
      */
     public static String plainText(String text) {
         if (text == null || text.isEmpty()) {
@@ -231,7 +248,9 @@ public final class PasteSanitizer {
                 || (c >= '\ufff9' && c <= '\ufffb'); // interlinear annotations
     }
 
-    /** Skips an ESC-introduced sequence and returns the index of the first byte after it. */
+    /**
+     * Skips an ESC-introduced sequence and returns the index of the first byte after it.
+     */
     private static int skipEscape(String text, int index) {
         int next = index + 1;
         if (next >= text.length()) {
@@ -256,7 +275,9 @@ public final class PasteSanitizer {
         };
     }
 
-    /** Skips a CSI sequence (already past {@code ESC [} or the C1 CSI byte). */
+    /**
+     * Skips a CSI sequence (already past {@code ESC [} or the C1 CSI byte).
+     */
     private static int skipCsi(String text, int index) {
         int i = index;
         while (i < text.length() && text.charAt(i) >= 0x30 && text.charAt(i) <= 0x3f) {

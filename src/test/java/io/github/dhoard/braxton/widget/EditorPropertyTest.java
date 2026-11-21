@@ -28,14 +28,16 @@ import io.github.dhoard.braxton.style.TextMeasure;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** Inserting then backspacing the same cluster restores the draft, at every position. */
+/**
+ * Inserting then backspacing the same cluster restores the draft, at every position.
+ */
 class EditorPropertyTest {
 
     @Test
     void anInsertedClusterIsRemovedExactlyByBackspace() {
         String[] clusters = {"a", "\u65E5", "\uD83D\uDE00", "e\u0301", "\uD83D\uDC68\u200D\uD83D\uDC69"};
         Random random = new Random(7L);
-        Editor.Config options = Editor.Config.defaults();
+        EditorConfig options = EditorConfig.defaults();
         for (int iteration = 0; iteration < 400; iteration++) {
             StringBuilder text = new StringBuilder();
             for (int i = 0; i < random.nextInt(6); i++) {
@@ -76,13 +78,13 @@ class EditorPropertyTest {
             Editor.Model state = Editor.Model.of(randomText(random, atoms));
             assertThat(state.text()).as("seeded draft").doesNotContain("\r");
             int limit = 1 + random.nextInt(12);
-            Editor.Config options = Editor.Config.defaults().withMaxLength(limit);
+            EditorConfig options = EditorConfig.defaults().withMaxLength(limit);
             if (random.nextBoolean()) {
                 options = options.withVisibleLines(1 + random.nextInt(3));
             }
             if (random.nextBoolean()) {
                 options = options.withMasking(
-                        random.nextBoolean() ? Editor.Config.Masking.PASSWORD : Editor.Config.Masking.HIDDEN);
+                        random.nextBoolean() ? EditorConfig.Masking.PASSWORD : EditorConfig.Masking.HIDDEN);
             }
             for (int step = 0; step < 25; step++) {
                 Editor.Model before = state;
@@ -103,7 +105,7 @@ class EditorPropertyTest {
                 assertThat(rendered.split("\n", -1))
                         .as("visible rows for [%s]", state.text())
                         .hasSize(Editor.visibleLineCount(state, options));
-                if (options.masking() == Editor.Config.Masking.NONE) {
+                if (options.masking() == EditorConfig.Masking.NONE) {
                     for (String row :
                             Editor.render(state, options, false).plainText().split("\n", -1)) {
                         assertThat(Editor.lines(state))

@@ -44,17 +44,17 @@ import java.util.Optional;
  * rather than when a key is pressed. A disabled action releases its gestures: it matches nothing, is
  * absent from {@link #bindings()} and from help, and its aliases may overlap another action's.</p>
  *
- * @param groups the groups, in display order
  * @param <Msg> the message type of the owning application or component
+ * @param groups the groups, in display order
  */
 public record KeyMap<Msg>(List<Group<Msg>> groups) {
 
     /**
      * One help column: a title and the actions under it.
      *
+     * @param <Msg> the message type of the owning application or component
      * @param title the group heading; blank for an untitled group
      * @param actions the actions, in display order
-     * @param <Msg> the message type of the owning application or component
      */
     public record Group<Msg>(String title, List<KeyAction<Msg>> actions) {
 
@@ -111,8 +111,8 @@ public record KeyMap<Msg>(List<Group<Msg>> groups) {
     /**
      * A map from groups, in display order.
      *
-     * @param groups the groups
      * @param <Msg> the message type
+     * @param groups the groups
      * @return the map
      */
     @SafeVarargs
@@ -130,8 +130,8 @@ public record KeyMap<Msg>(List<Group<Msg>> groups) {
     /**
      * A map from groups, in display order.
      *
-     * @param groups the groups
      * @param <Msg> the message type
+     * @param groups the groups
      * @return the map
      */
     public static <Msg> KeyMap<Msg> of(List<Group<Msg>> groups) {
@@ -141,9 +141,9 @@ public record KeyMap<Msg>(List<Group<Msg>> groups) {
     /**
      * One group of actions.
      *
+     * @param <Msg> the message type
      * @param title the group heading; blank for none
      * @param actions the actions, in display order
-     * @param <Msg> the message type
      * @return the group
      */
     @SafeVarargs
@@ -158,9 +158,9 @@ public record KeyMap<Msg>(List<Group<Msg>> groups) {
     /**
      * One group of actions.
      *
+     * @param <Msg> the message type
      * @param title the group heading; blank for none
      * @param actions the actions, in display order
-     * @param <Msg> the message type
      * @return the group
      */
     public static <Msg> Group<Msg> group(String title, List<KeyAction<Msg>> actions) {
@@ -202,6 +202,7 @@ public record KeyMap<Msg>(List<Group<Msg>> groups) {
      *
      * <p>An alias matches exactly, so this answer is the same one the compiled {@link Binding} list
      * answers.</p>
+     *
      * @param gesture the gesture to match
      * @return the action, or empty when no enabled action claims the gesture
      */

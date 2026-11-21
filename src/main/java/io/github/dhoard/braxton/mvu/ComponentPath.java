@@ -37,12 +37,26 @@ import java.util.Objects;
  * @param segments the immutable path from the root, empty for {@link #ROOT}
  */
 public record ComponentPath(List<ComponentId> segments) implements Serializable {
+    /**
+     * The root path: no segments, naming the program's own component.
+     */
     public static final ComponentPath ROOT = new ComponentPath(List.of());
 
+    /**
+     * Creates a {@code ComponentPath} value.
+     *
+     * @param segments the immutable path from the root, empty for {@link #ROOT}
+     */
     public ComponentPath {
         segments = List.copyOf(Objects.requireNonNull(segments, "segments"));
     }
 
+    /**
+     * Returns this path with one child identity appended.
+     *
+     * @param id the local identity of the resource
+     * @return this path with one child identity appended
+     */
     public ComponentPath append(ComponentId id) {
         Objects.requireNonNull(id, "id");
         if (segments.isEmpty()) return new ComponentPath(List.of(id));
@@ -51,6 +65,12 @@ public record ComponentPath(List<ComponentId> segments) implements Serializable 
         return new ComponentPath(next);
     }
 
+    /**
+     * Returns this path scoped beneath the supplied prefix.
+     *
+     * @param prefix the component path prefix
+     * @return this path scoped beneath the supplied prefix
+     */
     public ComponentPath prepend(ComponentPath prefix) {
         Objects.requireNonNull(prefix, "prefix");
         if (prefix.segments.isEmpty()) return this;
@@ -60,6 +80,12 @@ public record ComponentPath(List<ComponentId> segments) implements Serializable 
         return new ComponentPath(next);
     }
 
+    /**
+     * Tests whether this path starts with all segments of the supplied prefix.
+     *
+     * @param prefix the component path prefix
+     * @return {@code true} if this path starts with all segments of the supplied prefix; otherwise {@code false}
+     */
     public boolean startsWith(ComponentPath prefix) {
         Objects.requireNonNull(prefix, "prefix");
         if (segments.size() < prefix.segments.size()) return false;
@@ -79,7 +105,9 @@ public record ComponentPath(List<ComponentId> segments) implements Serializable 
         return true;
     }
 
-    /** Explicit because {@link #equals} is explicit: the two must stay one contract. */
+    /**
+     * Explicit because {@link #equals} is explicit: the two must stay one contract.
+     */
     @Override
     public int hashCode() {
         int hash = 1;

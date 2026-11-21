@@ -28,7 +28,9 @@ import java.io.Writer;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
-/** Bounded character pipe for owned streams and deterministic terminal fixtures. */
+/**
+ * Bounded character pipe for owned streams and deterministic terminal fixtures.
+ */
 public final class CharacterInput extends TimedReader {
     private final char[] buffer;
     private int head;
@@ -64,15 +66,28 @@ public final class CharacterInput extends TimedReader {
         }
     };
 
+    /**
+     * Creates the character input with its default configuration.
+     */
     public CharacterInput() {
         this(8192);
     }
 
+    /**
+     * Creates a {@code CharacterInput} value.
+     *
+     * @param capacity the maximum buffered item count
+     */
     public CharacterInput(int capacity) {
         if (capacity <= 0) throw new IllegalArgumentException("capacity must be positive");
         buffer = new char[capacity];
     }
 
+    /**
+     * Returns the writer feeding this bounded character buffer.
+     *
+     * @return the writer feeding this bounded character buffer
+     */
     public Writer getWriter() {
         return writer;
     }

@@ -25,7 +25,7 @@ package io.github.dhoard.braxton.app;
 import io.github.dhoard.braxton.input.KeyboardEnhancements;
 
 /**
- * Session behaviour an application can request before it starts.
+ * Session behavior an application can request before it starts.
  *
  * <p>Full-window applications use the alternate screen by default so exit restores the user's
  * scrollback instead of erasing it. An application that wants its output to stay where the user can
@@ -36,7 +36,7 @@ import io.github.dhoard.braxton.input.KeyboardEnhancements;
  * reporting is opt-in; bracketed paste defaults on when supported.</p>
  *
  * <p>Enhanced keyboard input and terminal focus reporting are opt-in and off by default, so an
- * application that does not ask keeps exactly the legacy keyboard behaviour it had. Both are
+ * application that does not ask keeps exactly the legacy keyboard behavior it had. Both are
  * requested rather than inferred: whether a terminal supports either is unknown until it answers,
  * and a terminal that ignores a request simply keeps sending legacy input.</p>
  *
@@ -55,51 +55,26 @@ public record TerminalOptions(
         KeyboardEnhancements keyboardEnhancements,
         boolean focusReporting) {
 
-    public static final TerminalOptions DEFAULT =
-            new TerminalOptions(true, MouseMode.NONE, true, KeyboardEnhancements.NONE, false);
-
+    /**
+     * Creates a {@code TerminalOptions} value.
+     *
+     * @param alternateScreen whether to enter the alternate screen for the session
+     * @param mouseMode how much pointer input the terminal is asked to report; {@link MouseMode#NONE} asks for none
+     * @param bracketedPaste whether to enable bracketed paste
+     * @param keyboardEnhancements the enhanced keyboard facts to request; {@link KeyboardEnhancements#NONE} requests none
+     * @param focusReporting whether to ask the terminal to report gaining and losing focus
+     */
     public TerminalOptions {
         mouseMode = mouseMode == null ? MouseMode.NONE : mouseMode;
         keyboardEnhancements = keyboardEnhancements == null ? KeyboardEnhancements.NONE : keyboardEnhancements;
     }
 
     /**
-     * The same options with pointer reporting turned on or off.
-     *
-     * <p>Turning it on asks for {@link MouseMode#CLICK}: presses, releases and wheel gestures, with
-     * no motion reports. Use {@link #withMouseMode(MouseMode)} to ask for drags or hover instead.
-     * This convenience is the pre-existing shape of the option, kept so a caller that only ever
-     * wanted clicks does not have to name a mode.</p>
-     *
-     * @param alternateScreen whether to enter the alternate screen for the session
-     * @param mouse whether to report presses, releases and wheel gestures
-     * @param bracketedPaste whether to enable bracketed paste
-     * @param keyboardEnhancements the enhanced keyboard facts to request
-     * @param focusReporting whether to ask the terminal to report focus changes
+     * The default presentation: alternate screen and bracketed paste on, pointer, keyboard
+     * enhancement and focus reporting not requested.
      */
-    public TerminalOptions(
-            boolean alternateScreen,
-            boolean mouse,
-            boolean bracketedPaste,
-            KeyboardEnhancements keyboardEnhancements,
-            boolean focusReporting) {
-        this(
-                alternateScreen,
-                mouse ? MouseMode.CLICK : MouseMode.NONE,
-                bracketedPaste,
-                keyboardEnhancements,
-                focusReporting);
-    }
-
-    /** The legacy session options, with no enhanced keyboard input and no focus reporting.
-     *
-     * @param alternateScreen whether to enter the alternate screen for the session
-     * @param mouse whether to report presses, releases and wheel gestures
-     * @param bracketedPaste whether to enable bracketed paste
-     */
-    public TerminalOptions(boolean alternateScreen, boolean mouse, boolean bracketedPaste) {
-        this(alternateScreen, mouse, bracketedPaste, KeyboardEnhancements.NONE, false);
-    }
+    public static final TerminalOptions DEFAULT =
+            new TerminalOptions(true, MouseMode.NONE, true, KeyboardEnhancements.NONE, false);
 
     /**
      * Whether pointer input is reported at all.
@@ -148,6 +123,12 @@ public record TerminalOptions(
         return new TerminalOptions(value, mouseMode, bracketedPaste, keyboardEnhancements, focusReporting);
     }
 
+    /**
+     * Returns the same value with bracketed paste replaced.
+     *
+     * @param value whether to enable bracketed paste
+     * @return the value with the requested bracketed paste
+     */
     public TerminalOptions withBracketedPaste(boolean value) {
         return new TerminalOptions(alternateScreen, mouseMode, value, keyboardEnhancements, focusReporting);
     }

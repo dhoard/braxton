@@ -27,8 +27,7 @@ import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -69,19 +68,29 @@ import java.util.List;
  */
 public final class Table {
 
-    /** The fewest cells a column keeps while a table is fitted to a narrower width. */
+    /**
+     * The fewest cells a column keeps while a table is fitted to a narrower width.
+     */
     public static final int MIN_COLUMN = 3;
 
-    /** Where one column puts the cells its content does not use. */
+    /**
+     * Where one column puts the cells its content does not use.
+     */
     public enum Alignment {
 
-        /** Content first, padding after it. */
+        /**
+         * Content first, padding after it.
+         */
         LEFT,
 
-        /** Padding on both sides of the content, the smaller half before it. */
+        /**
+         * Padding on both sides of the content, the smaller half before it.
+         */
         CENTER,
 
-        /** Padding first, content last. */
+        /**
+         * Padding first, content last.
+         */
         RIGHT
     }
 
@@ -407,12 +416,16 @@ public final class Table {
         return out;
     }
 
-    /** The alignment of one column, left when the table declared none for it. */
+    /**
+     * The alignment of one column, left when the table declared none for it.
+     */
     private Alignment alignment(int column) {
         return column < alignments.size() ? alignments.get(column) : Alignment.LEFT;
     }
 
-    /** The cells one rendered row may occupy, which is the budget less the frame's two edges. */
+    /**
+     * The cells one rendered row may occupy, which is the budget less the frame's two edges.
+     */
     private int budget() {
         return width <= 0 ? Integer.MAX_VALUE : Math.max(0, width - (border.isVisible() ? 2 : 0));
     }
@@ -437,19 +450,20 @@ public final class Table {
     }
 
     /**
-     * A one-element view of the rendered table.
+     * The table as a leaf of an element tree.
      *
-     * @return a text view holding {@link #render()}
+     * @param <Msg> the message type of the tree
+     * @return the element
      */
-    public View<Object> view() {
-        return Views.text(render());
+    public <Msg> Element<Msg> element() {
+        return RenderedText.of(cols -> render());
     }
 
     /**
      * Convenience for callers that build plain cells.
      *
      * @param text the cell text; null is empty
-     * @param color the text colour, or null for the inherited colour
+     * @param color the text color, or null for the inherited color
      * @return the styled cell
      */
     public static StyledText cell(String text, Color color) {

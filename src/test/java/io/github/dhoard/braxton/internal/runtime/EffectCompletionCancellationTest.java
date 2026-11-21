@@ -33,7 +33,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 
-/** Mapping a completion does not end the effect's cancellable lifetime. */
+/**
+ * Mapping a completion does not end the effect's cancellable lifetime.
+ */
 class EffectCompletionCancellationTest {
 
     private static final EffectId ID = EffectId.of("group-work");

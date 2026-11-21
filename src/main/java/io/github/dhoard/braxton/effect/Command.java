@@ -74,8 +74,8 @@ public sealed interface Command<Msg> {
     /**
      * Interpreted in order; a {@link Quit} ends the batch.
      *
-     * @param commands the commands to interpret, in declaration order
      * @param <Msg> the component message type these commands produce
+     * @param commands the commands to interpret, in declaration order
      */
     record Batch<Msg>(List<Command<Msg>> commands) implements Command<Msg> {
 
@@ -105,7 +105,7 @@ public sealed interface Command<Msg> {
      * answer arrives, and a command that produces no message - cancellation, or a presentation change -
      * once it has taken effect. Submission is not the same as installation, which is what makes a
      * sequence different from a {@link Batch}: a batch starts everything at once, and a sequence
-     * starts step N+1 only once step N is over. Messages are delivered in sequence order.
+     * starts step N+1 only once step N is over. Messages are delivered in sequence order.</p>
      *
      * <p>The next step is submitted at that completion point, not after the reducer has seen the
      * message: a message is one value among many, and the runtime never waits for a component's own
@@ -114,13 +114,13 @@ public sealed interface Command<Msg> {
      * committed.</p>
      *
      * <p>A sequence stops early - and runs nothing further - when a step never finishes because it
-     * was cancelled, when the component its steps belong to is removed, or when a step ends the
+     * was canceled, when the component its steps belong to is removed, or when a step ends the
      * program with {@link Quit}. Ending the program discards whatever is left, exactly as it does for
      * a batch. A sequence is not a lease on the runtime: it holds no thread and no registration of its
      * own, so an idle step (a long delay) costs nothing beyond that step's own effect.</p>
      *
-     * @param commands the commands to run in order
      * @param <Msg> the component message type these commands produce
+     * @param commands the commands to run in order
      */
     record Sequence<Msg>(List<Command<Msg>> commands) implements Command<Msg> {
 
@@ -149,11 +149,11 @@ public sealed interface Command<Msg> {
      * Its success or failure becomes exactly one message. The body must not touch the active
      * terminal, mutate application state, or call {@code update}.</p>
      *
+     * @param <Msg> the component message type this command produces
      * @param id the effect identity; replacing it invalidates an earlier registration
      * @param work the application work to run on the effect executor
      * @param onSuccess maps the work's result to the message delivered on success
      * @param onFailure maps the thrown failure to the message delivered on failure
-     * @param <Msg> the component message type this command produces
      */
     record Task<Msg>(EffectId id, Callable<?> work, Function<Object, Msg> onSuccess, Function<Throwable, Msg> onFailure)
             implements Command<Msg> {
@@ -181,11 +181,11 @@ public sealed interface Command<Msg> {
      * <p>The delay must be representable in nanoseconds, the unit the scheduler uses; a longer
      * delay is rejected here instead of overflowing when it is scheduled.</p>
      *
+     * @param <Msg> the component message type this command produces
      * @param id the effect identity; replacing it invalidates an earlier registration
      * @param delay how long to wait before delivering {@code message}
      * @param message the message delivered after the delay
      * @param rejected the message delivered instead when the effect quota is exhausted
-     * @param <Msg> the component message type this command produces
      */
     record Delay<Msg>(EffectId id, Duration delay, Msg message, Msg rejected) implements Command<Msg> {
 
@@ -222,13 +222,13 @@ public sealed interface Command<Msg> {
      * on one timeline.</p>
      *
      * <p>Like the clipboard built-ins this is an immediate owner-side read rather than a scheduled
-     * effect: it has no identity, it can be neither cancelled nor replaced, it is not counted
+     * effect: it has no identity, it can be neither canceled nor replaced, it is not counted
      * against the effect quota, and its mapper runs on the owner thread while the command is
      * interpreted. A mapper that returns {@code null} declines the reading, so nothing is
      * delivered.</p>
      *
-     * @param mapper maps the monotonic reading in nanoseconds to the delivered message
      * @param <Msg> the component message type this command produces
+     * @param mapper maps the monotonic reading in nanoseconds to the delivered message
      */
     record MonotonicTime<Msg>(Function<Long, Msg> mapper) implements Command<Msg> {
 
@@ -244,6 +244,17 @@ public sealed interface Command<Msg> {
             Objects.requireNonNull(mapper, "mapper");
             return new MonotonicTime<>(this.mapper.andThen(mapper));
         }
+    }
+
+    /**
+     * Sets the runtime diagnostics overlay without changing application state or key bindings.
+     *
+     * @param <Msg> the component message type this command produces
+     * @param enabled whether the feature is enabled
+     * @return the command that enables or disables the diagnostics overlay
+     */
+    static <Msg> Command<Msg> debugOverlay(boolean enabled) {
+        return new DebugOverlay<>(enabled);
     }
 
     /**
@@ -264,12 +275,12 @@ public sealed interface Command<Msg> {
      * there is nowhere left to report it.</p>
      *
      * <p>Like the other owner-side built-ins this produces no message of its own: it has no identity,
-     * it can be neither cancelled nor replaced, and it is not counted against the effect quota. A
+     * it can be neither canceled nor replaced, and it is not counted against the effect quota. A
      * mapper that returns {@code null} delivers nothing.</p>
      *
+     * @param <Msg> the component message type this command produces
      * @param request the child to run; required
      * @param mapper maps the child's result to the delivered message
-     * @param <Msg> the component message type this command produces
      */
     record Exec<Msg>(ProcessRequest request, Function<ProcessResult, Msg> mapper) implements Command<Msg> {
 
@@ -303,8 +314,8 @@ public sealed interface Command<Msg> {
      * <p>Like {@link Exec} this is an owner-side built-in with no identity, no cancellation and no
      * quota cost.</p>
      *
-     * @param mapper maps the outcome to the delivered message
      * @param <Msg> the component message type this command produces
+     * @param mapper maps the outcome to the delivered message
      */
     record Suspend<Msg>(Function<SuspendResult, Msg> mapper) implements Command<Msg> {
 
@@ -325,8 +336,8 @@ public sealed interface Command<Msg> {
     /**
      * Invalidates one effect id; its pending or queued results are ignored.
      *
-     * @param id the local effect identity to invalidate
      * @param <Msg> the component message type this command would have produced
+     * @param id the local effect identity to invalidate
      */
     record Cancel<Msg>(EffectId id) implements Command<Msg> {
 
@@ -360,8 +371,8 @@ public sealed interface Command<Msg> {
     /**
      * Enqueues an owner-local message after commit; never invokes update recursively.
      *
-     * @param message the message to deliver to this component's own update
      * @param <Msg> the component message type this command produces
+     * @param message the message to deliver to this component's own update
      */
     record Dispatch<Msg>(Msg message) implements Command<Msg> {
         /**
@@ -393,8 +404,8 @@ public sealed interface Command<Msg> {
      * sequence, and a message an application filter drops still finishes the step: the runtime
      * delivered it and the filter declined it, which is not a reason to leave a sequence suspended.</p>
      *
-     * @param message the message the next sequence step waits for
      * @param <Msg> the component message type this command produces
+     * @param message the message the next sequence step waits for
      */
     record AfterUpdate<Msg>(Msg message) implements Command<Msg> {
 
@@ -415,9 +426,9 @@ public sealed interface Command<Msg> {
     /**
      * Structural origin for a mounted command, including unkeyed built-ins and dispatch.
      *
+     * @param <Msg> the component message type this command produces
      * @param path the component path the wrapped command belongs to
      * @param command the command to interpret in that scope
-     * @param <Msg> the component message type this command produces
      */
     record Scoped<Msg>(ComponentPath path, Command<Msg> command) implements Command<Msg> {
         /**
@@ -449,8 +460,8 @@ public sealed interface Command<Msg> {
     /**
      * Reads the session's in-process clipboard buffer and reports it as one message.
      *
-     * @param mapper maps the stored text to the delivered message
      * @param <Msg> the component message type this command produces
+     * @param mapper maps the stored text to the delivered message
      */
     record ReadClipboard<Msg>(Function<String, Msg> mapper) implements Command<Msg> {
 
@@ -475,9 +486,9 @@ public sealed interface Command<Msg> {
      * copy never waits for the terminal and never claims the terminal accepted anything: the
      * in-process buffer holds the text either way.</p>
      *
+     * @param <Msg> the component message type this command produces
      * @param text the text to copy; null is treated as empty
      * @param mapper maps the reported result to the delivered message
-     * @param <Msg> the component message type this command produces
      */
     record Copy<Msg>(String text, Function<ClipboardResult, Msg> mapper) implements Command<Msg> {
 
@@ -504,10 +515,10 @@ public sealed interface Command<Msg> {
      * that the operating system accepted anything. The two selections are independent: copying to one
      * leaves the other as it was.</p>
      *
+     * @param <Msg> the component message type this command produces
      * @param selection the selection to write; a missing selection copies to the system clipboard
      * @param text the text to copy; null is treated as empty
      * @param mapper maps the reported result to the delivered message
-     * @param <Msg> the component message type this command produces
      */
     record CopyTo<Msg>(ClipboardSelection selection, String text, Function<ClipboardResult, Msg> mapper)
             implements Command<Msg> {
@@ -544,10 +555,10 @@ public sealed interface Command<Msg> {
      * <p>A read never writes the in-process buffer. An application that wants what it read to become
      * the session's paste value issues its own copy.</p>
      *
+     * @param <Msg> the component message type this command produces
      * @param id the effect identity; replacing it invalidates an earlier read
      * @param selection the selection to read; required
      * @param mapper maps the reported result to the delivered message
-     * @param <Msg> the component message type this command produces
      */
     record ReadTerminal<Msg>(EffectId id, ClipboardSelection selection, Function<ClipboardReadResult, Msg> mapper)
             implements Command<Msg> {
@@ -575,18 +586,18 @@ public sealed interface Command<Msg> {
      * an ordinary message, so nothing blocks the update thread and no terminal read happens inside a
      * transition. Exactly one message follows a query: the answer, or the reason there is none
      * ({@link TerminalQuery.Reply.Unsupported}, {@link TerminalQuery.Reply.Timeout},
-     * {@link TerminalQuery.Reply.Malformed}) - including when the effect is cancelled, where the
+     * {@link TerminalQuery.Reply.Malformed}) - including when the effect is canceled, where the
      * answer is simply never delivered.</p>
      *
      * <p>A query carries no identity, so the runtime serializes requests of the same kind and
-     * discards a reply nobody is waiting for. Cancelling the effect, cancelling its scope, or
+     * discards a reply nobody is waiting for. Canceling the effect, canceling its scope, or
      * unmounting the component it belongs to withdraws the query: a late reply then satisfies
      * nothing.</p>
      *
-     * @param query the question to ask; required
-     * @param id the effect identity; replacing it invalidates an earlier query
-     * @param mapper maps the terminal's answer to the delivered message
      * @param <Msg> the component message type this command produces
+     * @param id the effect identity; replacing it invalidates an earlier query
+     * @param query the question to ask; required
+     * @param mapper maps the terminal's answer to the delivered message
      */
     record Query<Msg>(EffectId id, TerminalQuery query, Function<TerminalQuery.Reply, Msg> mapper)
             implements Command<Msg> {
@@ -608,18 +619,18 @@ public sealed interface Command<Msg> {
     }
 
     /**
-     * Changes the colour profile the session renders with.
+     * Changes the color profile the session renders with.
      *
      * <p>The runtime owns the profile because it owns the output: a command sets it, every frame is
-     * re-encoded with it, and the next frame repaints the whole screen so no cell keeps a colour from
+     * re-encoded with it, and the next frame repaints the whole screen so no cell keeps a color from
      * the previous profile. {@link io.github.dhoard.braxton.style.ColorProfile#AUTO} returns the
      * session to the profile it negotiated.</p>
      *
      * <p>Like the other owner-side built-ins this produces no message: it changes presentation, not
      * the model.</p>
      *
-     * @param profile the profile to render with; null returns to the negotiated one
      * @param <Msg> the component message type this command would have produced
+     * @param profile the profile to render with; null returns to the negotiated one
      */
     record ColorProfileCommand<Msg>(ColorProfile profile) implements Command<Msg> {
 
@@ -627,6 +638,23 @@ public sealed interface Command<Msg> {
         public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
             Objects.requireNonNull(mapper, "mapper");
             return new ColorProfileCommand<>(profile);
+        }
+    }
+
+    /**
+     * Enables or disables the runtime's display-only developer overlay; produces no message.
+     * The overlay shows actual layout bounds, focus path, recent messages and view/layout/paint
+     * timing. It defaults off and claims no keyboard gesture. Turning it off releases its history.
+     * A renderer-disabled session ignores this presentation command.
+     *
+     * @param <Msg> the application message type
+     * @param enabled whether diagnostics should be painted
+     */
+    record DebugOverlay<Msg>(boolean enabled) implements Command<Msg> {
+        @Override
+        public <Msg2> Command<Msg2> map(Function<? super Msg, ? extends Msg2> mapper) {
+            Objects.requireNonNull(mapper, "mapper");
+            return new DebugOverlay<>(enabled);
         }
     }
 
@@ -647,8 +675,8 @@ public sealed interface Command<Msg> {
      * {@code CR} become {@code LF}, control characters other than tab and newline are dropped, and an
      * empty text prints nothing.</p>
      *
-     * @param text the text to print, one line per newline; required
      * @param <Msg> the component message type this command would have produced
+     * @param text the text to print, one line per newline; required
      * @see #println(String)
      */
     record PrintLine<Msg>(String text) implements Command<Msg> {
@@ -670,8 +698,8 @@ public sealed interface Command<Msg> {
     /**
      * Ends the program with {@code status}; terminal for the enclosing batch.
      *
-     * @param status the process exit status reported by {@code ExitResult}
      * @param <Msg> the component message type this command would have produced
+     * @param status the process exit status reported by {@code ExitResult}
      */
     record Quit<Msg>(int status) implements Command<Msg> {
 
@@ -973,7 +1001,7 @@ public sealed interface Command<Msg> {
     }
 
     /**
-     * Renders the session with another colour profile.
+     * Renders the session with another color profile.
      *
      * @param <Msg> the component message type
      * @param profile the profile to render with; null returns to the negotiated one

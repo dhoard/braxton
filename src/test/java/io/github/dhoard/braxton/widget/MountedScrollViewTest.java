@@ -26,11 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.ComponentId;
-import io.github.dhoard.braxton.mvu.ComponentPath;
 import io.github.dhoard.braxton.mvu.ComponentTree;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.ModelLens;
@@ -41,9 +39,9 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.InteractionRouter;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -70,7 +68,9 @@ class MountedScrollViewTest {
         record DraftOutput(Editor.Output value) implements Msg {}
     }
 
-    /** The parent: two transcript panes side by side over a composer. */
+    /**
+     * The parent: two transcript panes side by side over a composer.
+     */
     private static final class PanesAndEditor implements Component<Model, Msg, Never> {
 
         private final Mount<Model, Msg, Never, ScrollView.Model, ScrollView.Msg, Never> log = Mount.of(
@@ -93,7 +93,7 @@ class MountedScrollViewTest {
 
         private final Mount<Model, Msg, Never, Editor.Model, Editor.Msg, Editor.Output> draft = Mount.of(
                 ComponentId.of("draft"),
-                new Editor(Editor.Config.defaults().withPrompt("> ", Style.NONE)),
+                new Editor(EditorConfig.defaults().withPrompt("> ", Style.NONE)),
                 ModelLens.of(
                         Model::draft,
                         (model, child) -> new Model(model.log(), model.trace(), child, model.showTrace())),
@@ -127,13 +127,13 @@ class MountedScrollViewTest {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
-            List<View<Msg>> parts = new ArrayList<>();
-            parts.add(Views.row(
-                    Views.fixed(PANE_COLS, log.view(model, context)),
-                    model.showTrace() ? Views.fixed(PANE_COLS, trace.view(model, context)) : Views.blank()));
-            parts.add(Views.fixed(1, draft.view(model, context)));
-            return Views.column(parts);
+        public Element<Msg> view(Model model, ViewContext context) {
+            List<Element<Msg>> parts = new ArrayList<>();
+            parts.add(Elements.row(
+                    Elements.fixed(PANE_COLS, log.view(model, context)),
+                    model.showTrace() ? Elements.fixed(PANE_COLS, trace.view(model, context)) : Elements.spacer()));
+            parts.add(Elements.fixed(1, draft.view(model, context)));
+            return Elements.column(parts);
         }
 
         @Override
@@ -199,20 +199,20 @@ class MountedScrollViewTest {
         Model model = focused(start(), true, false, false);
 
         var logView = component.view(model, CONTEXT);
-        assertThat(InputRouter.route(logView, key("down")).orElseThrow())
+        assertThat(InteractionRouter.message(logView, key("down")).orElseThrow())
                 .isInstanceOfSatisfying(
                         Msg.Log.class, message -> assertThat(message.value()).isEqualTo(new ScrollView.Msg.Down(1)));
-        assertThat(InputRouter.route(logView, key("pagedown")).orElseThrow())
+        assertThat(InteractionRouter.message(logView, key("pagedown")).orElseThrow())
                 .isInstanceOfSatisfying(
                         Msg.Log.class, message -> assertThat(message.value()).isEqualTo(new ScrollView.Msg.PageDown()));
 
         var traceView = component.view(focused(model, false, true, false), CONTEXT);
-        assertThat(InputRouter.route(traceView, key("down")).orElseThrow())
+        assertThat(InteractionRouter.message(traceView, key("down")).orElseThrow())
                 .isInstanceOfSatisfying(
                         Msg.Trace.class, message -> assertThat(message.value()).isEqualTo(new ScrollView.Msg.Down(1)));
 
         var unfocused = component.view(focused(model, false, false, false), CONTEXT);
-        assertThat(InputRouter.route(unfocused, key("down")))
+        assertThat(InteractionRouter.message(unfocused, key("down")))
                 .as("no pane owns focus, so no pane may scroll")
                 .isEmpty();
     }
@@ -222,10 +222,11 @@ class MountedScrollViewTest {
         var component = new PanesAndEditor();
         var paneFocused = component.view(focused(start(), true, false, false), CONTEXT);
 
-        assertThat(InputRouter.route(paneFocused, InputEvent.KeyInput.of(Key.of("x"), "x")))
+        assertThat(InteractionRouter.message(paneFocused, InputEvent.KeyInput.of(Key.of("x"), "x")))
                 .as("a scroll pane never consumes printable text")
                 .isEmpty();
-        assertThat(InputRouter.route(paneFocused, key("end")).orElseThrow()).isInstanceOf(Msg.Log.class);
+        assertThat(InteractionRouter.message(paneFocused, key("end")).orElseThrow())
+                .isInstanceOf(Msg.Log.class);
     }
 
     @Test
@@ -233,17 +234,17 @@ class MountedScrollViewTest {
         var component = new PanesAndEditor();
         var draftFocused = component.view(focused(start(), false, false, true), CONTEXT);
 
-        assertThat(InputRouter.route(draftFocused, key("down")).orElseThrow())
+        assertThat(InteractionRouter.message(draftFocused, key("down")).orElseThrow())
                 .isInstanceOfSatisfying(
                         Msg.Draft.class, message -> assertThat(message.value()).isEqualTo(new Editor.Msg.MoveDown()));
-        assertThat(InputRouter.route(draftFocused, key("end")).orElseThrow())
+        assertThat(InteractionRouter.message(draftFocused, key("end")).orElseThrow())
                 .isInstanceOfSatisfying(
                         Msg.Draft.class, message -> assertThat(message.value()).isEqualTo(new Editor.Msg.MoveEnd()));
-        assertThat(InputRouter.route(draftFocused, InputEvent.KeyInput.of(Key.of("x"), "x"))
+        assertThat(InteractionRouter.message(draftFocused, InputEvent.KeyInput.of(Key.of("x"), "x"))
                         .orElseThrow())
                 .isInstanceOfSatisfying(
                         Msg.Draft.class, message -> assertThat(message.value()).isEqualTo(new Editor.Msg.Insert("x")));
-        assertThat(InputRouter.route(draftFocused, key("pagedown")))
+        assertThat(InteractionRouter.message(draftFocused, key("pagedown")))
                 .as("the editor does not handle paging, and no pane is focused")
                 .isEmpty();
     }
@@ -251,17 +252,17 @@ class MountedScrollViewTest {
     @Test
     void siblingRegionsKeepTheirScopedIdentities() {
         var component = new PanesAndEditor();
-        var renderer = new ScreenRenderer();
         Model model = focused(start(), true, false, false);
 
-        var regions = renderer.regions(component.view(model, CONTEXT), CONTEXT.viewport());
-        assertThat(regions).extracting(region -> region.id().value()).containsExactly("scroll", "scroll", "input");
-        assertThat(regions)
-                .extracting(region -> region.id().path())
-                .containsExactly(
-                        ComponentPath.ROOT.append(ComponentId.of("log")),
-                        ComponentPath.ROOT.append(ComponentId.of("trace")),
-                        ComponentPath.ROOT.append(ComponentId.of("draft")));
+        // Identity is structural now: two panes and one field are three leaves, and the model says
+        // which of them holds the keyboard.
+        var screen = io.github.dhoard.braxton.testing.ElementScreen.render(
+                component.view(model, CONTEXT),
+                CONTEXT.viewport().rows(),
+                CONTEXT.viewport().cols());
+        assertThat(io.github.dhoard.braxton.ui.InteractionRouter.focusables(screen.placement()))
+                .as("two panes and one field")
+                .hasSize(3);
     }
 
     @Test
@@ -275,20 +276,30 @@ class MountedScrollViewTest {
 
         Model hidden = new Model(model.log(), model.trace(), model.draft(), false);
         var hiddenView = component.view(hidden, CONTEXT);
-        assertThat(InputRouter.route(hiddenView, key("down")))
+        assertThat(InteractionRouter.message(hiddenView, key("down")))
                 .as("the trace pane still declares focus but is not mounted")
                 .isEmpty();
-        assertThat(new ScreenRenderer().regions(hiddenView, CONTEXT.viewport()))
-                .extracting(region -> region.id().path())
-                .doesNotContain(ComponentPath.ROOT.append(ComponentId.of("trace")));
+        assertThat(io.github.dhoard.braxton.ui.InteractionRouter.focusables(
+                        io.github.dhoard.braxton.testing.ElementScreen.render(
+                                        hiddenView,
+                                        CONTEXT.viewport().rows(),
+                                        CONTEXT.viewport().cols())
+                                .placement()))
+                .as("the unmounted pane is not in the tree")
+                .hasSize(2);
         assertThat(component.children(hidden).nodes())
                 .extracting(ComponentTree.Node::id)
                 .containsExactly(ComponentId.of("log"), ComponentId.of("draft"));
 
         Model shown = new Model(model.log(), model.trace(), model.draft(), true);
-        assertThat(new ScreenRenderer().regions(component.view(shown, CONTEXT), CONTEXT.viewport()))
-                .extracting(region -> region.id().path())
-                .contains(ComponentPath.ROOT.append(ComponentId.of("trace")));
+        assertThat(io.github.dhoard.braxton.ui.InteractionRouter.focusables(
+                        io.github.dhoard.braxton.testing.ElementScreen.render(
+                                        component.view(shown, CONTEXT),
+                                        CONTEXT.viewport().rows(),
+                                        CONTEXT.viewport().cols())
+                                .placement()))
+                .as("the reinserted pane is back")
+                .hasSize(3);
         assertThat(shown.trace().topLine())
                 .as("an unmounted pane keeps the state its model owns")
                 .isEqualTo(3);
@@ -320,8 +331,13 @@ class MountedScrollViewTest {
                 .model();
         model = component.update(model, new Msg.Log(new ScrollView.Msg.Down(1))).model();
 
-        View<Msg> view = component.view(model, CONTEXT);
-        assertThat(new ScreenRenderer().plainLines(view, CONTEXT.viewport()).subList(0, 4))
+        Element<Msg> view = component.view(model, CONTEXT);
+        assertThat(ElementScreen.render(
+                                view,
+                                CONTEXT.viewport().rows(),
+                                CONTEXT.viewport().cols())
+                        .lines()
+                        .subList(0, 4))
                 .containsExactly("log1  trace2", "log2  trace3", "log3  trace4", ">");
     }
 }

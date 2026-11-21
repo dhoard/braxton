@@ -30,7 +30,6 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.internal.runtime.Mailbox;
 import io.github.dhoard.braxton.internal.runtime.ManualTimers;
 import io.github.dhoard.braxton.internal.runtime.SubscriptionManager;
@@ -42,8 +41,8 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Countdown;
 import io.github.dhoard.braxton.widget.Help;
 import java.time.Duration;
@@ -62,7 +61,7 @@ import org.junit.jupiter.api.Timeout;
  * is exact and involves no sleeps; a "late reading" is a number, not a wall clock. The lifecycle
  * cases reconcile the demo's own subscription declarations against {@link ManualTimers}, so "no
  * timer while paused" is proven by the interval that stops being scheduled rather than by a value
- * that happened to hold still. The terminal behaviour of the packaged demo is verified separately
+ * that happened to hold still. The terminal behavior of the packaged demo is verified separately
  * by {@code python3 tools/terminal/verify_terminal.py --parity-phase 09}.</p>
  */
 @Timeout(20)
@@ -72,7 +71,9 @@ class ParityCountdownTest {
 
     private static final long MILLIS = 1_000_000L;
 
-    /** The duration the widget tests are configured with: a minute, so mm:ss has two digits. */
+    /**
+     * The duration the widget tests are configured with: a minute, so mm:ss has two digits.
+     */
     private static final Duration CONFIGURED = Duration.ofSeconds(60);
 
     private static final Countdown.Config CONFIG = Countdown.Config.of(CONFIGURED);
@@ -100,12 +101,16 @@ class ParityCountdownTest {
         return send(widget, model, message).model();
     }
 
-    /** The reading a timestamp request produces: how a start or resume is told what time it is. */
+    /**
+     * The reading a timestamp request produces: how a start or resume is told what time it is.
+     */
     private static Countdown.Msg reading(Command<Countdown.Msg> command, long atMillis) {
         return readingAt(command, atMillis * MILLIS);
     }
 
-    /** The reading a timestamp request produces at an absolute monotonic time in nanoseconds. */
+    /**
+     * The reading a timestamp request produces at an absolute monotonic time in nanoseconds.
+     */
     private static Countdown.Msg readingAt(Command<Countdown.Msg> command, long nowNanos) {
         assertThat(command)
                 .as("a run waiting for its deadline asks the runtime for one reading")
@@ -113,19 +118,25 @@ class ParityCountdownTest {
         return ((Command.MonotonicTime<Countdown.Msg>) command).mapper().apply(nowNanos);
     }
 
-    /** One reading of the model's current run, at an absolute monotonic time in milliseconds. */
+    /**
+     * One reading of the model's current run, at an absolute monotonic time in milliseconds.
+     */
     private static Countdown.Model at(Countdown widget, Countdown.Model model, long atMillis) {
         return apply(widget, model, new Countdown.Msg.Reading(model.epoch(), atMillis * MILLIS));
     }
 
-    /** A running countdown whose deadline the runtime named at {@code atMillis}. */
+    /**
+     * A running countdown whose deadline the runtime named at {@code atMillis}.
+     */
     private static Countdown.Model running(Countdown widget, long atMillis) {
         Update<Countdown.Model, Countdown.Msg, Countdown.Output> start =
                 send(widget, initial(widget), new Countdown.Msg.Start());
         return apply(widget, start.model(), reading(start.command(), atMillis));
     }
 
-    /** A running countdown that a reading at {@code atMillis} expires. */
+    /**
+     * A running countdown that a reading at {@code atMillis} expires.
+     */
     private static Countdown.Model expiredRun(Countdown widget, long atMillis) {
         Countdown.Model model = running(widget, 0L);
         return apply(widget, model, new Countdown.Msg.Reading(model.epoch(), atMillis * MILLIS));
@@ -133,7 +144,9 @@ class ParityCountdownTest {
 
     // ── the demo's own helpers ───────────────────────────────────────────────
 
-    /** The demo the packaged launch runs, driven as its own component. */
+    /**
+     * The demo the packaged launch runs, driven as its own component.
+     */
     private static CountdownDemo.Scene demo() {
         return new CountdownDemo.Scene(CountdownDemo.TEST_DURATION);
     }
@@ -142,13 +155,15 @@ class ParityCountdownTest {
         return scene.init(new InitContext(new Viewport(24, 80), null)).model();
     }
 
-    /** The demo's rows, so a test can assert the scene without decoding styling. */
+    /**
+     * The demo's rows, so a test can assert the scene without decoding styling.
+     */
     private static List<String> painted(CountdownDemo.Scene scene, CountdownDemo.Model model) {
         return painted(scene.view(model, CONTEXT), 24, 80);
     }
 
-    private static List<String> painted(View<?> view, int rows, int cols) {
-        return new ScreenRenderer().plainLines(view, new Viewport(rows, cols));
+    private static List<String> painted(Element<?> view, int rows, int cols) {
+        return ElementScreen.render(view, rows, cols).lines();
     }
 
     private static String row(CountdownDemo.Model model, int index) {
@@ -159,9 +174,12 @@ class ParityCountdownTest {
         return painted(scene, model).get(index).strip();
     }
 
-    /** What one key does to the demo's screen, as the scene's own message. */
+    /**
+     * What one key does to the demo's screen, as the scene's own message.
+     */
     private static Optional<CountdownDemo.Msg> route(CountdownDemo.Model model, String keyName) {
-        return InputRouter.route(demo().view(model, CONTEXT), key(keyName));
+        return io.github.dhoard.braxton.testing.Routing.route(demo(), model, CONTEXT, key(keyName)).stream()
+                .findFirst();
     }
 
     private static InputEvent.KeyInput key(String spec) {
@@ -202,18 +220,24 @@ class ParityCountdownTest {
         }
     }
 
-    /** One reading of the demo's countdown, as the mounted component would receive it. */
+    /**
+     * One reading of the demo's countdown, as the mounted component would receive it.
+     */
     private static CountdownDemo.Msg tick(CountdownDemo.Model model, long atMillis) {
         return new CountdownDemo.Msg.Count(
                 new Countdown.Msg.Reading(model.countdown().epoch(), atMillis * MILLIS));
     }
 
-    /** The demo started by one gesture, with the runtime's timestamp fact delivered after it. */
+    /**
+     * The demo started by one gesture, with the runtime's timestamp fact delivered after it.
+     */
     private static CountdownDemo.Model started(CountdownDemo.Scene scene, long atMillis) {
         return deliver(scene, initial(scene), new CountdownDemo.Msg.Toggle(), atMillis * MILLIS);
     }
 
-    /** Every message the mailbox holds, without waiting for more. */
+    /**
+     * Every message the mailbox holds, without waiting for more.
+     */
     private static List<Countdown.Msg> drained(Mailbox mailbox) {
         List<Countdown.Msg> messages = new ArrayList<>();
         while (true) {
@@ -232,7 +256,9 @@ class ParityCountdownTest {
         }
     }
 
-    /** Every demo message the mailbox holds, without waiting for more. */
+    /**
+     * Every demo message the mailbox holds, without waiting for more.
+     */
     private static List<CountdownDemo.Msg> drainedDemo(Mailbox mailbox) {
         List<CountdownDemo.Msg> messages = new ArrayList<>();
         while (true) {
@@ -779,7 +805,7 @@ class ParityCountdownTest {
     void aMountedCountdownPaintsItsOwnTime() {
         Countdown widget = countdown();
         Countdown.Model model = running(widget, 0L);
-        View<Countdown.Msg> view = widget.view(model, new ViewContext(new Viewport(24, 4)));
+        Element<Countdown.Msg> view = widget.view(model, new ViewContext(new Viewport(24, 4)));
         assertThat(painted(view, 1, 80).get(0)).isEqualTo("01:00");
         assertThat(painted(widget.view(model, new ViewContext(new Viewport(24, 4))), 1, 3)
                         .get(0))
@@ -932,9 +958,10 @@ class ParityCountdownTest {
         assertThat(route(model, "escape")).contains(new CountdownDemo.Msg.Quit());
         assertThat(route(model, "q")).as("an unbound key reaches nothing").isEmpty();
 
-        List<String> help = painted(Help.view(CountdownDemo.defaultKeys(), true, 200), 8, 200).stream()
-                .filter(line -> !line.isBlank())
-                .toList();
+        List<String> help =
+                painted(Help.element(CountdownDemo.defaultKeys(), Help.Config.defaults(), true, 200), 8, 200).stream()
+                        .filter(line -> !line.isBlank())
+                        .toList();
         assertThat(help).hasSize(3);
         assertThat(help.get(0)).contains("start over").contains("start/pause").contains("reset");
         assertThat(help.get(1)).contains("shorter").contains("longer");
@@ -953,7 +980,7 @@ class ParityCountdownTest {
     void theDemoRunsUnderTheDeterministicDriver() {
         ComponentDriver<CountdownDemo.Model, CountdownDemo.Msg, Never> driver =
                 ComponentDriver.initialize(demo(), new InitContext(new Viewport(24, 80), null));
-        assertThat(driver.screen(CONTEXT).plainLine(0))
+        assertThat(driver.screen(CONTEXT).line(0))
                 .isEqualTo("countdown state=idle epoch=0 nanos=5000000000 timeouts=0");
         driver.send(new CountdownDemo.Msg.Toggle());
         CountdownDemo.Model armed = driver.model();
@@ -964,7 +991,7 @@ class ParityCountdownTest {
         driver.send(tick(armed, 1_000L));
         assertThat(driver.model().countdown().armed()).isFalse();
         driver.send(tick(armed, 2_000L));
-        assertThat(driver.screen(CONTEXT).plainLine(3)).isEqualTo("remaining  00:04");
+        assertThat(driver.screen(CONTEXT).line(3)).isEqualTo("remaining  00:04");
         driver.send(new CountdownDemo.Msg.Toggle());
         assertThat(driver.model().countdown().running()).isFalse();
         assertThat(driver.subscriptions()).isInstanceOf(Subscription.None.class);

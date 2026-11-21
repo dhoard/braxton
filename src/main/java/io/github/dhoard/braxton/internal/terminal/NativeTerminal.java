@@ -22,23 +22,19 @@
 
 package io.github.dhoard.braxton.internal.terminal;
 
-import io.github.dhoard.braxton.app.TerminalCapabilities;
 import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.terminal.Capabilities;
+import io.github.dhoard.braxton.terminal.UnsupportedTerminalException;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
-import java.lang.foreign.Arena;
-import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.SymbolLookup;
-import java.lang.foreign.ValueLayout;
-import java.lang.invoke.MethodHandle;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
-/** FFM adapter for Braxton's own POSIX ABI. Context close waits for active native calls. */
+/**
+ * Java lifecycle policy for the owned POSIX transport. Close waits for active native calls.
+ */
 public final class NativeTerminal implements Terminal {
 
     /**
@@ -46,17 +42,13 @@ public final class NativeTerminal implements Terminal {
      * {@code bt_abi}. An image that answers anything else is refused before a symbol is bound, so a
      * stale extracted binary can never be called with the wrong signatures.
      */
-    static final int REQUIRED_ABI = 3;
+    static final int REQUIRED_ABI = 5;
 
-    private final Arena arena = Arena.ofShared();
-    private final MemorySegment inputTransfer = arena.allocate(8192);
-    private final MemorySegment outputTransfer = arena.allocate(8192);
-    // A read and output/size query may run concurrently. Close waits for bounded calls to finish.
+    // Close and handoffs wait for bounded transport calls to finish.
     private final java.util.concurrent.locks.ReentrantReadWriteLock lifetime =
             new java.util.concurrent.locks.ReentrantReadWriteLock(true);
-    private final MemorySegment dimensions = arena.allocate(8, 4);
-    private final MemorySegment context;
-    private final TerminalCapabilities capabilities;
+    private final TerminalTransport transport;
+    private final Capabilities capabilities;
     private final Utf8Reader reader;
     private final PrintWriter writer;
     private volatile IOException outputError;
@@ -67,6 +59,11 @@ public final class NativeTerminal implements Terminal {
     private boolean closed;
     private volatile State state = State.ACTIVE;
 
+    /**
+     * Returns the supported operating-system and CPU resource key.
+     *
+     * @return the supported operating-system and CPU resource key
+     */
     public static String platform() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         String cpu = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
@@ -76,10 +73,17 @@ public final class NativeTerminal implements Terminal {
             default -> throw new IllegalStateException("unsupported Braxton CPU: " + cpu);
         };
         if (os.equals("linux")) return "linux-" + arch;
-        if (os.equals("mac os x") && arch.equals("aarch64")) return "macos-aarch64";
-        throw new IllegalStateException("Braxton requires Linux or macOS ARM64: " + os + "/" + cpu);
+        if (os.equals("mac os x")) return "macos-" + arch;
+        throw new IllegalStateException(
+                "Braxton requires Linux (x86_64/ARM64) or macOS (ARM64/Intel): " + os + "/" + cpu);
     }
 
+    /**
+     * Opens the attached terminal with the default output-stall limit.
+     *
+     * @return opens the attached terminal with the default output-stall limit
+     * @throws IOException if input or output fails
+     */
     public static NativeTerminal open() throws IOException {
         return open(java.time.Duration.ofNanos(OutputDrain.RUNNING_STALL_NANOS));
     }
@@ -88,59 +92,40 @@ public final class NativeTerminal implements Terminal {
      * Opens the attached terminal with an explicit running stall limit: the time the terminal may
      * accept no output at all before a write fails. Shutdown always uses the shorter of this and
      * one second. Internal; the runtime uses {@link #open()}.
+     *
+     * @param outputStallLimit the maximum output stall duration
+     * @return opens the attached terminal with an explicit running stall limit: the time the terminal may
+     * accept no output at all before a write fails
+     * @throws java.io.IOException if input or output fails
      */
     public static NativeTerminal open(java.time.Duration outputStallLimit) throws IOException {
         if (!NativeTerminal.class.getModule().isNativeAccessEnabled())
             throw new IllegalStateException("Braxton requires --enable-native-access=ALL-UNNAMED on the classpath,"
                     + " or --enable-native-access=io.github.dhoard.braxton on the module path");
+        long stallNanos = stallNanos(outputStallLimit);
+        String type = System.getenv("TERM");
+        return new NativeTerminal(capabilities(type), stallNanos, new FfmTerminalTransport());
+    }
+
+    static long stallNanos(java.time.Duration outputStallLimit) {
         if (outputStallLimit == null || outputStallLimit.isNegative() || outputStallLimit.isZero())
             throw new IllegalArgumentException("output stall limit must be positive");
-        long stallNanos;
+
         try {
-            stallNanos = outputStallLimit.toNanos();
+            return outputStallLimit.toNanos();
         } catch (ArithmeticException overflow) {
-            stallNanos = Long.MAX_VALUE;
+            return Long.MAX_VALUE;
         }
-        String type = System.getenv("TERM");
-        return new NativeTerminal(type, stallNanos);
     }
 
-    static TerminalCapabilities capabilities(String type) {
-        String name = type == null ? "" : type.toLowerCase(Locale.ROOT);
-        boolean vt = name.startsWith("xterm")
-                || name.startsWith("screen")
-                || name.startsWith("tmux")
-                || name.startsWith("rxvt")
-                || name.equals("linux")
-                || name.startsWith("vt")
-                || name.startsWith("foot")
-                || name.startsWith("alacritty")
-                || name.startsWith("wezterm")
-                || name.startsWith("kitty")
-                || name.startsWith("ghostty");
-        if (!vt) throw new IllegalStateException("a cursor-addressable VT terminal is required (TERM=" + type + ")");
-        boolean modern = !name.equals("linux") && !name.startsWith("vt");
-        return new TerminalCapabilities(!name.startsWith("vt"), modern, modern, modern, type);
+    static Capabilities capabilities(String type) throws UnsupportedTerminalException {
+        return Capabilities.inspect(type);
     }
 
-    private NativeTerminal(String type, long outputStallNanos) throws IOException {
+    NativeTerminal(Capabilities capabilities, long outputStallNanos, TerminalTransport transport) {
         this.outputStallNanos = outputStallNanos;
-        MemorySegment acquired;
-        try {
-            var slot = arena.allocate(ValueLayout.ADDRESS);
-            check(call(Library.OPEN, 0, 1, slot), "open attached process terminal");
-            acquired = slot.get(ValueLayout.ADDRESS, 0);
-            try {
-                capabilities = capabilities(type);
-            } catch (RuntimeException failure) {
-                check(call(Library.CLOSE, acquired), "close rejected terminal");
-                throw failure;
-            }
-        } catch (Throwable failure) {
-            arena.close();
-            throw failure;
-        }
-        context = acquired;
+        this.capabilities = java.util.Objects.requireNonNull(capabilities);
+        this.transport = java.util.Objects.requireNonNull(transport);
         reader = new Utf8Reader(this::readBytes);
         writer = new PrintWriter(new OutputStreamWriter(
                 new OutputStream() {
@@ -161,18 +146,14 @@ public final class NativeTerminal implements Terminal {
     }
 
     private int readBytes(byte[] bytes, long timeoutMillis) throws IOException {
-        // The native side reads into the shared transfer segment, so the capacity it is given can
-        // never exceed that segment however large a caller's array is.
-        int capacity = Math.min(bytes.length, (int) inputTransfer.byteSize());
         lifetime.readLock().lock();
         try {
             if (closed) return -1;
             // A released terminal belongs to a child process or to the shell: reading it here would
             // take that process's input, so the read reports nothing to read rather than waiting.
             if (state != State.ACTIVE) return 0;
-            int count = call(Library.READ, context, inputTransfer, capacity, (int) Math.min(100, timeoutMillis));
+            int count = transport.read(bytes, (int) Math.min(100, timeoutMillis));
             if (count < -1) throw new IOException("terminal input failed (errno " + (-count - 2) + ")");
-            if (count > 0) MemorySegment.copy(inputTransfer, ValueLayout.JAVA_BYTE, 0, bytes, 0, count);
             return count;
         } finally {
             lifetime.readLock().unlock();
@@ -186,12 +167,11 @@ public final class NativeTerminal implements Terminal {
             if (closed) throw new IOException("terminal closed");
             if (state != State.ACTIVE) throw new IOException("terminal is released");
             while (length > 0) {
-                int count = Math.min(length, (int) outputTransfer.byteSize());
-                MemorySegment.copy(bytes, offset, outputTransfer, ValueLayout.JAVA_BYTE, 0, count);
+                int count = Math.min(length, 8192);
+                int chunkOffset = offset;
                 OutputDrain.drain(
                         count,
-                        (from, remaining, timeout) ->
-                                call(Library.WRITE_SOME, context, outputTransfer.asSlice(from), remaining, timeout),
+                        (from, remaining, timeout) -> transport.write(bytes, chunkOffset + from, remaining, timeout),
                         System::nanoTime,
                         outputStallNanos,
                         () -> outputBounded);
@@ -219,13 +199,13 @@ public final class NativeTerminal implements Terminal {
         outputBounded = true;
     }
 
-    public TerminalCapabilities capabilities() {
+    public Capabilities capabilities() {
         return capabilities;
     }
 
     public long resizeEpoch() {
         try {
-            return Integer.toUnsignedLong(call(Library.RESIZE_EPOCH));
+            return Integer.toUnsignedLong(transport.resizeEpoch());
         } catch (IOException failure) {
             throw new IllegalStateException(failure);
         }
@@ -236,7 +216,7 @@ public final class NativeTerminal implements Terminal {
         try {
             if (closed) throw new IOException("terminal closed");
             if (state != State.ACTIVE) throw new IOException("terminal is released");
-            check(call(Library.RAW, context), "enter raw mode");
+            check(transport.raw(), "enter raw mode");
         } finally {
             lifetime.writeLock().unlock();
         }
@@ -264,7 +244,7 @@ public final class NativeTerminal implements Terminal {
                 case ACTIVE -> {
                     state = State.RELEASING;
                     try {
-                        check(call(Library.RELEASE, context), "release terminal");
+                        check(transport.release(), "release terminal");
                     } catch (IOException | RuntimeException failure) {
                         // The device configuration may not have been restored, but the session still
                         // owns it: report the failure from the state it was actually left in.
@@ -297,7 +277,7 @@ public final class NativeTerminal implements Terminal {
                 case RELEASED -> {
                     state = State.REACQUIRING;
                     try {
-                        check(call(Library.REACQUIRE, context), "reacquire terminal");
+                        check(transport.reacquire(), "reacquire terminal");
                     } catch (IOException | RuntimeException failure) {
                         state = State.RELEASED;
                         throw failure;
@@ -315,7 +295,7 @@ public final class NativeTerminal implements Terminal {
         lifetime.readLock().lock();
         try {
             if (state != State.ACTIVE && state != State.RELEASED) return false;
-            int answer = call(Library.FOREGROUND, context);
+            int answer = transport.foreground();
             if (answer < 0)
                 throw new IllegalStateException("cannot inspect the terminal foreground (errno " + (-answer) + ")");
             return answer == 1;
@@ -326,13 +306,40 @@ public final class NativeTerminal implements Terminal {
         }
     }
 
+    @Override
+    public void registerSuspendBytes(String restore, String resume) throws IOException {
+        lifetime.readLock().lock();
+        try {
+            if (closed) throw new IOException("terminal closed");
+            check(
+                    transport.registerSuspendBytes(restore == null ? "" : restore, resume == null ? "" : resume),
+                    "register suspend sequences");
+        } finally {
+            lifetime.readLock().unlock();
+        }
+    }
+
+    @Override
+    public long resumeEpoch() {
+        try {
+            lifetime.readLock().lock();
+            try {
+                return closed ? 0L : Integer.toUnsignedLong(transport.resumeEpoch());
+            } finally {
+                lifetime.readLock().unlock();
+            }
+        } catch (IOException failure) {
+            throw new IllegalStateException(failure);
+        }
+    }
+
     public void suspend() throws IOException {
         lifetime.readLock().lock();
         try {
             if (closed) throw new IOException("terminal closed");
             // The native layer refuses a terminal that is still the session's: a session stopped in
             // raw mode would hand the shell a terminal whose settings contradict its screen.
-            check(call(Library.SUSPEND, context), "suspend the session");
+            check(transport.suspend(), "suspend the session");
         } finally {
             lifetime.readLock().unlock();
         }
@@ -342,8 +349,7 @@ public final class NativeTerminal implements Terminal {
         lifetime.readLock().lock();
         try {
             if (closed) throw new IllegalStateException("terminal closed");
-            check(call(Library.SIZE, context, dimensions, dimensions.asSlice(4)), "measure terminal");
-            return new Size(dimensions.get(ValueLayout.JAVA_INT, 0), dimensions.get(ValueLayout.JAVA_INT, 4));
+            return transport.size();
         } catch (IOException problem) {
             throw new IllegalStateException(problem);
         } finally {
@@ -360,11 +366,7 @@ public final class NativeTerminal implements Terminal {
             closed = true;
             state = State.CLOSED;
             reader.close();
-            try {
-                check(call(Library.CLOSE, context), "restore/close terminal");
-            } finally {
-                arena.close();
-            }
+            transport.close();
         } finally {
             lifetime.writeLock().unlock();
         }
@@ -372,57 +374,5 @@ public final class NativeTerminal implements Terminal {
 
     private static void check(int error, String operation) throws IOException {
         if (error != 0) throw new IOException("cannot " + operation + " (errno " + error + ")");
-    }
-
-    private static int call(MethodHandle function, Object... arguments) throws IOException {
-        try {
-            return (int) function.invokeWithArguments(arguments);
-        } catch (RuntimeException | Error failure) {
-            throw failure;
-        } catch (Throwable failure) {
-            throw new IOException("native terminal call failed", failure);
-        }
-    }
-
-    // Native access is checked explicitly before this lazy holder can be initialized.
-    @SuppressWarnings("restricted")
-    private static final class Library {
-        static final SymbolLookup SYMBOLS = load();
-        static final MethodHandle OPEN =
-                bind("bt_open", ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
-        static final MethodHandle RAW = bind("bt_raw", ValueLayout.ADDRESS);
-        static final MethodHandle READ =
-                bind("bt_read", ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT);
-        static final MethodHandle WRITE_SOME = bind(
-                "bt_write_some", ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT);
-        static final MethodHandle SIZE = bind("bt_size", ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS);
-        static final MethodHandle CLOSE = bind("bt_close", ValueLayout.ADDRESS);
-        static final MethodHandle RESIZE_EPOCH = bind("bt_resize_epoch");
-        static final MethodHandle RELEASE = bind("bt_release", ValueLayout.ADDRESS);
-        static final MethodHandle REACQUIRE = bind("bt_reacquire", ValueLayout.ADDRESS);
-        static final MethodHandle FOREGROUND = bind("bt_foreground", ValueLayout.ADDRESS);
-        static final MethodHandle SUSPEND = bind("bt_suspend", ValueLayout.ADDRESS);
-
-        private static SymbolLookup load() {
-            try {
-                var image = NativeLibraryLoader.packaged(platform());
-                return NativeLibraryLoader.load(image, file -> {
-                    SymbolLookup symbols = SymbolLookup.libraryLookup(file, Arena.ofAuto());
-                    MethodHandle abi = Linker.nativeLinker()
-                            .downcallHandle(
-                                    symbols.find("bt_abi").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
-                    if (call(abi) != REQUIRED_ABI) throw new IOException("unsupported Braxton native ABI");
-                    return symbols;
-                });
-            } catch (IOException failure) {
-                throw new java.io.UncheckedIOException(failure);
-            }
-        }
-
-        private static MethodHandle bind(String name, java.lang.foreign.MemoryLayout... arguments) {
-            return Linker.nativeLinker()
-                    .downcallHandle(
-                            SYMBOLS.find(name).orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT, arguments));
-        }
     }
 }

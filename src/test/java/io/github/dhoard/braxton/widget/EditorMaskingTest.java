@@ -24,10 +24,9 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ScreenRenderer;
+import io.github.dhoard.braxton.testing.ElementScreen;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -37,23 +36,28 @@ import org.junit.jupiter.api.Test;
  */
 class EditorMaskingTest {
 
-    private static final Editor.Config PASSWORD = Editor.Config.defaults().withMasking(Editor.Config.Masking.PASSWORD);
-    private static final Editor.Config HIDDEN = Editor.Config.defaults().withMasking(Editor.Config.Masking.HIDDEN);
+    private static final EditorConfig PASSWORD = EditorConfig.defaults().withMasking(EditorConfig.Masking.PASSWORD);
+    private static final EditorConfig HIDDEN = EditorConfig.defaults().withMasking(EditorConfig.Masking.HIDDEN);
 
-    /** Every row a viewport paints for {@code state}, through the real layout path. */
-    private static List<String> paintedLines(Editor.Model state, Editor.Config options) {
-        return new ScreenRenderer()
-                .plainLines(
+    /**
+     * Every row a viewport paints for {@code state}, through the real layout path.
+     */
+    private static List<String> paintedLines(Editor.Model state, EditorConfig options) {
+        return ElementScreen.render(
                         new Editor(options)
                                 .view(
                                         (state).withFocus(true),
                                         new io.github.dhoard.braxton.mvu.ViewContext(
                                                 io.github.dhoard.braxton.layout.Viewport.EMPTY))
                                 .map((Editor.Msg action) -> action),
-                        new Viewport(2, 24));
+                        2,
+                        24)
+                .lines();
     }
 
-    /** Painted column of the block cursor in {@code row}, or -1 when the row does not draw one. */
+    /**
+     * Painted column of the block cursor in {@code row}, or -1 when the row does not draw one.
+     */
     private static int blockColumn(String row) {
         return row.indexOf(Editor.CURSOR);
     }
@@ -133,7 +137,7 @@ class EditorMaskingTest {
                 .isEqualTo(4);
 
         // The same draft unmasked keeps the cleartext columns: the mask is the only difference.
-        Editor.Model clear = new Editor(Editor.Config.defaults())
+        Editor.Model clear = new Editor(EditorConfig.defaults())
                 .update(state, new Editor.Msg.MoveDown())
                 .model();
         assertThat(clear.preferredColumn()).isEqualTo(4);
@@ -162,7 +166,7 @@ class EditorMaskingTest {
                         .caret())
                 .isEqualTo(3);
 
-        Editor.Model clear = new Editor(Editor.Config.defaults())
+        Editor.Model clear = new Editor(EditorConfig.defaults())
                 .update(state, new Editor.Msg.MoveDown())
                 .model();
         assertThat(clear.preferredColumn()).isEqualTo(5);
@@ -174,7 +178,7 @@ class EditorMaskingTest {
         // The prompt prefixes every masked line, so the caret's column is the prompt's painted
         // width plus one cell per masked cluster, and the target line is sought from that same
         // base.
-        Editor.Config password = PASSWORD.withPrompt("> ", Style.NONE);
+        EditorConfig password = PASSWORD.withPrompt("> ", Style.NONE);
         String draft = "\u65E5\u65E5\nabcd";
         Editor.Model state = new Editor.Model(draft, 2, 2, 0);
         assertThat(paintedLines(state, password))
@@ -221,10 +225,10 @@ class EditorMaskingTest {
         // Documented distinction: copyText returns the selection or the draft and deliberately
         // ignores masking; copyableText (which the Copy action uses) refuses a masked draft.
         Editor.Model state = Editor.Model.of("secret").withCaret(3);
-        assertThat(Editor.copyText(state)).isEqualTo("secret");
-        assertThat(Editor.copyText(state.withSelection(0, 2))).isEqualTo("se");
+        assertThat(EditorEditing.copyText(state)).isEqualTo("secret");
+        assertThat(EditorEditing.copyText(state.withSelection(0, 2))).isEqualTo("se");
         assertThat(Editor.copyableText(state, PASSWORD)).isEmpty();
-        assertThat(Editor.copyableText(state, Editor.Config.defaults())).contains("secret");
+        assertThat(Editor.copyableText(state, EditorConfig.defaults())).contains("secret");
         assertThat(new Editor(PASSWORD)
                         .update(state, new Editor.Msg.Copy())
                         .outputs()

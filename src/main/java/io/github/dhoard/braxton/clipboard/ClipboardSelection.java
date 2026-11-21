@@ -36,10 +36,14 @@ package io.github.dhoard.braxton.clipboard;
  */
 public enum ClipboardSelection {
 
-    /** The system clipboard, OSC 52 selection {@code c}. Every supported platform has one. */
+    /**
+     * The system clipboard, OSC 52 selection {@code c}. Every supported platform has one.
+     */
     SYSTEM('c'),
 
-    /** The X11/Wayland primary selection, OSC 52 selection {@code p}. */
+    /**
+     * The X11/Wayland primary selection, OSC 52 selection {@code p}.
+     */
     PRIMARY('p');
 
     private final char code;
@@ -48,7 +52,11 @@ public enum ClipboardSelection {
         this.code = code;
     }
 
-    /** The single character OSC 52 uses to name this selection. */
+    /**
+     * The single character OSC 52 uses to name this selection.
+     *
+     * @return the single character OSC 52 uses to name this selection
+     */
     public char code() {
         return code;
     }
@@ -88,7 +96,11 @@ public enum ClipboardSelection {
         return fallback;
     }
 
-    /** The selection name a status row and a configuration value spell it with. */
+    /**
+     * The selection name a status row and a configuration value spell it with.
+     *
+     * @return the selection name a status row and a configuration value spell it with
+     */
     public String token() {
         return name().toLowerCase(java.util.Locale.ROOT);
     }

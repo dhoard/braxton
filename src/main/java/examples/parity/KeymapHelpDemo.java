@@ -25,6 +25,7 @@ package examples.parity;
 import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -38,8 +39,8 @@ import io.github.dhoard.braxton.mvu.OutputRoute;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.Selector;
 import java.util.List;
@@ -68,7 +69,9 @@ import java.util.function.Function;
  */
 public final class KeymapHelpDemo {
 
-    /** One selector column, wide enough for the marker and a five-letter option. */
+    /**
+     * One selector column, wide enough for the marker and a five-letter option.
+     */
     private static final int COLUMN = 16;
 
     private static final Style TITLE = Style.NONE.withBold();
@@ -81,7 +84,8 @@ public final class KeymapHelpDemo {
 
     private KeymapHelpDemo() {}
 
-    /** The scene state: both children, focus, help expansion, the scene's own actions, and the last gesture.
+    /**
+     * The scene state: both children, focus, help expansion, the scene's own actions, and the last gesture.
      *
      * @param left the left selector's state
      * @param right the right selector's state
@@ -125,20 +129,50 @@ public final class KeymapHelpDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
+        /**
+         * Moves the selection left.
+         *
+         * @param value the selector message to forward
+         */
         record Left(Selector.Msg value) implements Msg {}
 
+        /**
+         * Moves the selection right.
+         *
+         * @param value the selector message to forward
+         */
         record Right(Selector.Msg value) implements Msg {}
 
+        /**
+         * Reports a selector output together with its source side.
+         *
+         * @param side the selector side the output belongs to
+         * @param value the selector output that arrived
+         */
         record Output(String side, Selector.Output value) implements Msg {}
 
+        /**
+         * Toggles expanded help.
+         */
         record ToggleHelp() implements Msg {}
 
+        /**
+         * Replaces the demo action aliases.
+         */
         record Remap() implements Msg {}
 
+        /**
+         * Moves keyboard focus to the other selector.
+         */
         record ToggleFocus() implements Msg {}
 
+        /**
+         * Requests application exit.
+         */
         record Quit() implements Msg {}
     }
 
@@ -181,11 +215,20 @@ public final class KeymapHelpDemo {
         return Selector.defaultKeys();
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
 
+    /**
+     * Launches the interactive keymap help demo.
+     *
+     * @param args the command-line arguments
+     */
     public static void main(String[] args) {
         ExitResult result = run();
         if (result.failure() != null) {
@@ -194,8 +237,15 @@ public final class KeymapHelpDemo {
         System.exit(result.status());
     }
 
-    /** The demo scene: two mounted selectors, a status row, and the help block. */
+    /**
+     * The demo scene: two mounted selectors, a status row, and the help block.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final KeyMap<Msg> initialKeys = defaultKeys();
 
@@ -261,17 +311,33 @@ public final class KeymapHelpDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
+        }
+
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return model.keys().bindings();
+        }
+
+        /**
+         * The scene as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
             int width = context.viewport().cols();
-            View<Msg> fields = Views.row(
-                    Views.fixed(COLUMN, Views.column(Views.text("left", TITLE), left.view(model, context))),
-                    Views.fixed(COLUMN, Views.column(Views.text("right", TITLE), right.view(model, context))));
-            View<Msg> help = Views.column(
-                    Help.view(model.keys(), model.expanded(), width), Help.view(childKeys, model.expanded(), width));
-            View<Msg> body = Views.column(Views.text(status(model)), Views.gap(1), fields, Views.gap(1), help);
-            // The scene's actions are capture bindings: they run before the focused selector, so a
-            // scene shortcut is consumed once and never also reaches the child.
-            return Views.keyed(model.keys().bindings(), body, List.of());
+            Element<Msg> fields = Elements.row(
+                    Elements.fixed(COLUMN, Elements.column(Elements.text("left", TITLE), left.view(model, context))),
+                    Elements.fixed(COLUMN, Elements.column(Elements.text("right", TITLE), right.view(model, context))));
+            Element<Msg> help = Elements.column(
+                    Help.element(model.keys(), Help.Config.defaults(), model.expanded(), width),
+                    Help.element(childKeys, Help.Config.defaults(), model.expanded(), width));
+            // The scene's gestures are the ones that apply outside the selectors: no gesture in either
+            // map is in the other, so nothing here takes a key away from the field being used.
+            return Elements.column(Elements.text(status(model)), Elements.spacer(1), fields, Elements.spacer(1), help);
         }
 
         @Override
@@ -307,7 +373,7 @@ public final class KeymapHelpDemo {
         private static String describe(Msg.Output output) {
             return switch (output.value()) {
                 case Selector.Output.Chosen chosen -> "chosen:" + chosen.value();
-                case Selector.Output.Cancelled ignored -> "cancelled:" + output.side();
+                case Selector.Output.Cancelled ignored -> "canceled:" + output.side();
             };
         }
     }

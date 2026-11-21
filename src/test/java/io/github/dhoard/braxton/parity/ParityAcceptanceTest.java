@@ -30,23 +30,25 @@ import examples.parity.MouseDemo;
 import examples.parity.SceneCatalog;
 import examples.parity.Showcase;
 import examples.parity.WorkspaceDemo;
+import examples.parity.WorkspaceScene;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.KeyEventType;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.InteractionRouter;
 import io.github.dhoard.braxton.widget.Countdown;
 import io.github.dhoard.braxton.widget.DataTable;
 import io.github.dhoard.braxton.widget.FilePicker;
+import io.github.dhoard.braxton.widget.FilePickerModel;
 import io.github.dhoard.braxton.widget.TextInput;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -92,8 +94,35 @@ class ParityAcceptanceTest {
         return ComponentDriver.initialize(new Showcase.Scene(root), new InitContext(new Viewport(24, 80), null));
     }
 
+    /**
+     * One event for the workspace scene, routed the way the runtime routes it.
+     */
+    private static java.util.Optional<WorkspaceDemo.Msg> workspaceRoute(
+            io.github.dhoard.braxton.testing.ComponentDriver<
+                            WorkspaceDemo.Model, WorkspaceDemo.Msg, io.github.dhoard.braxton.mvu.Never>
+                    driver,
+            InputEvent event) {
+        return io.github.dhoard.braxton.testing.Routing.route(driver.component(), driver.model(), CONTEXT, event)
+                .stream()
+                .findFirst();
+    }
+
+    private static java.util.Optional<Showcase.Msg> route(
+            io.github.dhoard.braxton.testing.ComponentDriver<
+                            Showcase.Model, Showcase.Msg, io.github.dhoard.braxton.mvu.Never>
+                    driver,
+            InputEvent event) {
+        return io.github.dhoard.braxton.testing.Routing.route(driver.component(), driver.model(), CONTEXT, event)
+                .stream()
+                .findFirst();
+    }
+
     private static List<String> lines(ComponentDriver<Showcase.Model, Showcase.Msg, ?> driver) {
-        return new ScreenRenderer().plainLines(driver.view(CONTEXT), CONTEXT.viewport());
+        return ElementScreen.render(
+                        driver.view(CONTEXT),
+                        CONTEXT.viewport().rows(),
+                        CONTEXT.viewport().cols())
+                .lines();
     }
 
     private static InputEvent gesture(String spec) {
@@ -116,7 +145,7 @@ class ParityAcceptanceTest {
     void theCatalogListsEveryImplementedPhaseAndTheWorkspace() {
         Showcase.Scene scene = new Showcase.Scene(root);
         List<String> ids = scene.entries().stream().map(SceneCatalog.Entry::id).toList();
-        assertThat(ids).hasSize(24);
+        assertThat(ids).hasSize(27);
         assertThat(ids.get(0)).isEqualTo("01");
         assertThat(ids).contains("10", "17", "23", "24");
         assertThat(ids).isSorted();
@@ -124,7 +153,7 @@ class ParityAcceptanceTest {
                 .allSatisfy(entry -> assertThat(entry.title()).isNotBlank());
 
         List<String> screen = lines(catalog());
-        assertThat(screen.get(0)).isEqualTo("catalog=24 open=none selected=01 top=0 help=compact last=none");
+        assertThat(screen.get(0)).isEqualTo("catalog=27 open=none selected=01 top=0 help=compact last=none");
         assertThat(screen.get(1)).isEqualTo(Showcase.HEADING);
         assertThat(screen).anySatisfy(line -> assertThat(line).startsWith("\u276F 01 Keymaps and help"));
         // The window shows what fits; the last entry is what scrolling reaches.
@@ -136,7 +165,7 @@ class ParityAcceptanceTest {
 
     @Test
     void everyEntryMountsPaintsAndReturnsToTheCatalog() {
-        for (int index = 0; index < 24; index++) {
+        for (int index = 0; index < new Showcase.Scene(root).entries().size(); index++) {
             var driver = catalog();
             String id = new Showcase.Scene(root).entries().get(index).id();
             assertThat(driver.send(new Showcase.Msg.Open(index)).model().open()).isEqualTo(id);
@@ -188,8 +217,8 @@ class ParityAcceptanceTest {
         driver.send(new Showcase.Msg.Open(indexOf(scene, "01")));
 
         // Phase 01's selectors route down while they hold focus, and the catalog does not.
-        View<Showcase.Msg> view = driver.view(CONTEXT);
-        assertThat(InputRouter.route(view, gesture("down")))
+        Element<Showcase.Msg> view = driver.view(CONTEXT);
+        assertThat(InteractionRouter.message(view, gesture("down")))
                 .get()
                 .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(Showcase.Msg.SceneMessage.class))
                 .extracting(Showcase.Msg.SceneMessage::id)
@@ -197,7 +226,11 @@ class ParityAcceptanceTest {
 
         // In the catalog the same gesture moves the highlight instead.
         driver.send(new Showcase.Msg.Back());
-        assertThat(InputRouter.route(driver.view(CONTEXT), gesture("down"))).contains(new Showcase.Msg.Move(1));
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(
+                                driver.component(), driver.model(), CONTEXT, gesture("down"))
+                        .stream()
+                        .findFirst())
+                .contains(new Showcase.Msg.Move(1));
         assertThat(driver.send(new Showcase.Msg.Move(1)).model().selected()).isEqualTo(1);
     }
 
@@ -253,12 +286,12 @@ class ParityAcceptanceTest {
         events.add(new InputEvent.FocusInput(false));
         for (int index = 0; index < slots.size(); index++) {
             driver.send(new Showcase.Msg.Open(index));
-            View<Showcase.Msg> standalone = slots.get(index).view(driver.model(), body);
-            View<Showcase.Msg> mounted = driver.view(CONTEXT);
+            Element<Showcase.Msg> standalone = slots.get(index).view(driver.model(), body);
+            Element<Showcase.Msg> mounted = driver.view(CONTEXT);
             for (InputEvent event : events) {
-                assertThat(InputRouter.route(mounted, event))
+                assertThat(InteractionRouter.message(mounted, event))
                         .as("scene %s, event %s", slots.get(index).entry().id(), event)
-                        .isEqualTo(InputRouter.route(standalone, event));
+                        .isEqualTo(InteractionRouter.message(standalone, event));
             }
         }
     }
@@ -266,7 +299,7 @@ class ParityAcceptanceTest {
     @Test
     void catalogReturnKeysReachEverySceneAndModalSelection() {
         var driver = catalog();
-        for (int index = 0; index < 24; index++) {
+        for (int index = 0; index < new Showcase.Scene(root).entries().size(); index++) {
             driver.send(new Showcase.Msg.Open(index));
             assertCatalogReturnKeys(driver);
         }
@@ -281,7 +314,10 @@ class ParityAcceptanceTest {
     }
 
     private static void assertCatalogReturnKeys(ComponentDriver<Showcase.Model, Showcase.Msg, ?> driver) {
-        assertThat(InputRouter.route(driver.view(CONTEXT), gesture("ctrl+c")))
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(
+                                driver.component(), driver.model(), CONTEXT, gesture("ctrl+c"))
+                        .stream()
+                        .findFirst())
                 .as("scene %s returns on Ctrl+C", driver.model().open())
                 .contains(new Showcase.Msg.Back());
     }
@@ -310,10 +346,9 @@ class ParityAcceptanceTest {
         driver.send(new Showcase.Msg.Open(indexOf(scene, "01")));
 
         // A scene keeps every letter it might type; the catalog owns Ctrl+C for returning.
-        View<Showcase.Msg> mounted = driver.view(CONTEXT);
-        assertThat(InputRouter.route(mounted, gesture("f2"))).isEmpty();
-        assertThat(InputRouter.route(mounted, gesture("ctrl+c"))).contains(new Showcase.Msg.Back());
-        assertThat(InputRouter.route(mounted, gesture("q")))
+        assertThat(route(driver, gesture("f2"))).isEmpty();
+        assertThat(route(driver, gesture("ctrl+c"))).contains(new Showcase.Msg.Back());
+        assertThat(route(driver, gesture("q")))
                 .get()
                 .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(Showcase.Msg.SceneMessage.class))
                 .extracting(Showcase.Msg.SceneMessage::id)
@@ -325,7 +360,11 @@ class ParityAcceptanceTest {
         assertThat(left.command()).isEqualTo(Command.none());
 
         // Quitting is the catalog's own gesture, and it is a quit command like any other.
-        assertThat(InputRouter.route(driver.view(CONTEXT), gesture("q"))).contains(new Showcase.Msg.Quit());
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(
+                                driver.component(), driver.model(), CONTEXT, gesture("q"))
+                        .stream()
+                        .findFirst())
+                .contains(new Showcase.Msg.Quit());
         assertThat(driver.send(new Showcase.Msg.Quit()).command()).isEqualTo(Command.quit());
     }
 
@@ -333,7 +372,7 @@ class ParityAcceptanceTest {
     void theCatalogMovesOpensAndScrollsWithTheKeyboardAndThePointer() {
         var driver = catalog();
         driver.send(new Showcase.Msg.Last());
-        assertThat(driver.model().selected()).isEqualTo(23);
+        assertThat(driver.model().selected()).isEqualTo(26);
         assertThat(driver.model().top()).isGreaterThan(0);
 
         driver.send(new Showcase.Msg.First());
@@ -357,18 +396,18 @@ class ParityAcceptanceTest {
     void theCatalogReflowsItsWindowWhenTheTerminalShrinks() {
         var driver = catalog();
         driver.send(new Showcase.Msg.Last());
-        assertThat(driver.model().selected()).isEqualTo(23);
+        assertThat(driver.model().selected()).isEqualTo(26);
 
         // A shorter terminal shows fewer entries, so the window follows the highlight down.
         Showcase.Model shrunk = driver.send(new Showcase.Msg.Resized(10, 80)).model();
         assertThat(shrunk.rows()).isEqualTo(10);
-        assertThat(shrunk.top()).isEqualTo(23 - shrunk.visible() + 1);
+        assertThat(shrunk.top()).isEqualTo(26 - shrunk.visible() + 1);
         assertThat(lines(driver).get(0)).contains("top=" + shrunk.top());
-        assertThat(String.join("\n", lines(driver))).contains("24 Composed task workspace");
+        assertThat(String.join("\n", lines(driver))).contains("31 Debug overlay");
 
         // Growing back keeps the highlight where the reader left it.
         Showcase.Model grown = driver.send(new Showcase.Msg.Resized(24, 80)).model();
-        assertThat(grown.selected()).isEqualTo(23);
+        assertThat(grown.selected()).isEqualTo(26);
         assertThat(grown.visible()).isEqualTo(24 - Showcase.CHROME_ROWS);
     }
 
@@ -417,11 +456,15 @@ class ParityAcceptanceTest {
     // ── R-02: the composed workspace ───────────────────────────────────────
 
     private ComponentDriver<WorkspaceDemo.Model, WorkspaceDemo.Msg, io.github.dhoard.braxton.mvu.Never> workspace() {
-        return ComponentDriver.initialize(new WorkspaceDemo.Scene(root), new InitContext(new Viewport(24, 80), null));
+        return ComponentDriver.initialize(new WorkspaceScene(root), new InitContext(new Viewport(24, 80), null));
     }
 
     private static List<String> workspaceLines(ComponentDriver<WorkspaceDemo.Model, WorkspaceDemo.Msg, ?> driver) {
-        return new ScreenRenderer().plainLines(driver.view(CONTEXT), CONTEXT.viewport());
+        return ElementScreen.render(
+                        driver.view(CONTEXT),
+                        CONTEXT.viewport().rows(),
+                        CONTEXT.viewport().cols())
+                .lines();
     }
 
     private static String workspaceStatus(ComponentDriver<WorkspaceDemo.Model, WorkspaceDemo.Msg, ?> driver) {
@@ -436,7 +479,9 @@ class ParityAcceptanceTest {
         return workspaceLines(driver).get(3);
     }
 
-    /** A token that is asserted on whichever of the two rows carries it. */
+    /**
+     * A token that is asserted on whichever of the two rows carries it.
+     */
     private static String workspaceRows(ComponentDriver<WorkspaceDemo.Model, WorkspaceDemo.Msg, ?> driver) {
         return workspaceCounts(driver) + " " + workspaceLog(driver);
     }
@@ -573,23 +618,26 @@ class ParityAcceptanceTest {
         var driver = workspace();
         choose(driver, "notes.md");
         // The projection the workspace chose owns the page's own gestures.
-        assertThat(InputRouter.route(driver.view(CONTEXT), gesture("down"))).isPresent();
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(
+                                driver.component(), driver.model(), CONTEXT, gesture("down"))
+                        .stream()
+                        .findFirst())
+                .isPresent();
 
         deliver(driver, new WorkspaceDemo.Msg.Sync());
         assertThat(workspaceCounts(driver)).contains("dialog=open");
         assertThat(workspaceLog(driver)).contains("last=sync-ask");
 
         // While the dialog is open the page under it is unreachable, and its own keys still are.
-        View<WorkspaceDemo.Msg> modal = driver.view(CONTEXT);
         assertThat(String.join("\n", workspaceLines(driver))).contains("Apply the workspace changes?");
-        assertThat(InputRouter.route(modal, gesture("down"))).isEmpty();
-        assertThat(InputRouter.route(modal, gesture("esc"))).contains(new WorkspaceDemo.Msg.CancelSync());
-        assertThat(InputRouter.route(modal, gesture("enter"))).contains(new WorkspaceDemo.Msg.ConfirmSync());
+        assertThat(workspaceRoute(driver, gesture("down"))).isEmpty();
+        assertThat(workspaceRoute(driver, gesture("esc"))).contains(new WorkspaceDemo.Msg.CancelSync());
+        assertThat(workspaceRoute(driver, gesture("enter"))).contains(new WorkspaceDemo.Msg.ConfirmSync());
 
         // Declining leaves everything as it was; confirming lands the bar and re-projects.
         deliver(driver, new WorkspaceDemo.Msg.CancelSync());
         assertThat(workspaceCounts(driver)).contains("dialog=closed");
-        assertThat(workspaceLog(driver)).contains("last=sync-cancelled");
+        assertThat(workspaceLog(driver)).contains("last=sync-canceled");
         deliver(driver, new WorkspaceDemo.Msg.Sync());
         deliver(driver, new WorkspaceDemo.Msg.ConfirmSync());
         assertThat(workspaceCounts(driver)).contains("dialog=closed");
@@ -618,7 +666,7 @@ class ParityAcceptanceTest {
     private static void choose(
             ComponentDriver<WorkspaceDemo.Model, WorkspaceDemo.Msg, io.github.dhoard.braxton.mvu.Never> driver,
             String name) {
-        FilePicker.Model files = driver.model().files();
+        FilePickerModel files = driver.model().files();
         List<FilePicker.Entry> entries = new ArrayList<>();
         for (String entry : List.of("notes.md", "guide.md", "archive.bin")) {
             entries.add(new FilePicker.Entry(
@@ -701,7 +749,7 @@ class ParityAcceptanceTest {
             assertThat(verifier).as("packaged launch for %s", phase).contains("\"" + phase + "\": (\"" + launch + "\"");
             assertThat(probe).as("probe dispatch for %s", phase).contains("case \"" + phase + "\"");
         }
-        assertThat(phases).as("every implementation phase has a row").hasSize(24);
+        assertThat(phases).as("every implementation phase has a row").hasSize(28);
     }
 
     @Test

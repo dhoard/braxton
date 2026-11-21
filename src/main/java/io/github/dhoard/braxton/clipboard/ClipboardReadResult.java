@@ -38,10 +38,18 @@ package io.github.dhoard.braxton.clipboard;
  */
 public sealed interface ClipboardReadResult {
 
-    /** The selection that was asked about. */
+    /**
+     * The selection that was asked about.
+     *
+     * @return the selection that was asked about
+     */
     ClipboardSelection selection();
 
-    /** The transport the request was written on, or {@link ClipboardPath#NONE} when nothing was. */
+    /**
+     * The transport the request was written on, or {@link ClipboardPath#NONE} when nothing was.
+     *
+     * @return the component scope path
+     */
     ClipboardPath path();
 
     /**

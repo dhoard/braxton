@@ -30,9 +30,9 @@ package io.github.dhoard.braxton.app;
  * run that ended before the program was initialized - the terminal could not be opened, or a stop
  * arrived that early - reports no model.</p>
  *
+ * @param <M> the root model type
  * @param model the final committed model, or null when the run ended before {@code init} committed
  * @param exit how the run ended; never null
- * @param <M> the root model type
  */
 public record ProgramResult<M>(M model, ExitResult exit) {
 
@@ -52,7 +52,9 @@ public record ProgramResult<M>(M model, ExitResult exit) {
         return exit.ok();
     }
 
-    /** Diagnostic summary; never includes model values or terminal escape output. */
+    /**
+     * Diagnostic summary; never includes model values or terminal escape output.
+     */
     @Override
     public String toString() {
         return "ProgramResult[" + (model == null ? "no model" : "model") + ", " + exit + "]";

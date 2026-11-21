@@ -27,7 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** Sanitizing is idempotent and never leaves a terminal control character behind. */
+/**
+ * Sanitizing is idempotent and never leaves a terminal control character behind.
+ */
 class PasteSanitizerPropertyTest {
 
     @Test

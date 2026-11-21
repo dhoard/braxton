@@ -1,0 +1,1 @@
+# No migration exceptions remain. Legal imports are reviewed in layering-policy.txt.

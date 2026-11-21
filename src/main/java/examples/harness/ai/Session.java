@@ -29,22 +29,49 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
-/** Transcript/session component. Owns loading, history, metadata, replay and scroll state. */
+/**
+ * Transcript/session component. Owns loading, history, metadata, replay and scroll state.
+ */
 public final class Session implements Component<Session.Model, Session.Msg, Never> {
+
+    /**
+     * The identity of the session's one element subtree; a mount scopes it to its own path.
+     */
     public enum Status {
+        /**
+         * The offline transcript is being loaded.
+         */
         LOADING,
+        /**
+         * The offline transcript is available.
+         */
         READY,
+        /**
+         * Loading the offline transcript failed.
+         */
         FAILED
     }
 
+    /**
+     * The loaded offline transcript, metadata, replay position, and scroll position.
+     *
+     * @param status the process status or current application state
+     * @param entries the transcript entries in display order
+     * @param profile the recorded provider and model profile
+     * @param usage the recorded token usage
+     * @param contextWindow the model's context capacity in tokens
+     * @param turns the transcript turns in source order
+     * @param replayIndex the next replay turn index
+     * @param scrollBack the number of transcript rows scrolled back from the end
+     */
     public record Model(
             Status status,
             List<HarnessEntry> entries,
@@ -54,6 +81,18 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
             List<HarnessTranscript.HarnessTurn> turns,
             int replayIndex,
             int scrollBack) {
+        /**
+         * Creates a {@code Model} value.
+         *
+         * @param status the process status or current application state
+         * @param entries the transcript entries in display order
+         * @param profile the recorded provider and model profile
+         * @param usage the recorded token usage
+         * @param contextWindow the model's context capacity in tokens
+         * @param turns the transcript turns in source order
+         * @param replayIndex the next replay turn index
+         * @param scrollBack the number of transcript rows scrolled back from the end
+         */
         public Model {
             status = status == null ? Status.LOADING : status;
             entries = List.copyOf(
@@ -66,18 +105,42 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
             turns = List.copyOf(turns);
         }
 
+        /**
+         * Returns the same value with status replaced.
+         *
+         * @param value the requested status
+         * @return the value with the requested status
+         */
         public Model withStatus(Status value) {
             return new Model(value, entries, profile, usage, contextWindow, turns, replayIndex, scrollBack);
         }
 
+        /**
+         * Returns the same value with entries replaced.
+         *
+         * @param value the requested entries
+         * @return the value with the requested entries
+         */
         public Model withEntries(List<HarnessEntry> value) {
             return new Model(status, value, profile, usage, contextWindow, turns, replayIndex, scrollBack);
         }
 
+        /**
+         * Returns the same value with scroll replaced.
+         *
+         * @param value the requested scroll
+         * @return the value with the requested scroll
+         */
         public Model withScroll(int value) {
             return new Model(status, entries, profile, usage, contextWindow, turns, replayIndex, value);
         }
 
+        /**
+         * Returns the same value with replay index replaced.
+         *
+         * @param value the requested replay index
+         * @return the value with the requested replay index
+         */
         public Model withReplayIndex(int value) {
             return new Model(status, entries, profile, usage, contextWindow, turns, value, scrollBack);
         }
@@ -88,6 +151,7 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
          *
          * @param transcript the loaded transcript
          * @param nowMillis when the transcript entered this session, in Unix milliseconds
+         * @return the value with the requested transcript
          */
         public Model withTranscript(HarnessTranscript transcript, long nowMillis) {
             List<HarnessEntry> seeded = new ArrayList<>(entries);
@@ -125,6 +189,13 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
             return next.withEntries(next.entries());
         }
 
+        /**
+         * Returns the same value with metadata replaced.
+         *
+         * @param nextProfile the next recorded model profile
+         * @param nextUsage the accumulated token usage
+         * @return the value with the requested metadata
+         */
         public Model withMetadata(HarnessTranscript.Profile nextProfile, HarnessTranscript.Usage nextUsage) {
             return new Model(
                     status,
@@ -138,19 +209,58 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
         }
     }
 
+    /**
+     * Typed offline transcript, metadata, replay, and scrolling updates.
+     */
     public sealed interface Msg {
+        /**
+         * Carries the loaded value into the owning component update.
+         *
+         * @param transcript the immutable example transcript
+         */
         record Loaded(HarnessTranscript transcript) implements Msg {}
 
+        /**
+         * Carries the failed value into the owning component update.
+         *
+         * @param failure the primary failure, or null for a successful outcome
+         */
         record Failed(Throwable failure) implements Msg {}
 
+        /**
+         * Carries the status value into the owning component update.
+         *
+         * @param value the status the harness is showing
+         */
         record StatusValue(Status value) implements Msg {}
 
+        /**
+         * Carries the entries value into the owning component update.
+         *
+         * @param value the entries to show, newest first
+         */
         record Entries(List<HarnessEntry> value) implements Msg {}
 
+        /**
+         * Carries the scroll value into the owning component update.
+         *
+         * @param value the new scroll offset
+         */
         record Scroll(int value) implements Msg {}
 
+        /**
+         * Carries the replay value into the owning component update.
+         *
+         * @param value the replay generation to accept
+         */
         record Replay(int value) implements Msg {}
 
+        /**
+         * Carries the metadata update for the owning component.
+         *
+         * @param profile the recorded provider and model profile
+         * @param usage the recorded token usage
+         */
         record Metadata(HarnessTranscript.Profile profile, HarnessTranscript.Usage usage) implements Msg {}
     }
 
@@ -224,14 +334,21 @@ public final class Session implements Component<Session.Model, Session.Msg, Neve
     }
 
     @Override
-    public View<Msg> view(Model model, ViewContext context) {
-        return Views.column(
+    public Element<Msg> view(Model model, ViewContext context) {
+        return scene(model, context);
+    }
+
+    /**
+     * The session's window as one element tree.
+     */
+    private static Element<Msg> scene(Model model, ViewContext context) {
+        return Elements.column(
                 HarnessProjection.window(
                                 model,
                                 context.viewport().cols(),
                                 context.viewport().rows())
                         .stream()
-                        .map(Views::<Msg>text)
+                        .map(Elements::<Msg>text)
                         .toList());
     }
 }

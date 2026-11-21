@@ -52,7 +52,9 @@ public record PointerEvent(
         int clickCount,
         long capturedAtNanos) {
 
-    /** Rejects a missing action and a wheel that names no wheel direction. */
+    /**
+     * Rejects a missing action and a wheel that names no wheel direction.
+     */
     public PointerEvent {
         if (action == null) {
             throw new IllegalArgumentException("action is required");

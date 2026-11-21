@@ -28,7 +28,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
-/** The scheduler never fires a delay before the requested time. */
+/**
+ * The scheduler never fires a delay before the requested time.
+ */
 class SystemTimersTest {
 
     @Test
@@ -60,7 +62,7 @@ class SystemTimersTest {
 
     @Test
     void aCancelledLongDelayLeavesTheQueueAtOnce() {
-        // A cancelled delay used to stay queued (with its captured state) until its deadline.
+        // A canceled delay used to stay queued (with its captured state) until its deadline.
         int before = SystemTimers.INSTANCE.pendingTasks();
         Timers.Handle handle = SystemTimers.INSTANCE.schedule(3_600_000_000_000L, () -> {});
         assertThat(SystemTimers.INSTANCE.pendingTasks()).isEqualTo(before + 1);

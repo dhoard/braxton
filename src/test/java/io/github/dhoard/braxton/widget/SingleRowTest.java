@@ -30,7 +30,9 @@ import io.github.dhoard.braxton.style.StyledText;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** The one-row preparation shared by the widgets whose painted height is fixed. */
+/**
+ * The one-row preparation shared by the widgets whose painted height is fixed.
+ */
 class SingleRowTest {
 
     @Test

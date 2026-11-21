@@ -22,9 +22,8 @@
 
 package io.github.dhoard.braxton.internal.terminal;
 
-import io.github.dhoard.braxton.app.IoOptions;
-import io.github.dhoard.braxton.app.TerminalCapabilities;
 import io.github.dhoard.braxton.layout.Size;
+import io.github.dhoard.braxton.terminal.Capabilities;
 import java.io.FilterReader;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -58,7 +57,9 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class StreamTerminal implements Terminal {
 
-    /** A reader that reports end of input immediately: no input was supplied. */
+    /**
+     * A reader that reports end of input immediately: no input was supplied.
+     */
     private static final TimedReader NO_INPUT = new TimedReader() {
         @Override
         public int read(long timeoutMillis) {
@@ -73,7 +74,7 @@ public final class StreamTerminal implements Terminal {
     private final PrintWriter writer;
     private final AtomicReference<IOException> outputError;
     private final AtomicLong resizeEpoch = new AtomicLong();
-    private final TerminalCapabilities capabilities = TerminalCapabilities.PLAIN;
+    private final Capabilities capabilities = Capabilities.PLAIN;
     private volatile Size size;
     private volatile Runnable resizeCallback = () -> {};
     private volatile State state = State.ACTIVE;
@@ -95,8 +96,7 @@ public final class StreamTerminal implements Terminal {
      *
      * @param input the input to decode, or null for none
      * @param output the output to write, or null to discard it
-     * @param size the size to lay out for; null for {@value io.github.dhoard.braxton.app.IoOptions#DEFAULT_ROWS}
-     *     by {@value io.github.dhoard.braxton.app.IoOptions#DEFAULT_COLUMNS}
+     * @param size the size to lay out for; null for 24 rows by 80 columns
      * @return the terminal
      */
     public static StreamTerminal of(Reader input, Writer output, Size size) {
@@ -105,7 +105,7 @@ public final class StreamTerminal implements Terminal {
                 input == null ? NO_INPUT : TimedReader.from(nonClosing(input)),
                 writerOver(output, outputError),
                 outputError,
-                size == null ? new Size(IoOptions.DEFAULT_ROWS, IoOptions.DEFAULT_COLUMNS) : size);
+                size == null ? new Size(24, 80) : size);
     }
 
     /**
@@ -156,7 +156,9 @@ public final class StreamTerminal implements Terminal {
         });
     }
 
-    /** The destination of a session whose frames go nowhere. */
+    /**
+     * The destination of a session whose frames go nowhere.
+     */
     private static final class Discard extends Writer {
         @Override
         public void write(char[] buffer, int offset, int length) {}
@@ -168,7 +170,9 @@ public final class StreamTerminal implements Terminal {
         public void close() {}
     }
 
-    /** A view of a caller-owned reader whose close does not reach the caller's stream. */
+    /**
+     * A view of a caller-owned reader whose close does not reach the caller's stream.
+     */
     private static Reader nonClosing(Reader source) {
         return new FilterReader(source) {
             @Override
@@ -176,7 +180,9 @@ public final class StreamTerminal implements Terminal {
         };
     }
 
-    /** A view of a caller-owned writer whose close does not reach the caller's stream. */
+    /**
+     * A view of a caller-owned writer whose close does not reach the caller's stream.
+     */
     private static Writer nonClosing(Writer source) {
         return new Writer() {
             @Override
@@ -217,7 +223,7 @@ public final class StreamTerminal implements Terminal {
     }
 
     @Override
-    public TerminalCapabilities capabilities() {
+    public Capabilities capabilities() {
         return capabilities;
     }
 

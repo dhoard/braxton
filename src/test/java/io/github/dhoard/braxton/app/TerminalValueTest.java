@@ -24,9 +24,13 @@ package io.github.dhoard.braxton.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.dhoard.braxton.input.KeyboardEnhancements;
+import io.github.dhoard.braxton.terminal.Capabilities;
 import org.junit.jupiter.api.Test;
 
-/** Session options and capability facts are plain immutable values with sane defaults. */
+/**
+ * Session options and capability facts are plain immutable values with sane defaults.
+ */
 class TerminalValueTest {
 
     @Test
@@ -41,20 +45,19 @@ class TerminalValueTest {
         assertThat(TerminalOptions.DEFAULT.withBracketedPaste(false).bracketedPaste())
                 .isFalse();
         assertThat(TerminalOptions.DEFAULT.withMouse(true).withBracketedPaste(false))
-                .isEqualTo(new TerminalOptions(true, true, false));
+                .isEqualTo(new TerminalOptions(true, MouseMode.CLICK, false, KeyboardEnhancements.NONE, false));
     }
 
     @Test
     void capabilitiesCaptureFactsAndDefaultTermIsEmpty() {
-        TerminalCapabilities capabilities = new TerminalCapabilities(true, true, false, true, "xterm-256color");
+        Capabilities capabilities = Capabilities.of(true, true, false, true, "xterm-256color");
         assertThat(capabilities.color()).isTrue();
         assertThat(capabilities.alternateScreen()).isTrue();
         assertThat(capabilities.bracketedPaste()).isFalse();
         assertThat(capabilities.mouse()).isTrue();
         assertThat(capabilities.term()).isEqualTo("xterm-256color");
-        assertThat(new TerminalCapabilities(false, false, false, false, null).term())
-                .isEmpty();
-        assertThat(TerminalCapabilities.PLAIN.term()).isEqualTo("dumb");
-        assertThat(TerminalCapabilities.PLAIN.color()).isFalse();
+        assertThat(Capabilities.of(false, false, false, false, null).term()).isEmpty();
+        assertThat(Capabilities.PLAIN.term()).isEqualTo("dumb");
+        assertThat(Capabilities.PLAIN.color()).isFalse();
     }
 }

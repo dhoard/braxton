@@ -1,13 +1,16 @@
 /* Development-only child: exercises the packaged MVU API under an owned PTY/console. */
 package io.github.dhoard.braxton.internal.runtime;
 
+import io.github.dhoard.braxton.input.KeyboardEnhancements;
+
+import io.github.dhoard.braxton.widget.Elements;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.app.*;
 import io.github.dhoard.braxton.effect.*;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.layout.*;
 import io.github.dhoard.braxton.mvu.*;
 import io.github.dhoard.braxton.style.*;
-import io.github.dhoard.braxton.view.*;
 
 import java.io.*;
 import java.net.UnixDomainSocketAddress;
@@ -119,41 +122,60 @@ public final class TerminalProbe {
             };
         }
 
-        public View<Message> view(Model model, ViewContext context) {
+        public Element<Message> view(Model model, ViewContext context) {
             Viewport viewport = context.viewport();
-            View<Message> content = model.text().equals("verified")
-                    ? Views.column(
-                            Views.text("Native 界"),
-                            Views.text("verified", Style.NONE.withForeground(new Color(255, 0, 0))))
-                    : Views.text(model.text());
+            Element<Message> content = model.text().equals("verified")
+                    ? Elements.column(
+                            Elements.text("Native 界"),
+                            Elements.text("verified", Style.NONE.withForeground(new Color(255, 0, 0))))
+                    : Elements.text(model.text());
             if (model.text().startsWith("REFRESH_WIDE")) {
                 boolean wide = model.text().equals("REFRESH_WIDE");
                 int cols = viewport.cols();
-                var rows = new ArrayList<View<Message>>();
-                rows.add(Views.text("w".repeat(Math.max(0, cols - 2)) + (wide ? "界" : "y"),
+                var rows = new ArrayList<Element<Message>>();
+                rows.add(Elements.text("w".repeat(Math.max(0, cols - 2)) + (wide ? "界" : "y"),
                         Style.bg(Colors.BLACK).withBold()));
-                rows.add(Views.text(wide ? "b".repeat(cols) : "", Style.bg(new Color(255, 0, 0))));
-                for (int row = 2; row < viewport.rows() - 1; row++) rows.add(Views.text(""));
-                rows.add(Views.text(wide ? "z".repeat(cols) : "bottom"));
-                content = Views.column(rows);
+                rows.add(Elements.text(wide ? "b".repeat(cols) : "", Style.bg(new Color(255, 0, 0))));
+                for (int row = 2; row < viewport.rows() - 1; row++) rows.add(Elements.text(""));
+                rows.add(Elements.text(wide ? "z".repeat(cols) : "bottom"));
+                content = Elements.column(rows);
             } else if (model.text().startsWith("REFRESH")) {
                 boolean full = model.text().equals("REFRESH");
-                var rows = new ArrayList<View<Message>>();
-                rows.add(Views.text(full
+                var rows = new ArrayList<Element<Message>>();
+                rows.add(Elements.text(full
                         ? "REFRESH_FULL" + "x".repeat(viewport.cols() - 14) + "界"
                         : "short界", Style.bg(Colors.BLACK).withBold()));
-                rows.add(Views.text(full ? "b".repeat(viewport.cols()) : "",
+                rows.add(Elements.text(full ? "b".repeat(viewport.cols()) : "",
                         Style.bg(new Color(255, 0, 0))));
-                for (int row = 2; row < viewport.rows() - 1; row++) rows.add(Views.text(""));
-                rows.add(Views.text(full ? "z".repeat(viewport.cols()) : "bottom"));
-                content = Views.column(rows);
+                for (int row = 2; row < viewport.rows() - 1; row++) rows.add(Elements.text(""));
+                rows.add(Elements.text(full ? "z".repeat(viewport.cols()) : "bottom"));
+                content = Elements.column(rows);
             }
-            return Views.focus(
-                    ElementId.of("input"),
-                    true,
-                    List.of(),
-                    input -> Optional.of(new Message("", input, null)),
-                    content);
+            return content;
+        }
+
+        /**
+         * Every event becomes a message, so the probe can report exactly what arrived. A wheel is
+         * left out: when nothing takes it the runtime delivers it as the key it used to arrive as,
+         * and that is what the probe reports.
+         */
+        @Override
+        public java.util.List<Message> observed(InputEvent event) {
+            if (event instanceof InputEvent.PointerInput pointer && pointer.pointer().action().name().startsWith("WHEEL")) {
+                return List.of();
+            }
+            return List.of(new Message("", event, null));
+        }
+
+        /**
+         * The wheel gesture the runtime synthesizes when nothing took the pointer report, so a
+         * wheel still reaches an application that only reads keys.
+         */
+        @Override
+        public java.util.List<io.github.dhoard.braxton.input.Binding<Message>> claims(Model model) {
+            return List.of(new io.github.dhoard.braxton.input.Binding<>(
+                    io.github.dhoard.braxton.input.Key.WHEEL_UP,
+                    new Message(null, InputEvent.KeyInput.of(io.github.dhoard.braxton.input.Key.WHEEL_UP), null)));
         }
 
         public Subscription<Message> subscriptions(Model model) {
@@ -189,8 +211,8 @@ public final class TerminalProbe {
                                     return Update.next(model);
                                 }
 
-                                public View<String> view(Integer model, ViewContext context) {
-                                    return Views.text("bootstrap");
+                                public Element<String> view(Integer model, ViewContext context) {
+                                    return Elements.text("bootstrap");
                                 }
                             });
             if (result.failure() != null) result.failure().printStackTrace(System.err);
@@ -232,7 +254,7 @@ public final class TerminalProbe {
             var options = RuntimeOptions.defaults()
                     .withTerminal(
                             args.length > 0 && args[0].equals("--plain")
-                                    ? new TerminalOptions(false, false, false)
+                                    ? new TerminalOptions(false, MouseMode.NONE, false, KeyboardEnhancements.NONE, false)
                                     : TerminalOptions.DEFAULT.withMouse(true));
             var first = new ProbeProgram(false, identity);
             var runtime = new RuntimeLoop<Model, Message>(first, options);

@@ -39,7 +39,9 @@ import java.util.Arrays;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
-/** Native extraction policy, independent of FFM so publication and fallback are testable headlessly. */
+/**
+ * Native extraction policy, independent of FFM so publication and fallback are testable headlessly.
+ */
 final class NativeLibraryLoader {
     @FunctionalInterface
     interface Link<T> {
@@ -75,7 +77,9 @@ final class NativeLibraryLoader {
     private static final Set<PosixFilePermission> DIRECTORY_MODE = PosixFilePermissions.fromString("rwx------");
     private static final Set<PosixFilePermission> STAGING_MODE = PosixFilePermissions.fromString("rw-------");
     private static final Set<PosixFilePermission> LIBRARY_MODE = PosixFilePermissions.fromString("r-x------");
-    /** Bounded attempts to pick an entry name that nothing else already occupies. */
+    /**
+     * Bounded attempts to pick an entry name that nothing else already occupies.
+     */
     static final int TEMPORARY_ATTEMPTS = 16;
 
     private NativeLibraryLoader() {}
@@ -92,7 +96,9 @@ final class NativeLibraryLoader {
         }
     }
 
-    /** Reads one small build-generated metadata resource beside the packaged binary. */
+    /**
+     * Reads one small build-generated metadata resource beside the packaged binary.
+     */
     private static String metadata(String resource) throws IOException {
         try (var input = NativeLibraryLoader.class.getResourceAsStream(resource)) {
             if (input == null) throw new IOException("missing Braxton native metadata " + resource);

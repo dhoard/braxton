@@ -66,6 +66,6 @@ final class HarnessTheme {
     private HarnessTheme() {}
 
     private static Color color(String hex) {
-        return Color.parse(hex).orElseThrow(() -> new IllegalArgumentException("bad theme colour " + hex));
+        return Color.parse(hex).orElseThrow(() -> new IllegalArgumentException("bad theme color " + hex));
     }
 }

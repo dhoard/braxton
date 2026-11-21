@@ -52,16 +52,35 @@ import java.util.function.Function;
  */
 public sealed interface Subscription<Msg> {
 
-    /** Stable identity of this source. */
+    /**
+     * Stable identity of this source.
+     *
+     * @return stable identity of this source
+     */
     SubscriptionId id();
 
-    /** Configuration compared to decide whether the live resource can be reused. */
+    /**
+     * Configuration compared to decide whether the live resource can be reused.
+     *
+     * @return configuration compared to decide whether the live resource can be reused
+     */
     Object configuration();
 
-    /** Re-types emitted messages, preserving null (declined) emissions without calling the mapper. */
+    /**
+     * Re-types emitted messages, preserving null (declined) emissions without calling the mapper.
+     *
+     * @param <Msg2> the Msg2 value type
+     * @param mapper the value-to-message mapper
+     * @return re-types emitted messages, preserving null (declined) emissions without calling the mapper
+     */
     <Msg2> Subscription<Msg2> map(Function<? super Msg, ? extends Msg2> mapper);
 
-    /** Prepends scope recursively without starting sources or evaluating message mappers. */
+    /**
+     * Prepends scope recursively without starting sources or evaluating message mappers.
+     *
+     * @param path the component scope path
+     * @return prepends scope recursively without starting sources or evaluating message mappers
+     */
     default Subscription<Msg> scoped(ComponentPath path) {
         return switch (this) {
             case None<Msg> none -> none;
@@ -106,8 +125,8 @@ public sealed interface Subscription<Msg> {
     /**
      * Several independent sources, reconciled as a set.
      *
-     * @param items the sources to reconcile, in declaration order
      * @param <Msg> the component message type these sources emit
+     * @param items the sources to reconcile, in declaration order
      */
     record Batch<Msg>(List<Subscription<Msg>> items) implements Subscription<Msg> {
 
@@ -152,10 +171,10 @@ public sealed interface Subscription<Msg> {
      * emitting: its values come from code the session does not schedule, and dropping one would lose a
      * fact the application never hears about again.</p>
      *
+     * @param <Msg> the component message type this source emits
      * @param id the source identity, scoped by the owning mount
      * @param period the interval between emissions; must be positive and fit in nanoseconds
      * @param onTick maps the emission time in nanoseconds to a message, or to null to decline it
-     * @param <Msg> the component message type this source emits
      */
     record Interval<Msg>(SubscriptionId id, Duration period, Function<Long, Msg> onTick) implements Subscription<Msg> {
 
@@ -191,9 +210,9 @@ public sealed interface Subscription<Msg> {
     /**
      * Emits a message whenever the terminal size changes.
      *
+     * @param <Msg> the component message type this source emits
      * @param id the source identity, scoped by the owning mount
      * @param onResize maps the measured size to a message, or to null to decline it
-     * @param <Msg> the component message type this source emits
      */
     record Resize<Msg>(SubscriptionId id, Function<Size, Msg> onResize) implements Subscription<Msg> {
 
@@ -220,14 +239,14 @@ public sealed interface Subscription<Msg> {
     /**
      * Emits the session's terminal facts when they start and whenever they change.
      *
-     * <p>A colour profile or a reported background colour is a property of the session, not of any
+     * <p>A color profile or a reported background color is a property of the session, not of any
      * component, so this is how a component learns one it did not ask for. The current facts arrive
      * once when the source starts, which is also the only emission before anything changes; a
      * declared source that stays declared is not re-emitted for an unchanged fact.</p>
      *
+     * @param <Msg> the component message type this source emits
      * @param id the source identity, scoped by the owning mount
      * @param onFacts maps the facts to a message, or to null to decline them
-     * @param <Msg> the component message type this source emits
      */
     record Facts<Msg>(SubscriptionId id, Function<TerminalFacts, Msg> onFacts) implements Subscription<Msg> {
 
@@ -265,11 +284,11 @@ public sealed interface Subscription<Msg> {
      * for the queue to drain: a burst larger than the mailbox capacity fails the run with a mailbox
      * overflow instead of waiting for the consumer that is already blocked in {@code start}.</p>
      *
+     * @param <Msg> the component message type this source emits
      * @param id the source identity, scoped by the owning mount
      * @param configuration compared with the live source's configuration to decide reuse
      * @param start receives the emitter and returns the resource to close on removal
      * @param mapper maps one emitted value to a message, or to null to decline it
-     * @param <Msg> the component message type this source emits
      */
     record Source<Msg>(
             SubscriptionId id,
@@ -299,10 +318,23 @@ public sealed interface Subscription<Msg> {
         return message == null ? null : mapper.apply(message);
     }
 
+    /**
+     * Returns an empty subscription declaration.
+     *
+     * @param <Msg> the component message type this source emits
+     * @return an empty subscription declaration
+     */
     static <Msg> Subscription<Msg> none() {
         return new None<>();
     }
 
+    /**
+     * Combines subscription descriptors in declaration order.
+     *
+     * @param <Msg> the component message type this source emits
+     * @param items the subscription descriptors in declaration order
+     * @return the combined subscription descriptor
+     */
     @SafeVarargs
     static <Msg> Subscription<Msg> batch(Subscription<Msg>... items) {
         List<Subscription<Msg>> flat = new ArrayList<>();
@@ -322,10 +354,27 @@ public sealed interface Subscription<Msg> {
         return flat.size() == 1 ? flat.get(0) : new Batch<>(flat);
     }
 
+    /**
+     * Declares a scoped periodic source of monotonic-time messages.
+     *
+     * @param <Msg> the component message type this source emits
+     * @param id the local identity of the resource
+     * @param period the positive interval period
+     * @param onTick the monotonic-time-to-message mapper
+     * @return declares a scoped periodic source of monotonic-time messages
+     */
     static <Msg> Subscription<Msg> interval(SubscriptionId id, Duration period, Function<Long, Msg> onTick) {
         return new Interval<>(id, period, onTick);
     }
 
+    /**
+     * Declares a scoped source of terminal-size messages.
+     *
+     * @param <Msg> the component message type this source emits
+     * @param id the local identity of the resource
+     * @param onResize the size-to-message mapper
+     * @return declares a scoped source of terminal-size messages
+     */
     static <Msg> Subscription<Msg> resize(SubscriptionId id, Function<Size, Msg> onResize) {
         return new Resize<>(id, onResize);
     }
@@ -342,6 +391,16 @@ public sealed interface Subscription<Msg> {
         return new Facts<>(id, onFacts);
     }
 
+    /**
+     * Declares a scoped custom source whose resource is closed when removed.
+     *
+     * @param <Msg> the component message type this source emits
+     * @param id the local identity of the resource
+     * @param configuration the value whose equality identifies an unchanged source
+     * @param start the source starter; its returned resource is closed when the source stops
+     * @param mapper the value-to-message mapper
+     * @return declares a scoped custom source whose resource is closed when removed
+     */
     static <Msg> Subscription<Msg> source(
             SubscriptionId id,
             Object configuration,
@@ -353,6 +412,10 @@ public sealed interface Subscription<Msg> {
     /**
      * Flattens a subscription tree into its leaves in declaration order. Duplicate ids are a
      * configuration error and rejected, not deduplicated: two sources cannot share one identity.
+     *
+     * @param <Msg> the component message type this source emits
+     * @param subscription the subscription descriptor
+     * @return the leaf descriptors in declaration order
      */
     static <Msg> List<Subscription<Msg>> leaves(Subscription<Msg> subscription) {
         List<Subscription<Msg>> leaves = new ArrayList<>();

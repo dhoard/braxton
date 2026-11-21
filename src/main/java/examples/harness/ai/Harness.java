@@ -27,6 +27,8 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
+import io.github.dhoard.braxton.input.Binding;
+import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.Component;
@@ -40,8 +42,9 @@ import io.github.dhoard.braxton.mvu.OutputRoute;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,6 +60,21 @@ import java.util.function.Supplier;
  * per-application executor, no global key registry, and no terminal access outside the runtime.</p>
  */
 public final class Harness implements Component<Harness.Model, Harness.Msg, Never> {
+    /**
+     * The offline harness state, response queue, editor, timing, and viewport.
+     *
+     * @param session the terminal session used for input and output
+     * @param draft the composer draft
+     * @param pending the queued prompts
+     * @param active the active replay turn, or null when idle
+     * @param generation the replay generation used to reject stale messages
+     * @param nowNanos the caller-supplied monotonic time in nanoseconds
+     * @param workStartedNanos the monotonic start time of the active turn
+     * @param escArmedUntilNanos the Escape confirmation deadline in nanoseconds
+     * @param quitArmedUntilNanos the quit confirmation deadline in nanoseconds
+     * @param viewport the available terminal viewport
+     * @param projectPath the displayed project path
+     */
     public record Model(
             Session.Model session,
             Editor.Model draft,
@@ -69,12 +87,36 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
             long quitArmedUntilNanos,
             Size viewport,
             String projectPath) {
+        /**
+         * The number of transcript entries the model keeps, oldest dropped first.
+         */
         public static final int MAX_ENTRIES = 200;
 
+        /**
+         * The transcript turn and response block currently being replayed.
+         *
+         * @param turn the transcript turn
+         * @param blockIndex the response block index within the turn
+         */
         public record Active(HarnessTranscript.HarnessTurn turn, int blockIndex) {}
 
         private static final Session SESSION = new Session(() -> HarnessTranscript.empty(List.of()), List.of());
 
+        /**
+         * Creates a {@code Model} value.
+         *
+         * @param session the terminal session used for input and output
+         * @param draft the composer draft
+         * @param pending the queued prompts
+         * @param active the active replay turn, or null when idle
+         * @param generation the replay generation used to reject stale messages
+         * @param nowNanos the caller-supplied monotonic time in nanoseconds
+         * @param workStartedNanos the monotonic start time of the active turn
+         * @param escArmedUntilNanos the Escape confirmation deadline in nanoseconds
+         * @param quitArmedUntilNanos the quit confirmation deadline in nanoseconds
+         * @param viewport the available terminal viewport
+         * @param projectPath the displayed project path
+         */
         public Model {
             Objects.requireNonNull(session, "session");
             draft = draft == null ? Editor.Model.empty() : draft;
@@ -85,55 +127,124 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
             projectPath = projectPath == null ? "" : projectPath;
         }
 
+        /**
+         * Creates the offline harness model and its initial transcript notices.
+         *
+         * @param size the requested cell dimensions
+         * @param path the component scope path
+         * @param warnings the startup transcript diagnostics
+         * @return the offline harness model and its initial transcript notices
+         */
         public static Harness.Model initial(Size size, String path, List<String> warnings) {
             return new Harness.Model(
                     Session.initial(warnings), Editor.Model.empty(), List.of(), null, 0L, 0L, 0L, 0L, 0L, size, path);
         }
 
+        /**
+         * Tests whether a response replay is currently active.
+         *
+         * @return {@code true} if a response replay is currently active; otherwise {@code false}
+         */
         public boolean working() {
             return active != null;
         }
 
+        /**
+         * Returns the draft editor height admitted by the current viewport.
+         *
+         * @return the draft editor height admitted by the current viewport
+         */
         public int editorRows() {
             return Editor.visibleLineCount(draft, editorOptions());
         }
 
+        /**
+         * Returns the number of active and queued prompts.
+         *
+         * @return the number of active and queued prompts
+         */
         public int outstandingPrompts() {
             return pending.size() + (working() ? 1 : 0);
         }
 
+        /**
+         * Returns the current session status.
+         *
+         * @return the current session status
+         */
         public Session.Status status() {
             return session.status();
         }
 
+        /**
+         * Returns the immutable transcript entries.
+         *
+         * @return the immutable transcript entries
+         */
         public List<HarnessEntry> entries() {
             return session.entries();
         }
 
+        /**
+         * Returns the recorded model/provider profile.
+         *
+         * @return the recorded model/provider profile
+         */
         public HarnessTranscript.Profile profile() {
             return session.profile();
         }
 
+        /**
+         * Returns the recorded token usage.
+         *
+         * @return the recorded token usage
+         */
         public HarnessTranscript.Usage usage() {
             return session.usage();
         }
 
+        /**
+         * Returns the context-window token limit.
+         *
+         * @return the context-window token limit
+         */
         public int contextWindow() {
             return session.contextWindow();
         }
 
+        /**
+         * Returns the recorded transcript turns.
+         *
+         * @return the recorded transcript turns
+         */
         public List<HarnessTranscript.HarnessTurn> turns() {
             return session.turns();
         }
 
+        /**
+         * Returns the next transcript replay index.
+         *
+         * @return the next transcript replay index
+         */
         public int replayIndex() {
             return session.replayIndex();
         }
 
+        /**
+         * Returns the distance scrolled back from the transcript end.
+         *
+         * @return the distance scrolled back from the transcript end
+         */
         public int scrollBack() {
             return session.scrollBack();
         }
 
+        /**
+         * Returns the same value with session replaced.
+         *
+         * @param value the requested session
+         * @return the value with the requested session
+         */
         public Harness.Model withSession(Session.Model value) {
             return new Harness.Model(
                     value,
@@ -149,6 +260,12 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                     projectPath);
         }
 
+        /**
+         * Returns the same value with draft replaced.
+         *
+         * @param value the requested draft
+         * @return the value with the requested draft
+         */
         public Harness.Model withDraft(Editor.Model value) {
             return new Harness.Model(
                     session,
@@ -164,6 +281,12 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                     projectPath);
         }
 
+        /**
+         * Returns the same value with pending replaced.
+         *
+         * @param value the requested pending
+         * @return the value with the requested pending
+         */
         public Harness.Model withPending(List<String> value) {
             return new Harness.Model(
                     session,
@@ -179,6 +302,12 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                     projectPath);
         }
 
+        /**
+         * Returns the same value with active replaced.
+         *
+         * @param value the requested active
+         * @return the value with the requested active
+         */
         public Harness.Model withActive(Active value) {
             return new Harness.Model(
                     session,
@@ -194,6 +323,12 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                     projectPath);
         }
 
+        /**
+         * Returns the same value with generation replaced.
+         *
+         * @param value the requested generation
+         * @return the value with the requested generation
+         */
         public Harness.Model withGeneration(long value) {
             return new Harness.Model(
                     session,
@@ -209,6 +344,12 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                     projectPath);
         }
 
+        /**
+         * Returns the same value with now replaced.
+         *
+         * @param value the requested now
+         * @return the value with the requested now
+         */
         public Harness.Model withNow(long value) {
             return new Harness.Model(
                     session,
@@ -224,6 +365,12 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                     projectPath);
         }
 
+        /**
+         * Returns the same value with work started replaced.
+         *
+         * @param value the requested work started
+         * @return the value with the requested work started
+         */
         public Harness.Model withWorkStarted(long value) {
             return new Harness.Model(
                     session,
@@ -239,6 +386,12 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                     projectPath);
         }
 
+        /**
+         * Returns the same value with esc armed replaced.
+         *
+         * @param value the requested esc armed
+         * @return the value with the requested esc armed
+         */
         public Harness.Model withEscArmed(long value) {
             return new Harness.Model(
                     session,
@@ -254,6 +407,12 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                     projectPath);
         }
 
+        /**
+         * Returns the same value with quit armed replaced.
+         *
+         * @param value the requested quit armed
+         * @return the value with the requested quit armed
+         */
         public Harness.Model withQuitArmed(long value) {
             return new Harness.Model(
                     session,
@@ -269,6 +428,12 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                     projectPath);
         }
 
+        /**
+         * Returns the same value with viewport replaced.
+         *
+         * @param value the requested viewport
+         * @return the value with the requested viewport
+         */
         public Harness.Model withViewport(Size value) {
             return new Harness.Model(
                     session,
@@ -284,6 +449,12 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                     projectPath);
         }
 
+        /**
+         * Returns the same value with project path replaced.
+         *
+         * @param value the requested project path
+         * @return the value with the requested project path
+         */
         public Harness.Model withProjectPath(String value) {
             return new Harness.Model(
                     session,
@@ -299,49 +470,108 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
                     value);
         }
 
+        /**
+         * Returns the same value with status replaced.
+         *
+         * @param value the requested status
+         * @return the value with the requested status
+         */
         public Harness.Model withStatus(Session.Status value) {
             return withSession(
                     SESSION.update(session, new Session.Msg.StatusValue(value)).model());
         }
 
+        /**
+         * Returns the same value with entries replaced.
+         *
+         * @param value the requested entries
+         * @return the value with the requested entries
+         */
         public Harness.Model withEntries(List<HarnessEntry> value) {
             return withSession(
                     SESSION.update(session, new Session.Msg.Entries(value)).model());
         }
 
+        /**
+         * Returns the same value with scroll replaced.
+         *
+         * @param value the requested scroll
+         * @return the value with the requested scroll
+         */
         public Harness.Model withScroll(int value) {
             return withSession(
                     SESSION.update(session, new Session.Msg.Scroll(value)).model());
         }
 
+        /**
+         * Returns the same value with replay index replaced.
+         *
+         * @param value the requested replay index
+         * @return the value with the requested replay index
+         */
         public Harness.Model withReplayIndex(int value) {
             return withSession(
                     SESSION.update(session, new Session.Msg.Replay(value)).model());
         }
 
+        /**
+         * Returns the same value with transcript replaced.
+         *
+         * @param value the requested transcript
+         * @return the value with the requested transcript
+         */
         public Harness.Model withTranscript(HarnessTranscript value) {
             // Seeded from a model snapshot rather than through the mounted component: the entries
             // carry no recorded time here, which keeps a directly built model a pure value.
             return withSession(session.withTranscript(value, 0L));
         }
 
+        /**
+         * Returns the same value with metadata replaced.
+         *
+         * @param profile the recorded provider and model profile
+         * @param usage the recorded token usage
+         * @return the value with the requested metadata
+         */
         public Harness.Model withMetadata(HarnessTranscript.Profile profile, HarnessTranscript.Usage usage) {
             return withSession(SESSION.update(session, new Session.Msg.Metadata(profile, usage))
                     .model());
         }
 
+        /**
+         * Clears the pending quit-confirmation deadline.
+         *
+         * @return the model with no pending quit confirmation
+         */
         public Harness.Model disarmQuit() {
             return withQuitArmed(0L);
         }
     }
 
+    /**
+     * Typed user, session, and replay messages accepted by the offline harness.
+     */
     public sealed interface Msg {
 
+        /**
+         * Carries the session msg value into the owning component update.
+         *
+         * @param message the typed message to deliver
+         */
         record SessionMsg(Session.Msg message) implements Harness.Msg {}
 
+        /**
+         * Carries the composer output value into the owning component update.
+         *
+         * @param output the output destination
+         */
         record ComposerOutput(Editor.Output output) implements Harness.Msg {}
 
-        /** One editor gesture, mapped from the composer view. */
+        /**
+         * One editor gesture, mapped from the composer view.
+         *
+         * @param action the action to interpret
+         */
         public record ComposerMsg(Editor.Msg action) implements Harness.Msg {}
 
         /**
@@ -350,6 +580,11 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
          * @param text the prompt text submitted
          */
         public record Submit(String text) implements Harness.Msg {
+            /**
+             * Creates a {@code Submit} value.
+             *
+             * @param text the prompt text submitted
+             */
             public Submit {
                 text = text == null ? "" : text;
             }
@@ -369,14 +604,29 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
          */
         public record Resized(Size size) implements Harness.Msg {}
 
+        /**
+         * Carries the scroll up update for the owning component.
+         */
         public record ScrollUp() implements Harness.Msg {}
 
+        /**
+         * Carries the scroll down update for the owning component.
+         */
         public record ScrollDown() implements Harness.Msg {}
 
+        /**
+         * Carries the page up update for the owning component.
+         */
         public record PageUp() implements Harness.Msg {}
 
+        /**
+         * Carries the page down update for the owning component.
+         */
         public record PageDown() implements Harness.Msg {}
 
+        /**
+         * Carries the scroll bottom update for the owning component.
+         */
         public record ScrollBottom() implements Harness.Msg {}
 
         /**
@@ -408,13 +658,19 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
          */
         public record Copied(ClipboardResult result) implements Harness.Msg {}
 
-        /** Copy the visible transcript as plain text (Alt+T). */
+        /**
+         * Copy the visible transcript as plain text (Alt+T).
+         */
         public record CopyVisible() implements Harness.Msg {}
 
-        /** Copy the most recent assistant reply (Alt+L). */
+        /**
+         * Copy the most recent assistant reply (Alt+L).
+         */
         public record CopyLastReply() implements Harness.Msg {}
 
-        /** Tab asks for the composer to be focused. */
+        /**
+         * Tab asks for the composer to be focused.
+         */
         public record FocusComposer() implements Harness.Msg {}
 
         /**
@@ -430,18 +686,24 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
          */
         public record Notice(String text) implements Harness.Msg {}
 
-        /** Request application exit. */
+        /**
+         * Request application exit.
+         */
         public record Quit() implements Harness.Msg {}
     }
 
-    /** Each recorded block (one transcript box) is delivered this far apart so the replay is
-     * watchable rather than appearing all at once. */
+    /**
+     * Each recorded block (one transcript box) is delivered this far apart so the replay is
+     * watchable rather than appearing all at once.
+     */
     static final Duration RESPONSE_DELAY = Duration.ofSeconds(2);
 
     static final Duration TICK = Duration.ofMillis(50);
     static final long ESC_WINDOW_NANOS = 2_000_000_000L;
 
-    /** A second Ctrl+C must arrive within this window for the first one to mean "exit". */
+    /**
+     * A second Ctrl+C must arrive within this window for the first one to mean "exit".
+     */
     static final long QUIT_WINDOW_NANOS = 2_000_000_000L;
 
     static final int MAX_OUTSTANDING = 64;
@@ -488,6 +750,13 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
     private final List<String> startupWarnings;
     private final LongSupplier clock;
 
+    /**
+     * Creates a {@code Harness} value.
+     *
+     * @param loader the source loader
+     * @param projectPath the displayed project path
+     * @param startupWarnings the startup diagnostics to display
+     */
     public Harness(Supplier<HarnessTranscript> loader, String projectPath, List<String> startupWarnings) {
         this(loader, projectPath, startupWarnings, System::currentTimeMillis);
     }
@@ -496,6 +765,11 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
      * Creates the program with an explicit wall clock. Entries are stamped with the time they enter
      * the session; the clock is a constructor dependency so update stays a pure function of the
      * model and the message, and tests can pin the time.
+     *
+     * @param clock the clock used for displayed message times
+     * @param loader the source loader
+     * @param projectPath the displayed project path
+     * @param startupWarnings the startup diagnostics to display
      */
     public Harness(
             Supplier<HarnessTranscript> loader, String projectPath, List<String> startupWarnings, LongSupplier clock) {
@@ -510,8 +784,8 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
         return Math.max(0L, clock.getAsLong());
     }
 
-    static Editor.Config editorOptions() {
-        return Editor.Config.defaults()
+    static EditorConfig editorOptions() {
+        return EditorConfig.defaults()
                 .withMaxLength(DRAFT_LIMIT)
                 .withVisibleLines(HarnessProjection.MAX_EDITOR_ROWS)
                 .withStyles(
@@ -531,10 +805,38 @@ public final class Harness implements Component<Harness.Model, Harness.Msg, Neve
     }
 
     @Override
-    public View<Harness.Msg> view(Harness.Model model, ViewContext context) {
+    public Element<Harness.Msg> view(Harness.Model model, ViewContext context) {
+        return HarnessView.view(sized(model, context));
+    }
+
+    /**
+     * The harness's own gestures are claimed, not bound: the transcript's scroll and the tab that
+     * moves to the composer must work while the composer has the keyboard, which is the whole reason
+     * the harness reads them from the root.
+     */
+    @Override
+    public List<Binding<Harness.Msg>> claims(Harness.Model model) {
+        return HarnessView.bindings();
+    }
+
+    /**
+     * The two time-based gestures, observed rather than intercepted.
+     *
+     * <p>Escape and Ctrl+C decide nothing here: they only hand the model the time the terminal
+     * reported, and the model decides whether it is the second press of a window. Observing them
+     * means the composer still sees them, which is what lets its own Escape handling stay intact.</p>
+     */
+    @Override
+    public List<Harness.Msg> observed(InputEvent event) {
+        return HarnessView.intercept(event).map(List::of).orElseGet(List::of);
+    }
+
+    /**
+     * The model with the viewport the frame was painted at.
+     */
+    private static Harness.Model sized(Harness.Model model, ViewContext context) {
         Viewport viewport = context.viewport();
-        Harness.Model sized = model.viewport().equals(viewport.size()) ? model : model.withViewport(viewport.size());
-        return HarnessView.view(sized);
+        return model.viewport().equals(viewport.size()) ? model : model.withViewport(viewport.size());
     }
 
     @Override

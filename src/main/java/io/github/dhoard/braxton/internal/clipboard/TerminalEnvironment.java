@@ -37,7 +37,11 @@ public final class TerminalEnvironment {
 
     private final Map<String, String> variables;
 
-    /** Creates an environment view, defensively copying and sanitizing the supplied variables. */
+    /**
+     * Creates an environment view, defensively copying and sanitizing the supplied variables.
+     *
+     * @param variables the environment variables to inspect
+     */
     public TerminalEnvironment(Map<String, String> variables) {
         Map<String, String> copy = new LinkedHashMap<>();
         if (variables != null) {
@@ -50,12 +54,20 @@ public final class TerminalEnvironment {
         this.variables = Collections.unmodifiableMap(copy);
     }
 
-    /** Reads the current process environment. */
+    /**
+     * Reads the current process environment.
+     *
+     * @return a snapshot of the current process environment
+     */
     public static TerminalEnvironment system() {
         return new TerminalEnvironment(System.getenv());
     }
 
-    /** The {@code TERM} value, or an empty string. */
+    /**
+     * The {@code TERM} value, or an empty string.
+     *
+     * @return the TERM environment value, or empty when absent
+     */
     public String term() {
         return value("TERM");
     }
@@ -66,12 +78,18 @@ public final class TerminalEnvironment {
      * <p>Nested tmux sessions overwrite {@code TMUX} with the innermost server, so depth cannot be
      * derived reliably from the environment. The clipboard layer therefore never double-wraps a
      * passthrough sequence and {@link io.github.dhoard.braxton.clipboard.TmuxStrategy#AUTO} never uses passthrough.</p>
+     *
+     * @return {@code true} if the process runs under tmux according to {@code TMUX}; otherwise {@code false}
      */
     public boolean inTmux() {
         return !value("TMUX").isBlank();
     }
 
-    /** Whether {@code TERM} identifies a terminal that cannot display or interpret escapes. */
+    /**
+     * Whether {@code TERM} identifies a terminal that cannot display or interpret escapes.
+     *
+     * @return {@code true} if {@code TERM} identifies a terminal that cannot display or interpret escapes; otherwise {@code false}
+     */
     public boolean isDumbTerminal() {
         return "dumb".equalsIgnoreCase(term().strip());
     }
@@ -80,6 +98,8 @@ public final class TerminalEnvironment {
      * Whether writing OSC 52 is worthwhile. A dumb terminal is the only conservative
      * auto-detected unsupported case; terminals that silently ignore OSC 52 still retain the
      * in-process clipboard fallback.
+     *
+     * @return {@code true} if writing OSC 52 is worthwhile; otherwise {@code false}
      */
     public boolean supportsOsc52() {
         return !isDumbTerminal();

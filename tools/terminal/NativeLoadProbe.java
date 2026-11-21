@@ -8,7 +8,9 @@ import java.lang.foreign.ValueLayout;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** Developer probe: exercise the packaged FFM loader without opening a process terminal. */
+/**
+ * Developer probe: exercise the packaged FFM loader without opening a process terminal.
+ */
 @SuppressWarnings("restricted")
 public final class NativeLoadProbe {
     public static void main(String[] args) throws Throwable {
@@ -19,7 +21,7 @@ public final class NativeLoadProbe {
             if (System.nanoTime() > deadline) throw new AssertionError("start barrier not released");
             Thread.sleep(5);
         }
-        var holder = Class.forName(NativeTerminal.class.getName() + "$Library");
+        var holder = Class.forName(FfmTerminalTransport.class.getName() + "$Library");
         var field = holder.getDeclaredField("SYMBOLS");
         field.setAccessible(true);
         SymbolLookup symbols = (SymbolLookup) field.get(null);

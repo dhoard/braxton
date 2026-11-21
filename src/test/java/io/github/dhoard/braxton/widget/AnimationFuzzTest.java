@@ -60,7 +60,9 @@ class AnimationFuzzTest {
     private static final BigInteger MILLIS = BigInteger.valueOf(1_000_000L);
     private static final BigInteger STEP = BigInteger.valueOf(250L);
 
-    /** Hostile label text: joins, marks, controls, astral text and half a surrogate pair. */
+    /**
+     * Hostile label text: joins, marks, controls, astral text and half a surrogate pair.
+     */
     private static final String[] TEXTS = {
         "",
         "a",
@@ -179,7 +181,9 @@ class AnimationFuzzTest {
         }
     }
 
-    /** Walking the clock forward sweeps the frame table in cycle order, never skipping a frame. */
+    /**
+     * Walking the clock forward sweeps the frame table in cycle order, never skipping a frame.
+     */
     @Test
     void aFullCycleVisitsEveryFrameInOrder() {
         String[] table = frameTable();
@@ -198,7 +202,9 @@ class AnimationFuzzTest {
                 .hasSize(frames);
     }
 
-    /** The shimmer keeps its text and its style, whatever the clock and whatever the label. */
+    /**
+     * The shimmer keeps its text and its style, whatever the clock and whatever the label.
+     */
     @Test
     void theShimmerNeverChangesItsTextOrInventsAColor() {
         Random random = new Random(8_765_432L);
@@ -235,7 +241,7 @@ class AnimationFuzzTest {
                 Color foreground = span.style().foreground();
                 assertThat(foreground)
                         .as(
-                                "%s: span %s carries the colour %s, which was never offered",
+                                "%s: span %s carries the color %s, which was never offered",
                                 where, show(span.text()), foreground)
                         .isIn(allowed);
                 int spanClusters = TextMeasure.graphemes(span.text()).size();
@@ -316,7 +322,9 @@ class AnimationFuzzTest {
         }
     }
 
-    /** Missing arguments are a missing label, not a crash on the next tick. */
+    /**
+     * Missing arguments are a missing label, not a crash on the next tick.
+     */
     @Test
     void aShimmerWithoutTextOrColourStillRenders() {
         for (String text : new String[] {null, ""}) {
@@ -334,7 +342,7 @@ class AnimationFuzzTest {
         for (long now : TIMES) {
             for (String text : TEXTS) {
                 assertThat(Animation.shimmer(text, now, null, null).plainText())
-                        .as("text %s at %d without colours", show(text), now)
+                        .as("text %s at %d without colors", show(text), now)
                         .isEqualTo(StyledText.plain(text).plainText());
                 assertThat(Animation.shimmer(text, now, Color.BLACK, null).plainText())
                         .as("text %s at %d without a highlight", show(text), now)
@@ -343,7 +351,9 @@ class AnimationFuzzTest {
         }
     }
 
-    /** The spinner's own frames, read at the documented quarter-second offsets. */
+    /**
+     * The spinner's own frames, read at the documented quarter-second offsets.
+     */
     private static String[] frameTable() {
         int frames = Animation.spinnerFrames();
         String[] table = new String[frames];

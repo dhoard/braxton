@@ -1,12 +1,12 @@
 # Parity examples
 
-One runnable application per implemented parity phase. Each is a normal Braxton program: it lives
-under `src/main/java/examples/parity`, is packaged in the Braxton jar, and needs no dependency
-beyond Braxton itself.
+Runnable demos and terminal scenarios cover the implemented parity phases. The Java applications
+live under `src/main/java/examples/parity` and ship in the Braxton jar. Markdown rendering also
+requires the declared CommonMark runtime dependencies, as described under "Launching a demo."
 
-The phases are planned in `plans/NN-*.impl.md`; a directory of demos is not a promise that a later
-phase is implemented. Only the phases listed under "Runnable" below have an application and a
-verifier scenario.
+The registries in `tools/terminal/verify_terminal.py` define the available phases and packaged demo
+launch checks. `SceneCatalog` defines which scenes the integrated showcase can mount; standalone
+terminal and line-reader probes also have their own launches.
 
 ## Runnable
 
@@ -29,13 +29,20 @@ verifier scenario.
 | 15 — markdown rendering | `examples.parity.MarkdownDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 15` |
 | 16 — tabs and composed views | `examples.parity.TabsDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 16` |
 | 17 — mouse events and hit testing | `examples.parity.MouseDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 17` |
-| 18 — terminal queries and colour profiles | `examples.parity.TerminalQueryDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 18` |
+| 18 — terminal queries and color profiles | `examples.parity.TerminalQueryDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 18` |
 | 19 — terminal and primary clipboard | `examples.parity.ClipboardDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 19` |
 | 20 — declarative terminal presentation | `examples.parity.TerminalPresentationDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 20` |
 | 21 — process handoff and suspend/resume | `examples.parity.ProcessHandoffDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 21` |
 | 22 — command ordering and application control | `examples.parity.ApplicationControlDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 22` |
 | 23 — inline output, streaming and headless I/O | `examples.parity.InlineIoDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 23` |
 | 24 — integrated showcase and composed workspace | `examples.parity.Showcase` | `python3 tools/terminal/verify_terminal.py --parity-phase 24` |
+| 25 — terminal capability matrix | `examples.parity.TerminalMatrixDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 25` |
+| 26 — shared state engines | `examples.parity.EngineDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 26` |
+| 27 — element and widget kernel | `examples.parity.ElementKernelDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 27` |
+| 28 — widget gallery | `examples.parity.WidgetGalleryDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 28` |
+| 29 — line prompts | `examples.parity.LinePromptsDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 29` |
+| 30 — images and transitions | `examples.parity.RichOutputDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 30` |
+| 31 — developer diagnostics | `examples.parity.DebugOverlayDemo` | `python3 tools/terminal/verify_terminal.py --parity-phase 31` |
 
 
 ## Launching a demo
@@ -120,7 +127,7 @@ is not the focused element is not eligible.
 | `m` | switch between the terminal's own cursor and a painted one |
 | `s` | cycle the shape: block, underline, bar |
 | `b` | switch between a blinking and a steady caret |
-| `c` | cycle the caret colour between the terminal's own and one the scene picks |
+| `c` | cycle the caret color between the terminal's own and one the scene picks |
 | `←` / `→` / `↑` / `↓`, or `h` / `l` / `k` / `j` | move the caret one cell or one row |
 | `q`, `ctrl+c` | quit |
 
@@ -295,7 +302,7 @@ mounts a fresh, stopped spinner at the first frame of the preset it had.
 
 ### Phase 08: `ProgressDemo`
 
-A mock package manager over a seeded list of six packages: an `AnimatedProgress` that eases towards
+A mock package manager over a seeded list of six packages: an `AnimatedProgress` that eases toward
 how many of them are done, a static `ProgressBar` painted from the same target, and a `Spinner`
 turning while work remains. Nothing is fetched, installed or read from the file system - the run is
 the scene's own data - so the two progress regimes sit side by side without a real package manager.
@@ -330,7 +337,7 @@ the run's own progress and `last=` is the scene's log of its own actions: `insta
 renderer, both from the same bar definition, so the animated row becomes the static row with its own
 label as soon as the bar comes to rest.
 
-`s` retargets the bar towards the next package: the frames between the retarget and the rest walk
+`s` retargets the bar toward the next package: the frames between the retarget and the rest walk
 the fill up in order, and pressing `s` again mid-ease retargets from wherever the fill has reached,
 so the bar bends instead of restarting. `u` does the same in the other direction: the row keeps
 `displayed=1.000` for a moment before it eases down to `0.833`, which is the proof that a retarget
@@ -340,11 +347,11 @@ is done.
 `b` cycles the two opt-in refinements of the renderer, and both bars take them together. A partial
 fill grades the cell the fill stops in, so a sixth of thirty-two cells is five whole cells and three
 eighths of the next, and the row keeps exactly its width. A blend ramps the filled cells from one
-colour to the other, anchored to the bar so a cell keeps its colour as the fill grows; at a sixth of
-the bar the first filled cell carries the exact start colour and the last one is already further
+color to the other, anchored to the bar so a cell keeps its color as the fill grows; at a sixth of
+the bar the first filled cell carries the exact start color and the last one is already further
 along the ramp.
 
-`m` turns animation off: the bar lands on the target it was easing towards and holds no timer at
+`m` turns animation off: the bar lands on the target it was easing toward and holds no timer at
 all, which is the reduced-motion definition. A narrower terminal re-lays both bars at the same
 normalized value in fewer cells, and widening it restores the width.
 
@@ -466,7 +473,7 @@ The status rows, the list's own chrome and its items:
 preset=default items=240 selected=item-001 added=0 last=none
 filter=- mode=fuzzy editing=off applied=- matches=240 page=1/30
 title=on status=on page=on help=compact spinner=off rows=21 content=16
-Favourite things
+Favorite things
 240 items
 ❯ Raspberry jam
   On toast, mostly
@@ -482,7 +489,7 @@ a add item • x delete item • ctrl+c quit
 `RichList.visible(...)` and `RichList.pages(...)` answer for the mounted model. `content=` is
 `RichList.contentRows(...)`, which is how many rows the items get after the list's own chrome - 21
 less a title, counts, the indicator and two help rows. `last=` is the scene's log: `preset-<name>`,
-`added-<n>`, `removed-<id>`, `chose-<id>`, `cancelled` or `none`.
+`added-<n>`, `removed-<id>`, `chose-<id>`, `canceled` or `none`.
 
 A query is typed into the field and the list narrows as it goes: `matches=` and the counts row follow
 every character, the page count changes with the result set, and a selection the query hides falls to
@@ -727,7 +734,7 @@ HTML written as text, wide CJK glyphs, and the word `lantern` in enough places f
 have matches to walk.
 
 `t` re-projects the same source with the other palette: the first heading keeps its weight and
-changes its colour, and the body text never borrows it. `w` projects at two hundred cells and puts
+changes its color, and the body text never borrows it. `w` projects at two hundred cells and puts
 the pager in its panning mode, so `→` takes cells off the left edge of every row and switching back
 to wrapping drops the offset the wrap cannot use. `g` takes the gutter away and hands those six cells
 to the projection, so the same paragraph wraps later. `p` lowers the cell budget below what this
@@ -845,11 +852,11 @@ facts: a terminal that refuses a query shows `unsupported`, and one that stays s
 | `c` | ask where the cursor is |
 | `i` | ask which terminal is attached |
 | `m` | ask whether bracketed paste (mode 2004) is set |
-| `t` | ask whether the terminal claims 24-bit colour (`Tc`) |
-| `b` / `f` / `k` | ask for the background, foreground or cursor colour |
-| `p` | ask for the session's colour profile (a session fact: no bytes are written) |
+| `t` | ask whether the terminal claims 24-bit color (`Tc`) |
+| `b` / `f` / `k` | ask for the background, foreground or cursor color |
+| `p` | ask for the session's color profile (a session fact: no bytes are written) |
 | `a` | ask every terminal question at once |
-| `1` `2` `3` `4` | paint with no colour, 16 colours, 256 colours or truecolor |
+| `1` `2` `3` `4` | paint with no color, 16 colors, 256 colors or truecolor |
 | `esc`, `ctrl+c` | quit |
 
 ```text
@@ -864,7 +871,7 @@ help asks the terminal • c cursor position • i terminal name • m paste mod
 `profile=` is what the session negotiated or what the application chose, `theme=` follows the
 background the terminal reported, and `asked=`/`answered=`/`failed=` count what the session did
 rather than what it hopes. The sample row is ordinary styled text: pressing `3` repaints it as
-palette indices and pressing `4` repaints it as 24-bit colour, so a verifier can read the switch out
+palette indices and pressing `4` repaints it as 24-bit color, so a verifier can read the switch out
 of the transcript without a single escape sequence appearing in any content string.
 
 ### Phase 19: `ClipboardDemo`
@@ -899,12 +906,12 @@ not the terminal - is that source.
 
 The verifier answers the two requests with canned replies, including an empty selection, a payload
 that is not base64 and a reply that names the other selection, so what is asserted is Braxton's
-behaviour rather than a particular terminal's support.
+behavior rather than a particular terminal's support.
 
 ### Phase 20: `TerminalPresentationDemo`
 
 One scene declares the session's whole terminal presentation from its own model: the screen buffer,
-the pointer level, bracketed paste, focus reporting, the window title, the terminal's default colours,
+the pointer level, bracketed paste, focus reporting, the window title, the terminal's default colors,
 a taskbar progress value and a program-status record. Every field starts at `default`, which means
 "the session's own options", so the first frame asks the terminal for nothing it did not already open
 with.
@@ -916,7 +923,7 @@ with.
 | `p` | cycle bracketed paste: default, on, off |
 | `f` | cycle focus reporting: default, on, off |
 | `t` | cycle the title: none, a title, one that tries to inject a sequence |
-| `c` | apply the terminal's default colours, then give them back |
+| `c` | apply the terminal's default colors, then give them back |
 | `g` | cycle progress: none, normal 40, error 70, indeterminate, paused 90 |
 | `s` | cycle the status record: working, blocked, done, error, clear |
 | `k` | ask the terminal whether it keeps program-status records |
@@ -938,7 +945,7 @@ braxton terminal presentation gestures=0
 ```
 
 `screen=`/`mouse=`/`paste=`/`focus=` are the modes the scene asks for, with `default` for the
-session's own; `title=` is `none`, `set` or `unsafe`; `fg=`/`bg=`/`cursor=` are the default colours the
+session's own; `title=` is `none`, `set` or `unsafe`; `fg=`/`bg=`/`cursor=` are the default colors the
 scene imposes; `progress=` is the state and percentage, `status=` the program-status state and record
 id. `support=` reports whether the terminal answered the program-status question, with the number of
 names it listed on that row and the names themselves on the next two. `last=` is the scene's log of
@@ -949,7 +956,7 @@ The transcript is the evidence the frames cannot show. `t` writes `ESC [ 22 ; 0 
 `ESC ] 2 ; braxton presentation ESC \`, and the second press sets the title that tries to inject
 `ESC ] 0 ; pwned BEL`: the row reads `title=unsafe` and the transcript never contains the injected
 sequence, because control characters are removed before the title is written. `c` writes
-`ESC ] 10 ; rgb:e0/e6/f0 ESC \` and its two neighbours, and the second press resets them with
+`ESC ] 10 ; rgb:e0/e6/f0 ESC \` and its two neighbors, and the second press resets them with
 `ESC ] 110`/`111`/`112`. `g` writes `ESC ] 9 ; 4 ; <state> ; <value> ESC \` for each state, and `s`
 writes `ESC ] 7501 ; state=...` with the id, kind, app and base64 message the record carries.
 
@@ -957,7 +964,7 @@ writes `ESC ] 7501 ; state=...` with the id, kind, app and base64 message the re
 own screen, and coming back repaints everything, because the other buffer holds different cells. A
 session that quits with a finished `done` or `error` record leaves it behind - that is what the
 protocol keeps for the user to find - while a run still in progress is cleared, and everything else
-the session changed (modes, title, colours, progress) is given back on the way out.
+the session changed (modes, title, colors, progress) is given back on the way out.
 
 ### Phase 21: `ProcessHandoffDemo`
 
@@ -1118,7 +1125,7 @@ the model it reached, which is why the demo can report it as plain text. Neither
 not a menu of processes: choosing an entry mounts that phase's own scene component as the showcase's
 child, and returning is the unmount. One scene is alive at a time, which is what makes a stale timer,
 a stale query or a stale focus impossible to observe - the closed scene's subscriptions and commands
-were cancelled with its mount.
+were canceled with its mount.
 
 ```bash
 ./run-demo.sh                      # ./mvnw clean package, then the showcase
@@ -1144,12 +1151,13 @@ convenience launcher and does the same thing after building.
 | `q`, `ctrl+c` | quit - from the catalog only |
 
 ```text
-catalog=24 open=none selected=01 top=0 help=compact last=none
+catalog=27 open=none selected=01 top=0 help=compact last=none
 braxton parity showcase
 ❯ 01 Keymaps and help — one action definition drives routing and help
   02 Enhanced keyboard and terminal focus — key event types and focus reporting
   ...
  24 Composed task workspace — files, preview, drafts, tasks, progress and a confirmation
+ 28 Widget gallery — every milestone-4 widget on four pages
 ↑/k up • ↓/j down • home first • end last • enter open the scene • ? toggle help • q quit
 ```
 
@@ -1166,7 +1174,7 @@ clipboard shortcuts therefore work just as they do in standalone demos.
 The catalog's `ctrl+c` return binding also belongs to each modal scope, so an open
 selection dialog or confirmation can return directly to the catalog.
 
-Two behaviours differ from a standalone launch, both deliberate:
+Two behaviors differ from a standalone launch, both deliberate:
 
 - **Pointer level.** The showcase asks for `MouseMode.CELL_MOTION`, which is the level its scenes
   need most (drag selection in the mouse scene). A scene that runs standalone asks for its own.
@@ -1227,6 +1235,74 @@ The draft, the query, the selection and the running timer all survive a tab swit
 keeps every page mounted for the whole session: switching a tab changes what is painted and nothing
 else.
 
+### Phase 28: `WidgetGalleryDemo`
+
+Every widget added for the UI-capability milestone on one screen: the standalone scrollbar and split
+pane, the tree, the menu and the command palette, the select, multi-select, checkbox, radio group and
+form, the dialog, the toast and the notification center, the line chart, bar chart, sparkline and
+gauge, and the calendar and log viewer. Nineteen widget suites prove one widget at a time; this scene
+is the evidence that the set composes under one model, one key path and one theme store.
+
+| Key | Action |
+| --- | --- |
+| `alt+1` … `alt+4` | show the choice, navigation, message or data page |
+| `tab`, `shift+tab` | move the keyboard between the specimens of the shown page |
+| `ctrl+g` | show a toast |
+| `ctrl+d` | open the confirmation dialog |
+| `ctrl+s` | submit the form with what its two editors hold |
+| `q`, `esc` | quit |
+| any specimen's own keys | the focused widget's actions: arrows, `enter`, `space`, typing |
+
+```text
+braxton widget gallery — milestones 4.1 to 4.9
+gallery page=1/4 choice widgets=5 names=select,tags,remember,density,form
+focus=select last=none reports=0
+select=standard tags=design remember=off density=compact form=name
+select      Standard                                                           ▾
+multi-selectDesign                                                             ▾
+checkbox    [ ] remember this page
+radio group
+● Compact
+○ Comfortable
+form (ctrl+s submits)
+❯ Name
+name: Ada
+  Email
+email: ada.example
+```
+
+`gallery page=` is the shown page, how many specimens it holds and their gallery names; `focus=` is
+whose keyboard it is; `last=` is the scene's log of its own gestures - `page-choice`, `focus-tags`,
+`select-chosen`, `tags-chosenmany`, `remember-changed`, `menu-chosen`, `palette-chosen`, `bar-14`,
+`split-27`, `log-chosen`, `notices-chosen`, `toast-shown`, `dialog-canceled`, `calendar-chosen`,
+`form-rejected` - and `reports=` counts them, which is what makes a repainted frame distinguishable
+from a skipped one. The fourth row is the shown page's published state, so a verifier asserts what a
+widget decided without decoding a style.
+
+Six rules the scene is written to:
+
+- **Focus is model data, not tree data.** Every specimen holds its own `focused` flag, and `tab`
+  writes it into the next one's model; the kernel then routes the gesture to the leaf whose model
+  says it is focused. Nothing in the scene moves focus in the tree, because there is nothing to move.
+- **A widget instance outlives a frame.** The scene holds every widget, so a pointer capture, a drag
+  and a double press stay with the widget that started them - a per-frame instance would lose the
+  gesture between the press and the release.
+- **An output is the scene's message.** Each specimen's reduction returns the widget's own output -
+  `Chosen`, `ChosenMany`, `Changed`, `Inspected`, `Submitted`, `Rejected`, `Expired`, `Canceled` -
+  and the gallery records the kind on the status row rather than reading the widget's state again.
+- **A scrollbar scrolls something.** The standalone bar's window is the log viewer's own admitted
+  window, and a bar gesture becomes the log line it lands on, so the two cannot disagree about where
+  the reader is.
+- **The page under a modal layer is unreachable.** The dialog is an `Elements.modal` layer over the
+  painted page, and its own `esc` closes it and hands the keyboard back to the page.
+- **The form's focus names a field.** The form places the scene's two editors, and the scene gives
+  one of them the keyboard: a form cannot hold it while a field is editing, because the kernel has
+  one focused leaf. `ctrl+s` is the scene's own binding, because only the scene holds the values.
+
+Typing in the palette filters its commands and shows the keyboard's turn; a press on a log line or a
+calendar day is the same gesture in the pointer's terms. The page is four screens because nineteen
+widgets do not fit on a twenty-four row terminal at a size worth reading.
+
 ### Running the whole record
 
 ```bash
@@ -1236,6 +1312,56 @@ python3 tools/terminal/verify_terminal.py --parity-all --repeat 10 --pending-esc
 `--parity-all` runs every phase's own scenario and every packaged demo launch in one invocation, on
 top of the native battery those flags name. It is the integrated gate: a phase is expected to pass on
 its own first (`--parity-phase NN`), and this is what proves they still pass together.
+
+### Phase 29: `LinePromptsDemo`
+
+The four prompts of the `line` package, asked in order by a line-oriented program that never takes
+the screen. The demo opens the terminal, enters raw mode and asks a confirmation, a single choice, a
+set of marks and a bounded progress count, printing one durable answer line after each so the
+transcript says where the dialog reached. Everything already printed above the prompts survives the
+whole run.
+
+| Key | Action |
+| --- | --- |
+| `y`, `yes`, `n`, `no`, `enter` | answer the confirmation; a bare `enter` takes the default |
+| `ctrl+c` | abandon the confirmation, the line editor's own cancellation |
+| `↑` / `↓`, `home` / `end`, `pageup` / `pagedown` | move the highlight in a list prompt |
+| `enter` or `space` | choose the highlighted option (single choice) |
+| `space` | mark or unmark the highlighted option (multiple choice) |
+| `enter` | accept the marks made so far |
+| `esc`, `ctrl+c` | abandon a list prompt |
+
+```text
+Braxton line prompts
+Overwrite the report? [y/N] y
+confirm=yes
+Pick a theme  (enter chooses, esc cancels)
+❯ dark
+  light
+  high-contrast
+theme=light
+Build which targets  (space marks, enter chooses, esc cancels)
+[✓] linux-x86_64
+[✓] linux-aarch64
+[ ] macos-arm64
+[ ] macos-x86_64
+targets=linux-x86_64,linux-aarch64
+Installing packages  ████████████████████████████  6/6  100%
+prompts confirm=yes theme=light targets=2/4 progress=6/6
+```
+
+What the scene is written to, and why:
+
+- **Nothing takes the screen.** Every prompt paints in the terminal's own rows, below whatever the
+  program has already printed, so a wizard is usable after a command has produced output.
+- **A confirmation is a line.** Typing `y` alone answers nothing until `enter` arrives, which is
+  what keeps a user who types `yes` from answering three times and leaving keystrokes behind.
+- **A list prompt is a value's window.** The highlight clamps rather than wrapping, the window follows
+  it, and a key the prompt does not name changes nothing at all.
+- **A mark stays where it is.** `space` marks or unmarks the highlighted option without moving, so
+  marking two neighbors is two gestures rather than a skip.
+- **The progress row is repainted, not appended.** The bar keeps one row and the final frame stays on
+  screen when the prompt closes, so the transcript shows the completed count once.
 
 ## Adding a scenario
 
@@ -1256,3 +1382,39 @@ A phase contributes three things, in this order, once its behavior exists:
 Assertions belong on the emulated screen and on what the model published to it: a status row, a
 paint style, a chosen output. Prefer text that names state over text that names styling, and keep
 every assertion reproducible from a fixed terminal size.
+
+
+## Phase 30: rich output and reduced motion
+
+Run `examples.parity.RichOutputDemo` or select `30` in the showcase. Space starts or retargets a
+600 ms transition, `m` toggles reduced motion, and `q` quits. Reduced motion selects the target
+immediately and holds animation frame `a`; switching back keeps the settled value. Tick
+subscriptions exist only while a normal-motion transition is active. The image uses the composed
+half-block grid, including when the terminal is narrow.
+
+```
+rich output motion=normal value=0 target=0 state=settled moves=0
+image fallback=half-block
+```
+
+`ParityRichOutputTest` uses manual time; verifier scenario `30` checks normal completion,
+immediate reduced-motion completion, the stable frame, fallback pixels, resizing and cleanup.
+Native graphics codecs are verified separately by independent payload decoders.
+
+
+## Phase 31: developer diagnostics
+
+Run `examples.parity.DebugOverlayDemo` or select `31` in the showcase. The runtime overlay starts
+on. Tab moves focus between two ordinary checkboxes, space toggles the focused one, `d` toggles
+diagnostics, and `q` quits. The panel reports actual layout bounds, the active focus path, up to
+four recent messages and view/layout/paint timing. It does not participate in input routing.
+Turning it off releases its message history; returning from this scene in the showcase also
+turns the session-level overlay off.
+
+```
+debug overlay=on focus=left left=off right=off changes=0
+```
+
+Scenario `31` verifies routed widget input, focus paths, fresh history after a toggle and geometry
+after resize. `DebugOverlayTest`, `RuntimeDiagnosticsTest`, `DebugOverlayRuntimeTest` and
+`ParityDebugOverlayTest` cover the snapshot, owner-side effect and scene without native access.

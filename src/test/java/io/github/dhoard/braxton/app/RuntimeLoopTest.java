@@ -42,18 +42,22 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-/** End-to-end runtime behaviour over an in-memory terminal: one owner, no native access. */
+/**
+ * End-to-end runtime behavior over an in-memory terminal: one owner, no native access.
+ */
 class RuntimeLoopTest {
 
-    /** Increments on "a", quits on "q", and renders the count. */
+    /**
+     * Increments on "a", quits on "q", and renders the count.
+     */
     private record Counter() implements Component<Integer, String, Never> {
 
         @Override
@@ -71,11 +75,16 @@ class RuntimeLoopTest {
         }
 
         @Override
-        public View<String> view(Integer model, ViewContext context) {
-            return Views.keyed(
-                    List.of(Binding.of("a", "inc"), Binding.of("space", "inc"), Binding.of("q", "quit")),
-                    Views.text("count: " + model),
-                    List.of());
+        public Element<String> view(Integer model, ViewContext context) {
+            return Elements.text("count: " + model);
+        }
+
+        /**
+         * The gestures this fixture answers, once no leaf has taken them.
+         */
+        @Override
+        public java.util.List<Binding<String>> claims(Integer model) {
+            return List.of(Binding.of("a", "inc"), Binding.of("space", "inc"), Binding.of("q", "quit"));
         }
     }
 
@@ -83,12 +92,16 @@ class RuntimeLoopTest {
         return RuntimeOptions.defaults().withLimits(32, 8, 8);
     }
 
-    /** A sealed message type with no null case, so a null message fails the run. */
+    /**
+     * A sealed message type with no null case, so a null message fails the run.
+     */
     private sealed interface ResizeMessage permits SizeChanged {}
 
     private record SizeChanged(Size size) implements ResizeMessage {}
 
-    /** Renders the viewport it was given, so a resize is visible in the output. */
+    /**
+     * Renders the viewport it was given, so a resize is visible in the output.
+     */
     private record Measured() implements Component<Integer, String, Never> {
 
         @Override
@@ -102,9 +115,9 @@ class RuntimeLoopTest {
         }
 
         @Override
-        public View<String> view(Integer model, ViewContext context) {
+        public Element<String> view(Integer model, ViewContext context) {
             Viewport viewport = context.viewport();
-            return Views.text("size: " + viewport.rows() + "x" + viewport.cols());
+            return Elements.text("size: " + viewport.rows() + "x" + viewport.cols());
         }
     }
 
@@ -158,9 +171,9 @@ class RuntimeLoopTest {
             }
 
             @Override
-            public View<ResizeMessage> view(Integer model, ViewContext context) {
+            public Element<ResizeMessage> view(Integer model, ViewContext context) {
                 Viewport viewport = context.viewport();
-                return Views.text("size: " + viewport.rows() + "x" + viewport.cols());
+                return Elements.text("size: " + viewport.rows() + "x" + viewport.cols());
             }
 
             @Override
@@ -208,9 +221,9 @@ class RuntimeLoopTest {
             }
 
             @Override
-            public View<ResizeMessage> view(Integer model, ViewContext context) {
+            public Element<ResizeMessage> view(Integer model, ViewContext context) {
                 Viewport viewport = context.viewport();
-                return Views.text("size: " + viewport.rows() + "x" + viewport.cols());
+                return Elements.text("size: " + viewport.rows() + "x" + viewport.cols());
             }
 
             @Override
@@ -284,7 +297,7 @@ class RuntimeLoopTest {
         ExitResult result = run(new Counter(), options, terminal);
 
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(terminal.outputText()).contains("count: 2");
+        assertThat(terminal.screenText()).contains("count: 2");
         assertThat(terminal.outputText()).contains("\u001B[");
         assertThat(terminal.isOpen()).isFalse();
     }
@@ -299,10 +312,12 @@ class RuntimeLoopTest {
         ExitResult result = run(new Counter(), options(), terminal);
 
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(terminal.outputText()).contains("count: 1");
+        assertThat(terminal.screenText()).contains("count: 1");
     }
 
-    /** Blocks its first update until the test releases it, so the owner is busy at end-of-input. */
+    /**
+     * Blocks its first update until the test releases it, so the owner is busy at end-of-input.
+     */
     private static final class SlowStart implements Component<Integer, String, Never> {
         private final CountDownLatch entered = new CountDownLatch(1);
         private final CountDownLatch release = new CountDownLatch(1);
@@ -326,11 +341,13 @@ class RuntimeLoopTest {
         }
 
         @Override
-        public View<String> view(Integer model, ViewContext context) {
-            return Views.keyed(
-                    List.of(Binding.of("a", "a"), Binding.of("b", "b"), Binding.of("c", "c")),
-                    Views.text("count: " + model),
-                    List.of());
+        public Element<String> view(Integer model, ViewContext context) {
+            return Elements.text("count: " + model);
+        }
+
+        @Override
+        public java.util.List<Binding<String>> claims(Integer model) {
+            return List.of(Binding.of("a", "a"), Binding.of("b", "b"), Binding.of("c", "c"));
         }
     }
 
@@ -358,7 +375,7 @@ class RuntimeLoopTest {
         assertThat(outcome.get().kind())
                 .as("every key is processed, so the run ends at end-of-input: %s", outcome.get())
                 .isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(terminal.outputText())
+        assertThat(terminal.screenText())
                 .as("no key is dropped while the owner is busy")
                 .contains("count: 3");
     }
@@ -411,7 +428,7 @@ class RuntimeLoopTest {
         ExitResult result = run(new Counter(), options(), terminal);
 
         assertThat(result.kind()).isEqualTo(ExitResult.Kind.INPUT_CLOSED);
-        assertThat(terminal.outputText()).contains("count: 1");
+        assertThat(terminal.screenText()).contains("count: 1");
     }
 
     @Test
@@ -451,8 +468,8 @@ class RuntimeLoopTest {
         assertThat(secondResult.status()).isEqualTo(3);
         assertThat(second.isOpen()).isFalse();
         // The second run received its own input and painted its own model, not the first one's.
-        assertThat(second.outputText()).as("the second run counts its own keys").contains("count: 2");
-        assertThat(second.outputText()).doesNotContain("count: 5");
+        assertThat(second.screenText()).as("the second run counts its own keys").contains("count: 2");
+        assertThat(second.screenText()).doesNotContain("count: 5");
     }
 
     @Test
@@ -471,7 +488,9 @@ class RuntimeLoopTest {
         assertThat(healthy.outputText()).contains("count: 0");
     }
 
-    /** Fails during init, so the run ends in a failure that must not poison the next one. */
+    /**
+     * Fails during init, so the run ends in a failure that must not poison the next one.
+     */
     private record Exploding() implements Component<Integer, String, Never> {
 
         @Override
@@ -485,12 +504,14 @@ class RuntimeLoopTest {
         }
 
         @Override
-        public View<String> view(Integer model, ViewContext context) {
-            return Views.text("never");
+        public Element<String> view(Integer model, ViewContext context) {
+            return Elements.text("never");
         }
     }
 
-    /** Starts a task that ignores interruption, then asks to quit after one tick. */
+    /**
+     * Starts a task that ignores interruption, then asks to quit after one tick.
+     */
     private record HangingEffect(CountDownLatch started) implements Component<Integer, String, Never> {
 
         @Override
@@ -526,8 +547,8 @@ class RuntimeLoopTest {
         }
 
         @Override
-        public View<String> view(Integer model, ViewContext context) {
-            return Views.text("hanging");
+        public Element<String> view(Integer model, ViewContext context) {
+            return Elements.text("hanging");
         }
     }
 
@@ -552,7 +573,9 @@ class RuntimeLoopTest {
         assertThat(diagnostics).anySatisfy(message -> assertThat(message).contains("still running"));
     }
 
-    /** Throws from update on "boom" and from view while the model says "explode". */
+    /**
+     * Throws from update on "boom" and from view while the model says "explode".
+     */
     private record Crashing() implements Component<String, String, Never> {
 
         @Override
@@ -569,12 +592,16 @@ class RuntimeLoopTest {
         }
 
         @Override
-        public View<String> view(String model, ViewContext context) {
+        public Element<String> view(String model, ViewContext context) {
             if ("explode".equals(model)) {
                 throw new IllegalStateException("view failed");
             }
-            return Views.keyed(
-                    List.of(Binding.of("x", "boom"), Binding.of("y", "explode")), Views.text("safe"), List.of());
+            return Elements.text("safe");
+        }
+
+        @Override
+        public java.util.List<Binding<String>> claims(String model) {
+            return List.of(Binding.of("x", "boom"), Binding.of("y", "explode"));
         }
     }
 
@@ -616,8 +643,8 @@ class RuntimeLoopTest {
             }
 
             @Override
-            public View<String> view(Integer model, ViewContext context) {
-                return Views.text("hello");
+            public Element<String> view(Integer model, ViewContext context) {
+                return Elements.text("hello");
             }
         };
         TestTerminal terminal = new TestTerminal(new Size(4, 10));
@@ -649,9 +676,14 @@ class RuntimeLoopTest {
             }
 
             @Override
-            public View<String> view(Integer model, ViewContext context) {
+            public Element<String> view(Integer model, ViewContext context) {
                 views.incrementAndGet();
-                return Views.keyed(List.of(Binding.of("a", "inc")), Views.text("idle " + model), List.of());
+                return Elements.text("idle " + model);
+            }
+
+            @Override
+            public java.util.List<Binding<String>> claims(Integer model) {
+                return List.of(Binding.of("a", "inc"));
             }
         };
         Thread run = Thread.ofVirtual().name("idle-test").start(() -> run(program, options(), terminal));
@@ -696,9 +728,9 @@ class RuntimeLoopTest {
             }
 
             @Override
-            public View<String> view(Integer model, ViewContext context) {
+            public Element<String> view(Integer model, ViewContext context) {
                 callbacks.add(Thread.currentThread());
-                return Views.keyed(List.of(Binding.of("a", "inc")), Views.text("n " + model), List.of());
+                return Elements.text("n " + model);
             }
         };
         terminal.feed("a");
@@ -758,8 +790,8 @@ class RuntimeLoopTest {
             }
 
             @Override
-            public View<String> view(Integer model, ViewContext context) {
-                return Views.text("working");
+            public Element<String> view(Integer model, ViewContext context) {
+                return Elements.text("working");
             }
         };
         java.util.List<String> diagnostics = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
@@ -781,7 +813,12 @@ class RuntimeLoopTest {
                 RuntimeOptions.DEFAULT_MAX_LOCAL_DISPATCHES_PER_TURN,
                 io.github.dhoard.braxton.clipboard.ClipboardConfig.defaults(),
                 io.github.dhoard.braxton.app.TerminalOptions.DEFAULT,
-                null);
+                null,
+                RuntimeOptions.DEFAULT_COLOR_PROFILE,
+                null,
+                RuntimeOptions.DEFAULT_FPS,
+                false,
+                true);
         java.util.concurrent.atomic.AtomicReference<ExitResult> result =
                 new java.util.concurrent.atomic.AtomicReference<>();
         Thread run = Thread.ofVirtual()
@@ -855,8 +892,8 @@ class RuntimeLoopTest {
             }
 
             @Override
-            public View<String> view(Integer model, ViewContext context) {
-                return Views.text("batch");
+            public Element<String> view(Integer model, ViewContext context) {
+                return Elements.text("batch");
             }
         };
         TestTerminal terminal = new TestTerminal(new Size(3, 10));
@@ -875,7 +912,7 @@ class RuntimeLoopTest {
         assertThat(updates)
                 .as("nothing from the batch reaches update after the quit")
                 .hasValue(0);
-        assertThat(timers.pending()).as("the cancelled delay is gone").isZero();
+        assertThat(timers.pending()).as("the canceled delay is gone").isZero();
         assertThat(diagnostics).isEmpty();
     }
 
@@ -883,7 +920,7 @@ class RuntimeLoopTest {
     @Timeout(15)
     void aFailureKeepsItsPrimaryCauseAndCarriesTheCleanupFailures() throws Exception {
         // The documented contract: ExitResult "carries cleanup failures without hiding the primary
-        // cause". A timer that cannot be cancelled during shutdown must not replace the exception
+        // cause". A timer that cannot be canceled during shutdown must not replace the exception
         // that ended the run, and it must still be reported.
         Timers uncancellable = (delayNanos, task) -> () -> {
             throw new IllegalStateException("cancel failed");
@@ -907,8 +944,13 @@ class RuntimeLoopTest {
             }
 
             @Override
-            public View<String> view(Integer model, ViewContext context) {
-                return Views.keyed(List.of(Binding.of("a", "inc")), Views.text("safe"), List.of());
+            public Element<String> view(Integer model, ViewContext context) {
+                return Elements.text("safe");
+            }
+
+            @Override
+            public java.util.List<Binding<String>> claims(Integer model) {
+                return List.of(Binding.of("a", "inc"));
             }
         };
         java.util.concurrent.atomic.AtomicReference<ExitResult> result =
@@ -947,8 +989,8 @@ class RuntimeLoopTest {
             }
 
             @Override
-            public View<String> view(Integer model, ViewContext context) {
-                return Views.text("");
+            public Element<String> view(Integer model, ViewContext context) {
+                return Elements.text("");
             }
         };
         ExitResult result = run(broken, options(), terminal);
@@ -958,7 +1000,9 @@ class RuntimeLoopTest {
         assertThat(terminal.isOpen()).isFalse();
     }
 
-    /** Quits as soon as it starts, so the only failure in the run is a cleanup failure. */
+    /**
+     * Quits as soon as it starts, so the only failure in the run is a cleanup failure.
+     */
     private record Quitting() implements Component<Integer, String, Never> {
 
         @Override
@@ -972,8 +1016,8 @@ class RuntimeLoopTest {
         }
 
         @Override
-        public View<String> view(Integer model, ViewContext context) {
-            return Views.text("quit");
+        public Element<String> view(Integer model, ViewContext context) {
+            return Elements.text("quit");
         }
     }
 
@@ -992,7 +1036,9 @@ class RuntimeLoopTest {
         assertThat(RuntimeOptions.defaults().input()).isNotNull();
     }
 
-    /** Subscribes to a source that emits a burst from its own start function. */
+    /**
+     * Subscribes to a source that emits a burst from its own start function.
+     */
     private record Bursting(int emissions) implements Component<Integer, String, Never> {
 
         @Override
@@ -1006,8 +1052,8 @@ class RuntimeLoopTest {
         }
 
         @Override
-        public View<String> view(Integer model, ViewContext context) {
-            return Views.text("burst: " + model);
+        public Element<String> view(Integer model, ViewContext context) {
+            return Elements.text("burst: " + model);
         }
 
         @Override
@@ -1060,7 +1106,7 @@ class RuntimeLoopTest {
         Thread burstRun = Thread.ofVirtual()
                 .name("burst-control")
                 .start(() -> burst.set(run(new Bursting(5), options(), burstTerminal)));
-        await(() -> burstTerminal.outputText().contains("burst: 5"));
+        await(() -> burstTerminal.screenText().contains("burst: 5"));
         burstTerminal.endInput();
         burstRun.join(5_000L);
         assertThat(burstRun.isAlive()).isFalse();
@@ -1074,10 +1120,8 @@ class RuntimeLoopTest {
         terminal.endInput();
         run(new Counter(), options(), terminal);
         assertThat(terminal.writes()).isNotEmpty();
-        assertThat(terminal.outputText())
-                .contains("\u001B[?1049h")
-                .contains("\u001B[?1049l")
-                .contains("count: 1");
+        assertThat(terminal.outputText()).contains("\u001B[?1049h").contains("\u001B[?1049l");
+        assertThat(terminal.screenText()).contains("count: 1");
         assertThat(terminal.writes().stream().filter(write -> write.contains("count:")))
                 .allSatisfy(write -> assertThat(write).doesNotContain("\u001B[?1049"));
     }

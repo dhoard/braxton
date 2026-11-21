@@ -25,9 +25,13 @@ package examples.parity;
 import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.app.MouseMode;
+import io.github.dhoard.braxton.app.TerminalPresentation;
+import io.github.dhoard.braxton.app.TerminalPresentation.Progress;
+import io.github.dhoard.braxton.app.TerminalPresentation.Status;
 import io.github.dhoard.braxton.app.TerminalQuery;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.EffectId;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -37,12 +41,10 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.TerminalPresentation;
-import io.github.dhoard.braxton.view.TerminalPresentation.Progress;
-import io.github.dhoard.braxton.view.TerminalPresentation.Status;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
+import java.util.List;
 import java.util.Locale;
 import java.util.StringJoiner;
 import java.util.TreeSet;
@@ -52,7 +54,7 @@ import java.util.TreeSet;
  *
  * <p>One scene declares the session's terminal presentation from its own model, so the whole phase is
  * visible on one screen: which screen buffer the frames are drawn on, whether the pointer, paste and
- * focus reports are asked for, the window title, the terminal's default colours, a taskbar progress
+ * focus reports are asked for, the window title, the terminal's default colors, a taskbar progress
  * value and a program-status record. Every field starts at {@code default}, which means "the session's
  * own options", so the first frame asks the terminal for nothing beyond what the session opened
  * with.</p>
@@ -69,7 +71,7 @@ import java.util.TreeSet;
  *       none. The unsafe title is stripped before it reaches the terminal, so the transcript never
  *       contains the sequence it tried to inject - and leaving the title out pops the one the session
  *       saved when it first set one.</li>
- *   <li>{@code c} sets the terminal's default text, background and cursor colours and then gives them
+ *   <li>{@code c} sets the terminal's default text, background and cursor colors and then gives them
  *       back, which is the terminal's own configured palette rather than a captured value.</li>
  *   <li>{@code g} cycles the taskbar progress through none, normal, error, indeterminate and
  *       paused.</li>
@@ -86,78 +88,125 @@ import java.util.TreeSet;
  */
 public final class TerminalPresentationDemo {
 
-    /** The status row carrying the four session modes. */
+    /**
+     * The status row carrying the four session modes.
+     */
     public static final int MODE_ROW = 0;
 
-    /** The status row carrying the title and the three default colours. */
+    /**
+     * The status row carrying the title and the three default colors.
+     */
     public static final int METADATA_ROW = 1;
 
-    /** The status row carrying the progress and program-status intent. */
+    /**
+     * The status row carrying the progress and program-status intent.
+     */
     public static final int PROGRESS_ROW = 2;
 
-    /** The status row carrying whether the terminal keeps program-status records. */
+    /**
+     * The status row carrying whether the terminal keeps program-status records.
+     */
     public static final int SUPPORT_ROW = 3;
 
-    /** The status row carrying the state names the terminal accepts. */
+    /**
+     * The status row carrying the state names the terminal accepts.
+     */
     public static final int STATES_ROW = 4;
 
-    /** The status row carrying the blocked-kind names the terminal accepts. */
+    /**
+     * The status row carrying the blocked-kind names the terminal accepts.
+     */
     public static final int KINDS_ROW = 5;
 
-    /** The status row carrying the last gesture. */
+    /**
+     * The status row carrying the last gesture.
+     */
     public static final int LAST_ROW = 6;
 
-    /** The body row, which changes on every gesture. */
+    /**
+     * The body row, which changes on every gesture.
+     */
     public static final int BODY_ROW = 8;
 
-    /** The title the demo sets, and the one it tries to inject a sequence with. */
+    /**
+     * The title the demo sets, and the one it tries to inject a sequence with.
+     */
     public static final String TITLE = "braxton presentation";
 
-    /** A title holding a control sequence, which must not reach the terminal. */
+    /**
+     * A title holding a control sequence, which must not reach the terminal.
+     */
     public static final String UNSAFE_TITLE = "braxton\u001B]0;pwned\u0007";
 
-    /** The three default colours the demo applies to the terminal. */
+    /**
+     * The three default colors the demo applies to the terminal.
+     */
     public static final Color TEXT_COLOR = new Color(0xE0, 0xE6, 0xF0);
 
-    /** The default background the demo applies to the terminal. */
+    /**
+     * The default background the demo applies to the terminal.
+     */
     public static final Color BACKGROUND_COLOR = new Color(0x10, 0x14, 0x1C);
 
-    /** The default cursor colour the demo applies to the terminal. */
+    /**
+     * The default cursor color the demo applies to the terminal.
+     */
     public static final Color CURSOR_COLOR = new Color(0x38, 0xA6, 0xFF);
 
     private static final Style STATUS = Style.NONE.withBold();
+
     private static final Style BODY = Style.NONE.withBold();
 
     private TerminalPresentationDemo() {}
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
-        /** Cycles the screen buffer between the session default, plain and alternate. */
+        /**
+         * Cycles the screen buffer between the session default, plain and alternate.
+         */
         record CycleScreen() implements Msg {}
 
-        /** Cycles the pointer reporting level. */
+        /**
+         * Cycles the pointer reporting level.
+         */
         record CycleMouse() implements Msg {}
 
-        /** Cycles bracketed paste between the session default, on and off. */
+        /**
+         * Cycles bracketed paste between the session default, on and off.
+         */
         record CyclePaste() implements Msg {}
 
-        /** Cycles terminal focus reporting between the session default, on and off. */
+        /**
+         * Cycles terminal focus reporting between the session default, on and off.
+         */
         record CycleFocus() implements Msg {}
 
-        /** Cycles the window title between none, a title and one that tries to inject a sequence. */
+        /**
+         * Cycles the window title between none, a title and one that tries to inject a sequence.
+         */
         record CycleTitle() implements Msg {}
 
-        /** Cycles the terminal's default colours between none and the scene's own. */
+        /**
+         * Cycles the terminal's default colors between none and the scene's own.
+         */
         record CycleColors() implements Msg {}
 
-        /** Cycles the taskbar progress value. */
+        /**
+         * Cycles the taskbar progress value.
+         */
         record CycleProgress() implements Msg {}
 
-        /** Cycles the program-status record. */
+        /**
+         * Cycles the program-status record.
+         */
         record CycleStatus() implements Msg {}
 
-        /** Asks the terminal whether it keeps program-status records. */
+        /**
+         * Asks the terminal whether it keeps program-status records.
+         */
         record AskSupport() implements Msg {}
 
         /**
@@ -167,7 +216,9 @@ public final class TerminalPresentationDemo {
          */
         record Support(TerminalQuery.Reply reply) implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -179,7 +230,7 @@ public final class TerminalPresentationDemo {
      * @param bracketedPaste whether paste is bracketed, or null for the session default
      * @param focusReporting whether focus changes are reported, or null for the session default
      * @param title the window title, or null for none
-     * @param colors whether the scene imposes the terminal's default colours
+     * @param colors whether the scene imposes the terminal's default colors
      * @param progress the taskbar progress, or null for none
      * @param status the program-status record, or null for none
      * @param support what the terminal said about program status, as one token
@@ -203,7 +254,9 @@ public final class TerminalPresentationDemo {
             int gestures,
             String last) {
 
-        /** Substitutes the starting values for anything missing. */
+        /**
+         * Substitutes the starting values for anything missing.
+         */
         public Model {
             support = support == null ? "unknown" : support;
             states = states == null ? "-" : states;
@@ -212,7 +265,11 @@ public final class TerminalPresentationDemo {
             last = last == null ? "none" : last;
         }
 
-        /** The scene's starting state: nothing declared, so every field is the session's own. */
+        /**
+         * The scene's starting state: nothing declared, so every field is the session's own.
+         *
+         * @return the scene's starting state: nothing declared, so every field is the session's own
+         */
         public static Model start() {
             return new Model(null, null, null, null, null, false, null, null, "unknown", "-", "-", 0, "none");
         }
@@ -347,7 +404,7 @@ public final class TerminalPresentationDemo {
                 KeyMap.group(
                         "Metadata",
                         KeyAction.<Msg>of("title", new Msg.CycleTitle(), "t", "window title", "t"),
-                        KeyAction.<Msg>of("colors", new Msg.CycleColors(), "c", "default colours", "c"),
+                        KeyAction.<Msg>of("colors", new Msg.CycleColors(), "c", "default colors", "c"),
                         KeyAction.<Msg>of("progress", new Msg.CycleProgress(), "g", "taskbar progress", "g"),
                         KeyAction.<Msg>of("status", new Msg.CycleStatus(), "s", "program status", "s")),
                 KeyMap.group(
@@ -356,11 +413,20 @@ public final class TerminalPresentationDemo {
                         KeyAction.<Msg>of("quit", new Msg.Quit(), "q", "quit", "q", "ctrl+c")));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
 
+    /**
+     * Launches the interactive terminal presentation demo.
+     *
+     * @param args the command-line arguments
+     */
     public static void main(String[] args) {
         ExitResult result = run();
         if (result.failure() != null) {
@@ -369,8 +435,15 @@ public final class TerminalPresentationDemo {
         System.exit(result.status());
     }
 
-    /** The demo scene: one frame, five status rows and the help lines. */
+    /**
+     * The demo scene: one frame, five status rows and the help lines.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final KeyMap<Msg> keys = defaultKeys();
 
@@ -427,27 +500,48 @@ public final class TerminalPresentationDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
-            int width = context.viewport().cols();
-            return Views.presentation(
-                    model.presentation(),
-                    Views.onKeys(
-                            keys.bindings(),
-                            Views.column(
-                                    Views.text(modes(model), STATUS),
-                                    Views.text(metadata(model), STATUS),
-                                    Views.text(intent(model), STATUS),
-                                    Views.text(support(model), STATUS),
-                                    Views.text("states=" + model.states(), STATUS),
-                                    Views.text("kinds=" + model.kinds(), STATUS),
-                                    Views.text("last=" + model.last(), STATUS),
-                                    Views.gap(1),
-                                    Views.text("braxton terminal presentation gestures=" + model.gestures(), BODY),
-                                    Views.gap(1),
-                                    Help.view(keys, false, width))));
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
         }
 
-        /** The four session modes, with {@code default} for one the scene leaves to the session. */
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys.bindings();
+        }
+
+        /**
+         * What this model asks the terminal for: the frame's presentation, not a node in the tree.
+         */
+        @Override
+        public TerminalPresentation presentation(Model model) {
+            return model.presentation();
+        }
+
+        /**
+         * The status rows, the sample line and the help, as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+            int width = context.viewport().cols();
+            return Elements.column(
+                    Elements.text(modes(model), STATUS),
+                    Elements.text(metadata(model), STATUS),
+                    Elements.text(intent(model), STATUS),
+                    Elements.text(support(model), STATUS),
+                    Elements.text("states=" + model.states(), STATUS),
+                    Elements.text("kinds=" + model.kinds(), STATUS),
+                    Elements.text("last=" + model.last(), STATUS),
+                    Elements.spacer(1),
+                    Elements.text("braxton terminal presentation gestures=" + model.gestures(), BODY),
+                    Elements.spacer(1),
+                    Help.element(keys, Help.Config.defaults(), false, width));
+        }
+
+        /**
+         * The four session modes, with {@code default} for one the scene leaves to the session.
+         */
         private static String modes(Model model) {
             return "screen=" + screen(model)
                     + " mouse=" + token(model.mouseMode())
@@ -455,7 +549,9 @@ public final class TerminalPresentationDemo {
                     + " focus=" + token(model.focusReporting());
         }
 
-        /** The title and the three terminal default colours. */
+        /**
+         * The title and the three terminal default colors.
+         */
         private static String metadata(Model model) {
             return "title=" + titleToken(model.title())
                     + " fg=" + (model.colors() ? TEXT_COLOR.hex() : "none")
@@ -463,7 +559,9 @@ public final class TerminalPresentationDemo {
                     + " cursor=" + (model.colors() ? CURSOR_COLOR.hex() : "none");
         }
 
-        /** The metadata that is not a session mode: progress and the program-status record. */
+        /**
+         * The metadata that is not a session mode: progress and the program-status record.
+         */
         private static String intent(Model model) {
             String record = model.status() == null
                     ? "none"
@@ -488,7 +586,9 @@ public final class TerminalPresentationDemo {
                     + (model.kinds().equals("-") ? "0" : model.kinds().split(",").length);
         }
 
-        /** The scene after a support answer, with the terminal's own lists sorted so they are stable. */
+        /**
+         * The scene after a support answer, with the terminal's own lists sorted so they are stable.
+         */
         private static Model withSupport(Model model, TerminalQuery.Reply reply) {
             if (reply instanceof TerminalQuery.Reply.ProgramStatus supported) {
                 return model.withSupport("yes", join(supported.states()), join(supported.kinds()))
@@ -513,7 +613,9 @@ public final class TerminalPresentationDemo {
             return joined.length() == 0 ? "-" : joined.toString();
         }
 
-        /** {@code default} for a value the scene leaves to the session, then the value itself. */
+        /**
+         * {@code default} for a value the scene leaves to the session, then the value itself.
+         */
         private static String token(Boolean value) {
             return value == null ? "default" : value ? "on" : "off";
         }

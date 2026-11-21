@@ -59,7 +59,12 @@ public final class Unicode16Width {
 
     private Unicode16Width() {}
 
-    /** Whether the code point is wide by the pinned policy (ignoring variation selectors). */
+    /**
+     * Whether the code point is wide by the pinned policy (ignoring variation selectors).
+     *
+     * @param codePoint the Unicode scalar value to classify
+     * @return true for a two-column code point under the pinned policy
+     */
     public static boolean isWide(int codePoint) {
         int low = 0;
         int high = START.length - 1;

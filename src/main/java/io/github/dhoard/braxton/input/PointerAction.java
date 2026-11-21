@@ -31,15 +31,23 @@ package io.github.dhoard.braxton.input;
  */
 public enum PointerAction {
 
-    /** A button went down. */
+    /**
+     * A button went down.
+     */
     PRESS,
 
-    /** A button came up. */
+    /**
+     * A button came up.
+     */
     RELEASE,
 
-    /** The pointer moved, with or without a button held. */
+    /**
+     * The pointer moved, with or without a button held.
+     */
     MOTION,
 
-    /** A wheel was turned, or a trackpad reported a wheel-like scroll. */
+    /**
+     * A wheel was turned, or a trackpad reported a wheel-like scroll.
+     */
     WHEEL
 }

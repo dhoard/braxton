@@ -32,7 +32,7 @@ import io.github.dhoard.braxton.mvu.Mount;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.ui.Element;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,7 +57,9 @@ import java.util.Objects;
  */
 public final class SceneCatalog {
 
-    /** The fixture document set the file picker and the workspace browse, by file name. */
+    /**
+     * The fixture document set the file picker and the workspace browse, by file name.
+     */
     public static final Map<String, String> DOCUMENTS;
 
     static {
@@ -96,7 +98,9 @@ public final class SceneCatalog {
      */
     public record Entry(String id, String title, String summary) {
 
-        /** Rejects an incomplete entry. */
+        /**
+         * Rejects an incomplete entry.
+         */
         public Entry {
             if (id == null || id.isBlank()) {
                 throw new IllegalArgumentException("id is required");
@@ -157,9 +161,9 @@ public final class SceneCatalog {
          *
          * @param model the parent model holding this scene
          * @param context the geometry the showcase allocated to it
-         * @return the scene's view, mapped to the showcase's message type
+         * @return the scene's element tree, mapped to the showcase's message type
          */
-        View<Showcase.Msg> view(Showcase.Model model, ViewContext context);
+        Element<Showcase.Msg> view(Showcase.Model model, ViewContext context);
 
         /**
          * The scene's own subscriptions, scoped to its mount path.
@@ -168,6 +172,30 @@ public final class SceneCatalog {
          * @return the lifted subscriptions
          */
         Subscription<Showcase.Msg> subscriptions(Showcase.Model model);
+
+        /**
+         * What the scene asks the frame to present, or null.
+         *
+         * @param model the parent model holding this scene
+         * @return the scene's presentation, or null
+         */
+        io.github.dhoard.braxton.app.TerminalPresentation presentation(Showcase.Model model);
+
+        /**
+         * The gestures the scene claims.
+         *
+         * @param model the parent model holding this scene
+         * @return the scene's claimed bindings
+         */
+        java.util.List<io.github.dhoard.braxton.input.Binding<Showcase.Msg>> claims(Showcase.Model model);
+
+        /**
+         * The scene's own key bindings.
+         *
+         * @param model the parent model holding this scene
+         * @return the scene's bindings
+         */
+        java.util.List<io.github.dhoard.braxton.input.Binding<Showcase.Msg>> bindings(Showcase.Model model);
 
         /**
          * The scene's own children, scoped to its mount path.
@@ -281,7 +309,7 @@ public final class SceneCatalog {
                 slot(
                         entry(
                                 "18",
-                                "Terminal queries and colour profiles",
+                                "Terminal queries and color profiles",
                                 "questions the terminal answers, and its refusals"),
                         new TerminalQueryDemo.Scene(),
                         TerminalQueryDemo.Model.class,
@@ -292,7 +320,7 @@ public final class SceneCatalog {
                         ClipboardDemo.Model.class,
                         ClipboardDemo.Msg.class),
                 slot(
-                        entry("20", "Declarative terminal presentation", "screen, modes, title, colours and progress"),
+                        entry("20", "Declarative terminal presentation", "screen, modes, title, colors and progress"),
                         new TerminalPresentationDemo.Scene(),
                         TerminalPresentationDemo.Model.class,
                         TerminalPresentationDemo.Msg.class),
@@ -322,9 +350,24 @@ public final class SceneCatalog {
                                 "24",
                                 "Composed task workspace",
                                 "files, preview, drafts, tasks, progress and a confirmation"),
-                        new WorkspaceDemo.Scene(fixture),
+                        new WorkspaceScene(fixture),
                         WorkspaceDemo.Model.class,
-                        WorkspaceDemo.Msg.class));
+                        WorkspaceDemo.Msg.class),
+                slot(
+                        entry("28", "Widget gallery", "every milestone-4 widget on four pages"),
+                        new WidgetGalleryDemo.Scene(),
+                        GalleryState.class,
+                        WidgetGalleryDemo.Msg.class),
+                slot(
+                        entry("30", "Rich output", "images, transitions and reduced motion"),
+                        new RichOutputDemo.Scene(),
+                        RichOutputDemo.Model.class,
+                        RichOutputDemo.Msg.class),
+                slot(
+                        entry("31", "Debug overlay", "layout bounds, focus, messages and frame timing"),
+                        new DebugOverlayDemo.Scene(),
+                        DebugOverlayDemo.Model.class,
+                        DebugOverlayDemo.Msg.class));
     }
 
     /**
@@ -382,13 +425,28 @@ public final class SceneCatalog {
             }
 
             @Override
-            public View<Showcase.Msg> view(Showcase.Model model, ViewContext context) {
+            public Element<Showcase.Msg> view(Showcase.Model model, ViewContext context) {
                 return mount.view(model, context);
             }
 
             @Override
             public Subscription<Showcase.Msg> subscriptions(Showcase.Model model) {
                 return mount.subscriptions(model);
+            }
+
+            @Override
+            public io.github.dhoard.braxton.app.TerminalPresentation presentation(Showcase.Model model) {
+                return mount.presentation(model);
+            }
+
+            @Override
+            public java.util.List<io.github.dhoard.braxton.input.Binding<Showcase.Msg>> claims(Showcase.Model model) {
+                return mount.claims(model);
+            }
+
+            @Override
+            public java.util.List<io.github.dhoard.braxton.input.Binding<Showcase.Msg>> bindings(Showcase.Model model) {
+                return mount.bindings(model);
             }
 
             @Override

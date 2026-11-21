@@ -27,7 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.lang.reflect.Field;
 import org.junit.jupiter.api.Test;
 
-/** The generated wide-width table: sorted, disjoint ranges that the binary search can rely on. */
+/**
+ * The generated wide-width table: sorted, disjoint ranges that the binary search can rely on.
+ */
 class Unicode16WidthTest {
 
     private static int[] ranges(String of) throws Exception {

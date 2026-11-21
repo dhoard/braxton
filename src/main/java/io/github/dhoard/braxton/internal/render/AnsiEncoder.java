@@ -23,16 +23,15 @@
 package io.github.dhoard.braxton.internal.render;
 
 import io.github.dhoard.braxton.app.MouseMode;
+import io.github.dhoard.braxton.app.TerminalPresentation;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.ColorProfile;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.Cursor;
-import io.github.dhoard.braxton.view.TerminalPresentation;
+import io.github.dhoard.braxton.ui.Cursor;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Base64;
-import java.util.List;
+import java.util.Objects;
 
 /**
  * Turns painted cells into terminal escape sequences.
@@ -40,63 +39,121 @@ import java.util.List;
  * <p>Only this encoder writes SGR and OSC 8 sequences. Content text never contains escape bytes, so
  * data cannot inject terminal commands. Rows are addressed absolutely, painted in place, and only
  * their unused suffix is cleared, so shrinking rows leave no stale cells or clear-before-paint gap.</p>
+ *
+ * <p>A frame that follows another one is presented as the cells that differ: {@link #diff} addresses
+ * the runs of changed cells inside a row rather than the whole row, and when the changed rows are
+ * one region of the screen that scrolled it moves the region with the terminal's own insert and
+ * delete line sequences and repaints only the rows that scrolled into view. A one-cell change
+ * therefore costs a cursor move, the cell, and the style it needs - not a row.</p>
  */
 public final class AnsiEncoder {
 
-    /** Reset every SGR attribute and colour. */
+    /**
+     * Reset every SGR attribute and color.
+     */
     public static final String RESET = "\u001B[0m";
-    /** Hide the cursor while a frame owns the screen. */
+    /**
+     * Hide the cursor while a frame owns the screen.
+     */
     public static final String HIDE_CURSOR = "\u001B[?25l";
-    /** Show the cursor again on the way out. */
+    /**
+     * Show the cursor again on the way out.
+     */
     public static final String SHOW_CURSOR = "\u001B[?25h";
-    /** Erase from the cursor to the end of its line. */
+    /**
+     * Erase from the cursor to the end of its line.
+     */
     public static final String ERASE_LINE_RIGHT = "\u001B[0K";
-    /** Erase the whole line the cursor is on, whichever column it is in. */
+    /**
+     * Erase the whole line the cursor is on, whichever column it is in.
+     */
     public static final String ERASE_LINE = "\u001B[2K";
-    /** Erase from the cursor to the end of the screen, leaving everything above it alone. */
+    /**
+     * Erase from the cursor to the end of the screen, leaving everything above it alone.
+     */
     public static final String ERASE_DISPLAY_BELOW = "\u001B[0J";
 
-    /** Enter the alternate screen. */
+    /**
+     * Enter the alternate screen.
+     */
     public static final String ALT_SCREEN_ON = "\u001B[?1049h";
-    /** Leave the alternate screen. */
+    /**
+     * Leave the alternate screen.
+     */
     public static final String ALT_SCREEN_OFF = "\u001B[?1049l";
-    /** Enable bracketed paste. */
+    /**
+     * Enable bracketed paste.
+     */
     public static final String ENABLE_BRACKETED_PASTE = "\u001B[?2004h";
-    /** Disable bracketed paste. */
+    /**
+     * Disable bracketed paste.
+     */
     public static final String DISABLE_BRACKETED_PASTE = "\u001B[?2004l";
-    /** Enable press/release pointer reporting in its SGR form. */
+    /**
+     * Enable press/release pointer reporting in its SGR form.
+     */
     public static final String ENABLE_MOUSE = enableMouse(MouseMode.CLICK);
-    /** Undo {@link #ENABLE_MOUSE}. */
+    /**
+     * Undo {@link #ENABLE_MOUSE}.
+     */
     public static final String DISABLE_MOUSE = disableMouse(MouseMode.CLICK);
-    /** Ask the terminal to report gaining and losing focus. */
+    /**
+     * Ask the terminal to report gaining and losing focus.
+     */
     public static final String ENABLE_FOCUS_REPORTING = "\u001B[?1004h";
-    /** Stop the terminal reporting focus changes. */
+    /**
+     * Stop the terminal reporting focus changes.
+     */
     public static final String DISABLE_FOCUS_REPORTING = "\u001B[?1004l";
-    /** Ask the terminal which enhanced-keyboard flags it has enabled. */
+    /**
+     * Ask the terminal which enhanced-keyboard flags it has enabled.
+     */
     public static final String QUERY_KEYBOARD_ENHANCEMENTS = "\u001B[?u";
-    /** Restore the keyboard flags the terminal had before the application pushed its own. */
+    /**
+     * Restore the keyboard flags the terminal had before the application pushed its own.
+     */
     public static final String POP_KEYBOARD_ENHANCEMENTS = "\u001B[<u";
-    /** DECSCUSR with no shape preference: the terminal's default cursor style. */
+    /**
+     * DECSCUSR with no shape preference: the terminal's default cursor style.
+     */
     public static final String RESET_CURSOR_STYLE = "\u001B[0 q";
-    /** OSC 112: restore the terminal's configured cursor colour. */
+    /**
+     * OSC 112: restore the terminal's configured cursor color.
+     */
     public static final String RESET_CURSOR_COLOR = "\u001B]112\u001B\\";
-    /** OSC 110: restore the terminal's configured default text colour. */
+    /**
+     * OSC 110: restore the terminal's configured default text color.
+     */
     public static final String RESET_FOREGROUND = "\u001B]110\u001B\\";
-    /** OSC 111: restore the terminal's configured default background colour. */
+    /**
+     * OSC 111: restore the terminal's configured default background color.
+     */
     public static final String RESET_BACKGROUND = "\u001B]111\u001B\\";
-    /** XTPUSHTITLE: save the window title this session is about to replace. */
+    /**
+     * XTPUSHTITLE: save the window title this session is about to replace.
+     */
     public static final String PUSH_TITLE = "\u001B[22;0t";
-    /** XTPOPTITLE: put the window title back the way it was when it was pushed. */
+    /**
+     * XTPOPTITLE: put the window title back the way it was when it was pushed.
+     */
     public static final String POP_TITLE = "\u001B[23;0t";
-    /** The OSC command that carries program-status reports and their feature detection. */
+    /**
+     * The OSC command that carries program-status reports and their feature detection.
+     */
     public static final int PROGRAM_STATUS_OSC = 7501;
-    /** OSC 7501 feature detection: ask the terminal whether it keeps program-status records. */
+    /**
+     * OSC 7501 feature detection: ask the terminal whether it keeps program-status records.
+     */
     public static final String QUERY_PROGRAM_STATUS = "\u001B]7501;?\u001B\\";
 
     private static final String OSC8_OPEN = "\u001B]8;;";
-    /** The control sequence introducer every non-hyperlink OSC starts with. */
+    /**
+     * The control sequence introducer every non-hyperlink OSC starts with.
+     */
     private static final String OSC_PREFIX = "\u001B]";
-    /** The string terminator that closes an OSC; CAN and SUB are never written here. */
+    /**
+     * The string terminator that closes an OSC; CAN and SUB are never written here.
+     */
     private static final String STRING_TERMINATOR = "\u001B\\";
 
     private AnsiEncoder() {}
@@ -143,12 +200,16 @@ public final class AnsiEncoder {
         };
     }
 
-    /** One tracking level, followed by the SGR encoding every report is asked to use. */
+    /**
+     * One tracking level, followed by the SGR encoding every report is asked to use.
+     */
     private static String mouseTracking(int level) {
         return "\u001B[?" + level + "h\u001B[?1006h";
     }
 
-    /** The reverse of {@link #mouseTracking}: the encoding first, then the level it encoded. */
+    /**
+     * The reverse of {@link #mouseTracking}: the encoding first, then the level it encoded.
+     */
     private static String stopMouseTracking(int level) {
         return "\u001B[?1006l\u001B[?" + level + "l";
     }
@@ -190,12 +251,12 @@ public final class AnsiEncoder {
     }
 
     /**
-     * Colour the terminal cursor.
+     * Color the terminal cursor.
      *
-     * <p>{@code OSC 12} takes an X11 colour specification; the {@code rgb:rr/gg/bb} form carries the
+     * <p>{@code OSC 12} takes an X11 color specification; the {@code rgb:rr/gg/bb} form carries the
      * exact channel values {@link Color} holds, so no rounding happens on the way out.</p>
      *
-     * @param color the colour to apply
+     * @param color the color to apply
      * @return the escape sequence
      */
     public static String cursorColor(Color color) {
@@ -223,22 +284,22 @@ public final class AnsiEncoder {
     }
 
     /**
-     * A default terminal colour.
+     * A default terminal color.
      *
      * <p>{@code OSC 10}, {@code OSC 11} and {@code OSC 12} set the text, background and cursor
-     * colours the terminal uses for everything it draws itself. The {@code rgb:rr/gg/bb} form carries
+     * colors the terminal uses for everything it draws itself. The {@code rgb:rr/gg/bb} form carries
      * the exact channel values, as for {@link #cursorColor(Color)}.</p>
      *
-     * @param code the colour command: 10 for text, 11 for background, 12 for the cursor
-     * @param color the colour to apply; required
+     * @param code the color command: 10 for text, 11 for background, 12 for the cursor
+     * @param color the color to apply; required
      * @return the escape sequence
      */
     public static String defaultColor(int code, Color color) {
         if (color == null) {
-            throw new IllegalArgumentException("a default colour is required");
+            throw new IllegalArgumentException("a default color is required");
         }
         if (code != 10 && code != 11 && code != 12) {
-            throw new IllegalArgumentException("default colour command must be 10, 11 or 12, was " + code);
+            throw new IllegalArgumentException("default color command must be 10, 11 or 12, was " + code);
         }
         return OSC_PREFIX + code + ";rgb:" + hex(color.red()) + "/" + hex(color.green()) + "/" + hex(color.blue())
                 + STRING_TERMINATOR;
@@ -309,7 +370,9 @@ public final class AnsiEncoder {
         return out.append(STRING_TERMINATOR).toString();
     }
 
-    /** Appends one {@code :key=value} pair, or nothing when the record does not carry that key. */
+    /**
+     * Appends one {@code :key=value} pair, or nothing when the record does not carry that key.
+     */
     private static void pair(StringBuilder out, String key, String value) {
         if (value == null) {
             return;
@@ -317,7 +380,9 @@ public final class AnsiEncoder {
         out.append(':').append(key).append('=').append(value);
     }
 
-    /** The base64 of the UTF-8 bytes of a value the protocol expects as base64. */
+    /**
+     * The base64 of the UTF-8 bytes of a value the protocol expects as base64.
+     */
     private static String base64(String text) {
         return Base64.getEncoder().encodeToString(safeText(text).getBytes(StandardCharsets.UTF_8));
     }
@@ -373,7 +438,7 @@ public final class AnsiEncoder {
      * A complete frame: every row repainted in place.
      *
      * @param screen the screen to encode
-     * @param profile the colour profile to encode for; {@link ColorProfile#AUTO} is treated as
+     * @param profile the color profile to encode for; {@link ColorProfile#AUTO} is treated as
      *     {@link ColorProfile#TRUECOLOR}, because a frame is never written with an unresolved profile
      * @return the escape sequences for the whole screen
      */
@@ -386,10 +451,10 @@ public final class AnsiEncoder {
     }
 
     /**
-     * A complete frame with colour switched on or off.
+     * A complete frame with color switched on or off.
      *
      * @param screen the screen to encode
-     * @param color whether colour SGR parameters are emitted
+     * @param color whether color SGR parameters are emitted
      * @return the escape sequences for the whole screen
      */
     public static String frame(Screen screen, boolean color) {
@@ -397,57 +462,304 @@ public final class AnsiEncoder {
     }
 
     /**
-     * Only the rows whose cells differ, or a full frame when there is no previous screen.
+     * Only the cells that differ, scrolled into place where the change is a scroll.
+     *
+     * <p>Two things are compared cell by cell rather than row by row. Within a row, only the runs of
+     * changed cells are written, each addressed with one absolute cursor move, so a changed cell in
+     * an otherwise identical row costs that cell instead of the row. Across rows, when the changed
+     * rows are one region whose content moved by the same number of rows, the region is scrolled with
+     * the terminal's own insert or delete line sequences inside a temporary scrolling region, and
+     * only the rows the scroll exposed are painted.</p>
+     *
+     * <p>A run of changed cells is widened to whole grapheme clusters: a wide grapheme belongs to the
+     * cell it starts in and the cell after it, so half of one is never painted on its own. The empty
+     * cells the frame leaves at the end of a row are cleared rather than written as blanks, and a row
+     * that paints nothing at all in the frame is cleared with one line erase.</p>
+     *
+     * <p>A row whose run writes the last column can leave some terminals with a wrap pending, or with
+     * a grapheme wider than the grid charged it finished past the right margin, so the row below is
+     * repainted in full in the same batch. That is the only reason this method ever repaints a row the
+     * frame did not change.</p>
      *
      * @param previous the last presented screen, or null
      * @param next the screen to present
-     * @param profile the colour profile to encode for
+     * @param profile the color profile to encode for
      * @return the escape sequences that take the terminal to {@code next}
      */
     public static String diff(Screen previous, Screen next, ColorProfile profile) {
         if (previous == null || previous.rows() != next.rows() || previous.cols() != next.cols()) {
             return frame(next, profile);
         }
+        int rows = next.rows();
+        if (rows == 0 || next.cols() == 0) {
+            return "";
+        }
+        int top = 0;
+        while (top < rows && rowEquals(previous, next, top)) {
+            top++;
+        }
+        if (top == rows) {
+            return "";
+        }
+        int bottom = rows - 1;
+        while (rowEquals(previous, next, bottom)) {
+            bottom--;
+        }
         StringBuilder out = new StringBuilder();
+        Scroll scroll = scroll(previous, next, top, bottom, out);
         boolean repaintNext = false;
-        for (int row = 0; row < next.rows(); row++) {
-            if (repaintNext || !rowEquals(previous, next, row)) {
+        for (int row = 0; row < rows; row++) {
+            boolean whole = repaintNext || (scroll != null && scroll.exposed(row));
+            repaintNext = false;
+            if (!whole && !changed(previous, next, row, scroll)) {
+                continue;
+            }
+            if (whole) {
                 out.append(encodeRow(next, row, profile));
-                // A row that writes its last column leaves the terminal at the right edge, and a
-                // terminal that renders some cluster wider than the grid charged it finishes the row
-                // past that edge: the tail wraps, and it wraps onto the start of the row below. That
-                // row's own cells did not change, so a diff would leave the wrapped cells there for
-                // good. Repainting it clears whatever the row above spilled into it, in the same
-                // batch, so nothing is ever painted outside the row that owns it.
-                repaintNext = lastPaintedColumn(next, row) + 1 >= next.cols();
+                repaintNext = paintedEnd(next, row) >= next.cols();
             } else {
-                repaintNext = false;
+                repaintNext = diffRow(previous, next, row, profile, out);
             }
         }
         return out.toString();
     }
 
     /**
-     * Only the rows whose cells differ, with colour switched on or off.
+     * Only the cells that differ, with color switched on or off.
      *
      * @param previous the last presented screen, or null
      * @param next the screen to present
-     * @param color whether colour SGR parameters are emitted
+     * @param color whether color SGR parameters are emitted
      * @return the escape sequences that take the terminal to {@code next}
      */
     public static String diff(Screen previous, Screen next, boolean color) {
         return diff(previous, next, profileFor(color));
     }
 
-    /** The profile a legacy colour flag names. */
+    /**
+     * The profile a legacy color flag names.
+     */
     private static ColorProfile profileFor(boolean color) {
         return color ? ColorProfile.TRUECOLOR : ColorProfile.NONE;
     }
 
+    /**
+     * Whether the terminal still has to be told about one row of the frame.
+     *
+     * <p>With a scroll, the region covers every row the frame changed: the rows the shift did not move
+     * into place are the ones it exposed, and a row outside the region is one both frames hold the
+     * same way.</p>
+     */
+    private static boolean changed(Screen previous, Screen next, int row, Scroll scroll) {
+        if (scroll != null) {
+            return scroll.exposed(row);
+        }
+        return !rowEquals(previous, next, row);
+    }
+
+    /**
+     * A region of the screen whose content moved by the same number of rows.
+     *
+     * @param top the region's first row
+     * @param bottom the region's last row
+     * @param count how many rows the content moved
+     * @param up whether the content moved toward the top of the screen
+     */
+    private record Scroll(int top, int bottom, int count, boolean up) {
+
+        /**
+         * Whether the scroll exposed the row, leaving it blank for the frame to paint.
+         */
+        boolean exposed(int row) {
+            return up ? row > bottom - count && row <= bottom : row >= top && row < top + count;
+        }
+    }
+
+    /**
+     * Tries to explain the changed rows as a scroll, and writes the sequences when it fits.
+     *
+     * <p>The changed rows span one region, so the whole region is the candidate: either its content
+     * moved toward the top by {@code count} rows - the frame's row {@code top + index} is the old
+     * frame's row {@code top + count + index} - or toward the bottom by the same reading in reverse.
+     * A candidate is accepted only when every row the shift covers already matches, which is what
+     * makes the rows the encoder then leaves alone provably correct, and only when it covers more rows
+     * than it exposes, because the rows it exposes have to be painted anyway and the sequences
+     * themselves cost bytes.</p>
+     *
+     * <p>The region is confined to itself with DECSTBM for the duration of the shift and given back
+     * immediately, so nothing written after it scrolls rows the frame did not move. A shift that
+     * covers the whole screen needs no margins at all, because that is the region a terminal scrolls
+     * by default. The rows a delete leaves behind, and the rows an insert creates, are blanked by the
+     * terminal; the caller repaints them.</p>
+     *
+     * @param previous the last presented screen
+     * @param next the screen to present
+     * @param top the first row the frame changed
+     * @param bottom the last row the frame changed
+     * @param out the sequences appended to when a scroll fits
+     * @return the scroll that was written, or null when the changed rows are not a scroll
+     */
+    private static Scroll scroll(Screen previous, Screen next, int top, int bottom, StringBuilder out) {
+        int height = bottom - top + 1;
+        if (height < 3) {
+            return null;
+        }
+        for (int count = 1; count * 2 < height; count++) {
+            if (rowsEqual(previous, next, top + count, top, height - count)) {
+                appendScroll(out, top, bottom, count, true, next.rows());
+                return new Scroll(top, bottom, count, true);
+            }
+            if (rowsEqual(previous, next, top, top + count, height - count)) {
+                appendScroll(out, top, bottom, count, false, next.rows());
+                return new Scroll(top, bottom, count, false);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The margins, the cursor move and the one insert or delete line sequence a scroll needs.
+     */
+    private static void appendScroll(StringBuilder out, int top, int bottom, int count, boolean up, int rows) {
+        boolean wholeScreen = top == 0 && bottom == rows - 1;
+        if (!wholeScreen) {
+            out.append("\u001B[").append(top + 1).append(';').append(bottom + 1).append('r');
+        }
+        out.append(moveCursor(top, 0));
+        out.append("\u001B[").append(count).append(up ? 'M' : 'L');
+        if (!wholeScreen) {
+            // Given back at once: a scrolling region left behind would move rows the application
+            // writes later, and nothing else in this encoder expects one to be set.
+            out.append("\u001B[r");
+        }
+    }
+
+    /**
+     * One row's changed cells, as runs addressed where they are, appending to the frame.
+     *
+     * @return whether a run wrote the row's last column, so the row below has to be repainted
+     */
+    private static boolean diffRow(Screen previous, Screen next, int row, ColorProfile profile, StringBuilder out) {
+        int cols = next.cols();
+        int painted = paintedEnd(next, row);
+        if (painted == 0) {
+            // The frame paints nothing here, so the whole line goes, whatever it held before.
+            out.append(moveCursor(row, 0)).append(RESET).append(ERASE_LINE);
+            return false;
+        }
+        // Runs are looked for inside the extent the frame paints. Every cell from there to the end
+        // of the row is empty in the frame, so those cells are cleared with one erase however much
+        // the previous frame held there - writing them as blanks would cost a byte a cell and leave
+        // the row's tail painted rather than cleared.
+        int first = firstDifference(previous, next, row, 0, painted);
+        while (first < painted) {
+            int start = clusterStart(previous, next, row, first);
+            int stop = runEnd(previous, next, row, first, painted);
+            out.append(moveCursor(row, start));
+            appendContent(next, row, start, stop, profile, out);
+            if (stop >= cols) {
+                return true;
+            }
+            if (stop >= painted) {
+                // Nothing the frame paints is left of this run, so the rest of the line is cleared
+                // instead of written as blanks - the suffix clear a whole-row repaint writes. A run
+                // that ends here is never blank itself: the frame's last painted cell is in it.
+                out.append(moveCursor(row, stop)).append(RESET).append(ERASE_LINE_RIGHT);
+                return false;
+            }
+            first = firstDifference(previous, next, row, stop, painted);
+        }
+        if (tailDiffers(previous, next, row, painted)) {
+            out.append(moveCursor(row, painted)).append(RESET).append(ERASE_LINE_RIGHT);
+        }
+        return false;
+    }
+
+    /**
+     * The first column at or after {@code from} and before {@code to} whose cell differs.
+     *
+     * @return that column, or {@code to} when no cell in the range differs
+     */
+    private static int firstDifference(Screen previous, Screen next, int row, int from, int to) {
+        for (int col = from; col < to; col++) {
+            if (differs(previous, next, row, col)) {
+                return col;
+            }
+        }
+        return to;
+    }
+
+    /**
+     * Whether any cell from the frame's painted end to the row's last column differs.
+     */
+    private static boolean tailDiffers(Screen previous, Screen next, int row, int from) {
+        return firstDifference(previous, next, row, from, next.cols()) < next.cols();
+    }
+
+    /**
+     * The column after the changed graphemes that start at {@code first}, widened to whole ones.
+     */
+    private static int runEnd(Screen previous, Screen next, int row, int first, int limit) {
+        int stop = first + 1;
+        while (stop < limit) {
+            while (stop < limit && (previous.isContinuation(row, stop) || next.isContinuation(row, stop))) {
+                // A grapheme is painted whole or not at all, on either side of the change.
+                stop++;
+            }
+            if (stop >= limit || !differs(previous, next, row, stop)) {
+                return stop;
+            }
+            stop++;
+        }
+        return stop;
+    }
+
+    /**
+     * Whether one cell differs between a row of two screens.
+     */
+    private static boolean differs(Screen previous, Screen next, int row, int col) {
+        return previous.isContinuation(row, col) != next.isContinuation(row, col)
+                || !previous.text(row, col).equals(next.text(row, col))
+                || !previous.style(row, col).equals(next.style(row, col))
+                || !Objects.equals(previous.link(row, col), next.link(row, col));
+    }
+
+    /**
+     * The first cell of the grapheme cluster a change at {@code start} belongs to.
+     */
+    private static int clusterStart(Screen previous, Screen next, int row, int start) {
+        int col = start;
+        while (col > 0 && (previous.isContinuation(row, col) || next.isContinuation(row, col))) {
+            col--;
+        }
+        return col;
+    }
+
     private static boolean rowEquals(Screen previous, Screen next, int row) {
-        for (int col = 0; col < next.cols(); col++) {
-            if (!previous.cell(row, col).equals(next.cell(row, col))
-                    || previous.isContinuation(row, col) != next.isContinuation(row, col)) {
+        return rowEquals(previous, row, next, row);
+    }
+
+    /**
+     * Whether one row of one screen holds exactly what another row of another screen holds.
+     */
+    private static boolean rowEquals(Screen one, int oneRow, Screen other, int otherRow) {
+        for (int col = 0; col < one.cols(); col++) {
+            if (one.isContinuation(oneRow, col) != other.isContinuation(otherRow, col)
+                    || !one.text(oneRow, col).equals(other.text(otherRow, col))
+                    || !one.style(oneRow, col).equals(other.style(otherRow, col))
+                    || !Objects.equals(one.link(oneRow, col), other.link(otherRow, col))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether {@code count} consecutive rows hold the same cells in two screens.
+     */
+    private static boolean rowsEqual(Screen one, Screen other, int oneRow, int otherRow, int count) {
+        for (int index = 0; index < count; index++) {
+            if (!rowEquals(one, oneRow + index, other, otherRow + index)) {
                 return false;
             }
         }
@@ -459,7 +771,7 @@ public final class AnsiEncoder {
      *
      * @param screen the screen holding the row
      * @param row the row to encode
-     * @param color whether colour SGR parameters are emitted
+     * @param color whether color SGR parameters are emitted
      * @return the escape sequences for that row
      */
     public static String encodeRow(Screen screen, int row, boolean color) {
@@ -467,11 +779,11 @@ public final class AnsiEncoder {
     }
 
     /**
-     * One row, encoded for a colour profile.
+     * One row, encoded for a color profile.
      *
      * @param screen the screen holding the row
      * @param row the row to encode
-     * @param profile the colour profile to encode for
+     * @param profile the color profile to encode for
      * @return the escape sequences for that row
      */
     public static String encodeRow(Screen screen, int row, ColorProfile profile) {
@@ -485,7 +797,7 @@ public final class AnsiEncoder {
             out.append(RESET).append(ERASE_LINE);
             return out.toString();
         }
-        out.append(content(screen, row, end, profile));
+        appendContent(screen, row, 0, end, profile, out);
         if (end < screen.cols()) {
             out.append(moveCursor(row, end)).append(RESET).append(ERASE_LINE_RIGHT);
         }
@@ -503,32 +815,39 @@ public final class AnsiEncoder {
      *
      * @param screen the screen holding the row
      * @param row the row to encode
-     * @param profile the colour profile to encode for
+     * @param profile the color profile to encode for
      * @return the styled content of the row's painted extent, which may be empty
      */
     public static String rowContent(Screen screen, int row, ColorProfile profile) {
-        return screen.cols() == 0 ? "" : content(screen, row, paintedEnd(screen, row), profile);
+        StringBuilder out = new StringBuilder();
+        if (screen.cols() != 0) {
+            appendContent(screen, row, 0, paintedEnd(screen, row), profile, out);
+        }
+        return out.toString();
     }
 
-    /** The styled content of a row up to {@code end}, the exclusive painted extent. */
-    private static String content(Screen screen, int row, int end, ColorProfile profile) {
-        if (end == 0) {
-            return "";
-        }
-        StringBuilder out = new StringBuilder();
-        int last = end - 1;
-        if (screen.isContinuation(row, last)) {
-            last--;
-        }
+    /**
+     * The styled content of one row's cells from {@code from} up to {@code to}, appended in place.
+     *
+     * <p>The terminal's style state is tracked inside the run and given back with a reset before the
+     * run ends, so every run may be written anywhere on the screen: nothing it leaves behind changes
+     * how a later run or the next frame is drawn. A gap - a cell the frame leaves empty - is written
+     * as a blank in the default style, because the cells after it must keep the columns the grid gave
+     * them.</p>
+     */
+    private static void appendContent(
+            Screen screen, int row, int from, int to, ColorProfile profile, StringBuilder out) {
         Style active = Style.NONE;
         String activeLink = null;
         boolean styled = false;
-        for (int col = 0; col <= last; col++) {
+        for (int col = from; col < to; col++) {
             if (screen.isContinuation(row, col)) {
                 continue;
             }
-            Cell cell = screen.cell(row, col);
-            if (cell.isEmpty()) {
+            String text = screen.text(row, col);
+            Style style = screen.style(row, col);
+            String link = screen.link(row, col);
+            if (screen.isEmptyCell(row, col)) {
                 // Gaps must overwrite old content and occupy their columns so later cells stay
                 // where the grid placed them.
                 if (activeLink != null) {
@@ -543,7 +862,7 @@ public final class AnsiEncoder {
                 out.append(' ');
                 continue;
             }
-            if (!cell.style().equals(active) || (cell.link() == null) != (activeLink == null)) {
+            if (!style.equals(active) || (link == null) != (activeLink == null)) {
                 if (styled || activeLink != null) {
                     if (activeLink != null) {
                         out.append(OSC8_OPEN).append(STRING_TERMINATOR);
@@ -552,20 +871,20 @@ public final class AnsiEncoder {
                     out.append(RESET);
                     styled = false;
                 }
-                active = cell.style();
+                active = style;
                 if (!active.isPlain()) {
-                    out.append(sgr(active, profile));
+                    appendSgr(out, active, profile);
                     styled = true;
                 }
             }
-            if (cell.link() != null && !cell.link().equals(activeLink)) {
+            if (link != null && !link.equals(activeLink)) {
                 if (activeLink != null) {
                     out.append(OSC8_OPEN).append(STRING_TERMINATOR);
                 }
-                out.append(OSC8_OPEN).append(safeLink(cell.link())).append(STRING_TERMINATOR);
-                activeLink = cell.link();
+                out.append(OSC8_OPEN).append(safeLink(link)).append(STRING_TERMINATOR);
+                activeLink = link;
             }
-            out.append(cell.text());
+            out.append(text);
         }
         if (activeLink != null) {
             out.append(OSC8_OPEN).append(STRING_TERMINATOR);
@@ -573,17 +892,6 @@ public final class AnsiEncoder {
         if (styled) {
             out.append(RESET);
         }
-        return out.toString();
-    }
-
-    /** Last column holding a painted grapheme, excluding continuation cells. */
-    private static int lastPaintedColumn(Screen screen, int row) {
-        for (int col = screen.cols() - 1; col >= 0; col--) {
-            if (!screen.isContinuation(row, col) && !screen.cell(row, col).isEmpty()) {
-                return col;
-            }
-        }
-        return -1;
     }
 
     /**
@@ -602,7 +910,7 @@ public final class AnsiEncoder {
             if (screen.isContinuation(row, col)) {
                 return col + 1;
             }
-            if (!screen.cell(row, col).isEmpty()) {
+            if (!screen.isEmptyCell(row, col)) {
                 return col + 1;
             }
         }
@@ -613,7 +921,9 @@ public final class AnsiEncoder {
         return safeText(link);
     }
 
-    /** The text of a payload with every control character removed. */
+    /**
+     * The text of a payload with every control character removed.
+     */
     private static String safeText(String text) {
         if (text == null || text.isEmpty()) {
             return "";
@@ -639,66 +949,102 @@ public final class AnsiEncoder {
     }
 
     /**
-     * SGR parameter sequence for a style under a colour profile.
+     * SGR parameter sequence for a style under a color profile.
      *
-     * <p>Attributes are emitted whatever the profile says: a session without colour still has bold,
-     * underline and the rest. Only the two colour parameters change, and they change shape with the
-     * profile - {@code 38;2;r;g;b}, {@code 38;5;index}, or one of the classic 16-colour codes - so a
-     * narrower profile loses precision, never decoration. A colour profile of {@link
-     * ColorProfile#NONE} emits no colour parameters at all.</p>
+     * <p>Attributes are emitted whatever the profile says: a session without color still has bold,
+     * underline and the rest. Only the two color parameters change, and they change shape with the
+     * profile - {@code 38;2;r;g;b}, {@code 38;5;index}, or one of the classic 16-color codes - so a
+     * narrower profile loses precision, never decoration. A color profile of {@link
+     * ColorProfile#NONE} emits no color parameters at all.</p>
      *
      * @param style the style to encode
-     * @param profile the colour profile to encode for
+     * @param profile the color profile to encode for
      * @return the sequence, or an empty string for a plain style
      */
     public static String sgr(Style style, ColorProfile profile) {
-        List<String> params = new ArrayList<>();
-        if (style.bold()) {
-            params.add("1");
-        }
-        if (style.italic()) {
-            params.add("3");
-        }
-        if (style.underline()) {
-            params.add("4");
-        }
-        if (style.invert()) {
-            params.add("7");
-        }
-        if (style.hidden()) {
-            params.add("8");
-        }
-        if (style.strikethrough()) {
-            params.add("9");
-        }
-        ColorProfile resolved = profile == null || profile == ColorProfile.AUTO ? ColorProfile.TRUECOLOR : profile;
-        if (resolved.color()) {
-            colour(params, style.foreground(), resolved, true);
-            colour(params, style.background(), resolved, false);
-        }
-        return params.isEmpty() ? "" : "\u001B[" + String.join(";", params) + "m";
+        StringBuilder out = new StringBuilder();
+        appendSgr(out, style, profile);
+        return out.toString();
     }
 
     /**
-     * Adds one colour's parameters to a style's parameter list.
+     * Appends a style's SGR parameters to a frame already under construction.
      *
-     * <p>Only called for a profile that emits colour, so the three branches are the three forms a
-     * terminal accepts: 24-bit, a 256-colour palette index, and one of the classic 16-colour codes.
-     * The profile is compared rather than switched so the guard above is the only place that has to
+     * <p>Written straight into the caller's builder rather than assembled from a parameter list,
+     * because a frame changes style once per painted run: a temporary list, its boxed integers and a
+     * joined string per run is the whole of what a diff used to allocate. A style under a profile
+     * that leaves nothing to say - a color and a 16-color-free session - appends nothing at all,
+     * which is the same answer {@link #sgr(Style, ColorProfile)} gives.</p>
+     *
+     * @param out the frame under construction
+     * @param style the style to encode
+     * @param profile the color profile to encode for
+     */
+    private static void appendSgr(StringBuilder out, Style style, ColorProfile profile) {
+        int start = out.length();
+        out.append("\u001B[");
+        int params = 0;
+        params = attribute(out, params, style.bold(), "1");
+        params = attribute(out, params, style.italic(), "3");
+        params = attribute(out, params, style.underline(), "4");
+        params = attribute(out, params, style.invert(), "7");
+        params = attribute(out, params, style.hidden(), "8");
+        params = attribute(out, params, style.strikethrough(), "9");
+        ColorProfile resolved = profile == null || profile == ColorProfile.AUTO ? ColorProfile.TRUECOLOR : profile;
+        if (resolved.color()) {
+            params = color(out, params, style.foreground(), resolved, true);
+            params = color(out, params, style.background(), resolved, false);
+        }
+        if (params == 0) {
+            out.setLength(start);
+            return;
+        }
+        out.append('m');
+    }
+
+    /**
+     * Appends one attribute parameter when the style has it, and answers how many are written.
+     */
+    private static int attribute(StringBuilder out, int written, boolean present, String parameter) {
+        if (!present) {
+            return written;
+        }
+        if (written > 0) {
+            out.append(';');
+        }
+        out.append(parameter);
+        return written + 1;
+    }
+
+    /**
+     * Appends one color's parameters.
+     *
+     * <p>Only called for a profile that emits color, so the three branches are the three forms a
+     * terminal accepts: 24-bit, a 256-color palette index, and one of the classic 16-color codes.
+     * The profile is compared rather than switched so the caller's guard is the only place that has to
      * know {@link ColorProfile#NONE} exists.</p>
      */
-    private static void colour(List<String> params, Color color, ColorProfile profile, boolean foreground) {
+    private static int color(StringBuilder out, int written, Color color, ColorProfile profile, boolean foreground) {
         if (color == null) {
-            return;
+            return written;
+        }
+        if (written > 0) {
+            out.append(';');
         }
         if (profile == ColorProfile.ANSI16) {
             int index = Colors.nearestAnsi16(color);
             int code = index < 8 ? (foreground ? 30 : 40) + index : (foreground ? 90 : 100) + index - 8;
-            params.add(Integer.toString(code));
+            out.append(code);
         } else if (profile == ColorProfile.ANSI256) {
-            params.add((foreground ? "38;5;" : "48;5;") + Colors.nearestAnsi256(color));
+            out.append(foreground ? "38;5;" : "48;5;").append(Colors.nearestAnsi256(color));
         } else {
-            params.add((foreground ? "38;2;" : "48;2;") + color.red() + ";" + color.green() + ";" + color.blue());
+            out.append(foreground ? "38;2;" : "48;2;")
+                    .append(color.red())
+                    .append(';')
+                    .append(color.green())
+                    .append(';')
+                    .append(color.blue());
         }
+        return written + 1;
     }
 }

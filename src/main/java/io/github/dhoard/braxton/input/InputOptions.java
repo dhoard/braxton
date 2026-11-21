@@ -25,7 +25,8 @@ package io.github.dhoard.braxton.input;
 import java.time.Duration;
 import java.util.Objects;
 
-/** Input limits measured in complete Unicode scalars and UTF-8 equivalent payload bytes.
+/**
+ * Input limits measured in complete Unicode scalars and UTF-8 equivalent payload bytes.
  *
  * @param escapeTimeout how long an incomplete escape sequence may stay open
  * @param maxCsiCharacters the largest CSI body kept, in characters
@@ -39,9 +40,22 @@ public record InputOptions(
         int maxPasteBytes,
         Duration pasteIdleTimeout,
         Duration cancellationInterval) {
+    /**
+     * The default decode limits: a 30 ms escape window, 64 CSI characters, a 1 MiB paste, a
+     * 250 ms paste idle timeout and a 100 ms cancellation interval.
+     */
     public static final InputOptions DEFAULT =
             new InputOptions(Duration.ofMillis(30), 64, 1_048_576, Duration.ofMillis(250), Duration.ofMillis(100));
 
+    /**
+     * Creates a {@code InputOptions} value.
+     *
+     * @param escapeTimeout how long an incomplete escape sequence may stay open
+     * @param maxCsiCharacters the largest CSI body kept, in characters
+     * @param maxPasteBytes the largest paste payload kept, in UTF-8 equivalent bytes
+     * @param pasteIdleTimeout how long a paste may pause before it is ended
+     * @param cancellationInterval how often a blocked read rechecks cancellation
+     */
     public InputOptions {
         positive(escapeTimeout, "escape timeout");
         positive(pasteIdleTimeout, "paste idle timeout");

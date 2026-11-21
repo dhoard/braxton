@@ -30,14 +30,28 @@ package io.github.dhoard.braxton.layout;
  */
 public record Size(int rows, int cols) {
 
+    /**
+     * Zero rows and zero columns.
+     */
     public static final Size EMPTY = new Size(0, 0);
 
+    /**
+     * Creates a {@code Size} value.
+     *
+     * @param rows the number of rows, never negative
+     * @param cols the number of columns, never negative
+     */
     public Size {
         if (rows < 0 || cols < 0) {
             throw new IllegalArgumentException("size must be non-negative: " + rows + "x" + cols);
         }
     }
 
+    /**
+     * Tests whether at least one cell dimension is zero.
+     *
+     * @return {@code true} if at least one cell dimension is zero; otherwise {@code false}
+     */
     public boolean isEmpty() {
         return rows == 0 || cols == 0;
     }

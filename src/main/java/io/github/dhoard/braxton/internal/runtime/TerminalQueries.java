@@ -75,10 +75,14 @@ import java.util.function.Supplier;
  */
 public final class TerminalQueries<Msg> {
 
-    /** How long a query waits for its answer before reporting a timeout. */
+    /**
+     * How long a query waits for its answer before reporting a timeout.
+     */
     public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(1);
 
-    /** How many queries may be live - on the wire or waiting for their kind to clear - at once. */
+    /**
+     * How many queries may be live - on the wire or waiting for their kind to clear - at once.
+     */
     public static final int DEFAULT_MAX_OUTSTANDING = 16;
 
     /**
@@ -98,13 +102,17 @@ public final class TerminalQueries<Msg> {
         void deliver(Msg message, ScopeManager.Origin origin);
     }
 
-    /** One live query: on the wire, or waiting for the earlier query of its kind to finish. */
+    /**
+     * One live query: on the wire, or waiting for the earlier query of its kind to finish.
+     */
     private static final class Pending<Msg> {
         final EffectId id;
         final TerminalQuery query;
         final Function<TerminalQuery.Reply, Msg> mapper;
         final ScopeManager.Origin origin;
-        /** What a sequence waits for when this query is one of its steps. */
+        /**
+         * What a sequence waits for when this query is one of its steps.
+         */
         final Runnable finished;
 
         Timers.Handle timer;
@@ -132,9 +140,13 @@ public final class TerminalQueries<Msg> {
     private final long timeoutNanos;
     private final int maxClipboardReadBytes;
     private final Object lock = new Object();
-    /** Live queries by identity, in submission order. */
+    /**
+     * Live queries by identity, in submission order.
+     */
     private final Map<EffectId, Pending<Msg>> entries = new LinkedHashMap<>();
-    /** The one query per kind that may be on the wire. */
+    /**
+     * The one query per kind that may be on the wire.
+     */
     private final Map<String, Pending<Msg>> wire = new HashMap<>();
 
     private ScopeManager scopes;
@@ -234,7 +246,11 @@ public final class TerminalQueries<Msg> {
         this.maxClipboardReadBytes = Math.max(0, maxClipboardReadBytes);
     }
 
-    /** Binds the scopes a query's origin is captured from. */
+    /**
+     * Binds the scopes a query's origin is captured from.
+     *
+     * @param scopes the active component lifetime registry
+     */
     public void bindScopes(ScopeManager scopes) {
         this.scopes = scopes;
     }
@@ -244,7 +260,7 @@ public final class TerminalQueries<Msg> {
      *
      * <p>It runs on the owner thread, before the mapped answer is delivered, and only for a reply the
      * session was waiting for - a timeout is not evidence of anything a terminal said. The runtime uses
-     * it to record the session-wide meaning of a capability or background colour reply.</p>
+     * it to record the session-wide meaning of a capability or background color reply.</p>
      *
      * @param observer receives the query and its answer
      */
@@ -366,7 +382,11 @@ public final class TerminalQueries<Msg> {
         advance(kind);
     }
 
-    /** Withdraws one query by identity; a queued successor takes the wire if it owned it. */
+    /**
+     * Withdraws one query by identity; a queued successor takes the wire if it owned it.
+     *
+     * @param id the local identity of the resource
+     */
     public void cancel(EffectId id) {
         String freed;
         synchronized (lock) {
@@ -377,7 +397,11 @@ public final class TerminalQueries<Msg> {
         }
     }
 
-    /** Withdraws every query belonging to a removed scope and its descendants. */
+    /**
+     * Withdraws every query belonging to a removed scope and its descendants.
+     *
+     * @param path the component scope path
+     */
     public void cancelScope(ComponentPath path) {
         List<String> freed = new ArrayList<>();
         synchronized (lock) {
@@ -392,7 +416,9 @@ public final class TerminalQueries<Msg> {
         }
     }
 
-    /** Withdraws every query and cancels every deadline; used at shutdown. */
+    /**
+     * Withdraws every query and cancels every deadline; used at shutdown.
+     */
     public void close() {
         synchronized (lock) {
             closed = true;
@@ -404,14 +430,20 @@ public final class TerminalQueries<Msg> {
         }
     }
 
-    /** Exposed for the runtime and tests: how many queries are live, queued ones included. */
+    /**
+     * Exposed for the runtime and tests: how many queries are live, queued ones included.
+     *
+     * @return exposed for the runtime and tests: how many queries are live, queued ones included
+     */
     public int live() {
         synchronized (lock) {
             return entries.size();
         }
     }
 
-    /** Writes one query's request, resolving it as malformed when the terminal refuses the write. */
+    /**
+     * Writes one query's request, resolving it as malformed when the terminal refuses the write.
+     */
     private void send(Pending<Msg> pending) {
         String request = request(pending.query);
         Timers.Handle timer;
@@ -432,7 +464,9 @@ public final class TerminalQueries<Msg> {
         }
     }
 
-    /** The reply deadline of one query fired. */
+    /**
+     * The reply deadline of one query fired.
+     */
     private void expire(Pending<Msg> pending) {
         TerminalQuery.Reply answer;
         synchronized (lock) {
@@ -448,7 +482,9 @@ public final class TerminalQueries<Msg> {
         advance(pending.query.kind());
     }
 
-    /** Resolves a query whose request never reached the terminal. */
+    /**
+     * Resolves a query whose request never reached the terminal.
+     */
     private void fail(Pending<Msg> pending, String detail) {
         synchronized (lock) {
             if (entries.get(pending.id) != pending) {
@@ -487,13 +523,17 @@ public final class TerminalQueries<Msg> {
         send(next);
     }
 
-    /** Removes the query registered under {@code id}; the caller advances its kind. */
+    /**
+     * Removes the query registered under {@code id}; the caller advances its kind.
+     */
     private String withdrawn(EffectId id) {
         Pending<Msg> existing = entries.get(id);
         return existing == null ? null : removeLocked(existing);
     }
 
-    /** Removes one live query, cancels its deadline, and frees its wire slot if it held one. */
+    /**
+     * Removes one live query, cancels its deadline, and frees its wire slot if it held one.
+     */
     private String removeLocked(Pending<Msg> pending) {
         entries.remove(pending.id, pending);
         cancelTimer(pending);
@@ -508,7 +548,9 @@ public final class TerminalQueries<Msg> {
         }
     }
 
-    /** Maps and delivers one answer for a query that is already removed from the registry. */
+    /**
+     * Maps and delivers one answer for a query that is already removed from the registry.
+     */
     private void deliver(
             TerminalQuery.Reply answer, Function<TerminalQuery.Reply, Msg> mapper, ScopeManager.Origin origin) {
         if (mapper == null) {
@@ -529,7 +571,9 @@ public final class TerminalQueries<Msg> {
         }
     }
 
-    /** The request sequence a query writes, or null for a query that never reaches the wire. */
+    /**
+     * The request sequence a query writes, or null for a query that never reaches the wire.
+     */
     private static String request(TerminalQuery query) {
         return switch (query) {
             case TerminalQuery.CursorPosition position -> "\u001B[6n";
@@ -555,7 +599,9 @@ public final class TerminalQueries<Msg> {
         return read.path() == ClipboardPath.TMUX_PASSTHROUGH ? TmuxClipboard.passthrough(sequence) : sequence;
     }
 
-    /** The OSC command that reports one of the terminal's three colours. */
+    /**
+     * The OSC command that reports one of the terminal's three colors.
+     */
     private static int oscCode(TerminalQuery.Target target) {
         return switch (target) {
             case FOREGROUND -> 10;
@@ -564,7 +610,9 @@ public final class TerminalQueries<Msg> {
         };
     }
 
-    /** The colour an OSC command number reports, or null for any other command. */
+    /**
+     * The color an OSC command number reports, or null for any other command.
+     */
     private static TerminalQuery.Target colorTarget(int code) {
         return switch (code) {
             case 10 -> TerminalQuery.Target.FOREGROUND;
@@ -574,7 +622,9 @@ public final class TerminalQueries<Msg> {
         };
     }
 
-    /** Upper-case hexadecimal, the encoding XTGETTCAP uses for names. */
+    /**
+     * Upper-case hexadecimal, the encoding XTGETTCAP uses for names.
+     */
     private static String hex(String text) {
         StringBuilder hex = new StringBuilder(text.length() * 2);
         for (int index = 0; index < text.length(); index++) {
@@ -585,7 +635,9 @@ public final class TerminalQueries<Msg> {
         return hex.toString();
     }
 
-    /** The text a hexadecimal run names, or null when it is not valid hexadecimal. */
+    /**
+     * The text a hexadecimal run names, or null when it is not valid hexadecimal.
+     */
     static String unhex(String text) {
         if (text == null || text.length() % 2 != 0) {
             return null;
@@ -606,7 +658,7 @@ public final class TerminalQueries<Msg> {
      * The kind key a framed reply answers, or null when no query of this library asks that question.
      *
      * <p>Deciding the kind from the reply alone is what keeps correlation honest: the answer names the
-     * mode, capability, colour or selection it is about, or it is one of the two forms that carry no
+     * mode, capability, color or selection it is about, or it is one of the two forms that carry no
      * identity at all and can only be matched by being the one outstanding query of its kind.</p>
      */
     static String kindOf(TerminalReply reply) {
@@ -659,7 +711,9 @@ public final class TerminalQueries<Msg> {
         return null;
     }
 
-    /** The kind key one clipboard reply answers, or null when its selection field names none. */
+    /**
+     * The kind key one clipboard reply answers, or null when its selection field names none.
+     */
     private static String clipboardKind(String selectionField) {
         ClipboardSelection selection = selectionField == null || selectionField.isEmpty()
                 ? ClipboardSelection.SYSTEM
@@ -667,7 +721,9 @@ public final class TerminalQueries<Msg> {
         return selection == null ? null : "clipboard:" + selection.code();
     }
 
-    /** The answer one framed reply gives to a known query, or null when the reply is not usable. */
+    /**
+     * The answer one framed reply gives to a known query, or null when the reply is not usable.
+     */
     private TerminalQuery.Reply answer(TerminalQuery query, TerminalReply reply) {
         return switch (query) {
             case TerminalQuery.CursorPosition position -> cursorPosition(position, reply);
@@ -739,7 +795,9 @@ public final class TerminalQueries<Msg> {
         return new TerminalQuery.Reply.ProgramStatus(states, kinds);
     }
 
-    /** The well-formed names in one comma-separated list, in the order the terminal wrote them. */
+    /**
+     * The well-formed names in one comma-separated list, in the order the terminal wrote them.
+     */
     private static Set<String> names(String list) {
         Set<String> names = new LinkedHashSet<>();
         for (String field : list.split(",", -1)) {
@@ -751,7 +809,9 @@ public final class TerminalQueries<Msg> {
         return names;
     }
 
-    /** Whether {@code name} is one character of the protocol's value set, repeated. */
+    /**
+     * Whether {@code name} is one character of the protocol's value set, repeated.
+     */
     private static boolean protocolName(String name) {
         if (name.isEmpty()) {
             return false;
@@ -854,33 +914,33 @@ public final class TerminalQueries<Msg> {
 
     private static TerminalQuery.Reply colorValue(TerminalQuery query, TerminalReply reply) {
         if (!(reply instanceof TerminalReply.OperatingSystem osc)) {
-            return new TerminalQuery.Reply.Malformed(query, "not a colour report");
+            return new TerminalQuery.Reply.Malformed(query, "not a color report");
         }
         TerminalQuery.ColorReport asked = (TerminalQuery.ColorReport) query;
         if (colorTarget(osc.code()) != asked.target()) {
-            return new TerminalQuery.Reply.Malformed(query, "colour report names another colour");
+            return new TerminalQuery.Reply.Malformed(query, "color report names another color");
         }
         String data = osc.data().strip();
         if (data.equals("?")) {
-            // The documented answer of a terminal that cannot report the colour.
+            // The documented answer of a terminal that cannot report the color.
             return new TerminalQuery.Reply.Unsupported(query);
         }
         Color color = parseColor(data);
         return color == null
-                ? new TerminalQuery.Reply.Malformed(query, "colour is not an X11 rgb specification")
+                ? new TerminalQuery.Reply.Malformed(query, "color is not an X11 rgb specification")
                 : new TerminalQuery.Reply.ColorValue(asked.target(), color);
     }
 
     /**
-     * One X11 colour specification, normalized to eight bits per channel.
+     * One X11 color specification, normalized to eight bits per channel.
      *
      * <p>The documented forms are {@code rgb:r/g/b} with one to four hexadecimal digits per channel,
      * and the {@code #} forms with three, six or twelve digits. A channel shorter than four digits is
-     * scaled, so {@code rgb:f/0/0} is the same colour as {@code #ff0000}; {@code rgba:} is accepted
-     * with its alpha ignored, because the colour channels are what a terminal reports.</p>
+     * scaled, so {@code rgb:f/0/0} is the same color as {@code #ff0000}; {@code rgba:} is accepted
+     * with its alpha ignored, because the color channels are what a terminal reports.</p>
      *
      * @param text the specification
-     * @return the colour, or null when the text is not one of those forms
+     * @return the color, or null when the text is not one of those forms
      */
     public static Color parseColor(String text) {
         if (text == null) {
@@ -903,7 +963,9 @@ public final class TerminalQueries<Msg> {
         return null;
     }
 
-    /** {@code r/g/b}, one to four hex digits each, scaled to eight bits. */
+    /**
+     * {@code r/g/b}, one to four hex digits each, scaled to eight bits.
+     */
     private static Color parseRgb(String channels) {
         String[] parts = channels.split("/", -1);
         if (parts.length != 3) {
@@ -920,7 +982,9 @@ public final class TerminalQueries<Msg> {
         return new Color(scaled[0], scaled[1], scaled[2]);
     }
 
-    /** {@code rgb}, {@code rrggbb} or {@code rrrrggggbbbb}, in hexadecimal. */
+    /**
+     * {@code rgb}, {@code rrggbb} or {@code rrrrggggbbbb}, in hexadecimal.
+     */
     private static Color parseHex(String digits) {
         if (digits.length() != 3 && digits.length() != 6 && digits.length() != 12) {
             return null;
@@ -938,7 +1002,9 @@ public final class TerminalQueries<Msg> {
         return new Color(scaled[0], scaled[1], scaled[2]);
     }
 
-    /** The value of a nonempty hexadecimal run, or null when it holds any other character. */
+    /**
+     * The value of a nonempty hexadecimal run, or null when it holds any other character.
+     */
     private static Integer parseHexValue(String text) {
         if (text.isEmpty()) {
             return null;
@@ -954,13 +1020,17 @@ public final class TerminalQueries<Msg> {
         return value;
     }
 
-    /** Scales a channel of {@code digits} hexadecimal digits to 0..255, rounding to nearest. */
+    /**
+     * Scales a channel of {@code digits} hexadecimal digits to 0..255, rounding to nearest.
+     */
     private static int scale(int value, int digits) {
         int maximum = (1 << (4 * digits)) - 1;
         return (value * 255 + maximum / 2) / maximum;
     }
 
-    /** The text before the first {@code separator}, or the whole text when there is none. */
+    /**
+     * The text before the first {@code separator}, or the whole text when there is none.
+     */
     private static String firstField(String text, char separator) {
         int index = text.indexOf(separator);
         return index < 0 ? text : text.substring(0, index);
@@ -979,7 +1049,9 @@ public final class TerminalQueries<Msg> {
         return true;
     }
 
-    /** A decimal field as an int, saturated rather than wrapped when the digits are absurd. */
+    /**
+     * A decimal field as an int, saturated rather than wrapped when the digits are absurd.
+     */
     private static int parseInt(String field) {
         if (field.length() > 9) {
             return Integer.MAX_VALUE;

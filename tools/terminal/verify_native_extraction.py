@@ -149,7 +149,7 @@ def verify(args):
             process.stdin.write(b"x")
             process.stdin.flush()
             require(process.wait(timeout=20) == 0, "loaded native handle failed after concurrent starts")
-            require(process.stdout.read().strip() == b"ABI 3", "native ABI handle did not survive")
+            require(process.stdout.read().strip() == b"ABI 5", "native ABI handle did not survive")
         print("PASS packaged native fallback/concurrent first starts/version coexistence/temp cleanup" +
               (" on an actual noexec filesystem" if args.namespace_child else " with unavailable temp storage"))
 

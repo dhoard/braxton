@@ -33,7 +33,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
-/** Published release identifiers must agree with the artifact version. */
+/**
+ * Published release identifiers must agree with the artifact version.
+ */
 class DocumentedVersionsTest {
 
     /**
@@ -46,7 +48,9 @@ class DocumentedVersionsTest {
 
     private static final Pattern POM_REVISION = Pattern.compile("<revision>([^<]*)</revision>");
 
-    /** The heading of the section that states the release this repository ships. */
+    /**
+     * The heading of the section that states the release this repository ships.
+     */
     private static final String VERSIONING_HEADING = "## Project status and versioning";
 
     /**
@@ -60,7 +64,7 @@ class DocumentedVersionsTest {
     @Test
     void theDocumentedNativeBuildMatchesTheShippedContract() throws IOException {
         String readme = Files.readString(Path.of("README.md"));
-        assertThat(readme).contains("C compiler", "macOS ARM64", "Linux", "--enable-native-access");
+        assertThat(readme).contains("C compiler", "macOS ARM64", "macOS x86_64", "Linux", "--enable-native-access");
         assertThat(Files.readString(Path.of("pom.xml"))).contains("build-native-terminal");
     }
 
@@ -107,14 +111,18 @@ class DocumentedVersionsTest {
         return matcher.group(1);
     }
 
-    /** The migration section, from its heading to the next heading of any level. */
+    /**
+     * The migration section, from its heading to the next heading of any level.
+     */
     private static String migrationSection(String readme, Matcher heading) {
         int start = heading.start();
         int end = readme.indexOf("\n#", start + heading.group().length());
         return end < 0 ? readme.substring(start) : readme.substring(start, end);
     }
 
-    /** The README section that states the release, up to the next heading. */
+    /**
+     * The README section that states the release, up to the next heading.
+     */
     private static String versioningSection(String readme) {
         int start = readme.indexOf(VERSIONING_HEADING);
         assertThat(start)

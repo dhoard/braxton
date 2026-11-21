@@ -31,11 +31,15 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
-/** The pointer protocols decode to normalized pointer reports, and malformed ones decode to none. */
+/**
+ * The pointer protocols decode to normalized pointer reports, and malformed ones decode to none.
+ */
 @org.junit.jupiter.api.extension.ExtendWith(io.github.dhoard.braxton.internal.input.TestReaders.class)
 class MouseMappingTest {
 
-    /** Every event the decoder produces, written so a whole input can be compared in one string. */
+    /**
+     * Every event the decoder produces, written so a whole input can be compared in one string.
+     */
     private static String decode(String bytes) throws IOException {
         InputDecoder decoder =
                 new InputDecoder(io.github.dhoard.braxton.internal.input.TestReaders.utf8(new ByteAtATime(bytes)));
@@ -140,7 +144,9 @@ class MouseMappingTest {
         }
     }
 
-    /** Serves one byte at a time, like a terminal delivering a sequence in pieces. */
+    /**
+     * Serves one byte at a time, like a terminal delivering a sequence in pieces.
+     */
     private static final class ByteAtATime extends java.io.InputStream {
         private final byte[] data;
         private int index;

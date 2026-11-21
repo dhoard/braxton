@@ -24,6 +24,7 @@ package io.github.dhoard.braxton.internal.terminal;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.dhoard.braxton.terminal.UnsupportedTerminalException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
@@ -120,10 +121,12 @@ class TimedReaderTest {
     }
 
     @Test
-    void terminalCapabilitiesRejectUnknownTypesAndKeepBasicVtConservative() {
-        assertThatThrownBy(() -> NativeTerminal.capabilities(null)).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> NativeTerminal.capabilities("dumb")).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> NativeTerminal.capabilities("unknown")).isInstanceOf(IllegalStateException.class);
+    void terminalCapabilitiesAcceptModernAndUnknownTypesButRejectDumbOnes() throws Exception {
+        assertThatThrownBy(() -> NativeTerminal.capabilities(null)).isInstanceOf(UnsupportedTerminalException.class);
+        assertThatThrownBy(() -> NativeTerminal.capabilities("dumb")).isInstanceOf(UnsupportedTerminalException.class);
+        for (String term : java.util.List.of("st-256color", "konsole-256color", "contour", "unknown")) {
+            assertThat(NativeTerminal.capabilities(term).term()).isEqualTo(term);
+        }
         assertThat(NativeTerminal.capabilities("xterm-256color").mouse()).isTrue();
         assertThat(NativeTerminal.capabilities("vt100").alternateScreen()).isFalse();
         assertThat(NativeTerminal.capabilities("linux").bracketedPaste()).isFalse();

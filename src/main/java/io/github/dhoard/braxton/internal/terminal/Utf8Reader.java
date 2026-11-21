@@ -29,11 +29,23 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
-/** Incremental JDK decoding; incomplete byte sequences remain buffered across timed reads. */
+/**
+ * Incremental JDK decoding; incomplete byte sequences remain buffered across timed reads.
+ */
 public final class Utf8Reader extends TimedReader {
+    /**
+     * Timed byte input consumed by the incremental UTF-8 decoder.
+     */
     @FunctionalInterface
     public interface Bytes {
-        /** Returns a byte count, zero for timeout, or -1 for EOF. */
+        /**
+         * Returns a byte count, zero for timeout, or -1 for EOF.
+         *
+         * @param buffer the destination character buffer
+         * @param timeoutMillis the maximum wait in milliseconds
+         * @return a byte count, zero for timeout, or -1 for EOF
+         * @throws java.io.IOException if input or output fails
+         */
         int read(byte[] buffer, long timeoutMillis) throws IOException;
     }
 
@@ -48,6 +60,11 @@ public final class Utf8Reader extends TimedReader {
     private boolean eof;
     private volatile boolean closed;
 
+    /**
+     * Creates a {@code Utf8Reader} value.
+     *
+     * @param input the input source
+     */
     public Utf8Reader(Bytes input) {
         this.input = java.util.Objects.requireNonNull(input);
         bytes.flip();

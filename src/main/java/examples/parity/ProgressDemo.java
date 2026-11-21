@@ -27,6 +27,7 @@ import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.effect.SubscriptionId;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.layout.Size;
@@ -43,9 +44,9 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.AnimatedProgress;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.ProgressBar;
 import io.github.dhoard.braxton.widget.Spinner;
@@ -57,25 +58,25 @@ import java.util.List;
  * Phase 08 parity demo: an animated progress bar, a static one, and a mock package manager.
  *
  * <p>The scene is a local, seeded installation run: a fixed list of six packages, an
- * {@link AnimatedProgress} that eases towards how many of them are done, a static
+ * {@link AnimatedProgress} that eases toward how many of them are done, a static
  * {@link ProgressBar} painted from the same target, and a {@link Spinner} turning while work
  * remains. Nothing is fetched, installed or read from the file system - the whole run is the
  * scene's own data - so the demo shows the two progress regimes side by side without a real
  * package manager.</p>
  *
- * <p>Every gesture advances the scene's own state and lets the widget animate towards it, so what
+ * <p>Every gesture advances the scene's own state and lets the widget animate toward it, so what
  * a user watches is the widget easing rather than a value the scene computed:</p>
  *
  * <ul>
  *   <li>{@code s} completes the next package, which retargets the bar. Pressing it again while the
- *       bar is still moving retargets from wherever the fill has reached, so the bar bends towards
+ *       bar is still moving retargets from wherever the fill has reached, so the bar bends toward
  *       the new target instead of restarting.</li>
  *   <li>{@code u} gives a package back, which is the same thing in the other direction.</li>
  *   <li>{@code r} starts the run over.</li>
  *   <li>{@code m} cycles the bar between smooth motion and the instant, reduced-motion
  *       definition, which reaches the target at once and holds no timer.</li>
  *   <li>{@code b} cycles how both bars paint their fill: whole cells, a graded partial cell, a
- *       start-to-end colour blend, or both refinements together.</li>
+ *       start-to-end color blend, or both refinements together.</li>
  * </ul>
  *
  * <p>Everything the scene reports is on status rows, so a terminal verifier can assert the state
@@ -84,32 +85,50 @@ import java.util.List;
  */
 public final class ProgressDemo {
 
-    /** The seeded package list the mock installer works through; nothing is fetched. */
+    /**
+     * The seeded package list the mock installer works through; nothing is fetched.
+     */
     public static final List<String> PACKAGES =
             List.of("figlet", "glamour", "lipgloss", "harmonica", "bubbles", "bubbletea");
 
-    /** The demo's response time: slower than the widget default so the easing can be watched. */
+    /**
+     * The demo's response time: slower than the widget default so the easing can be watched.
+     */
     public static final Duration RESPONSE_TIME = Duration.ofMillis(600);
 
-    /** The cadence the animated bar is asked to repaint at. */
+    /**
+     * The cadence the animated bar is asked to repaint at.
+     */
     public static final Duration TICK_PERIOD = Duration.ofMillis(16);
 
-    /** The narrowest bar the scene lays out. */
+    /**
+     * The narrowest bar the scene lays out.
+     */
     public static final int MIN_BAR_WIDTH = 8;
 
-    /** The widest bar the scene lays out. */
+    /**
+     * The widest bar the scene lays out.
+     */
     public static final int MAX_BAR_WIDTH = 32;
 
-    /** The colour a finished cell is painted with when no blend overrides it. */
+    /**
+     * The color a finished cell is painted with when no blend overrides it.
+     */
     public static final Color FILLED = new Color(0x4C, 0xC0, 0x7A);
 
-    /** The colour a cell that is still to come is painted with. */
+    /**
+     * The color a cell that is still to come is painted with.
+     */
     public static final Color EMPTY = new Color(0x5A, 0x5A, 0x5A);
 
-    /** The colour the blended fill starts at. */
+    /**
+     * The color the blended fill starts at.
+     */
     public static final Color BLEND_START = new Color(0x2B, 0x8C, 0xFF);
 
-    /** The colour the blended fill ends at. */
+    /**
+     * The color the blended fill ends at.
+     */
     public static final Color BLEND_END = new Color(0xC0, 0x5B, 0xFF);
 
     private static final Style STATUS = Style.NONE.withBold();
@@ -118,15 +137,25 @@ public final class ProgressDemo {
 
     private ProgressDemo() {}
 
-    /** How the fill of both bars is painted; the scene owns this choice, not the widget. */
+    /**
+     * How the fill of both bars is painted; the scene owns this choice, not the widget.
+     */
     public enum Fill {
-        /** Whole cells only: what a bar has always painted. */
+        /**
+         * Whole cells only: what a bar has always painted.
+         */
         PLAIN("plain"),
-        /** Whole cells plus an eighth-block glyph where the fill stops. */
+        /**
+         * Whole cells plus an eighth-block glyph where the fill stops.
+         */
         FRACTIONAL("partial"),
-        /** Whole cells, blended from the start colour to the end colour. */
+        /**
+         * Whole cells, blended from the start color to the end color.
+         */
         BLEND("blend"),
-        /** Both refinements together. */
+        /**
+         * Both refinements together.
+         */
         FRACTIONAL_BLEND("partial+blend");
 
         private final String label;
@@ -191,7 +220,9 @@ public final class ProgressDemo {
             Fill fill,
             String last) {
 
-        /** Substitutes a resting bar, a stopped spinner and the scene defaults for missing values. */
+        /**
+         * Substitutes a resting bar, a stopped spinner and the scene defaults for missing values.
+         */
         public Model {
             bar = bar == null ? AnimatedProgress.Model.at(0.0) : bar;
             spinner = spinner == null ? Spinner.Model.stopped() : spinner;
@@ -298,7 +329,9 @@ public final class ProgressDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -315,19 +348,29 @@ public final class ProgressDemo {
          */
         record Spin(Spinner.Msg value) implements Msg {}
 
-        /** Completes the next seeded package. */
+        /**
+         * Completes the next seeded package.
+         */
         record Install() implements Msg {}
 
-        /** Gives the last completed package back. */
+        /**
+         * Gives the last completed package back.
+         */
         record Uninstall() implements Msg {}
 
-        /** Starts the run over. */
+        /**
+         * Starts the run over.
+         */
         record Reset() implements Msg {}
 
-        /** Cycles the animated bar between smooth and instant motion. */
+        /**
+         * Cycles the animated bar between smooth and instant motion.
+         */
         record CycleMotion() implements Msg {}
 
-        /** Cycles how both bars paint their fill. */
+        /**
+         * Cycles how both bars paint their fill.
+         */
         record CycleFill() implements Msg {}
 
         /**
@@ -337,7 +380,9 @@ public final class ProgressDemo {
          */
         record Resized(Size size) implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -363,7 +408,11 @@ public final class ProgressDemo {
                 KeyMap.group("Scene", KeyAction.<Msg>of("quit", new Msg.Quit(), "esc", "quit", "escape", "ctrl+c")));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
@@ -381,8 +430,15 @@ public final class ProgressDemo {
         System.exit(result.status());
     }
 
-    /** One animated bar, one static bar, one spinner and the status rows that spell them out. */
+    /**
+     * One animated bar, one static bar, one spinner and the status rows that spell them out.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final KeyMap<Msg> keys = defaultKeys();
 
@@ -422,7 +478,9 @@ public final class ProgressDemo {
             };
         }
 
-        /** The bar and the spinner declare their own intervals; the scene adds the resize source. */
+        /**
+         * The bar and the spinner declare their own intervals; the scene adds the resize source.
+         */
         @Override
         public Subscription<Msg> subscriptions(Model model) {
             return Subscription.batch(
@@ -440,23 +498,41 @@ public final class ProgressDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
+        public Element<Msg> view(Model model, ViewContext context) {
+            // The scene is an element tree; the wrapper keeps the scene's keys where they have always
+            // been until the runtime switch moves them onto Component.bindings, which the demo
+            // already declares below.
+            return scene(model, context);
+        }
+
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys.bindings();
+        }
+
+        /**
+         * Status rows, the two bars, the spinner and the help line, as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
             int cols = context.viewport().cols();
-            List<View<Msg>> rows = new ArrayList<>(9);
+            List<Element<Msg>> rows = new ArrayList<>(9);
             // Status rows are one row each however narrow the terminal is: a wrapped diagnostic
             // would push the painted bars and the help down and move what a verifier can assert.
-            rows.add(Views.fixed(1, Views.text(barStatus(model), STATUS)));
-            rows.add(Views.fixed(1, Views.text(policy(model), STATUS)));
-            rows.add(Views.gap(1));
+            rows.add(Elements.fixed(1, Elements.text(barStatus(model), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(policy(model), STATUS)));
+            rows.add(Elements.spacer(1));
             // The animated row is the mounted component's own view; the static row is the pure
             // renderer, so the two regimes are painted from the same bar definition.
-            rows.add(Views.fixed(1, mountBar(model).view(model, context)));
-            rows.add(Views.fixed(1, Views.text(model.staticBar().render(model.target(), 1.0))));
-            rows.add(Views.gap(1));
-            rows.add(Views.row(mountSpinner(model).view(model, context), Views.text(" " + installLine(model))));
-            rows.add(Views.gap(1));
-            rows.add(Help.view(keys, false, cols));
-            return Views.onKeys(keys.bindings(), Views.column(rows));
+            rows.add(Elements.fixed(1, mountBar(model).view(model, context)));
+            rows.add(Elements.fixed(1, Elements.text(model.staticBar().render(model.target(), 1.0))));
+            rows.add(Elements.spacer(1));
+            rows.add(Elements.row(mountSpinner(model).view(model, context), Elements.text(" " + installLine(model))));
+            rows.add(Elements.spacer(1));
+            rows.add(Help.element(keys, Help.Config.defaults(), false, cols));
+            return Elements.column(rows);
         }
 
         /**
@@ -475,7 +551,9 @@ public final class ProgressDemo {
                     OutputRoute.toOutput(value -> value));
         }
 
-        /** The install spinner, mounted beside the bar so both run on their own intervals. */
+        /**
+         * The install spinner, mounted beside the bar so both run on their own intervals.
+         */
         private Mount<Model, Msg, Never, Spinner.Model, Spinner.Msg, Never> mountSpinner(Model model) {
             return Mount.of(
                     ComponentId.of("spinner"),
@@ -485,7 +563,9 @@ public final class ProgressDemo {
                     OutputRoute.toOutput(value -> value));
         }
 
-        /** Completes the next package: the bar eases towards the new target from wherever it is. */
+        /**
+         * Completes the next package: the bar eases toward the new target from wherever it is.
+         */
         private Update<Model, Msg, Never> install(Model model) {
             if (model.complete()) {
                 return Update.next(model.withLast("complete"));
@@ -506,7 +586,9 @@ public final class ProgressDemo {
                     .withLast("done"));
         }
 
-        /** Gives the last completed package back, which retargets the bar in the other direction. */
+        /**
+         * Gives the last completed package back, which retargets the bar in the other direction.
+         */
         private Update<Model, Msg, Never> uninstall(Model model) {
             if (model.installed() == 0) {
                 return Update.next(model.withLast("empty"));
@@ -522,7 +604,9 @@ public final class ProgressDemo {
                     .withLast("back-" + gone));
         }
 
-        /** Starts the run over: zero targets, and a spinner turning again. */
+        /**
+         * Starts the run over: zero targets, and a spinner turning again.
+         */
         private Update<Model, Msg, Never> reset(Model model) {
             Model cleared = model.withInstalled(0);
             Model animated = mountBar(cleared)
@@ -537,7 +621,7 @@ public final class ProgressDemo {
         /**
          * Cycles the bar between smooth and instant motion.
          *
-         * <p>Turning animation off lands the bar on the target it was already easing towards, which
+         * <p>Turning animation off lands the bar on the target it was already easing toward, which
          * is what a user who asked for reduced motion should see rather than a bar that finishes
          * moving because it started moving before the preference changed.</p>
          */
@@ -551,7 +635,9 @@ public final class ProgressDemo {
             return Update.next(changed);
         }
 
-        /** The animated bar's row: what it was asked for, where it has reached, and whether it moves. */
+        /**
+         * The animated bar's row: what it was asked for, where it has reached, and whether it moves.
+         */
         private static String barStatus(Model model) {
             AnimatedProgress.Config config = model.config();
             return "animated target=" + fraction(model.target())
@@ -559,7 +645,9 @@ public final class ProgressDemo {
                     + " run=" + (model.bar().running() ? "on" : "off");
         }
 
-        /** The policy row: the scene's own choices and what it last did. */
+        /**
+         * The policy row: the scene's own choices and what it last did.
+         */
         private static String policy(Model model) {
             // The bar width leads the row: it is what a resize changes, and at a narrow terminal
             // the fields behind it are the ones that may be clipped.
@@ -570,7 +658,9 @@ public final class ProgressDemo {
                     + " last=" + model.last();
         }
 
-        /** What the mock installer is doing right now. */
+        /**
+         * What the mock installer is doing right now.
+         */
         private static String installLine(Model model) {
             return model.complete()
                     ? "complete " + PACKAGES.size() + "/" + PACKAGES.size()

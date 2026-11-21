@@ -24,10 +24,11 @@ package io.github.dhoard.braxton.benchmark;
 
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Box;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Table;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,8 +46,9 @@ final class BenchViews {
      *
      * @param rows table rows to include; each row is three cells
      * @param draft the editor draft
+     * @return the tree
      */
-    static View<Object> transcript(int rows, String draft) {
+    static Element<Object> transcript(int rows, String draft) {
         Table table = Table.of();
         for (int i = 0; i < rows; i++) {
             table.row(
@@ -54,20 +56,22 @@ final class BenchViews {
                     StyledText.plain(BenchCorpus.build("ascii", 24)),
                     StyledText.plain("ok"));
         }
-        List<View<Object>> items = new ArrayList<>();
-        items.add(Views.text("Braxton benchmark"));
-        items.add(Box.of("status: idle").title("status").view(40));
-        items.add(table.view());
-        items.add(new Editor(Editor.Config.defaults())
+        List<Element<Object>> items = new ArrayList<>();
+        items.add(Elements.text("Braxton benchmark"));
+        items.add(Elements.text(Box.of("status: idle").title("status").render(40)));
+        items.add(Elements.text(table.render()));
+        Element<Editor.Msg> pane = new Editor(EditorConfig.defaults())
                 .view(
                         (Editor.Model.of(draft)).withFocus(true),
-                        new io.github.dhoard.braxton.mvu.ViewContext(io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                .map(action -> action));
-        items.add(Views.grow(Views.blank()));
-        return Views.column(items);
+                        new io.github.dhoard.braxton.mvu.ViewContext(io.github.dhoard.braxton.layout.Viewport.EMPTY));
+        items.add(pane.map(message -> (Object) message));
+        items.add(Elements.grow(Elements.spacer()));
+        return Elements.column(items);
     }
 
-    /** Parses the {@code rowsCols} {@code @Param} shape, for example {@code 40x120}. */
+    /**
+     * Parses the {@code rowsCols} {@code @Param} shape, for example {@code 40x120}.
+     */
     static Viewport viewport(String spec) {
         int at = spec.indexOf('x');
         if (at <= 0) {

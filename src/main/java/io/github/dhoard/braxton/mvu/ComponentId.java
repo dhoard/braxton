@@ -38,8 +38,16 @@ import java.util.Objects;
  * @param value the validated local identity segment
  */
 public record ComponentId(String value) implements Serializable {
+    /**
+     * The longest accepted identifier, in characters.
+     */
     public static final int MAX_LENGTH = 128;
 
+    /**
+     * Creates a {@code ComponentId} value.
+     *
+     * @param value the validated local identity segment
+     */
     public ComponentId {
         Objects.requireNonNull(value, "value");
         if (value.isBlank()
@@ -52,6 +60,12 @@ public record ComponentId(String value) implements Serializable {
         }
     }
 
+    /**
+     * Creates a {@code ComponentId} value.
+     *
+     * @param value the validated local identity segment
+     * @return the validated local component identity
+     */
     public static ComponentId of(String value) {
         return new ComponentId(value);
     }

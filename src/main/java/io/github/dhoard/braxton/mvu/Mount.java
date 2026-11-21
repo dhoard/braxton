@@ -24,8 +24,11 @@ package io.github.dhoard.braxton.mvu;
 
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.input.Binding;
+import io.github.dhoard.braxton.input.InputEvent;
+import io.github.dhoard.braxton.ui.Element;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -44,7 +47,7 @@ import java.util.function.Supplier;
  * switch relies on: the child keeps its model, its scoped element ids and its subscriptions while
  * another child is painted, so returning to it finds the same draft and a timer that is still
  * running. Declaring no node is the explicit unmount: the child's scoped subscriptions and commands
- * are cancelled, its element ids are released, and a later remount starts from {@link #initialize}
+ * are canceled, its element ids are released, and a later remount starts from {@link #initialize}
  * again. Nothing is kept alive implicitly - the declaration is the whole policy, and a parent that
  * stops declaring a node has decided to end that child.</p>
  *
@@ -80,6 +83,12 @@ public final class Mount<P, Msg, Out, C, ChildMsg, ChildOut> {
     /**
      * Binds one child component to one slot of a parent model.
      *
+     * @param <C> the child model type
+     * @param <ChildMsg> the child message type
+     * @param <ChildOut> the child output type
+     * @param <Msg> the parent message type
+     * @param <Out> the parent output type
+     * @param <P> the parent model type
      * @param id the child's local identity segment under its parent
      * @param child the child component definition
      * @param lens pure access/replacement of the child model in the parent model
@@ -100,10 +109,23 @@ public final class Mount<P, Msg, Out, C, ChildMsg, ChildOut> {
         return ComponentFailure.call(path, phase, action);
     }
 
+    /**
+     * Initializes the child component and lifts its command and outputs.
+     *
+     * @param context the initialization or view context
+     * @return initializes the child component and lifts its command and outputs
+     */
     public Initialization<C, Msg, Out> initialize(InitContext context) {
         return lift(call(ComponentFailure.Phase.INIT, () -> child.init(Objects.requireNonNull(context, "context"))));
     }
 
+    /**
+     * Applies a child message and replaces its model through the lens.
+     *
+     * @param parent the parent model
+     * @param message the typed message to deliver
+     * @return the parent transition with mapped child commands and outputs
+     */
     public Update<P, Msg, Out> update(P parent, ChildMsg message) {
         Objects.requireNonNull(parent, "parent");
         Objects.requireNonNull(message, "message");
@@ -134,15 +156,101 @@ public final class Mount<P, Msg, Out, C, ChildMsg, ChildOut> {
         });
     }
 
-    public View<Msg> view(P parent, ViewContext context) {
+    /**
+     * Builds the child view and maps its messages into the parent type.
+     *
+     * @param parent the parent model
+     * @param context the initialization or view context
+     * @return the child view and maps its messages into the parent type
+     */
+    public Element<Msg> view(P parent, ViewContext context) {
         Objects.requireNonNull(parent, "parent");
+        // The child speaks its own message type and the parent speaks another, so the whole answer
+        // is one mapping: the tree keeps the child's geometry, focus and caret.
         return call(
                 ComponentFailure.Phase.VIEW,
-                () -> child.view(lens.get().apply(parent), context)
-                        .<Msg>map(messages)
-                        .scoped(path));
+                () -> child.view(lens.get().apply(parent), context).map(messages));
     }
 
+    /**
+     * The gestures the child claims, mapped into the parent's message type.
+     *
+     * <p>A hook lives on the component, so a mounted child's claims do not travel with its view the
+     * way a routing node in a view tree once did. The parent asks for them here and composes them
+     * with its own: only the parent knows the order its children's gestures belong in, and only the
+     * parent can decide that a child's claim outranks its own.</p>
+     *
+     * @param parent the parent model the child model is read from
+     * @return the child's claimed bindings, in the parent's message type
+     */
+    public List<Binding<Msg>> claims(P parent) {
+        Objects.requireNonNull(parent, "parent");
+        C childModel = call(ComponentFailure.Phase.VIEW, () -> lens.get().apply(parent));
+        return lift(call(ComponentFailure.Phase.VIEW, () -> child.claims(childModel)));
+    }
+
+    /**
+     * The child's own key bindings, mapped into the parent's message type.
+     *
+     * @param parent the parent model the child model is read from
+     * @return the child's bindings, in the parent's message type
+     */
+    public List<Binding<Msg>> bindings(P parent) {
+        Objects.requireNonNull(parent, "parent");
+        C childModel = call(ComponentFailure.Phase.VIEW, () -> lens.get().apply(parent));
+        return lift(call(ComponentFailure.Phase.VIEW, () -> child.bindings(childModel)));
+    }
+
+    /**
+     * What the child makes of an event it was shown, mapped into the parent's message type.
+     *
+     * @param parent the parent model the child model is read from
+     * @param event the event being routed
+     * @return the child's messages, in the parent's message type
+     */
+    public List<Msg> observed(P parent, InputEvent event) {
+        Objects.requireNonNull(parent, "parent");
+        Objects.requireNonNull(event, "event");
+        C childModel = call(ComponentFailure.Phase.VIEW, () -> lens.get().apply(parent));
+        return call(ComponentFailure.Phase.VIEW, () -> child.observed(event)).stream()
+                .<Msg>map(messages)
+                .toList();
+    }
+
+    /**
+     * What the child asks the frame to present with this model, or null when it asks for nothing.
+     *
+     * <p>A presentation is the root's answer, so a parent that mounts a scene forwards it: the scene
+     * that asked for an alternate screen still gets one when the parent is what the runtime asks.</p>
+     *
+     * @param parent the parent model the child model is read from
+     * @return the child's presentation, or null
+     */
+    public io.github.dhoard.braxton.app.TerminalPresentation presentation(P parent) {
+        Objects.requireNonNull(parent, "parent");
+        C childModel = call(ComponentFailure.Phase.VIEW, () -> lens.get().apply(parent));
+        // A child that declares no presentation answers null, and that is an answer: the wrapper
+        // rejects null, so the child's own answer is returned unwrapped.
+        return child.presentation(childModel);
+    }
+
+    /**
+     * Lifts a child's bindings into the parent's message type.
+     */
+    private List<Binding<Msg>> lift(List<Binding<ChildMsg>> bindings) {
+        List<Binding<Msg>> lifted = new ArrayList<>(bindings.size());
+        for (Binding<ChildMsg> binding : bindings) {
+            lifted.add(new Binding<>(binding.key(), messages.apply(binding.message())));
+        }
+        return List.copyOf(lifted);
+    }
+
+    /**
+     * Scopes the child subscriptions and lifts their messages to the parent.
+     *
+     * @param parent the parent model
+     * @return scopes the child subscriptions and lifts their messages to the parent
+     */
     public Subscription<Msg> subscriptions(P parent) {
         Objects.requireNonNull(parent, "parent");
         return call(
@@ -152,6 +260,12 @@ public final class Mount<P, Msg, Out, C, ChildMsg, ChildOut> {
                         .scoped(path));
     }
 
+    /**
+     * Declares this child identity and its active descendants.
+     *
+     * @param parent the parent model
+     * @return declares this child identity and its active descendants
+     */
     public ComponentTree.Node tree(P parent) {
         Objects.requireNonNull(parent, "parent");
         return ComponentTree.Node.deferred(

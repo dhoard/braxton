@@ -51,7 +51,9 @@ import org.junit.jupiter.api.Test;
  */
 class PackagingContractTest {
 
-    /** The README: "the build targets bytecode 69" (Java 25). */
+    /**
+     * The README: "the build targets bytecode 69" (Java 25).
+     */
     private static final int DOCUMENTED_MAJOR_VERSION = 69;
 
     /**
@@ -64,7 +66,9 @@ class PackagingContractTest {
 
     private static final String CORE_ROOT = "io/github/dhoard/braxton/";
 
-    /** Array descriptors of primitives, which name no package. */
+    /**
+     * Array descriptors of primitives, which name no package.
+     */
     private static final List<String> PRIMITIVE_DESCRIPTORS = List.of("B", "C", "D", "F", "I", "J", "S", "Z", "V");
 
     @Test
@@ -91,7 +95,9 @@ class PackagingContractTest {
         }
     }
 
-    /** Every {@code .class} of the core, as the packaged artifact would carry it. */
+    /**
+     * Every {@code .class} of the core, as the packaged artifact would carry it.
+     */
     private static List<Path> coreClasses() throws IOException, URISyntaxException {
         Path root = Path.of(Application.class
                 .getProtectionDomain()
@@ -201,7 +207,8 @@ class PackagingContractTest {
                 "examples/parity/Showcase.class",
                 "examples/parity/SceneCatalog.class",
                 "examples/parity/WorkspaceDemo.class",
-                "examples/parity/WorkspaceDemo$Scene.class")) {
+                "examples/parity/WorkspaceScene.class",
+                "examples/parity/WidgetGalleryDemo.class")) {
             assertThat(root.resolve(name)).as("packaged %s", name).exists();
         }
         assertThat(PackagingContractTest.class.getResource("/examples/parity/markdown.md"))

@@ -34,7 +34,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * Per-session clipboard behaviour: protocol encoding, transport selection, deduplication, and the
+ * Per-session clipboard behavior: protocol encoding, transport selection, deduplication, and the
  * in-process fallback buffer.
  *
  * <p>The service never writes to a stream itself. The runtime hands it the session's output owner,
@@ -56,6 +56,13 @@ public final class ClipboardService {
      */
     private final Map<ClipboardSelection, String> lastSequences = new EnumMap<>(ClipboardSelection.class);
 
+    /**
+     * Creates a {@code ClipboardService} value.
+     *
+     * @param config the immutable configuration
+     * @param environment the terminal environment and runtime services
+     * @param writer the terminal control-sequence writer
+     */
     public ClipboardService(ClipboardConfig config, TerminalEnvironment environment, Consumer<String> writer) {
         this.config = config == null ? ClipboardConfig.defaults() : config;
         this.environment = environment == null ? TerminalEnvironment.system() : environment;
@@ -63,7 +70,12 @@ public final class ClipboardService {
         this.buffer = new ClipboardBuffer(this.config.maxInternalChars());
     }
 
-    /** Copies text to the system clipboard, always storing it internally. */
+    /**
+     * Copies text to the system clipboard, always storing it internally.
+     *
+     * @param text the text to process
+     * @return the clipboard write outcome, including the selected transport
+     */
     public synchronized ClipboardResult copy(String text) {
         return copy(ClipboardSelection.SYSTEM, text);
     }
@@ -79,6 +91,7 @@ public final class ClipboardService {
      *
      * @param selection the selection to write; a missing selection copies to the system clipboard
      * @param text the text to copy; null is treated as empty
+     * @return the write outcome after internal storage and at most one OSC 52 sequence
      */
     public synchronized ClipboardResult copy(ClipboardSelection selection, String text) {
         ClipboardSelection target = selection == null ? ClipboardSelection.SYSTEM : selection;
@@ -124,7 +137,11 @@ public final class ClipboardService {
         return new ClipboardResult(stored, storedBytes, truncated, true, true, false, path);
     }
 
-    /** The text currently held by the in-process buffer. */
+    /**
+     * The text currently held by the in-process buffer.
+     *
+     * @return the text currently held by the in-process buffer
+     */
     public String internalText() {
         return buffer.get();
     }
@@ -162,7 +179,11 @@ public final class ClipboardService {
         };
     }
 
-    /** Strategy helper retained for callers that need to name the selected tmux mode. */
+    /**
+     * Strategy helper retained for callers that need to name the selected tmux mode.
+     *
+     * @return strategy helper retained for callers that need to name the selected tmux mode
+     */
     public TmuxStrategy tmuxStrategy() {
         return config.tmuxStrategy();
     }

@@ -23,6 +23,7 @@
 package io.github.dhoard.braxton.benchmark;
 
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -56,12 +57,12 @@ public class EditorRenderBenchmark {
     public int draftLength;
 
     private Editor.Model state;
-    private Editor.Config options;
+    private EditorConfig options;
 
     @Setup
     public void setup() {
         state = Editor.Model.of(BenchCorpus.build(corpus, draftLength));
-        options = Editor.Config.defaults();
+        options = EditorConfig.defaults();
     }
 
     @Benchmark

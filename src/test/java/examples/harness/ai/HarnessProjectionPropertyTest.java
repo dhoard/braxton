@@ -33,7 +33,9 @@ import java.util.List;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** The frame, its transcript window, and its scroll bound hold for any content and viewport. */
+/**
+ * The frame, its transcript window, and its scroll bound hold for any content and viewport.
+ */
 class HarnessProjectionPropertyTest {
 
     private static Harness.Model randomState(Random random) {

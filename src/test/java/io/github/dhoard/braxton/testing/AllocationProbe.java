@@ -26,7 +26,9 @@ import java.lang.management.ManagementFactory;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Assumptions;
 
-/** Allocation measurement shared by the deterministic performance regressions. */
+/**
+ * Allocation measurement shared by the deterministic performance regressions.
+ */
 public final class AllocationProbe {
 
     private static volatile Object sink;

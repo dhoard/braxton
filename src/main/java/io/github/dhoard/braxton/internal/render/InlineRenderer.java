@@ -23,7 +23,7 @@
 package io.github.dhoard.braxton.internal.render;
 
 import io.github.dhoard.braxton.style.ColorProfile;
-import io.github.dhoard.braxton.view.Cursor;
+import io.github.dhoard.braxton.ui.Cursor;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -57,13 +57,19 @@ public final class InlineRenderer {
 
     private final CursorPresenter cursor;
 
-    /** Rows the region currently occupies; zero before the first frame and after a durable print. */
+    /**
+     * Rows the region currently occupies; zero before the first frame and after a durable print.
+     */
     private int height;
 
-    /** How far below the region's first row the terminal's cursor currently is. */
+    /**
+     * How far below the region's first row the terminal's cursor currently is.
+     */
     private int row;
 
-    /** The column the terminal's cursor is in. */
+    /**
+     * The column the terminal's cursor is in.
+     */
     private int column;
 
     /**
@@ -102,7 +108,7 @@ public final class InlineRenderer {
      *
      * @param previous the screen the region shows, or null to force a full repaint
      * @param next the screen to present; required
-     * @param profile the colour profile to encode for
+     * @param profile the color profile to encode for
      * @param caret the cursor the layout resolved, or empty when nothing is to be shown
      * @return the escape sequences to write, or an empty string when the region already shows
      *     {@code next} with the caret in place
@@ -224,7 +230,9 @@ public final class InlineRenderer {
         return out.toString();
     }
 
-    /** The caret the terminal shows itself, or empty when it stays hidden. */
+    /**
+     * The caret the terminal shows itself, or empty when it stays hidden.
+     */
     private static Optional<Cursor> nativeCaret(Optional<Cursor> caret) {
         if (caret == null) {
             return Optional.empty();
@@ -232,7 +240,9 @@ public final class InlineRenderer {
         return caret.filter(value -> value.visible() && value.strategy() == Cursor.Strategy.NATIVE);
     }
 
-    /** How many rows from the top of {@code screen} hold anything at all. */
+    /**
+     * How many rows from the top of {@code screen} hold anything at all.
+     */
     private static int paintedHeight(Screen screen) {
         for (int row = screen.rows() - 1; row >= 0; row--) {
             if (AnsiEncoder.paintedEnd(screen, row) > 0) {

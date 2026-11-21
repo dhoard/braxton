@@ -27,7 +27,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
-/** Owned, native-access-free subprocess used by NativeLibraryProcessTest. */
+/**
+ * Owned, native-access-free subprocess used by NativeLibraryProcessTest.
+ */
 public final class NativeExtractionProcess {
     private NativeExtractionProcess() {}
 

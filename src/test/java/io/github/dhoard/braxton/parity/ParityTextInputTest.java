@@ -31,7 +31,6 @@ import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.Modifiers;
 import io.github.dhoard.braxton.internal.input.InputDecoder;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.internal.input.TestReaders;
 import io.github.dhoard.braxton.internal.terminal.TimedReader;
 import io.github.dhoard.braxton.layout.Viewport;
@@ -42,12 +41,14 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.InteractionRouter;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.TextInput;
+import io.github.dhoard.braxton.widget.TextInputConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -61,7 +62,7 @@ import org.junit.jupiter.api.Test;
  * Phase 05 acceptance: a single-line text input - one row that never breaks, horizontal scrolling,
  * validation, completion and a three-field form.
  *
- * <p>Every assertion is against public behaviour: the model a message produces, the outputs it
+ * <p>Every assertion is against public behavior: the model a message produces, the outputs it
  * emits, the row the field paints, and what a routed key does to the demo scene.</p>
  */
 class ParityTextInputTest {
@@ -70,20 +71,20 @@ class ParityTextInputTest {
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private static TextInput.Config plain() {
-        return TextInput.Config.defaults();
+    private static TextInputConfig plain() {
+        return TextInputConfig.defaults();
     }
 
-    private static TextInput.Config completing(String... candidates) {
+    private static TextInputConfig completing(String... candidates) {
         return plain().withCompletion(TextInput.Completion.prefix());
     }
 
     private static Update<TextInput.Model, TextInput.Msg, TextInput.Output> sent(
-            TextInput.Model state, TextInput.Config config, TextInput.Msg message) {
+            TextInput.Model state, TextInputConfig config, TextInput.Msg message) {
         return new TextInput(config).update(state, message);
     }
 
-    private static TextInput.Model after(TextInput.Model state, TextInput.Config config, TextInput.Msg message) {
+    private static TextInput.Model after(TextInput.Model state, TextInputConfig config, TextInput.Msg message) {
         return sent(state, config, message).model();
     }
 
@@ -101,33 +102,39 @@ class ParityTextInputTest {
                 state.revision());
     }
 
-    private static String row(TextInput.Model state, TextInput.Config config, boolean focused) {
+    private static String row(TextInput.Model state, TextInputConfig config, boolean focused) {
         return TextInput.render(state, config, focused).plainText();
     }
 
-    private static String row(TextInput.Model state, TextInput.Config config, boolean focused, int cols) {
+    private static String row(TextInput.Model state, TextInputConfig config, boolean focused, int cols) {
         return TextInput.render(state, config, focused, cols).plainText();
     }
 
-    /** The row a real layout paints, which is what a user sees. */
-    private static List<String> painted(TextInput.Model state, TextInput.Config config, boolean focused, int cols) {
-        return new ScreenRenderer()
-                .plainLines(
+    /**
+     * The row a real layout paints, which is what a user sees.
+     */
+    private static List<String> painted(TextInput.Model state, TextInputConfig config, boolean focused, int cols) {
+        return ElementScreen.render(
                         new TextInput(config)
                                 .view(state.withFocus(focused), new ViewContext(new Viewport(1, cols)))
                                 .map(message -> message),
-                        new Viewport(1, cols));
+                        1,
+                        cols)
+                .lines();
     }
 
-    /** The expanded help of a key map: one line per group, holding every action in the map. */
+    /**
+     * The expanded help of a key map: one line per group, holding every action in the map.
+     */
     private static List<String> help(io.github.dhoard.braxton.input.KeyMap<TextInput.Msg> keys) {
-        return new ScreenRenderer()
-                .plainLines(Help.view(keys, true, 400), new Viewport(12, 400)).stream()
-                        .filter(line -> !line.isBlank())
-                        .toList();
+        return ElementScreen.render(Help.element(keys, Help.Config.defaults(), true, 400), 12, 400).lines().stream()
+                .filter(line -> !line.isBlank())
+                .toList();
     }
 
-    /** A validator for the ISBN fixtures the reference example uses. */
+    /**
+     * A validator for the ISBN fixtures the reference example uses.
+     */
     private static TextInput.Validation isbn13(String text) {
         String digits = text.replace("-", "");
         if (digits.length() != 13) {
@@ -148,7 +155,7 @@ class ParityTextInputTest {
         return sum % 10 == 0 ? TextInput.Validation.ok() : TextInput.Validation.invalid("ISBN has invalid check digit");
     }
 
-    private static TextInput.Config isbn() {
+    private static TextInputConfig isbn() {
         return plain().withMaxLength(17).withValidator(ParityTextInputTest::isbn13);
     }
 
@@ -156,7 +163,7 @@ class ParityTextInputTest {
 
     @Test
     void everyLineBreakAnInsertionCarriesBecomesOneSpace() {
-        TextInput.Config config = plain();
+        TextInputConfig config = plain();
         TextInput.Model state = after(TextInput.Model.of(""), config, new TextInput.Msg.Insert("a\r\nb"));
         assertThat(state.text()).as("CRLF is one break, so one space").isEqualTo("a b");
         state = after(state, config, new TextInput.Msg.Insert("c\rd"));
@@ -185,7 +192,7 @@ class ParityTextInputTest {
 
     @Test
     void theFieldPaintsExactlyOneRowHoweverLongTheDraftIs() {
-        TextInput.Config config = plain().withWidth(20);
+        TextInputConfig config = plain().withWidth(20);
         TextInput.Model state = TextInput.Model.of("alpha beta gamma delta");
         assertThat(TextInput.render(state, config, true).lines()).hasSize(1);
         assertThat(painted(state, config, true, 20)).hasSize(1);
@@ -193,7 +200,7 @@ class ParityTextInputTest {
 
     @Test
     void aNarrowFieldScrollsHorizontallyToKeepTheCaretVisible() {
-        TextInput.Config config = plain().withWidth(8);
+        TextInputConfig config = plain().withWidth(8);
         TextInput.Model state = TextInput.Model.of("abcdefghijklmnop");
         assertThat(TextInput.scrollOffset(state, config, 8)).isEqualTo(9);
         String painted = row(state, config, true);
@@ -204,7 +211,7 @@ class ParityTextInputTest {
 
     @Test
     void aCaretInTheMiddleOfALongDraftScrollsTheRowToIt() {
-        TextInput.Config config = plain().withWidth(6);
+        TextInputConfig config = plain().withWidth(6);
         TextInput.Model state = at("0123456789", 8);
         String painted = row(state, config, true);
         assertThat(painted).hasSize(6);
@@ -215,7 +222,7 @@ class ParityTextInputTest {
 
     @Test
     void theAllocatedWidthWinsWhenItIsNarrowerThanTheDeclaredOne() {
-        TextInput.Config config = plain().withWidth(40);
+        TextInputConfig config = plain().withWidth(40);
         TextInput.Model state = TextInput.Model.of("abcdefghijklmnopqrstuvwxyz");
         assertThat(TextInput.scrollOffset(state, config, 40)).isZero();
         assertThat(TextInput.scrollOffset(state, config, 10)).isEqualTo(17);
@@ -224,7 +231,7 @@ class ParityTextInputTest {
 
     @Test
     void aOneCellFieldPaintsTheCaretAndNothingElse() {
-        TextInput.Config config = plain().withWidth(1);
+        TextInputConfig config = plain().withWidth(1);
         TextInput.Model state = TextInput.Model.of("abc");
         assertThat(row(state, config, true)).isEqualTo("\u2588");
         assertThat(row(state, config, false))
@@ -234,7 +241,7 @@ class ParityTextInputTest {
 
     @Test
     void aFieldThatIsGivenNoWidthPaintsItsWholeDraft() {
-        TextInput.Config config = plain();
+        TextInputConfig config = plain();
         TextInput.Model state = TextInput.Model.of("abc");
         assertThat(row(state, config, true)).isEqualTo("abc\u2588");
         assertThat(TextInput.scrollOffset(state, config, 0)).isZero();
@@ -242,7 +249,7 @@ class ParityTextInputTest {
 
     @Test
     void wideGlyphsScrollWholeAndKeepTheCaretVisible() {
-        TextInput.Config config = plain().withWidth(4);
+        TextInputConfig config = plain().withWidth(4);
         TextInput.Model state = TextInput.Model.of("\u65e5\u672c\u8a9e");
         String painted = row(state, config, true);
         assertThat(painted)
@@ -253,7 +260,7 @@ class ParityTextInputTest {
 
     @Test
     void aTabInADraftIsPaintedAsTheSpacesOfItsStop() {
-        TextInput.Config config = plain().withWidth(12);
+        TextInputConfig config = plain().withWidth(12);
         TextInput.Model state = at("a\tb", 3);
         String painted = row(state, config, true);
         assertThat(painted).isEqualTo("a   b\u2588");
@@ -261,7 +268,7 @@ class ParityTextInputTest {
 
     @Test
     void aSelectionIsPaintedWithTheSelectionStyleAndReplacedByTyping() {
-        TextInput.Config config = plain().withStyles(Style.NONE, Style.NONE.withUnderline(), Style.NONE);
+        TextInputConfig config = plain().withStyles(Style.NONE, Style.NONE.withUnderline(), Style.NONE);
         TextInput.Model selected = after(TextInput.Model.of("hello world"), config, new TextInput.Msg.SelectAll());
         assertThat(selected.hasSelection()).isTrue();
         assertThat(selected.selection()).isEqualTo("hello world");
@@ -273,7 +280,7 @@ class ParityTextInputTest {
 
     @Test
     void theLengthCapCountsUtf16UnitsWithoutSplittingACluster() {
-        TextInput.Config config = plain().withMaxLength(3);
+        TextInputConfig config = plain().withMaxLength(3);
         String thumbsUp = "\uD83D\uDC4D";
         TextInput.Model state = after(TextInput.Model.of(""), config, new TextInput.Msg.Insert(thumbsUp + thumbsUp));
         assertThat(state.text())
@@ -290,7 +297,7 @@ class ParityTextInputTest {
 
     @Test
     void theLengthCapAppliesToAPasteAsWell() {
-        TextInput.Config config = plain().withMaxLength(5);
+        TextInputConfig config = plain().withMaxLength(5);
         assertThat(after(TextInput.Model.of(""), config, new TextInput.Msg.Paste("abcdefghij"))
                         .text())
                 .isEqualTo("abcde");
@@ -308,7 +315,7 @@ class ParityTextInputTest {
 
     @Test
     void aValidDraftTransitionsFromInvalidToValid() {
-        TextInput.Config config = isbn();
+        TextInputConfig config = isbn();
         TextInput field = new TextInput(config);
         TextInput.Model state = field.init(new InitContext(null, null)).model();
         Update<TextInput.Model, TextInput.Msg, TextInput.Output> typed =
@@ -328,7 +335,7 @@ class ParityTextInputTest {
 
     @Test
     void validationIsOnlyReportedWhenItChanges() {
-        TextInput.Config config = plain().withValidator(text -> text.isEmpty()
+        TextInputConfig config = plain().withValidator(text -> text.isEmpty()
                 ? TextInput.Validation.ok()
                 : text.length() < 3 ? TextInput.Validation.invalid("needs 3 characters") : TextInput.Validation.ok());
         TextInput field = new TextInput(config);
@@ -350,7 +357,7 @@ class ParityTextInputTest {
 
     @Test
     void anInvalidDraftStaysEditableAndItsSubmitIsRejected() {
-        TextInput.Config config = isbn();
+        TextInputConfig config = isbn();
         TextInput field = new TextInput(config);
         TextInput.Model state = field.init(new InitContext(null, null)).model();
         state = after(state, config, new TextInput.Msg.Insert("9783"));
@@ -369,7 +376,7 @@ class ParityTextInputTest {
 
     @Test
     void aValidDraftSubmitsItsText() {
-        TextInput.Config config = plain().withValidator(
+        TextInputConfig config = plain().withValidator(
                         text -> text.isEmpty() ? TextInput.Validation.invalid("empty") : TextInput.Validation.ok());
         TextInput.Model valid = new TextInput(config).validated(TextInput.Model.of("hello"));
         assertThat(sent(valid, config, new TextInput.Msg.Submit()).outputs())
@@ -378,7 +385,7 @@ class ParityTextInputTest {
 
     @Test
     void anInvalidDraftSubmitsWhenThePolicyAllowsIt() {
-        TextInput.Config config = plain().withValidator(text -> TextInput.Validation.invalid("always"))
+        TextInputConfig config = plain().withValidator(text -> TextInput.Validation.invalid("always"))
                 .withSubmitPolicy(TextInput.SubmitPolicy.ALLOW_INVALID);
         TextInput.Model state = new TextInput(config).validated(TextInput.Model.of("draft"));
         assertThat(sent(state, config, new TextInput.Msg.Submit()).outputs())
@@ -387,7 +394,7 @@ class ParityTextInputTest {
 
     @Test
     void replacingTheDraftRevalidatesIt() {
-        TextInput.Config config = plain().withValidator(
+        TextInputConfig config = plain().withValidator(
                         text -> text.equals("ok") ? TextInput.Validation.ok() : TextInput.Validation.invalid("not ok"));
         TextInput.Model state = new TextInput(config).validated(TextInput.Model.of("bad"));
         assertThat(state.valid()).isFalse();
@@ -402,7 +409,7 @@ class ParityTextInputTest {
 
     @Test
     void aValidatorThatThrowsIsNotSwallowed() {
-        TextInput.Config config = plain().withValidator(text -> {
+        TextInputConfig config = plain().withValidator(text -> {
             throw new IllegalStateException("validator exploded");
         });
         assertThatThrownBy(() -> sent(TextInput.Model.of("a"), config, new TextInput.Msg.Insert("b")))
@@ -412,7 +419,7 @@ class ParityTextInputTest {
 
     @Test
     void aValidatorThatAnswersNothingIsAConfigurationFailure() {
-        TextInput.Config config = plain().withValidator(text -> null);
+        TextInputConfig config = plain().withValidator(text -> null);
         assertThatThrownBy(() -> sent(TextInput.Model.of("a"), config, new TextInput.Msg.Insert("b")))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("validator returned no validation");
@@ -431,7 +438,7 @@ class ParityTextInputTest {
 
     @Test
     void candidatesMatchByCaseSensitivePrefixInTheOrderTheyWereSupplied() {
-        TextInput.Config config = completing();
+        TextInputConfig config = completing();
         TextInput.Model state = withCandidates(TextInput.Model.of("bra"), "braxton", "Branch", "branch", "gum");
         assertThat(TextInput.matchedCandidates(state, config)).containsExactly("braxton", "branch");
         assertThat(TextInput.selectedCandidate(state, config)).contains("braxton");
@@ -448,7 +455,7 @@ class ParityTextInputTest {
 
     @Test
     void anEmptyDraftHasNothingToComplete() {
-        TextInput.Config config = completing();
+        TextInputConfig config = completing();
         TextInput.Model state = withCandidates(TextInput.Model.of(""), "braxton");
         assertThat(TextInput.matchedCandidates(state, config)).isEmpty();
         assertThat(TextInput.selectedCandidate(state, config)).isEmpty();
@@ -457,7 +464,7 @@ class ParityTextInputTest {
 
     @Test
     void completingIsOffUnlessItIsAskedFor() {
-        TextInput.Config config = plain();
+        TextInputConfig config = plain();
         TextInput.Model state = withCandidates(TextInput.Model.of("br"), "braxton");
         assertThat(TextInput.matchedCandidates(state, config)).isEmpty();
         assertThat(TextInput.suggestedSuffix(state, config)).isEmpty();
@@ -465,7 +472,7 @@ class ParityTextInputTest {
 
     @Test
     void acceptingACandidateReplacesTheWholeDraft() {
-        TextInput.Config config = completing();
+        TextInputConfig config = completing();
         TextInput.Model state = withCandidates(at("brax", 2), "braxton");
         TextInput.Model accepted = after(state, config, new TextInput.Msg.AcceptSuggestion());
         assertThat(accepted.text())
@@ -476,7 +483,7 @@ class ParityTextInputTest {
 
     @Test
     void cyclingChangesTheSelectedCandidateAndWrapsAtBothEnds() {
-        TextInput.Config config = completing();
+        TextInputConfig config = completing();
         TextInput.Model state = withCandidates(TextInput.Model.of("br"), "bravo", "braxton", "branch");
         assertThat(TextInput.selectedCandidate(state, config)).contains("bravo");
         state = after(state, config, new TextInput.Msg.NextSuggestion());
@@ -496,7 +503,7 @@ class ParityTextInputTest {
 
     @Test
     void duplicateCandidatesAreCollapsedWhenTheyAreSupplied() {
-        TextInput.Config config = plain();
+        TextInputConfig config = plain();
         TextInput.Model state = after(
                 TextInput.Model.of(""),
                 config,
@@ -509,7 +516,7 @@ class ParityTextInputTest {
 
     @Test
     void anAnswerForAnOlderDraftIsIgnored() {
-        TextInput.Config config = plain();
+        TextInputConfig config = plain();
         TextInput.Model state = after(TextInput.Model.of(""), config, new TextInput.Msg.Insert("b"));
         assertThat(state.revision()).isEqualTo(1);
         TextInput.Model answered = after(state, config, new TextInput.Msg.Candidates(0, List.of("stale")));
@@ -523,7 +530,7 @@ class ParityTextInputTest {
 
     @Test
     void editingInvalidatesAnObsoleteCompletion() {
-        TextInput.Config config = completing();
+        TextInputConfig config = completing();
         TextInput.Model state = withCandidates(TextInput.Model.of("br"), "braxton");
         assertThat(TextInput.suggestedSuffix(state, config)).isEqualTo("axton");
         state = after(state, config, new TextInput.Msg.Insert("zz"));
@@ -534,7 +541,7 @@ class ParityTextInputTest {
 
     @Test
     void aUnicodePrefixMatchesAndItsSuffixIsTheRestOfTheCandidate() {
-        TextInput.Config config = completing();
+        TextInputConfig config = completing();
         TextInput.Model state = withCandidates(TextInput.Model.of("\u65e5\u672c"), "\u65e5\u672c\u8a9e");
         assertThat(TextInput.matchedCandidates(state, config)).containsExactly("\u65e5\u672c\u8a9e");
         assertThat(TextInput.suggestedSuffix(state, config)).isEqualTo("\u8a9e");
@@ -543,8 +550,8 @@ class ParityTextInputTest {
 
     @Test
     void aMaskedDraftNeverCompletes() {
-        TextInput.Config config =
-                plain().withMasking(Editor.Config.Masking.PASSWORD).withCompletion(TextInput.Completion.prefix());
+        TextInputConfig config =
+                plain().withMasking(EditorConfig.Masking.PASSWORD).withCompletion(TextInput.Completion.prefix());
         TextInput.Model state = withCandidates(TextInput.Model.of("hunter"), "hunter2");
         assertThat(TextInput.matchedCandidates(state, config)).isEmpty();
         assertThat(TextInput.suggestedSuffix(state, config)).isEmpty();
@@ -563,7 +570,7 @@ class ParityTextInputTest {
 
     @Test
     void aMaskedClusterPaintsOneGlyphSoTheCaretFollowsTheMaskNotTheDraft() {
-        TextInput.Config config = plain().withMasking(Editor.Config.Masking.PASSWORD);
+        TextInputConfig config = plain().withMasking(EditorConfig.Masking.PASSWORD);
         // A joined cluster of eight UTF-16 units masks as one glyph, so a caret at the draft's end
         // is the second cell of the painted row, not the ninth.
         String family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
@@ -577,7 +584,7 @@ class ParityTextInputTest {
 
     @Test
     void aHiddenDraftPaintsOnlyItsCaret() {
-        TextInput.Config config = plain().withMasking(Editor.Config.Masking.HIDDEN);
+        TextInputConfig config = plain().withMasking(EditorConfig.Masking.HIDDEN);
         TextInput.Model state = TextInput.Model.of("secret");
         assertThat(row(state, config, true)).isEqualTo("\u2588");
         assertThat(row(state, config, false))
@@ -588,7 +595,7 @@ class ParityTextInputTest {
 
     @Test
     void aCompletionGestureWithNothingToCompleteFallsThroughToTheParent() {
-        TextInput.Config config = plain().withCompletion(TextInput.Completion.prefix());
+        TextInputConfig config = plain().withCompletion(TextInput.Completion.prefix());
         // A form that binds the same gestures for itself, with the field as the focused element.
         assertThat(route(withCandidates(TextInput.Model.of("br"), "gum"), config, Key.TAB))
                 .as("nothing matches 'br' among the candidates, so the form gets the key")
@@ -611,22 +618,25 @@ class ParityTextInputTest {
      * <p>The form's bindings bubble, so the field sees the key first: what it consumes is its own
      * message and what it leaves alone reaches the form.</p>
      */
-    private static Optional<String> route(TextInput.Model state, TextInput.Config config, Key gesture) {
-        View<String> view = Views.keyed(
-                List.of(),
-                new TextInput(config).view(state, CONTEXT).map(message -> "field:" + message),
-                List.of(
-                        io.github.dhoard.braxton.input.Binding.of("tab", "next"),
-                        io.github.dhoard.braxton.input.Binding.of("ctrl+n", "cycle")));
-        return InputRouter.route(view, InputEvent.KeyInput.of(gesture, gesture.name()));
+    private static Optional<String> route(TextInput.Model state, TextInputConfig config, Key gesture) {
+        Element<String> view = new TextInput(config).view(state, CONTEXT).map(message -> "field:" + message);
+        List<io.github.dhoard.braxton.input.Binding<String>> application = List.of(
+                io.github.dhoard.braxton.input.Binding.of("tab", "next"),
+                io.github.dhoard.braxton.input.Binding.of("ctrl+n", "cycle"));
+        return InteractionRouter.message(view, InputEvent.KeyInput.of(gesture, gesture.name()))
+                .or(() ->
+                        InteractionRouter.route(
+                                        view, InputEvent.KeyInput.of(gesture, gesture.name()), List.of(), application)
+                                .stream()
+                                .findFirst());
     }
 
     @Test
     void tabAcceptsACandidateWhenOneIsSelected() {
-        TextInput.Config config = plain().withCompletion(TextInput.Completion.prefix());
-        View<TextInput.Msg> field =
+        TextInputConfig config = plain().withCompletion(TextInput.Completion.prefix());
+        Element<TextInput.Msg> field =
                 new TextInput(config).view(withCandidates(TextInput.Model.of("br"), "braxton"), CONTEXT);
-        Optional<TextInput.Msg> routed = InputRouter.route(field, InputEvent.KeyInput.of(Key.TAB, "\t"));
+        Optional<TextInput.Msg> routed = InteractionRouter.message(field, InputEvent.KeyInput.of(Key.TAB, "\t"));
         assertThat(routed)
                 .as("the field consumes the gesture and asks to accept")
                 .contains(new TextInput.Msg.AcceptSuggestion());
@@ -634,7 +644,7 @@ class ParityTextInputTest {
 
     @Test
     void aRemappedAcceptGestureReplacesTheDefault() {
-        TextInput.Config config = plain().withCompletion(TextInput.Completion.prefix());
+        TextInputConfig config = plain().withCompletion(TextInput.Completion.prefix());
         TextInput field =
                 new TextInput(config, TextInput.defaultKeys(config).withAliases("accept-suggestion", "ctrl+space"));
         assertThat(field.keys().actionFor(Key.TAB)).isEmpty();
@@ -644,7 +654,7 @@ class ParityTextInputTest {
 
     @Test
     void completingIsAnOutputTheApplicationAnswers() {
-        TextInput.Config config = plain().withCompletion(TextInput.Completion.prefix());
+        TextInputConfig config = plain().withCompletion(TextInput.Completion.prefix());
         Update<TextInput.Model, TextInput.Msg, TextInput.Output> typed =
                 sent(TextInput.Model.of(""), config, new TextInput.Msg.Insert("br"));
         assertThat(typed.outputs()).containsExactly(new TextInput.Output.SuggestionsRequested(1, "br"));
@@ -670,7 +680,7 @@ class ParityTextInputTest {
     }
 
     private static List<String> lines(ComponentDriver<TextInputDemo.Model, TextInputDemo.Msg, ?> driver) {
-        return new ScreenRenderer().plainLines(driver.view(CONTEXT), new Viewport(24, 80));
+        return ElementScreen.render(driver.view(CONTEXT), 24, 80).lines();
     }
 
     private static void press(ComponentDriver<TextInputDemo.Model, TextInputDemo.Msg, Never> driver, String bytes) {
@@ -681,7 +691,9 @@ class ParityTextInputTest {
             throw new AssertionError(failure);
         }
         for (InputEvent event : events) {
-            InputRouter.route(driver.view(CONTEXT), event).ifPresent(message -> deliver(driver, message));
+            io.github.dhoard.braxton.testing.Routing.route(driver.component(), driver.model(), CONTEXT, event).stream()
+                    .findFirst()
+                    .ifPresent(message -> deliver(driver, message));
         }
     }
 
@@ -715,7 +727,9 @@ class ParityTextInputTest {
         return events;
     }
 
-    /** Feeds the decoder one byte per read, so a partial sequence is really partial. */
+    /**
+     * Feeds the decoder one byte per read, so a partial sequence is really partial.
+     */
     private static final class ByteAtATime extends InputStream {
 
         private final byte[] bytes;
@@ -842,7 +856,9 @@ class ParityTextInputTest {
         assertThat(lines(driver)).anySatisfy(line -> assertThat(line).contains("msg=too-short"));
     }
 
-    /** One painted scene row, as text. */
+    /**
+     * One painted scene row, as text.
+     */
     private static String paintedRow(ComponentDriver<TextInputDemo.Model, TextInputDemo.Msg, ?> driver, int index) {
         return lines(driver).get(index);
     }
@@ -851,7 +867,7 @@ class ParityTextInputTest {
 
     @Test
     void renderingIsPureAndLeavesTheModelAlone() {
-        TextInput.Config config = completing().withWidth(10);
+        TextInputConfig config = completing().withWidth(10);
         TextInput.Model state = withCandidates(TextInput.Model.of("bra"), "braxton");
         TextInput.Model before =
                 new TextInput.Model(state.draft(), state.validation(), state.suggestions(), state.revision());
@@ -859,7 +875,8 @@ class ParityTextInputTest {
         StyledText second = TextInput.render(state, config, true);
         assertThat(first).isEqualTo(second);
         assertThat(state).isEqualTo(before);
-        assertThat(new ScreenRenderer().plainLines(new TextInput(config).view(state, CONTEXT), new Viewport(1, 10)))
+        assertThat(ElementScreen.render(new TextInput(config).view(state, CONTEXT), 1, 10)
+                        .lines())
                 .isEqualTo(painted(state, config, true, 10));
     }
 
@@ -895,35 +912,35 @@ class ParityTextInputTest {
 
     @Test
     void pasteInputAndUnhandledEventsAreMappedAndLeftAlone() {
-        TextInput.Config config = plain();
-        View<TextInput.Msg> view = new TextInput(config).view(TextInput.Model.of(""), CONTEXT);
-        assertThat(InputRouter.route(view, new InputEvent.PasteInput("a\nb")))
+        TextInputConfig config = plain();
+        Element<TextInput.Msg> view = new TextInput(config).view(TextInput.Model.of(""), CONTEXT);
+        assertThat(InteractionRouter.message(view, new InputEvent.PasteInput("a\nb")))
                 .contains(new TextInput.Msg.Paste("a\nb"));
-        assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.ESCAPE)))
+        assertThat(InteractionRouter.message(view, InputEvent.KeyInput.of(Key.ESCAPE)))
                 .as("escape is not a field gesture, so it is left for the application")
                 .isEmpty();
-        assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.of("b"), "b")))
+        assertThat(InteractionRouter.message(view, InputEvent.KeyInput.of(Key.of("b"), "b")))
                 .contains(new TextInput.Msg.Insert("b"));
-        assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.of("b", Modifiers.CTRL), "")))
+        assertThat(InteractionRouter.message(view, InputEvent.KeyInput.of(Key.of("b", Modifiers.CTRL), "")))
                 .as("a modified key is not text")
                 .isEmpty();
     }
 
     @Test
     void aFieldThatIsNotFocusedReceivesNoInput() {
-        View<TextInput.Msg> view =
+        Element<TextInput.Msg> view =
                 new TextInput(plain()).view(TextInput.Model.of("").withFocus(false), CONTEXT);
-        assertThat(InputRouter.route(view, InputEvent.KeyInput.of(Key.of("b"), "b")))
+        assertThat(InteractionRouter.message(view, InputEvent.KeyInput.of(Key.of("b"), "b")))
                 .isEmpty();
     }
 
     @Test
     void aFieldWithASelectionCopiesOnlyWhatMayLeaveIt() {
-        TextInput.Config config = plain();
+        TextInputConfig config = plain();
         TextInput.Model selected = after(TextInput.Model.of("secret"), config, new TextInput.Msg.SelectAll());
         assertThat(sent(selected, config, new TextInput.Msg.Copy()).outputs())
                 .containsExactly(new TextInput.Output.Copy("secret"));
-        TextInput.Config refused = config.withCopyEnabled(false);
+        TextInputConfig refused = config.withCopyEnabled(false);
         assertThat(sent(selected, refused, new TextInput.Msg.Copy()).outputs())
                 .containsExactly(new TextInput.Output.Copy(""));
         assertThat(sent(selected, config, new TextInput.Msg.PasteRequest()).outputs())
@@ -932,28 +949,27 @@ class ParityTextInputTest {
 
     @Test
     void aDeclaredCaretSitsOnTheCellABlockWouldCover() {
-        TextInput.Config config = plain().withWidth(8)
+        TextInputConfig config = plain().withWidth(8)
                 .withCursor(Editor.CursorPolicy.nativeCursor(
-                        io.github.dhoard.braxton.view.Cursor.Shape.BAR,
-                        io.github.dhoard.braxton.view.Cursor.Mode.STEADY));
+                        io.github.dhoard.braxton.ui.Cursor.Shape.BAR, io.github.dhoard.braxton.ui.Cursor.Mode.STEADY));
         TextInput.Model state = TextInput.Model.of("abcdefghijklmnop");
         // A declared caret is not painted into the text; it is placed on the same cell a block would
         // have covered, at the window's caret column.
         String painted = row(state, config, true);
         assertThat(painted).isEqualTo("jklmnop");
-        io.github.dhoard.braxton.view.RenderedScreen screen = new ScreenRenderer()
-                .screen(new TextInput(config).view(state, new ViewContext(new Viewport(1, 8))), new Viewport(1, 8));
-        assertThat(screen.cursor()).isPresent();
-        assertThat(screen.cursor().get().column())
+        ElementScreen screen =
+                ElementScreen.render(new TextInput(config).view(state, new ViewContext(new Viewport(1, 8))), 1, 8);
+        assertThat(screen.cursor()).isNotNull();
+        assertThat(screen.cursor().column())
                 .as("the last cell of the window, where the block would have been")
                 .isEqualTo(7);
-        assertThat(screen.cursor().get().row()).isZero();
-        assertThat(screen.cursor().get().strategy()).isEqualTo(io.github.dhoard.braxton.view.Cursor.Strategy.NATIVE);
+        assertThat(screen.cursor().row()).isZero();
+        assertThat(screen.cursor().strategy()).isEqualTo(io.github.dhoard.braxton.ui.Cursor.Strategy.NATIVE);
     }
 
     @Test
     void aWordAndADocumentEdgeAreOneMotionInOneRow() {
-        TextInput.Config config = plain();
+        TextInputConfig config = plain();
         TextInput.Model state = at("alpha beta", 10);
         assertThat(after(state, config, new TextInput.Msg.MoveWordLeft()).caret())
                 .isEqualTo(6);
@@ -980,7 +996,7 @@ class ParityTextInputTest {
 
     @Test
     void malformedAndOversizedInputStaysOneBoundedRow() {
-        TextInput.Config config = plain().withWidth(10).withMaxLength(16);
+        TextInputConfig config = plain().withWidth(10).withMaxLength(16);
         TextInput.Model state = TextInput.Model.of("");
         // An unpaired surrogate and a control character are neither breaks nor limits: they are
         // dead ends at a value boundary, and neither may throw or turn the field into two rows.
@@ -993,7 +1009,7 @@ class ParityTextInputTest {
 
     @Test
     void aVeryLongDraftIsPaintedOnlyThroughItsWindow() {
-        TextInput.Config config = plain().withWidth(12);
+        TextInputConfig config = plain().withWidth(12);
         TextInput.Model state = TextInput.Model.of("x".repeat(10_000));
         assertThat(TextInput.render(state, config, true).lines()).hasSize(1);
         assertThat(row(state, config, true)).hasSize(12);
@@ -1002,7 +1018,7 @@ class ParityTextInputTest {
 
     @Test
     void theSameCandidateAnswerTwiceChangesNothingTheSecondTime() {
-        TextInput.Config config = plain();
+        TextInputConfig config = plain();
         TextInput.Model once = after(TextInput.Model.of(""), config, new TextInput.Msg.Candidates(0, List.of("alpha")));
         TextInput.Model twice = after(once, config, new TextInput.Msg.Candidates(0, List.of("alpha")));
         assertThat(twice).isSameAs(once);
@@ -1015,7 +1031,7 @@ class ParityTextInputTest {
 
     @Test
     void aPromptIsPaintedOnceAndIsNeverContent() {
-        TextInput.Config config = plain().withWidth(12).withPrompt("name: ", Style.NONE);
+        TextInputConfig config = plain().withWidth(12).withPrompt("name: ", Style.NONE);
         TextInput.Model state = TextInput.Model.of("ada");
         assertThat(row(state, config, true)).isEqualTo("name: ada\u2588");
         assertThat(sent(state, config, new TextInput.Msg.Submit()).outputs())
@@ -1027,7 +1043,7 @@ class ParityTextInputTest {
 
     @Test
     void aPlaceholderStandsInForAnEmptyDraftWithoutBeingContent() {
-        TextInput.Config config = plain().withWidth(12).withPlaceholder("Nickname", Style.NONE);
+        TextInputConfig config = plain().withWidth(12).withPlaceholder("Nickname", Style.NONE);
         TextInput.Model empty = TextInput.Model.of("");
         assertThat(row(empty, config, true)).isEqualTo("\u2588ickname");
         assertThat(sent(empty, config, new TextInput.Msg.Submit()).outputs())

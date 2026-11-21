@@ -44,7 +44,7 @@ import java.util.function.Consumer;
  * a stream pair replaces that device with something the caller owns - a pipe, a socket, a byte array,
  * another process's terminal - and no native library is loaded and no device configuration is
  * changed. A supplied stream is not a VT: it negotiates no alternate screen, no pointer reporting, no
- * bracketed paste, no focus reporting and no colour, so a stream session renders inline (see
+ * bracketed paste, no focus reporting and no color, so a stream session renders inline (see
  * {@link TerminalOptions#alternateScreen()}) and asks for anything else only through an explicit
  * {@link RuntimeOptions#withColorProfile(io.github.dhoard.braxton.style.ColorProfile)}.</p>
  *
@@ -79,10 +79,14 @@ public record IoOptions(
         boolean renderer,
         Consumer<String> diagnostics) {
 
-    /** The rows a stream session lays out for when no size is stated. */
+    /**
+     * The rows a stream session lays out for when no size is stated.
+     */
     public static final int DEFAULT_ROWS = 24;
 
-    /** The columns a stream session lays out for when no size is stated. */
+    /**
+     * The columns a stream session lays out for when no size is stated.
+     */
     public static final int DEFAULT_COLUMNS = 80;
 
     /**

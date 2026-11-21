@@ -29,6 +29,7 @@ import io.github.dhoard.braxton.app.RuntimeOptions;
 import io.github.dhoard.braxton.app.TerminalOptions;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
@@ -47,11 +48,16 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.RichList;
+import io.github.dhoard.braxton.widget.RichListConfig;
+import io.github.dhoard.braxton.widget.RichListModel;
+import io.github.dhoard.braxton.widget.RichListMsg;
+import io.github.dhoard.braxton.widget.RichListOutput;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -90,51 +96,79 @@ import java.util.Optional;
  */
 public final class MouseDemo {
 
-    /** The id of the left pane's mount. */
+    /**
+     * The id of the left pane's mount.
+     */
     public static final String LEFT_PANE = "left";
 
-    /** The id of the right pane's mount. */
+    /**
+     * The id of the right pane's mount.
+     */
     public static final String RIGHT_PANE = "right";
 
-    /** The id of the dialog's mount. */
+    /**
+     * The id of the dialog's mount.
+     */
     public static final String DIALOG = "dialog";
 
-    /** The draft the left pane starts with. */
+    /**
+     * The draft the left pane starts with.
+     */
     public static final String DRAFT = "Click in this pane to place the caret, and drag to select.";
 
-    /** The items the right pane lists. */
+    /**
+     * The items the right pane lists.
+     */
     public static final List<RichList.Item> ITEMS = List.of(
             RichList.Item.of("item-01", "Lantern", "Hangs above the stall"),
             RichList.Item.of("item-02", "Sourdough", "Named after a friend"),
             RichList.Item.of("item-03", "Wool socks", "Thicker than they look"),
             RichList.Item.of("item-04", "Mending kit", "Needle, thread and scissors"));
 
-    /** The items the dialog lists, so a click inside the modal is visible as its own selection. */
+    /**
+     * The items the dialog lists, so a click inside the modal is visible as its own selection.
+     */
     public static final List<RichList.Item> DIALOG_ITEMS =
             List.of(RichList.Item.of("dialog-01", "Discard"), RichList.Item.of("dialog-02", "Keep"));
 
-    /** The two status rows above the panes. */
+    /**
+     * The two status rows above the panes.
+     */
     public static final int STATUS_ROWS = 2;
 
-    /** The two help rows below the panes. */
+    /**
+     * The two help rows below the panes.
+     */
     public static final int HELP_ROWS = 2;
 
-    /** The rows a mount is told the scene paints around it. */
+    /**
+     * The rows a mount is told the scene paints around it.
+     */
     public static final int RESERVED_ROWS = STATUS_ROWS + HELP_ROWS;
 
-    /** The panes' rows when the view is initialized without a terminal. */
+    /**
+     * The panes' rows when the view is initialized without a terminal.
+     */
     public static final int PANE_ROWS = 24 - RESERVED_ROWS;
 
-    /** The rows the dialog's box occupies, edges included. */
+    /**
+     * The rows the dialog's box occupies, edges included.
+     */
     public static final int DIALOG_ROWS = 5;
 
-    /** The columns the dialog's box occupies, edges included. */
+    /**
+     * The columns the dialog's box occupies, edges included.
+     */
     public static final int DIALOG_COLS = 40;
 
-    /** The blank rows the dialog is inset by, which is where its first painted row starts. */
+    /**
+     * The blank rows the dialog is inset by, which is where its first painted row starts.
+     */
     public static final int DIALOG_TOP = 1;
 
-    /** The blank columns the dialog is inset by, which is where its first painted column starts. */
+    /**
+     * The blank columns the dialog is inset by, which is where its first painted column starts.
+     */
     public static final int DIALOG_LEFT = 20;
 
     private static final Style STATUS = Style.NONE.withBold();
@@ -149,10 +183,14 @@ public final class MouseDemo {
      */
     public enum Pane {
 
-        /** The left pane holds the keyboard. */
+        /**
+         * The left pane holds the keyboard.
+         */
         LEFT,
 
-        /** The right pane holds the keyboard. */
+        /**
+         * The right pane holds the keyboard.
+         */
         RIGHT
     }
 
@@ -171,8 +209,8 @@ public final class MouseDemo {
      */
     public record Model(
             Editor.Model left,
-            RichList.Model right,
-            RichList.Model dialog,
+            RichListModel right,
+            RichListModel dialog,
             Pane pane,
             boolean modal,
             int reports,
@@ -180,15 +218,17 @@ public final class MouseDemo {
             String last,
             boolean expandedHelp) {
 
-        /** Substitutes initialized defaults and derives every focus flag. */
+        /**
+         * Substitutes initialized defaults and derives every focus flag.
+         */
         public Model {
             pane = pane == null ? Pane.LEFT : pane;
             pointer = pointer == null ? "none" : pointer;
             last = last == null ? "none" : last;
             left = (left == null ? Editor.Model.of(DRAFT) : left).withFocus(!modal && pane == Pane.LEFT);
-            right = (right == null ? RichList.Model.of(ITEMS, PANE_ROWS) : right)
+            right = (right == null ? RichListModel.of(ITEMS, PANE_ROWS) : right)
                     .withFocus(!modal && pane == Pane.RIGHT);
-            dialog = (dialog == null ? RichList.Model.of(DIALOG_ITEMS, DIALOG_ROWS - 2) : dialog).withFocus(modal);
+            dialog = (dialog == null ? RichListModel.of(DIALOG_ITEMS, DIALOG_ROWS - 2) : dialog).withFocus(modal);
             reports = Math.max(0, reports);
         }
 
@@ -232,11 +272,11 @@ public final class MouseDemo {
             return new Model(value, right, dialog, pane, modal, reports, pointer, last, expandedHelp);
         }
 
-        Model withRight(RichList.Model value) {
+        Model withRight(RichListModel value) {
             return new Model(left, value, dialog, pane, modal, reports, pointer, last, expandedHelp);
         }
 
-        Model withDialog(RichList.Model value) {
+        Model withDialog(RichListModel value) {
             return new Model(left, right, value, pane, modal, reports, pointer, last, expandedHelp);
         }
 
@@ -261,7 +301,9 @@ public final class MouseDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -283,28 +325,28 @@ public final class MouseDemo {
          *
          * @param value the list's message
          */
-        record Right(RichList.Msg value) implements Msg {}
+        record Right(RichListMsg value) implements Msg {}
 
         /**
          * A message from the mounted dialog list.
          *
          * @param value the dialog's message
          */
-        record Dialog(RichList.Msg value) implements Msg {}
+        record Dialog(RichListMsg value) implements Msg {}
 
         /**
          * An output the right pane routed to the scene.
          *
          * @param value the list's output
          */
-        record RightOutput(RichList.Output value) implements Msg {}
+        record RightOutput(RichListOutput value) implements Msg {}
 
         /**
          * An output the dialog routed to the scene.
          *
          * @param value the dialog's output
          */
-        record DialogOutput(RichList.Output value) implements Msg {}
+        record DialogOutput(RichListOutput value) implements Msg {}
 
         /**
          * One pointer report the scene observed, as the token the status row paints.
@@ -313,16 +355,24 @@ public final class MouseDemo {
          */
         record Seen(String token) implements Msg {}
 
-        /** Moves the keyboard between the panes. */
+        /**
+         * Moves the keyboard between the panes.
+         */
         record TogglePane() implements Msg {}
 
-        /** Opens or closes the dialog. */
+        /**
+         * Opens or closes the dialog.
+         */
         record ToggleModal() implements Msg {}
 
-        /** Toggles full help. */
+        /**
+         * Toggles full help.
+         */
         record ToggleHelp() implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -335,7 +385,11 @@ public final class MouseDemo {
         return RuntimeOptions.defaults().withTerminal(TerminalOptions.DEFAULT.withMouseMode(MouseMode.CELL_MOTION));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene(), options());
     }
@@ -360,8 +414,8 @@ public final class MouseDemo {
      *
      * @return the policy
      */
-    public static Editor.Config editorConfig() {
-        return Editor.Config.defaults();
+    public static EditorConfig editorConfig() {
+        return EditorConfig.defaults();
     }
 
     /**
@@ -370,8 +424,8 @@ public final class MouseDemo {
      * @param rows the rows the pane holds
      * @return the definition
      */
-    public static RichList.Config listConfig(int rows) {
-        return RichList.Config.defaults()
+    public static RichListConfig listConfig(int rows) {
+        return RichListConfig.defaults()
                 .withItems(ITEMS)
                 .withTitle("Items")
                 .withRows(Math.max(0, rows))
@@ -383,8 +437,8 @@ public final class MouseDemo {
      *
      * @return the definition
      */
-    public static RichList.Config dialogConfig() {
-        return RichList.Config.defaults()
+    public static RichListConfig dialogConfig() {
+        return RichListConfig.defaults()
                 .withItems(DIALOG_ITEMS)
                 .withTitle("Dialog")
                 .withRows(DIALOG_ROWS - 2);
@@ -459,22 +513,24 @@ public final class MouseDemo {
      * DIALOG_ROWS} of the body, and columns {@link #DIALOG_LEFT} to {@code DIALOG_LEFT +
      * DIALOG_COLS}.</p>
      *
-     * @param content the dialog's own rows
      * @param <Msg> the scene message type
+     * @param content the dialog's own rows
      * @return the boxed dialog
      */
-    private static <Msg> View<Msg> dialogBox(View<Msg> content) {
+    private static <Msg> Element<Msg> dialogBox(Element<Msg> content) {
         // A fill first, so the dialog is opaque: a modal that let the panes show through its own
         // blank cells would read as a hole rather than as a layer above them.
-        View<Msg> box = Views.overlay(Views.fill(Style.NONE), Views.border(Border.SINGLE, content));
+        Element<Msg> box = Elements.stack(Elements.fill(Style.NONE), Elements.frame(Border.SINGLE, content));
         // The column and row are what make the reservations real: a Fixed outside one is a
         // transparent wrapper, and the border would stretch to whatever the layer was given.
-        return Views.padding(
+        return Elements.pad(
                 new Insets(DIALOG_TOP, 0, 0, DIALOG_LEFT),
-                Views.column(Views.fixed(DIALOG_ROWS, Views.row(Views.fixed(DIALOG_COLS, box)))));
+                Elements.column(Elements.fixed(DIALOG_ROWS, Elements.row(Elements.fixed(DIALOG_COLS, box)))));
     }
 
-    /** What the editor asked for, as one token. */
+    /**
+     * What the editor asked for, as one token.
+     */
     private static String output(Editor.Output output) {
         return switch (output) {
             case Editor.Output.Submit submit -> "submit:" + submit.text().length();
@@ -483,16 +539,25 @@ public final class MouseDemo {
         };
     }
 
-    /** What the list asked for, as one token. */
-    private static String output(RichList.Output output) {
+    /**
+     * What the list asked for, as one token.
+     */
+    private static String output(RichListOutput output) {
         return switch (output) {
-            case RichList.Output.Chosen chosen -> "chose:" + chosen.item().id();
-            case RichList.Output.Cancelled cancelled -> "cancelled";
+            case RichListOutput.Chosen chosen -> "chose:" + chosen.item().id();
+            case RichListOutput.Canceled cancelled -> "canceled";
         };
     }
 
-    /** The scene: three mounted children, two status rows, the split or the dialog, and help. */
+    /**
+     * The scene: three mounted children, two status rows, the split or the dialog, and help.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final Editor left = Editor.textarea(editorConfig());
         private final RichList right = new RichList(listConfig(PANE_ROWS));
@@ -503,13 +568,13 @@ public final class MouseDemo {
                 ModelLens.of(Model::left, Model::withLeft),
                 Msg.Left::new,
                 OutputRoute.toMessage(Msg.LeftOutput::new));
-        private final Mount<Model, Msg, Never, RichList.Model, RichList.Msg, RichList.Output> rightMount = Mount.of(
+        private final Mount<Model, Msg, Never, RichListModel, RichListMsg, RichListOutput> rightMount = Mount.of(
                 ComponentId.of(RIGHT_PANE),
                 right,
                 ModelLens.of(Model::right, Model::withRight),
                 Msg.Right::new,
                 OutputRoute.toMessage(Msg.RightOutput::new));
-        private final Mount<Model, Msg, Never, RichList.Model, RichList.Msg, RichList.Output> dialogMount = Mount.of(
+        private final Mount<Model, Msg, Never, RichListModel, RichListMsg, RichListOutput> dialogMount = Mount.of(
                 ComponentId.of(DIALOG),
                 dialog,
                 ModelLens.of(Model::dialog, Model::withDialog),
@@ -579,38 +644,63 @@ public final class MouseDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
-            int cols = Math.max(1, context.viewport().cols());
-            List<View<Msg>> rows = new ArrayList<>(STATUS_ROWS + 1 + HELP_ROWS);
-            rows.add(Views.fixed(1, Views.text(status(model), STATUS)));
-            rows.add(Views.fixed(1, Views.text(pointerLine(model), STATUS)));
-            rows.add(Views.grow(panes(model, context)));
-            for (StyledText line : helpLines(model, cols)) {
-                rows.add(Views.fixed(1, Views.text(line)));
-            }
-            // The scene's own observer wraps everything, so a report is logged before the element
-            // under the pointer is offered it. It never consumes one: the log is an observation, not
-            // a handler. The scene's own gestures are bubble bindings, so a focused pane sees a key
-            // first and a field still types the letters it owns.
-            return Views.keyed(List.of(), Scene::observe, Views.column(rows), keys().bindings());
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
         }
 
-        /** The split, or the split under the dialog when it is open. */
-        private View<Msg> panes(Model model, ViewContext context) {
-            View<Msg> split = Views.row(
-                    Views.grow(leftMount.view(model, context)),
-                    Views.fixed(1, Views.text(StyledText.plain("\u2502"))),
-                    Views.grow(rightMount.view(model, context)));
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys().bindings();
+        }
+
+        /**
+         * Every pointer report the scene is shown, after the element under it has been served.
+         *
+         * <p>The log is an observation: the report still reaches the pane it landed on, so the demo
+         * can show what arrived without taking the click away from the editor that acts on it.</p>
+         */
+        @Override
+        public List<Msg> observed(InputEvent event) {
+            return Scene.observe(event).map(List::of).orElseGet(List::of);
+        }
+
+        /**
+         * The status rows, the panes and the help, as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+            int cols = Math.max(1, context.viewport().cols());
+            List<Element<Msg>> rows = new ArrayList<>(STATUS_ROWS + 1 + HELP_ROWS);
+            rows.add(Elements.fixed(1, Elements.text(status(model), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(pointerLine(model), STATUS)));
+            rows.add(Elements.grow(panes(model, context)));
+            for (StyledText line : helpLines(model, cols)) {
+                rows.add(Elements.fixed(1, Elements.text(line)));
+            }
+            return Elements.column(rows);
+        }
+
+        /**
+         * The split, or the split under the dialog when it is open.
+         */
+        private Element<Msg> panes(Model model, ViewContext context) {
+            Element<Msg> split = Elements.row(
+                    Elements.grow(leftMount.view(model, context)),
+                    Elements.fixed(1, Elements.text(StyledText.plain("\u2502"))),
+                    Elements.grow(rightMount.view(model, context)));
             if (!model.dialogOpen()) {
                 return split;
             }
-            // A modal layer is a route of its own, so the layer carries the scene's own gestures:
-            // without them the dialog could not be closed, and a session key would only work while
-            // the dialog was shut.
-            return Views.modal(split, Views.onKeys(keys().bindings(), dialogBox(dialogMount.view(model, context))));
+            // A modal layer is a route of its own: the page under it is unreachable until the dialog
+            // is answered, and the scene's own gestures still close it.
+            return Elements.stack(split, Elements.modal(dialogBox(dialogMount.view(model, context))));
         }
 
-        /** Records one pointer report without consuming it. */
+        /**
+         * Records one pointer report without consuming it.
+         */
         private static Optional<Msg> observe(InputEvent event) {
             if (!(event instanceof InputEvent.PointerInput pointer)) {
                 return Optional.empty();
@@ -619,7 +709,9 @@ public final class MouseDemo {
             return Optional.of(new Msg.Seen(describe(report)));
         }
 
-        /** One report as the token the status row paints. */
+        /**
+         * One report as the token the status row paints.
+         */
         private static String describe(PointerEvent event) {
             return event.action().name().toLowerCase(Locale.ROOT) + ":"
                     + event.button().name().toLowerCase(Locale.ROOT) + "@" + event.row() + "," + event.column();

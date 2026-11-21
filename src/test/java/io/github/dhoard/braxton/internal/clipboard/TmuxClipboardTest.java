@@ -27,14 +27,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** The tmux passthrough wrapper doubles every ESC and is applied at most once. */
+/**
+ * The tmux passthrough wrapper doubles every ESC and is applied at most once.
+ */
 class TmuxClipboardTest {
 
     private static final String PREFIX = "\u001bPtmux;";
     private static final String SUFFIX = "\u001b\\";
     private static final String OSC52 = "\u001b]52;c;aGk=\u0007";
 
-    /** What tmux does to the payload before forwarding it: collapse each doubled ESC. */
+    /**
+     * What tmux does to the payload before forwarding it: collapse each doubled ESC.
+     */
     private static String unescape(String body) {
         return body.replace("\u001b\u001b", "\u001b");
     }
@@ -49,7 +53,9 @@ class TmuxClipboardTest {
         return count;
     }
 
-    /** Every ESC in the payload sits in a pair, so unescaping never has to guess. */
+    /**
+     * Every ESC in the payload sits in a pair, so unescaping never has to guess.
+     */
     private static boolean doublesEveryEscape(String body) {
         for (int i = 0; i < body.length(); ) {
             if (body.charAt(i) != '\u001b') {

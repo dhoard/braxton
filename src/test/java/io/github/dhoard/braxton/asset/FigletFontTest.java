@@ -31,7 +31,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** FIGlet fonts are parsed and rendered by the format's endmark and hardblank rules. */
+/**
+ * FIGlet fonts are parsed and rendered by the format's endmark and hardblank rules.
+ */
 class FigletFontTest {
 
     @Test

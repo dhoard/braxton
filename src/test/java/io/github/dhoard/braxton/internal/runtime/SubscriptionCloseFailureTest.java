@@ -32,7 +32,9 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** A source that fails to close is reported, not propagated. */
+/**
+ * A source that fails to close is reported, not propagated.
+ */
 class SubscriptionCloseFailureTest {
 
     @Test

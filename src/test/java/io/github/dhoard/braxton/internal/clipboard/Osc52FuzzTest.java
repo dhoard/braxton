@@ -49,7 +49,9 @@ import org.junit.jupiter.api.Test;
  */
 class Osc52FuzzTest {
 
-    /** Content with its own escape bytes, control bytes, astral pairs, joiners and selectors. */
+    /**
+     * Content with its own escape bytes, control bytes, astral pairs, joiners and selectors.
+     */
     private static final String[] TEXT_ATOMS = {
         "a",
         "z",
@@ -68,12 +70,16 @@ class Osc52FuzzTest {
         "\uFE0F",
     };
 
-    /** Selection values including the strings that would open a second sequence if trusted. */
+    /**
+     * Selection values including the strings that would open a second sequence if trusted.
+     */
     private static final String[] SELECTIONS = {
         null, "", "c", "p", "s", "0", "7", "8", "9", ";", ";p", "c;echo", "\u001B]52;", "cc", "C", "  "
     };
 
-    /** ESC ] 52 ; selection ; base64 BEL - nothing before, between, or after. */
+    /**
+     * ESC ] 52 ; selection ; base64 BEL - nothing before, between, or after.
+     */
     private static final java.util.regex.Pattern FRAMED =
             java.util.regex.Pattern.compile("\u001B\\]52;([cps0-7]);([A-Za-z0-9+/=]*)\u0007");
 
@@ -123,7 +129,9 @@ class Osc52FuzzTest {
         }
     }
 
-    /** A payload cut by the byte limit stops between clusters, never inside one. */
+    /**
+     * A payload cut by the byte limit stops between clusters, never inside one.
+     */
     @Test
     void aTruncatedPayloadEndsOnAClusterBoundary() {
         for (int round = 0; round < 6_000; round++) {
@@ -160,7 +168,9 @@ class Osc52FuzzTest {
         }
     }
 
-    /** The no-limit form: an empty or null draft writes nothing rather than clearing the clipboard. */
+    /**
+     * The no-limit form: an empty or null draft writes nothing rather than clearing the clipboard.
+     */
     @Test
     void anEmptyDraftNeverEmitsAClearingSequence() {
         assertThat(Osc52.encode(null)).isEmpty();

@@ -30,28 +30,64 @@ import java.util.Objects;
  * Immutable result of one initialization or update step. Output order is declaration order;
  * an unchanged model reference never suppresses a command or an output.
  *
- * @param model the next model, never null
- * @param command the inert command to interpret after the commit, never null
- * @param outputs the semantic outputs for the parent, in declaration order
  * @param <M> the component model type
  * @param <Msg> the component message type
  * @param <Out> the semantic output type crossing the component boundary
+ * @param model the next model, never null
+ * @param command the inert command to interpret after the commit, never null
+ * @param outputs the semantic outputs for the parent, in declaration order
  */
 public record Update<M, Msg, Out>(M model, Command<Msg> command, List<Out> outputs) {
+    /**
+     * Creates a {@code Update} value.
+     *
+     * @param model the next model, never null
+     * @param command the inert command to interpret after the commit, never null
+     * @param outputs the semantic outputs for the parent, in declaration order
+     */
     public Update {
         Objects.requireNonNull(model, "model");
         Objects.requireNonNull(command, "command");
         outputs = List.copyOf(Objects.requireNonNull(outputs, "outputs"));
     }
 
+    /**
+     * Creates a transition with no component outputs.
+     *
+     * @param <M> the component model type
+     * @param <Msg> the component message type
+     * @param <Out> the semantic output type crossing the component boundary
+     * @param model the next model, never null
+     * @return a transition with no component outputs
+     */
     public static <M, Msg, Out> Update<M, Msg, Out> next(M model) {
         return next(model, Command.none());
     }
 
+    /**
+     * Creates a transition with no component outputs.
+     *
+     * @param <M> the component model type
+     * @param <Msg> the component message type
+     * @param <Out> the semantic output type crossing the component boundary
+     * @param model the next model, never null
+     * @param command the inert command to interpret after the commit, never null
+     * @return a transition with no component outputs
+     */
     public static <M, Msg, Out> Update<M, Msg, Out> next(M model, Command<Msg> command) {
         return new Update<>(model, command, List.of());
     }
 
+    /**
+     * Creates a transition emitting one typed component output.
+     *
+     * @param <M> the component model type
+     * @param <Msg> the component message type
+     * @param <Out> the semantic output type crossing the component boundary
+     * @param model the next model, never null
+     * @param output the output destination
+     * @return a transition emitting one typed component output
+     */
     public static <M, Msg, Out> Update<M, Msg, Out> emit(M model, Out output) {
         Objects.requireNonNull(output, "output");
         return new Update<>(model, Command.none(), List.of(output));

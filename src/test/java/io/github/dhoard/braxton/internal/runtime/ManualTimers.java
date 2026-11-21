@@ -56,7 +56,9 @@ public final class ManualTimers implements Timers {
         };
     }
 
-    /** Runs every task due at or before {@code now + nanos}, in due order. */
+    /**
+     * Runs every task due at or before {@code now + nanos}, in due order.
+     */
     public synchronized void advance(long nanos) {
         nowNanos += Math.max(0L, nanos);
         while (true) {

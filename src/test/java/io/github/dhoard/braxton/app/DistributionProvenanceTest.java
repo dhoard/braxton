@@ -92,7 +92,7 @@ class DistributionProvenanceTest {
                 .allSatisfy(font ->
                         assertThat(notice).as("NOTICE names %s", font).contains(font.substring(0, font.indexOf('.'))));
         assertThat(notice)
-                .as("the third-party section names its licence")
+                .as("the third-party section names its license")
                 .contains("FIGlet")
                 .contains("Redistribution and use in source and binary forms");
     }

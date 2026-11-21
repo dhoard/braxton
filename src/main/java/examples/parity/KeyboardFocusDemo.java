@@ -27,6 +27,7 @@ import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.app.RuntimeOptions;
 import io.github.dhoard.braxton.app.TerminalOptions;
 import io.github.dhoard.braxton.effect.Command;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyEventType;
@@ -43,9 +44,10 @@ import io.github.dhoard.braxton.mvu.OutputRoute;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import java.util.List;
 import java.util.Locale;
@@ -76,12 +78,16 @@ import java.util.Optional;
  */
 public final class KeyboardFocusDemo {
 
-    /** The demo's editing policy: a plain, unframed field with a visible caret. */
-    private static final Editor.Config EDITOR = Editor.Config.defaults();
+    /**
+     * The demo's editing policy: a plain, unframed field with a visible caret.
+     */
+    private static final EditorConfig EDITOR = EditorConfig.defaults();
 
     private static final Style TITLE = Style.NONE.withBold();
 
-    /** The most draft characters the status row echoes, so a long draft cannot wrap it. */
+    /**
+     * The most draft characters the status row echoes, so a long draft cannot wrap it.
+     */
     private static final int ECHO = 40;
 
     /**
@@ -97,7 +103,9 @@ public final class KeyboardFocusDemo {
             .withReportAllKeys(true)
             .withReportAssociatedText(true);
 
-    /** The session options the demo runs with. */
+    /**
+     * The session options the demo runs with.
+     */
     public static final TerminalOptions TERMINAL =
             TerminalOptions.DEFAULT.withKeyboardEnhancements(REQUESTED).withFocusReporting(true);
 
@@ -146,30 +154,58 @@ public final class KeyboardFocusDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
-        /** One key event the scene observed, in routing order. */
+        /**
+         * One key event the scene observed, in routing order.
+         *
+         * @param event the normalized input event
+         */
         record Key(InputEvent.KeyInput event) implements Msg {}
 
-        /** The terminal window gained or lost focus. */
+        /**
+         * The terminal window gained or lost focus.
+         *
+         * @param gained whether terminal focus was gained
+         */
         record TerminalFocus(boolean gained) implements Msg {}
 
-        /** The terminal answered which enhanced-keyboard flags it has enabled. */
+        /**
+         * The terminal answered which enhanced-keyboard flags it has enabled.
+         *
+         * @param flags the negotiated keyboard enhancement flags
+         */
         record Enhancements(KeyboardEnhancements flags) implements Msg {}
 
-        /** The editor's own message, forwarded through the mount. */
+        /**
+         * The editor's own message, forwarded through the mount.
+         *
+         * @param value the editor message to forward
+         */
         record EditorMessage(Editor.Msg value) implements Msg {}
 
-        /** The editor's semantic output. */
+        /**
+         * The editor's semantic output.
+         *
+         * @param value the editor output to forward
+         */
         record Output(Editor.Output value) implements Msg {}
 
-        /** Switches between compact and grouped full help. */
+        /**
+         * Switches between compact and grouped full help.
+         */
         record ToggleHelp() implements Msg {}
 
-        /** Moves the field's own focus, so the demo shows that model focus is not terminal focus. */
+        /**
+         * Moves the field's own focus, so the demo shows that model focus is not terminal focus.
+         */
         record ToggleField() implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -187,11 +223,20 @@ public final class KeyboardFocusDemo {
                 KeyMap.group("General", KeyAction.<Msg>of("quit", new Msg.Quit(), "q", "quit", "q", "ctrl+c")));
     }
 
-    /** Runs the demo against the owned terminal with the session options it demonstrates. */
+    /**
+     * Runs the demo against the owned terminal with the session options it demonstrates.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene(), RuntimeOptions.defaults().withTerminal(TERMINAL));
     }
 
+    /**
+     * Launches the interactive keyboard focus demo.
+     *
+     * @param args the command-line arguments
+     */
     public static void main(String[] args) {
         ExitResult result = run();
         if (result.failure() != null) {
@@ -200,8 +245,15 @@ public final class KeyboardFocusDemo {
         System.exit(result.status());
     }
 
-    /** The demo scene: one editor field, a status block, and the help lines. */
+    /**
+     * The demo scene: one editor field, a status block, and the help lines.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final KeyMap<Msg> keys = defaultKeys();
 
@@ -229,7 +281,7 @@ public final class KeyboardFocusDemo {
         @Override
         public Update<Model, Msg, Never> update(Model model, Msg message) {
             return switch (message) {
-                case Msg.Key key -> forward(model, key.event());
+                case Msg.Key key -> record(model, key.event());
                 case Msg.TerminalFocus focus ->
                     Update.next(model.withTerminalFocused(focus.gained())
                             .withLast(focus.gained() ? "focus-gained" : "focus-lost"));
@@ -249,24 +301,49 @@ public final class KeyboardFocusDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
+        }
+
+        /**
+         * The scene's three gestures are claimed: this demo is about the keyboard, so its own keys
+         * win over the field it is showing - a field that typed {@code f} would make it impossible to
+         * take focus away from the field, which is the one thing the demo exists to show.
+         */
+        @Override
+        public List<Binding<Msg>> claims(Model model) {
+            return keys.bindings();
+        }
+
+        /**
+         * Every event the scene is shown, after the field has had its turn.
+         *
+         * <p>Observing is what makes the event type visible: a release would otherwise be
+         * indistinguishable from the press it ends, and the terminal's own notifications are not
+         * gestures a binding could name.</p>
+         */
+        @Override
+        public List<Msg> observed(InputEvent event) {
+            return Scene.observe(event).map(List::of).orElseGet(List::of);
+        }
+
+        /**
+         * The status rows, the field and the help, as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
             int width = context.viewport().cols();
-            View<Msg> body = Views.column(
-                    Views.text(capabilities(model), TITLE),
-                    Views.text(state(model)),
-                    Views.text("editor=" + echo(model.editor().text())
+            return Elements.column(
+                    Elements.text(capabilities(model), TITLE),
+                    Elements.text(state(model)),
+                    Elements.text("editor=" + echo(model.editor().text())
                             + " field="
                             + (model.editor().focused() ? "focused" : "blurred")
                             + " out="
                             + model.out()),
-                    Views.gap(1),
+                    Elements.spacer(1),
                     field.view(model, context),
-                    Views.gap(1),
-                    Help.view(keys, model.expanded(), width));
-            // The scene observes every key event and every terminal notification, then forwards what
-            // an editor action applies. Interception is what makes the event type visible: a release
-            // would otherwise be indistinguishable from the press it ends.
-            return Views.keyed(keys.bindings(), Scene::observe, body, List.of());
+                    Elements.spacer(1),
+                    Help.element(keys, Help.Config.defaults(), model.expanded(), width));
         }
 
         @Override
@@ -274,7 +351,9 @@ public final class KeyboardFocusDemo {
             return ComponentTree.of(field.tree(model));
         }
 
-        /** Records one event, and consumes every event the scene is interested in. */
+        /**
+         * Records one event; the scene is shown every event and consumes none of them.
+         */
         private static Optional<Msg> observe(InputEvent event) {
             return switch (event) {
                 case InputEvent.KeyInput key -> Optional.of(new Msg.Key(key));
@@ -292,25 +371,15 @@ public final class KeyboardFocusDemo {
         }
 
         /**
-         * Records the gesture and applies whatever editor action it names.
+         * Records the gesture the field was shown, and nothing else.
          *
-         * <p>The editor's own mapping decides what a gesture means, so the demo reports the event
-         * type without becoming a second editing policy. A release never reaches that mapping: it
-         * is recorded and nothing else, which is what keeps a key-up from typing or submitting.
-         * An unfocused field takes no action either, because focus is model data the scene owns.</p>
+         * <p>The scene observes; it does not intervene. The field answers the key itself - it is the
+         * focused widget, so it sees the gesture before any binding - and this row records what
+         * arrived, which is the whole point of the demo: the event type is visible even though the
+         * scene never had to take the key away from the field to see it.</p>
          */
-        private Update<Model, Msg, Never> forward(Model model, InputEvent.KeyInput event) {
-            Model recorded = model.withLast(describe(event));
-            if (!event.activates() || !recorded.editor().focused()) {
-                return Update.next(recorded);
-            }
-            Optional<Editor.Msg> action = Editor.actionFor(event, EDITOR);
-            if (action.isEmpty()) {
-                return Update.next(recorded);
-            }
-            // Dispatched rather than applied here, so the field's own message path stays the one that
-            // updates it and its outputs cross the mount boundary as they always do.
-            return Update.next(recorded, Command.dispatch(new Msg.EditorMessage(action.get())));
+        private static Update<Model, Msg, Never> record(Model model, InputEvent.KeyInput event) {
+            return Update.next(model.withLast(describe(event)));
         }
 
         private static String describe(InputEvent.KeyInput event) {
@@ -340,7 +409,9 @@ public final class KeyboardFocusDemo {
             return "last=" + model.last() + " term=" + (model.terminalFocused() ? "focused" : "blurred");
         }
 
-        /** A one-line, bounded echo of a draft, so a status row cannot wrap. */
+        /**
+         * A one-line, bounded echo of a draft, so a status row cannot wrap.
+         */
         private static String echo(String text) {
             String flat = text.replace('\n', ' ');
             return flat.length() <= ECHO ? flat : flat.substring(0, ECHO) + Help.ELLIPSIS;

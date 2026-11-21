@@ -53,6 +53,14 @@ public final class FigletFont {
         this.glyphs = Map.copyOf(glyphs);
     }
 
+    /**
+     * Parses a FIGlet font from the caller-owned stream.
+     *
+     * @param stream the caller-owned input stream
+     * @param name the name to resolve
+     * @return the parsed font
+     * @throws IOException if input or output fails
+     */
     public static FigletFont parse(InputStream stream, String name) throws IOException {
         if (stream == null) {
             throw new IOException("font not found: " + name);
@@ -126,19 +134,39 @@ public final class FigletFont {
         return raw.substring(0, end);
     }
 
+    /**
+     * Returns the display name.
+     *
+     * @return the display name
+     */
     public String name() {
         return name;
     }
 
+    /**
+     * Returns the glyph height in text rows.
+     *
+     * @return the number of text rows per glyph
+     */
     public int height() {
         return height;
     }
 
+    /**
+     * Returns the font glyph used internally for a hard blank.
+     *
+     * @return the font glyph used internally for a hard blank
+     */
     public char hardBlank() {
         return hardBlank;
     }
 
-    /** Renders {@code text}; unknown characters are skipped. */
+    /**
+     * Renders {@code text}; unknown characters are skipped.
+     *
+     * @param text the text to process
+     * @return the FIGlet banner as plain-text rows
+     */
     public List<String> render(String text) {
         String value = text == null ? "" : text;
         List<String> result = new ArrayList<>();

@@ -30,7 +30,6 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.internal.runtime.Mailbox;
 import io.github.dhoard.braxton.internal.runtime.ManualTimers;
 import io.github.dhoard.braxton.internal.runtime.SubscriptionManager;
@@ -42,8 +41,8 @@ import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.Stopwatch;
 import java.time.Duration;
@@ -62,7 +61,7 @@ import org.junit.jupiter.api.Timeout;
  * is exact and involves no sleeps; a "late reading" is a number, not a wall clock. The lifecycle
  * cases reconcile the demo's own subscription declarations against {@link ManualTimers}, so "no
  * timer while stopped" and "two watches tick independently" are proven by the intervals that are
- * scheduled rather than by values that happened to hold still. The terminal behaviour of the
+ * scheduled rather than by values that happened to hold still. The terminal behavior of the
  * packaged demo is verified separately by {@code python3 tools/terminal/verify_terminal.py
  * --parity-phase 10}.</p>
  */
@@ -94,12 +93,16 @@ class ParityStopwatchTest {
         return send(widget, model, message).model();
     }
 
-    /** The reading a timestamp request produces: how a start or a reset is told what time it is. */
+    /**
+     * The reading a timestamp request produces: how a start or a reset is told what time it is.
+     */
     private static Stopwatch.Msg reading(Command<Stopwatch.Msg> command, long atMillis) {
         return readingAt(command, atMillis * MILLIS);
     }
 
-    /** The reading a timestamp request produces at an absolute monotonic time in nanoseconds. */
+    /**
+     * The reading a timestamp request produces at an absolute monotonic time in nanoseconds.
+     */
     private static Stopwatch.Msg readingAt(Command<Stopwatch.Msg> command, long nowNanos) {
         assertThat(command)
                 .as("a run waiting for its origin asks the runtime for one reading")
@@ -107,12 +110,16 @@ class ParityStopwatchTest {
         return ((Command.MonotonicTime<Stopwatch.Msg>) command).mapper().apply(nowNanos);
     }
 
-    /** One reading of the model's current run, at an absolute monotonic time in milliseconds. */
+    /**
+     * One reading of the model's current run, at an absolute monotonic time in milliseconds.
+     */
     private static Stopwatch.Model at(Stopwatch widget, Stopwatch.Model model, long atMillis) {
         return apply(widget, model, new Stopwatch.Msg.Reading(model.epoch(), atMillis * MILLIS));
     }
 
-    /** A running stopwatch whose origin the runtime named at {@code atMillis}. */
+    /**
+     * A running stopwatch whose origin the runtime named at {@code atMillis}.
+     */
     private static Stopwatch.Model running(Stopwatch widget, long atMillis) {
         Update<Stopwatch.Model, Stopwatch.Msg, Never> start = send(widget, initial(widget), new Stopwatch.Msg.Start());
         return apply(widget, start.model(), reading(start.command(), atMillis));
@@ -120,7 +127,9 @@ class ParityStopwatchTest {
 
     // ── the demo's own helpers ───────────────────────────────────────────────
 
-    /** The demo the packaged launch runs, driven as its own component. */
+    /**
+     * The demo the packaged launch runs, driven as its own component.
+     */
     private static StopwatchDemo.Scene demo() {
         return new StopwatchDemo.Scene();
     }
@@ -129,22 +138,27 @@ class ParityStopwatchTest {
         return scene.init(new InitContext(new Viewport(24, 80), null)).model();
     }
 
-    /** The demo's rows, so a test can assert the scene without decoding styling. */
+    /**
+     * The demo's rows, so a test can assert the scene without decoding styling.
+     */
     private static List<String> painted(StopwatchDemo.Scene scene, StopwatchDemo.Model model) {
         return painted(scene.view(model, CONTEXT), 24, 80);
     }
 
-    private static List<String> painted(View<?> view, int rows, int cols) {
-        return new ScreenRenderer().plainLines(view, new Viewport(rows, cols));
+    private static List<String> painted(Element<?> view, int rows, int cols) {
+        return ElementScreen.render(view, rows, cols).lines();
     }
 
     private static String row(StopwatchDemo.Scene scene, StopwatchDemo.Model model, int index) {
         return painted(scene, model).get(index).strip();
     }
 
-    /** What one key does to the demo's screen, as the scene's own message. */
+    /**
+     * What one key does to the demo's screen, as the scene's own message.
+     */
     private static Optional<StopwatchDemo.Msg> route(StopwatchDemo.Model model, String keyName) {
-        return InputRouter.route(demo().view(model, CONTEXT), key(keyName));
+        return io.github.dhoard.braxton.testing.Routing.route(demo(), model, CONTEXT, key(keyName)).stream()
+                .findFirst();
     }
 
     private static InputEvent.KeyInput key(String spec) {
@@ -185,23 +199,31 @@ class ParityStopwatchTest {
         }
     }
 
-    /** One watch of the demo's model. */
+    /**
+     * One watch of the demo's model.
+     */
     private static Stopwatch.Model watch(StopwatchDemo.Model model, boolean leftPane) {
         return leftPane ? model.left() : model.right();
     }
 
-    /** One reading of the demo's left or right watch, as the mounted component would receive it. */
+    /**
+     * One reading of the demo's left or right watch, as the mounted component would receive it.
+     */
     private static StopwatchDemo.Msg tick(StopwatchDemo.Model model, boolean leftPane, long atMillis) {
         Stopwatch.Msg reading = new Stopwatch.Msg.Reading(watch(model, leftPane).epoch(), atMillis * MILLIS);
         return leftPane ? new StopwatchDemo.Msg.Left(reading) : new StopwatchDemo.Msg.Right(reading);
     }
 
-    /** The demo's left watch started by one gesture, with the runtime's timestamp fact delivered. */
+    /**
+     * The demo's left watch started by one gesture, with the runtime's timestamp fact delivered.
+     */
     private static StopwatchDemo.Model startedLeft(StopwatchDemo.Scene scene, long atMillis) {
         return deliver(scene, initial(scene), new StopwatchDemo.Msg.Left(new Stopwatch.Msg.Start()), atMillis * MILLIS);
     }
 
-    /** Every message the mailbox holds, without waiting for more. */
+    /**
+     * Every message the mailbox holds, without waiting for more.
+     */
     private static List<StopwatchDemo.Msg> drained(Mailbox mailbox) {
         List<StopwatchDemo.Msg> messages = new ArrayList<>();
         while (true) {
@@ -567,7 +589,9 @@ class ParityStopwatchTest {
         }
     }
 
-    /** Every message of one widget the mailbox holds, without waiting for more. */
+    /**
+     * Every message of one widget the mailbox holds, without waiting for more.
+     */
     private static <T> List<T> drainedFrom(Mailbox mailbox, Class<T> type) {
         List<T> messages = new ArrayList<>();
         while (true) {
@@ -698,7 +722,7 @@ class ParityStopwatchTest {
     void aMountedStopwatchPaintsItsOwnTime() {
         Stopwatch widget = stopwatch();
         Stopwatch.Model model = at(widget, running(widget, 0L), 2_000L);
-        View<Stopwatch.Msg> view = widget.view(model, new ViewContext(new Viewport(24, 4)));
+        Element<Stopwatch.Msg> view = widget.view(model, new ViewContext(new Viewport(24, 4)));
         assertThat(painted(view, 1, 80).get(0)).isEqualTo("00:00:02.000");
         assertThat(painted(widget.view(model, new ViewContext(new Viewport(24, 4))), 1, 4)
                         .get(0))
@@ -833,9 +857,10 @@ class ParityStopwatchTest {
                 .as("the right watch is untouched by the left one's state")
                 .contains(new StopwatchDemo.Msg.Right(new Stopwatch.Msg.Start()));
 
-        List<String> help = painted(Help.view(StopwatchDemo.keys(running), true, 200), 8, 200).stream()
-                .filter(line -> !line.isBlank())
-                .toList();
+        List<String> help =
+                painted(Help.element(StopwatchDemo.keys(running), Help.Config.defaults(), true, 200), 8, 200).stream()
+                        .filter(line -> !line.isBlank())
+                        .toList();
         assertThat(help).hasSize(3);
         assertThat(help.get(0)).contains("stop left").contains("reset left").doesNotContain("start left");
         assertThat(help.get(1)).contains("start right").contains("reset right").doesNotContain("stop right");
@@ -854,8 +879,8 @@ class ParityStopwatchTest {
     void theDemoRunsUnderTheDeterministicDriver() {
         ComponentDriver<StopwatchDemo.Model, StopwatchDemo.Msg, Never> driver =
                 ComponentDriver.initialize(demo(), new InitContext(new Viewport(24, 80), null));
-        assertThat(driver.screen(CONTEXT).plainLine(0)).isEqualTo("left state=stopped epoch=0 nanos=0");
-        assertThat(driver.screen(CONTEXT).plainLine(4)).isEqualTo("left   00:00:00.000");
+        assertThat(driver.screen(CONTEXT).line(0)).isEqualTo("left state=stopped epoch=0 nanos=0");
+        assertThat(driver.screen(CONTEXT).line(4)).isEqualTo("left   00:00:00.000");
 
         driver.send(new StopwatchDemo.Msg.Left(new Stopwatch.Msg.Start()));
         StopwatchDemo.Model armed = driver.model();
@@ -866,8 +891,8 @@ class ParityStopwatchTest {
         driver.send(tick(armed, true, 1_000L));
         assertThat(driver.model().left().armed()).isFalse();
         driver.send(tick(armed, true, 2_500L));
-        assertThat(driver.screen(CONTEXT).plainLine(4)).isEqualTo("left   00:00:01.500");
-        assertThat(driver.screen(CONTEXT).plainLine(5)).isEqualTo("right  00:00:00.000");
+        assertThat(driver.screen(CONTEXT).line(4)).isEqualTo("left   00:00:01.500");
+        assertThat(driver.screen(CONTEXT).line(5)).isEqualTo("right  00:00:00.000");
 
         driver.send(new StopwatchDemo.Msg.Left(new Stopwatch.Msg.Stop()));
         assertThat(driver.model().left().running()).isFalse();

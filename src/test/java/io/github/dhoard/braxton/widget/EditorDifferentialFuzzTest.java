@@ -56,7 +56,9 @@ import org.junit.jupiter.api.Test;
  */
 class EditorDifferentialFuzzTest {
 
-    /** Draft and inserted text, including every break form an application may hand over. */
+    /**
+     * Draft and inserted text, including every break form an application may hand over.
+     */
     private static final String[] ATOMS = {
         "a",
         "b",
@@ -90,9 +92,9 @@ class EditorDifferentialFuzzTest {
     private void run(OptionalInt maxLength, int sequences) {
         Random random = new Random(424_242L + sequences + maxLength.orElse(-1));
         for (int sequence = 0; sequence < sequences; sequence++) {
-            Editor.Config config = maxLength.isPresent()
-                    ? Editor.Config.defaults().withMaxLength(maxLength.getAsInt())
-                    : Editor.Config.defaults().withUnlimitedLength();
+            EditorConfig config = maxLength.isPresent()
+                    ? EditorConfig.defaults().withMaxLength(maxLength.getAsInt())
+                    : EditorConfig.defaults().withUnlimitedLength();
             Editor editor = new Editor(config);
 
             StringBuilder seed = new StringBuilder();
@@ -168,7 +170,7 @@ class EditorDifferentialFuzzTest {
         }
     }
 
-    private static void applyToModel(Doc expected, Editor.Msg message, Editor.Config config) {
+    private static void applyToModel(Doc expected, Editor.Msg message, EditorConfig config) {
         if (message instanceof Editor.Msg.Insert insert) {
             expected.insertWithinLimit(insert.text(), config.maxLength());
         } else if (message instanceof Editor.Msg.Backspace) {
@@ -192,7 +194,9 @@ class EditorDifferentialFuzzTest {
         }
     }
 
-    /** The document as clusters, with the caret and anchor between them. */
+    /**
+     * The document as clusters, with the caret and anchor between them.
+     */
     private static final class Doc {
         private final List<String> clusters = new ArrayList<>();
         private int caret;
@@ -218,7 +222,9 @@ class EditorDifferentialFuzzTest {
             return units;
         }
 
-        /** The cluster positions that bound the line holding {@code index}. */
+        /**
+         * The cluster positions that bound the line holding {@code index}.
+         */
         private int[] lineBounds(int index) {
             int start = 0;
             for (int i = index - 1; i >= 0; i--) {
@@ -324,13 +330,17 @@ class EditorDifferentialFuzzTest {
             anchor = 0;
         }
 
-        /** The state {@code Model.withCaret} reaches: one coordinate for both ends of the range. */
+        /**
+         * The state {@code Model.withCaret} reaches: one coordinate for both ends of the range.
+         */
         void withCaretAt(int requestedOffset) {
             caret = boundaryBefore(requestedOffset);
             anchor = caret;
         }
 
-        /** The two ends of a range the application names directly. */
+        /**
+         * The two ends of a range the application names directly.
+         */
         void placeCaret(int requestedOffset) {
             caret = boundaryBefore(requestedOffset);
         }
@@ -339,7 +349,9 @@ class EditorDifferentialFuzzTest {
             anchor = boundaryBefore(requestedOffset);
         }
 
-        /** The last cluster boundary at or before {@code requestedOffset}. */
+        /**
+         * The last cluster boundary at or before {@code requestedOffset}.
+         */
         private int boundaryBefore(int requestedOffset) {
             int target = Math.max(0, Math.min(requestedOffset, text().length()));
             int index = 0;
@@ -366,7 +378,9 @@ class EditorDifferentialFuzzTest {
             return clusters;
         }
 
-        /** CR and CR/LF each become the single LF the rows draw. */
+        /**
+         * CR and CR/LF each become the single LF the rows draw.
+         */
         private static String prepare(String raw) {
             return raw.replace("\r\n", "\n").replace('\r', '\n');
         }

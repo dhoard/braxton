@@ -31,6 +31,11 @@ import java.util.Objects;
  * @param viewport the geometry to lay the view out for, never null
  */
 public record ViewContext(Viewport viewport) {
+    /**
+     * Creates a {@code ViewContext} value.
+     *
+     * @param viewport the geometry to lay the view out for, never null
+     */
     public ViewContext {
         Objects.requireNonNull(viewport, "viewport");
     }

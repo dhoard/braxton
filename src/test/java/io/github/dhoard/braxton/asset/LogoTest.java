@@ -31,7 +31,9 @@ import io.github.dhoard.braxton.style.StyledText;
 import java.io.IOException;
 import org.junit.jupiter.api.Test;
 
-/** A FIGlet logo applies one style, with an optional shadow colour over the whole art. */
+/**
+ * A FIGlet logo applies one style, with an optional shadow color over the whole art.
+ */
 class LogoTest {
 
     @Test
@@ -47,7 +49,7 @@ class LogoTest {
         assertThat(rendered.spans())
                 .filteredOn(span -> !span.text().isBlank())
                 .allSatisfy(span -> assertThat(span.style().bold()).isTrue());
-        assertThat(logo.view()).isNotNull();
+        assertThat(logo.element()).isNotNull();
     }
 
     @Test

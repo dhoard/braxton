@@ -137,7 +137,9 @@ class ClipboardBufferFuzzTest {
         }
     }
 
-    /** Bounds that cannot hold the first cluster, whatever that cluster is. */
+    /**
+     * Bounds that cannot hold the first cluster, whatever that cluster is.
+     */
     @Test
     void aBoundSmallerThanTheFirstClusterStoresNothingInsteadOfHalfACluster() {
         String[] first = {
@@ -221,7 +223,9 @@ class ClipboardBufferFuzzTest {
         return kept.substring(0, end);
     }
 
-    /** The slow, obvious answer: segment everything, keep whole clusters while they still fit. */
+    /**
+     * The slow, obvious answer: segment everything, keep whole clusters while they still fit.
+     */
     private static String wholeClusters(String value, int bound) {
         StringBuilder kept = new StringBuilder();
         for (String cluster : Graphemes.iterate(value)) {

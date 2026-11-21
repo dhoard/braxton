@@ -55,7 +55,9 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(value = 120, unit = java.util.concurrent.TimeUnit.SECONDS)
 class InputDecoderFuzzTest {
 
-    /** Fragments chosen to interleave badly: open sequences, orphan ends of sequences, invalid UTF-8. */
+    /**
+     * Fragments chosen to interleave badly: open sequences, orphan ends of sequences, invalid UTF-8.
+     */
     private static final byte[][] FRAGMENTS = {
         bytes("a"),
         bytes("["),

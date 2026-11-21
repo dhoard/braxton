@@ -26,6 +26,7 @@ import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -39,8 +40,8 @@ import io.github.dhoard.braxton.mvu.OutputRoute;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.Stopwatch;
 import java.util.ArrayList;
@@ -73,10 +74,14 @@ public final class StopwatchDemo {
 
     private static final Style STATUS = Style.NONE.withBold();
 
-    /** The prefix the left watch's painted row carries, so both rows line up. */
+    /**
+     * The prefix the left watch's painted row carries, so both rows line up.
+     */
     private static final String LEFT_LABEL = "left   ";
 
-    /** The prefix the right watch's painted row carries, so both rows line up. */
+    /**
+     * The prefix the right watch's painted row carries, so both rows line up.
+     */
     private static final String RIGHT_LABEL = "right  ";
 
     private StopwatchDemo() {}
@@ -90,7 +95,9 @@ public final class StopwatchDemo {
      */
     public record Model(Stopwatch.Model left, Stopwatch.Model right, String last) {
 
-        /** Substitutes a stopped watch and no action for missing values. */
+        /**
+         * Substitutes a stopped watch and no action for missing values.
+         */
         public Model {
             left = left == null ? Stopwatch.Model.stopped() : left;
             right = right == null ? Stopwatch.Model.stopped() : right;
@@ -125,7 +132,9 @@ public final class StopwatchDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -142,7 +151,9 @@ public final class StopwatchDemo {
          */
         record Right(Stopwatch.Msg value) implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
@@ -184,7 +195,11 @@ public final class StopwatchDemo {
                 KeyMap.group("Scene", KeyAction.<Msg>of("quit", new Msg.Quit(), "esc", "quit", "escape", "ctrl+c")));
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
@@ -202,8 +217,15 @@ public final class StopwatchDemo {
         System.exit(result.status());
     }
 
-    /** Two mounted stopwatches, their status rows and one help line. */
+    /**
+     * Two mounted stopwatches, their status rows and one help line.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         @Override
         public Update<Model, Msg, Never> init(InitContext context) {
@@ -222,7 +244,9 @@ public final class StopwatchDemo {
             };
         }
 
-        /** Each mounted stopwatch declares its own interval, and only while it runs. */
+        /**
+         * Each mounted stopwatch declares its own interval, and only while it runs.
+         */
         @Override
         public Subscription<Msg> subscriptions(Model model) {
             return Subscription.batch(
@@ -238,27 +262,45 @@ public final class StopwatchDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
+        }
+
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys(model).bindings();
+        }
+
+        /**
+         * The scene's rows as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
+
             int cols = context.viewport().cols();
             // The key map is built from this state: the start/stop pair each watch shows in help is
             // the one its own running state enables.
             KeyMap<Msg> keys = keys(model);
-            List<View<Msg>> rows = new ArrayList<>(8);
+            List<Element<Msg>> rows = new ArrayList<>(8);
             // Status rows are one row each however narrow the terminal is: a wrapped diagnostic would
             // push the painted watches and the help down and move what a verifier can assert.
-            rows.add(Views.fixed(1, Views.text(status("left", model, true), STATUS)));
-            rows.add(Views.fixed(1, Views.text(status("right", model, false), STATUS)));
-            rows.add(Views.fixed(1, Views.text(policy(model), STATUS)));
-            rows.add(Views.gap(1));
+            rows.add(Elements.fixed(1, Elements.text(status("left", model, true), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(status("right", model, false), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(policy(model), STATUS)));
+            rows.add(Elements.spacer(1));
             // The painted times are the mounted components' own views, so what a user sees is what
             // the widget renders rather than a second copy of its formatter.
-            rows.add(Views.fixed(
-                    1, Views.row(Views.text(LEFT_LABEL), mount(model, true).view(model, context))));
-            rows.add(Views.fixed(
-                    1, Views.row(Views.text(RIGHT_LABEL), mount(model, false).view(model, context))));
-            rows.add(Views.gap(1));
-            rows.add(Help.view(keys, false, cols));
-            return Views.onKeys(keys.bindings(), Views.column(rows));
+            rows.add(Elements.fixed(
+                    1,
+                    Elements.row(Elements.text(LEFT_LABEL), mount(model, true).view(model, context))));
+            rows.add(Elements.fixed(
+                    1,
+                    Elements.row(Elements.text(RIGHT_LABEL), mount(model, false).view(model, context))));
+            rows.add(Elements.spacer(1));
+            rows.add(Help.element(keys, Help.Config.defaults(), false, cols));
+            return Elements.column(rows);
         }
 
         /**
@@ -293,7 +335,9 @@ public final class StopwatchDemo {
                     reduced.model().withLast(word(leftPane, message)), reduced.command(), reduced.outputs());
         }
 
-        /** What one gesture did, as the scene's log spells it. */
+        /**
+         * What one gesture did, as the scene's log spells it.
+         */
         private static String word(boolean leftPane, Stopwatch.Msg message) {
             String side = leftPane ? "left" : "right";
             return switch (message) {
@@ -305,7 +349,9 @@ public final class StopwatchDemo {
             };
         }
 
-        /** One watch's row: which state it is in, which run it is and how much time it measured. */
+        /**
+         * One watch's row: which state it is in, which run it is and how much time it measured.
+         */
         private static String status(String name, Model model, boolean leftPane) {
             Stopwatch.Model watch = model.watch(leftPane);
             return name + " state=" + (watch.running() ? "running" : "stopped")
@@ -313,7 +359,9 @@ public final class StopwatchDemo {
                     + " nanos=" + watch.elapsedNanos();
         }
 
-        /** The policy row: the cadence the scene chose and what it last did. */
+        /**
+         * The policy row: the cadence the scene chose and what it last did.
+         */
         private static String policy(Model model) {
             return "tick=" + model.config().tickPeriod().toMillis() + "ms last=" + model.last();
         }

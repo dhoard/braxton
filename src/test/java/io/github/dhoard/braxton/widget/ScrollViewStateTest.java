@@ -43,7 +43,9 @@ import org.junit.jupiter.api.Test;
  */
 class ScrollViewStateTest {
 
-    /** Content of {@code count} rows named {@code prefix + index}. */
+    /**
+     * Content of {@code count} rows named {@code prefix + index}.
+     */
     private static ScrollView.Content rows(String prefix, int count) {
         List<StyledText> lines = new ArrayList<>(count);
         for (int index = 0; index < count; index++) {
@@ -52,7 +54,9 @@ class ScrollViewStateTest {
         return ScrollView.Content.of(lines);
     }
 
-    /** Plain rows {@code L0..L(count-1)}. */
+    /**
+     * Plain rows {@code L0..L(count-1)}.
+     */
     private static ScrollView.Content rows(int count) {
         return rows("L", count);
     }
@@ -68,7 +72,9 @@ class ScrollViewStateTest {
         return pane(visibleRows, false, count);
     }
 
-    /** The row names the window covers. */
+    /**
+     * The row names the window covers.
+     */
     private static List<String> window(ScrollView.Model state) {
         List<String> names = new ArrayList<>();
         for (StyledText line : ScrollView.visibleLines(state)) {
@@ -388,9 +394,9 @@ class ScrollViewStateTest {
                         .contains(action.message());
             }
         }
-        // The shifted forms the map accepts are the ones the handler already accepted.
+        // The shifted forms extend the selection instead of moving the window alone.
         assertThat(ScrollView.actionFor(InputEvent.KeyInput.of(Key.parse("shift+down"))))
-                .contains(new Msg.Down(1));
+                .contains(new Msg.SelectDown(1));
         // Ctrl and Alt stay the application's shortcut space, and text is not a scrolling gesture.
         assertThat(ScrollView.actionFor(InputEvent.KeyInput.of(Key.parse("ctrl+down"))))
                 .isEmpty();

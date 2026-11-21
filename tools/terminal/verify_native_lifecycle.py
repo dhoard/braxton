@@ -11,6 +11,7 @@ import fcntl
 import os
 from pathlib import Path
 import platform
+import re
 import signal
 import select
 import threading
@@ -337,6 +338,148 @@ def java_handoff_probe(jar, work):
             os.close(slave)
 
 
+def redirected_stdin_probe(jar, work):
+    """R-02: keys come from /dev/tty, piped stdin remains unread, no tty is a typed failure."""
+    classes = Path(work) / "ctl-classes"
+    classes.mkdir(exist_ok=True)
+    subprocess.run(["javac", "-cp", str(jar), "-d", str(classes),
+                    str(Path(__file__).with_name("ControllingTerminalProbe.java"))], check=True)
+    master, slave = os.openpty()
+
+    def attach():
+        os.setsid()
+        fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+
+    process = subprocess.Popen([
+        "java", "--enable-native-access=ALL-UNNAMED", f"-Djava.io.tmpdir={work}",
+        "-cp", os.pathsep.join((str(classes), str(jar))), "ControllingTerminalProbe"
+    ], stdin=subprocess.PIPE, stdout=slave, stderr=subprocess.PIPE, preexec_fn=attach,
+       env={**os.environ, "TERM": "xterm-256color"})
+    os.close(slave)
+
+    def marker():
+        assert select.select([process.stderr], [], [], 20)[0], "the native probe never reported"
+        return process.stderr.readline()
+
+    try:
+        os.write(master, b"k")
+        assert marker().strip() == b"KEY=107", "the native reader did not get the PTY key"
+        process.stdin.write(b"from-pipe\n")
+        process.stdin.flush()
+        assert marker().strip() == b"PIPED=from-pipe", "piped stdin was consumed by the terminal"
+        assert process.wait(timeout=10) == 0, "the native probe did not exit cleanly"
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        os.close(master)
+
+    no_tty = subprocess.Popen([
+        "java", "--enable-native-access=ALL-UNNAMED", f"-Djava.io.tmpdir={work}",
+        "-cp", os.pathsep.join((str(classes), str(jar))), "ControllingTerminalProbe", "notty"
+    ], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+       env={**os.environ, "TERM": "xterm-256color"})
+    _, error = no_tty.communicate(timeout=10)
+    assert no_tty.returncode == 0 and b"NO_TTY" in error, error.decode(errors="replace")
+
+
+def external_stop_probe(native):
+    """R-03: external SIGTSTP restores cooked mode and leaves the screen; SIGCONT resumes."""
+    master, slave = os.openpty()
+    original = termios.tcgetattr(slave)
+    report = os.pipe()
+    child = os.fork()
+    if child == 0:
+        def say(value):
+            os.write(report[1], value + b"\n")
+        try:
+            os.close(report[0])
+            os.setsid()
+            fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+            context = c.c_void_p()
+            assert native.bt_open(slave, slave, c.byref(context)) == 0
+            assert native.bt_raw(context) == 0
+            restore, resume = b"RESTORE", b"RESUME"
+            assert native.bt_set_suspend_bytes(context, c.c_char_p(restore), len(restore),
+                                               c.c_char_p(resume), len(resume)) == 0
+            say(f"START{native.bt_resume_epoch()}".encode())
+            say(b"READY")
+            for _ in range(2):
+                before = native.bt_resume_epoch()
+                while native.bt_resume_epoch() == before:
+                    time.sleep(0.01)
+                say(b"RESUMED")
+            say(b"DONE")
+            say(f"FINAL{native.bt_resume_epoch()}".encode())
+            assert native.bt_close(context) == 0
+            os._exit(0)
+        except BaseException as failure:
+            say(b"ERROR:" + repr(failure).encode(errors="replace"))
+            os._exit(7)
+    os.close(report[1])
+
+    def line(timeout=20):
+        data = bytearray()
+        deadline = time.monotonic() + timeout
+        while not data.endswith(b"\n"):
+            assert time.monotonic() < deadline and select.select([report[0]], [], [], 1)[0], \
+                "the child never reported"
+            data.extend(os.read(report[0], 1))
+        return bytes(data[:-1])
+
+    def drain():
+        data = bytearray()
+        while select.select([master], [], [], 0)[0]:
+            try:
+                data.extend(os.read(master, 4096))
+            except BlockingIOError:
+                break
+        return bytes(data)
+
+    try:
+        ready = b""
+        while b"READY" not in ready and b"ERROR" not in ready:
+            chunk = line()
+            ready += chunk
+        assert b"READY" in ready, f"the child did not register its suspend bytes: {ready!r}"
+        start = int(re.search(rb"START(\d+)", ready).group(1))
+        for cycle in (1, 2):
+            os.killpg(child, signal.SIGTSTP)
+            pid, status = os.waitpid(child, os.WUNTRACED)
+            assert pid == child and os.WIFSTOPPED(status), f"the job did not stop: status={status}"
+            if os.WIFSTOPPED(status):
+                stop_signal_number = os.WSTOPSIG(status)
+            else:
+                stop_signal_number = -1
+            stop_output = drain()
+            assert b"RESTORE" in stop_output, f"the restore bytes were not written before the stop: {stop_output!r}"
+            stopped_attributes = termios.tcgetattr(slave)
+            assert same_attributes(stopped_attributes, original), \
+                f"the terminal was not cooked before the stop: signal={stop_signal_number}, {original[3]:#x} -> {stopped_attributes[3]:#x}, output={stop_output!r}"
+            os.killpg(child, signal.SIGCONT)
+            resumed = line()
+            assert resumed == b"RESUMED", f"the resume epoch did not advance: {resumed!r}"
+            assert b"RESUME" in drain(), "the resume bytes were not written after the continue"
+            after = termios.tcgetattr(slave)
+            assert not (after[3] & termios.ICANON), "raw mode was not restored after continue"
+        assert line() == b"DONE", "the child did not finish both cycles"
+        final = line()
+        assert final == f"FINAL{start + 2}".encode(), f"unexpected final resume epoch: {final!r}"
+        _, status = os.waitpid(child, 0)
+        assert os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0, "the child failed to close cleanly"
+        assert same_attributes(termios.tcgetattr(slave), original), "terminal was not restored after close"
+    finally:
+        try:
+            if os.waitpid(child, os.WNOHANG)[0] == 0:
+                os.killpg(child, signal.SIGKILL)
+                os.waitpid(child, 0)
+        except ChildProcessError:
+            pass
+        os.close(report[0])
+        os.close(master)
+        os.close(slave)
+
+
 def main():
     if sys.argv[1] == "--stall-only":
         # Java probes only: usable against any build, including one predating ABI 2.
@@ -363,7 +506,9 @@ def main():
         native.bt_reacquire.argtypes = (c.c_void_p,)
         native.bt_foreground.argtypes = (c.c_void_p,)
         native.bt_suspend.argtypes = (c.c_void_p,)
-        assert native.bt_abi() == 3
+        native.bt_set_suspend_bytes.argtypes = (c.c_void_p, c.c_char_p, c.c_int, c.c_char_p, c.c_int)
+        native.bt_resume_epoch.restype = c.c_int
+        assert native.bt_abi() == 5
         master, slave = os.openpty()
         original = termios.tcgetattr(slave)
         previous = signal.getsignal(signal.SIGWINCH)
@@ -418,8 +563,10 @@ def main():
         java_close_probe(Path(sys.argv[1]).resolve(), work)
         java_stall_probes(Path(sys.argv[1]).resolve(), work)
         java_handoff_probe(Path(sys.argv[1]).resolve(), work)
+        redirected_stdin_probe(Path(sys.argv[1]).resolve(), work)
+        external_stop_probe(native)
     print("PASS native ABI/raw I/O/size/congested output/output stall/concurrent Java close/resize-handler "
-          "ownership/restoration/release-reacquire/Java handoff/job control")
+          "ownership/restoration/release-reacquire/Java handoff/job control/redirected stdin/external stop")
 
 
 if __name__ == "__main__":

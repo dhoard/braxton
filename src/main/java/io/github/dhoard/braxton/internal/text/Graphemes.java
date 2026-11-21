@@ -27,7 +27,9 @@ import java.util.Iterator;
 import java.util.Locale;
 import java.util.NoSuchElementException;
 
-/** Streaming segmentation with the same boundaries as the public text measurement API. */
+/**
+ * Streaming segmentation with the same boundaries as the public text measurement API.
+ */
 public final class Graphemes {
     private static final String[] ASCII = new String[128];
 
@@ -39,6 +41,12 @@ public final class Graphemes {
 
     private Graphemes() {}
 
+    /**
+     * Iterates complete grapheme clusters without splitting combining sequences.
+     *
+     * @param text the text to process
+     * @return iterates complete grapheme clusters without splitting combining sequences
+     */
     public static Iterable<String> iterate(String text) {
         String value = text == null ? "" : text;
         return () -> new Cursor(value);
@@ -82,7 +90,9 @@ public final class Graphemes {
                 return ASCII[text.charAt(start++)];
             }
             int end = iterator.next();
-            String cluster = text.substring(start, end);
+            String cluster = end == start + 1 && text.charAt(start) < ASCII.length
+                    ? ASCII[text.charAt(start)]
+                    : text.substring(start, end);
             start = end;
             return cluster;
         }

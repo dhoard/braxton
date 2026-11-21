@@ -29,7 +29,9 @@ import java.util.List;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 
-/** Owned JDK UTF-8 decoders, closed after each parser test. */
+/**
+ * Owned JDK UTF-8 decoders, closed after each parser test.
+ */
 public final class TestReaders implements AfterEachCallback {
     private static final ThreadLocal<List<TimedReader>> READERS = ThreadLocal.withInitial(ArrayList::new);
 

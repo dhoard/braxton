@@ -90,7 +90,9 @@ final class GridRows {
             this.tailColumns = tailColumns;
         }
 
-        /** A row with nothing painted yet. */
+        /**
+         * A row with nothing painted yet.
+         */
         static Row empty() {
             return new Row(null, 0);
         }
@@ -191,7 +193,9 @@ final class GridRows {
         return text.substring(TextMeasure.boundaryBefore(text, text.length() - 1));
     }
 
-    /** True when every character of {@code value} is printable ASCII; see the per-character rule. */
+    /**
+     * True when every character of {@code value} is printable ASCII; see the per-character rule.
+     */
     private static boolean isAscii(String value) {
         for (int i = 0; i < value.length(); i++) {
             if (!TextMeasure.isPrintableAscii(value.charAt(i))) {

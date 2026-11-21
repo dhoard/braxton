@@ -38,20 +38,24 @@ import java.util.Locale;
  *
  * <p>The header names what the block is, in the kind's accent, and carries the time the message
  * entered the session in the metrics dim, so a reader can tell a prompt, a reasoning step, a tool
- * call, a notice, and a failure apart without reading the body. The body keeps the text colour, so
- * a message is never one coloured block.</p>
+ * call, a notice, and a failure apart without reading the body. The body keeps the text color, so
+ * a message is never one colored block.</p>
  */
 final class HarnessMessage {
 
     private static final String TIMESTAMP_PATTERN = "uuuu-MM-dd h:mm a";
 
-    /** The message kinds the transcript renders and the accent each one's label wears. */
+    /**
+     * The message kinds the transcript renders and the accent each one's label wears.
+     */
     enum Kind {
         USER("USER", HarnessTheme.USER_GUTTER_COLOR),
         THINKING("THINKING", HarnessTheme.THINKING_GUTTER_COLOR),
         ASSISTANT("ASSISTANT", HarnessTheme.ASSISTANT_GUTTER_COLOR),
         TOOL("TOOL", HarnessTheme.TOOL_GUTTER_COLOR),
-        /** A failed tool call keeps the tool label and wears the failure accent. */
+        /**
+         * A failed tool call keeps the tool label and wears the failure accent.
+         */
         TOOL_ERROR("TOOL", HarnessTheme.ERROR_GUTTER_COLOR),
         SYSTEM("SYSTEM", HarnessTheme.SYSTEM_GUTTER_COLOR),
         ERROR("ERROR", HarnessTheme.ERROR_GUTTER_COLOR);
@@ -75,7 +79,9 @@ final class HarnessMessage {
 
     private HarnessMessage() {}
 
-    /** The kind one entry renders as. */
+    /**
+     * The kind one entry renders as.
+     */
     static Kind kind(HarnessEntry entry) {
         return switch (entry) {
             case HarnessEntry.User user -> Kind.USER;
@@ -87,10 +93,14 @@ final class HarnessMessage {
         };
     }
 
-    /** Plain wrapped body rows; styles and right padding are applied only on indexed access. */
+    /**
+     * Plain wrapped body rows; styles and right padding are applied only on indexed access.
+     */
     private record BodyRow(String text, Style style) {}
 
-    /** The rows one entry occupies: the header, one blank row, and the body. */
+    /**
+     * The rows one entry occupies: the header, one blank row, and the body.
+     */
     static List<StyledText> rows(int width, HarnessEntry entry) {
         int columns = Math.max(1, width);
         List<BodyRow> body = body(columns, entry);
@@ -167,7 +177,7 @@ final class HarnessMessage {
     /**
      * A tool message: the invocation, then, when there is output, one blank row and the bounded
      * preview. Omissions and engine truncation are named in the dim notice voice rather than in
-     * the content colour, so generated text is never mistaken for tool output.
+     * the content color, so generated text is never mistaken for tool output.
      */
     private static List<BodyRow> tool(int width, HarnessEntry.Tool tool) {
         List<BodyRow> rows = new ArrayList<>();

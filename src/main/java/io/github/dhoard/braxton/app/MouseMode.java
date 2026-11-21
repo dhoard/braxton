@@ -37,15 +37,23 @@ package io.github.dhoard.braxton.app;
  */
 public enum MouseMode {
 
-    /** Report nothing; the terminal sends no pointer input at all. */
+    /**
+     * Report nothing; the terminal sends no pointer input at all.
+     */
     NONE,
 
-    /** Report presses, releases and wheel gestures. */
+    /**
+     * Report presses, releases and wheel gestures.
+     */
     CLICK,
 
-    /** Report presses, releases, wheel gestures, and motion while a button is held. */
+    /**
+     * Report presses, releases, wheel gestures, and motion while a button is held.
+     */
     CELL_MOTION,
 
-    /** Report presses, releases, wheel gestures, and all motion, with or without a button held. */
+    /**
+     * Report presses, releases, wheel gestures, and all motion, with or without a button held.
+     */
     ALL_MOTION
 }

@@ -25,9 +25,12 @@ package io.github.dhoard.braxton.internal.render;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.dhoard.braxton.layout.Rect;
+import io.github.dhoard.braxton.style.ColorProfile;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
+import io.github.dhoard.braxton.style.TextWrap;
+import io.github.dhoard.braxton.style.WidthPolicy;
 import java.lang.management.ManagementFactory;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -45,6 +48,59 @@ class RenderCostTest {
         long before = bean.getThreadAllocatedBytes(Thread.currentThread().threadId());
         action.run();
         return bean.getThreadAllocatedBytes(Thread.currentThread().threadId()) - before;
+    }
+
+    @Test
+    void wrappingAUniformRunAllocatesByRowsRatherThanCells() {
+        StyledText text = StyledText.plain(("\u2502" + "x".repeat(78) + "\u2502\n").repeat(30));
+        long bytes = allocated(() -> sink = TextWrap.wrap(text, WidthPolicy.PINNED, 80, 24));
+        assertThat(bytes)
+                .as("a 24-row uniform run should not rebuild each of its 1,920 cells")
+                .isLessThan(20_000);
+        assertThat(TextWrap.wrap(text, WidthPolicy.PINNED, 80, 24)).hasSize(24);
+    }
+
+    @Test
+    void paintingOrdinaryTextDoesNotCopyEverySingleCharacter() {
+        Screen screen = new Screen(1, 2048);
+        StyledText line = StyledText.plain("a".repeat(2048));
+        long bytes = allocated(() -> screen.writeLine(0, 0, 2048, line, WidthPolicy.PINNED));
+        assertThat(bytes)
+                .as("painting existing ASCII clusters should reuse their text")
+                .isLessThan(10_000);
+        assertThat(screen.plainLine(0)).isEqualTo(line.plainText());
+    }
+
+    @Test
+    void aOneCellChangeAllocatesAtMostAQuarterOfTheRecordedBaseline() {
+        Screen before = scene(24, 80);
+        Screen after = scene(24, 80);
+        after.put(12, 40, "Z", Style.fg(Colors.ERROR_400), null, 1);
+        long bytes = allocated(() -> sink = AnsiEncoder.diff(before, after, ColorProfile.TRUECOLOR));
+        assertThat(bytes)
+                .as("R-13: 25%% of the WP-0.1 baseline of 97,208 B/op for a one-cell 24x80 diff")
+                .isLessThanOrEqualTo(24_302L);
+        assertThat(AnsiEncoder.diff(before, after, ColorProfile.TRUECOLOR))
+                .as("the same change's R-13 byte budget")
+                .hasSizeLessThanOrEqualTo(48);
+    }
+
+    /**
+     * A scene painted cell by cell, with the style changes a real frame carries.
+     */
+    private static Screen scene(int rows, int cols) {
+        Screen screen = new Screen(rows, cols);
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < cols; col++) {
+                Style style = switch ((row + col) % 3) {
+                    case 0 -> Style.fg(Colors.BLUE_400);
+                    case 1 -> Style.NONE.withBold();
+                    default -> Style.NONE;
+                };
+                screen.put(row, col, "x", style, null, 1);
+            }
+        }
+        return screen;
     }
 
     @Test
@@ -83,13 +139,12 @@ class RenderCostTest {
 
     @Test
     void wrappingAWideRowDoesNotCopyItsGrowingPrefixPerGrapheme() {
-        LayoutEngine engine = new LayoutEngine();
         StyledText text = StyledText.plain("x".repeat(2048));
-        long bytes = allocated(() -> sink = engine.wrapLines(text, 2048));
+        long bytes = allocated(() -> sink = TextWrap.wrap(text, WidthPolicy.PINNED, 2048));
         assertThat(bytes)
                 .as("one wrapped row should not allocate quadratic prefix copies")
                 .isLessThan(1_000_000);
-        assertThat(engine.wrapLines(text, 2048)).containsExactly(text);
+        assertThat(TextWrap.wrap(text, WidthPolicy.PINNED, 2048)).containsExactly(text);
     }
 
     @Test
@@ -107,7 +162,7 @@ class RenderCostTest {
         Style blue = Style.fg(Colors.BLUE_400);
         String url = "https://example.com";
         StyledText text = StyledText.of("ab🙂", red, url).append(StyledText.of("c\td\nz", blue, url));
-        assertThat(new LayoutEngine().wrapLines(text, 4))
+        assertThat(TextWrap.wrap(text, WidthPolicy.PINNED, 4))
                 .containsExactly(
                         StyledText.of("ab🙂", red, url), StyledText.of("c   ", blue, url),
                         StyledText.of("d", blue, url), StyledText.of("z", blue, url));

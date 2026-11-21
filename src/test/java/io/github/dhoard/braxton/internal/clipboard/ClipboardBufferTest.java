@@ -27,7 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** The bounded in-process buffer truncates only at a grapheme-cluster boundary. */
+/**
+ * The bounded in-process buffer truncates only at a grapheme-cluster boundary.
+ */
 class ClipboardBufferTest {
 
     private static final String EMOJI = "\uD83D\uDE00";

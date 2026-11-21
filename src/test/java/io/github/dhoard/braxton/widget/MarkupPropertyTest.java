@@ -27,7 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Rendered markup is inert text and its tables keep one row width. */
+/**
+ * Rendered markup is inert text and its tables keep one row width.
+ */
 class MarkupPropertyTest {
 
     @Test

@@ -29,7 +29,9 @@ import java.io.StringReader;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Transcript records: turn assembly, tool lifecycle, and forward-compatible warnings. */
+/**
+ * Transcript records: turn assembly, tool lifecycle, and forward-compatible warnings.
+ */
 class TranscriptJsonlReaderTest {
 
     private static HarnessTranscript read(String jsonl) throws IOException {

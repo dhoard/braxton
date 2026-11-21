@@ -34,8 +34,21 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-/** Owner-managed active scopes. Candidate validation has no live-resource side effects. */
+/**
+ * Owner-managed active scopes. Candidate validation has no live-resource side effects.
+ */
 public final class ScopeManager {
+
+    /**
+     * Creates the scope manager with its default state.
+     */
+    public ScopeManager() {}
+    /**
+     * A component path together with its captured lifetime epoch.
+     *
+     * @param path the component scope path
+     * @param epoch the component lifetime generation
+     */
     public record Origin(ComponentPath path, long epoch) {}
 
     private record Pending(ComponentPath parent, ComponentTree tree) {}
@@ -44,6 +57,14 @@ public final class ScopeManager {
     private volatile List<ComponentPath> lastRemoved = List.of();
     private long nextEpoch = 2L;
 
+    /**
+     * Validates a candidate tree and assigns stable or fresh lifetime epochs.
+     *
+     * @param tree the declared component tree
+     * @param maxCount the maximum component count
+     * @param maxDepth the maximum component nesting depth
+     * @return validates a candidate tree and assigns stable or fresh lifetime epochs
+     */
     public Map<ComponentPath, Long> prepare(ComponentTree tree, int maxCount, int maxDepth) {
         var next = new HashMap<ComponentPath, Long>();
         next.put(ComponentPath.ROOT, active.get(ComponentPath.ROOT));
@@ -71,6 +92,12 @@ public final class ScopeManager {
                 path, ComponentFailure.Phase.CHILDREN, message, new IllegalArgumentException(message));
     }
 
+    /**
+     * Installs the prepared scope tree and returns removed component paths.
+     *
+     * @param candidate the candidate value to compare
+     * @return installs the prepared scope tree and returns removed component paths
+     */
     public List<ComponentPath> commit(Map<ComponentPath, Long> candidate) {
         var removed = active.keySet().stream()
                 .filter(path -> !candidate.containsKey(path))
@@ -80,7 +107,12 @@ public final class ScopeManager {
         return removed;
     }
 
-    /** Whether the path is active in the committed tree. */
+    /**
+     * Whether the path is active in the committed tree.
+     *
+     * @param path the component scope path
+     * @return {@code true} if the path is active in the committed tree; otherwise {@code false}
+     */
     public boolean isActive(ComponentPath path) {
         return active.containsKey(Objects.requireNonNull(path, "path"));
     }
@@ -91,6 +123,9 @@ public final class ScopeManager {
      * <p>A command produced by the update whose commit removes its own component is legitimate at
      * the time it is returned and void once the scope is gone: the runtime discards it instead of
      * failing the run. Paths that were never declared are still reported as failures.</p>
+     *
+     * @param path the component scope path
+     * @return {@code true} if the last commit tore this path, or an ancestor of it, down; otherwise {@code false}
      */
     public boolean wasJustRemoved(ComponentPath path) {
         Objects.requireNonNull(path, "path");
@@ -100,13 +135,44 @@ public final class ScopeManager {
         return false;
     }
 
+    /**
+     * Captures the current lifetime epoch for a component path.
+     *
+     * @param path the component scope path
+     * @return captures the current lifetime epoch for a component path
+     */
     public Origin capture(ComponentPath path) {
         Long epoch = active.get(path);
         if (epoch == null) throw invalid(path, "command/source belongs to undeclared component");
         return new Origin(path, epoch);
     }
 
+    /**
+     * Tests whether a captured origin still names an active lifetime.
+     *
+     * @param origin the captured component lifetime
+     * @return {@code true} if a captured origin still names an active lifetime; otherwise {@code false}
+     */
     public boolean isCurrent(Origin origin) {
         return origin != null && Objects.equals(active.get(origin.path()), origin.epoch());
+    }
+
+    static <Msg> void validateSubscriptions(
+            io.github.dhoard.braxton.effect.Subscription<Msg> sources,
+            java.util.Map<ComponentPath, Long> nextScopes,
+            int maxSubscriptions) {
+        ComponentPath path = ComponentPath.ROOT;
+        try {
+            var leaves = io.github.dhoard.braxton.effect.Subscription.leaves(sources);
+            if (leaves.size() > maxSubscriptions) throw new IllegalArgumentException("too many subscriptions");
+            for (var leaf : leaves) {
+                path = leaf.id().path();
+                if (!nextScopes.containsKey(path))
+                    throw new IllegalArgumentException("subscription belongs to undeclared component " + path);
+            }
+        } catch (IllegalArgumentException invalid) {
+            // These are framework declaration errors, not thrown component/payload diagnostics.
+            throw new ComponentFailure(path, ComponentFailure.Phase.SUBSCRIPTIONS, invalid.getMessage(), invalid);
+        }
     }
 }

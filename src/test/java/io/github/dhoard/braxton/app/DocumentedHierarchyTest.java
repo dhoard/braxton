@@ -68,16 +68,15 @@ class DocumentedHierarchyTest {
         try (var loader = new URLClassLoader(
                 new java.net.URL[] {temporary.toUri().toURL()}, getClass().getClassLoader())) {
             var component = (Component<?, ?, ?>)
-                    loader.loadClass("demo.Counters").getConstructor().newInstance();
+                    loader.loadClass("demo.Counters").getMethod("component").invoke(null);
             verify(component);
         }
     }
 
     private static <M, Msg, Out> void verify(Component<M, Msg, Out> component) {
         var driver = ComponentDriver.initialize(component, new InitContext(new Viewport(3, 30), null));
-        assertThat(driver.children().nodes()).hasSize(2);
-        assertThat(driver.screen(new ViewContext(new Viewport(3, 30))).plainLine(0))
-                .isEqualTo("count: 0");
+        assertThat(driver.children().nodes()).isEmpty();
+        assertThat(driver.screen(new ViewContext(new Viewport(3, 30))).line(0)).isEqualTo("left: 0");
     }
 
     @Test

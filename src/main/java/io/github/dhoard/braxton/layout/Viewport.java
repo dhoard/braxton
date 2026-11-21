@@ -33,22 +33,47 @@ package io.github.dhoard.braxton.layout;
  */
 public record Viewport(int rows, int cols) {
 
+    /**
+     * Zero rows and zero columns.
+     */
     public static final Viewport EMPTY = new Viewport(0, 0);
 
+    /**
+     * Creates a {@code Viewport} value.
+     *
+     * @param rows the number of rows available to the view, never negative
+     * @param cols the number of columns available to the view, never negative
+     */
     public Viewport {
         if (rows < 0 || cols < 0) {
             throw new IllegalArgumentException("viewport must be non-negative: " + rows + "x" + cols);
         }
     }
 
+    /**
+     * Creates a viewport with the supplied cell dimensions.
+     *
+     * @param size the requested cell dimensions
+     * @return a viewport with the supplied cell dimensions
+     */
     public static Viewport of(Size size) {
         return new Viewport(size.rows(), size.cols());
     }
 
+    /**
+     * Returns this viewport as a size value.
+     *
+     * @return this viewport as a size value
+     */
     public Size size() {
         return new Size(rows, cols);
     }
 
+    /**
+     * Returns the zero-origin rectangle covering the viewport.
+     *
+     * @return the zero-origin rectangle covering the viewport
+     */
     public Rect bounds() {
         return new Rect(0, 0, rows, cols);
     }

@@ -45,9 +45,8 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.ColorProfile;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -75,7 +74,9 @@ class TerminalHandoffTest {
 
     private static final String SCENE = "scene";
 
-    /** Every scene here quits with this command once it has seen what it was waiting for. */
+    /**
+     * Every scene here quits with this command once it has seen what it was waiting for.
+     */
     private static final Command<String> QUIT = Command.quit();
 
     private static RuntimeOptions options(Duration grace) {
@@ -90,17 +91,21 @@ class TerminalHandoffTest {
                 ClipboardConfig.defaults(),
                 io.github.dhoard.braxton.app.TerminalOptions.DEFAULT,
                 InputOptions.DEFAULT,
-                ColorProfile.AUTO);
+                ColorProfile.AUTO,
+                null,
+                RuntimeOptions.DEFAULT_FPS,
+                false,
+                true);
     }
 
     /**
-     * A two-key scene whose update is the test's own behaviour.
+     * A two-key scene whose update is the test's own behavior.
      *
-     * <p>{@code r} produces {@code run} and {@code s} produces {@code suspend}; the behaviour decides
+     * <p>{@code r} produces {@code run} and {@code s} produces {@code suspend}; the behavior decides
      * what command each message returns, so one scene serves every lifecycle case.</p>
      */
     private static Component<List<String>, String, Never> scene(
-            BiFunction<List<String>, String, Command<String>> behaviour) {
+            BiFunction<List<String>, String, Command<String>> behavior) {
         List<Binding<String>> bindings =
                 List.of(new Binding<>(Key.of("r"), "run"), new Binding<>(Key.of("s"), "suspend"));
         return new Component<>() {
@@ -114,29 +119,36 @@ class TerminalHandoffTest {
                 List<String> next = new ArrayList<>(model);
                 next.add(message);
                 List<String> recorded = List.copyOf(next);
-                Command<String> command = behaviour.apply(recorded, message);
+                Command<String> command = behavior.apply(recorded, message);
                 return command == null ? Update.next(recorded) : Update.next(recorded, command);
             }
 
             @Override
-            public View<String> view(List<String> model, ViewContext context) {
-                return Views.focus(
-                        ElementId.of("scene"),
-                        true,
-                        bindings,
-                        View.InputHandler.none(),
-                        Views.text(SCENE + ":" + model.size() + ":"
-                                + context.viewport().cols()));
+            public Element<String> view(List<String> model, ViewContext context) {
+                return Elements.text(
+                        SCENE + ":" + model.size() + ":" + context.viewport().cols());
+            }
+
+            /**
+             * The gestures this fixture answers, once no leaf has taken them.
+             */
+            @Override
+            public java.util.List<Binding<String>> claims(List<String> model) {
+                return bindings;
             }
         };
     }
 
-    /** The exec command for one child, reported as {@code handed:<token>}. */
+    /**
+     * The exec command for one child, reported as {@code handed:<token>}.
+     */
     private static Command<String> exec(String... argv) {
         return Command.exec(ProcessRequest.of(argv), TerminalHandoffTest::describe);
     }
 
-    /** Runs one scene over an owned stream terminal, feeding {@code key} once it is painted. */
+    /**
+     * Runs one scene over an owned stream terminal, feeding {@code key} once it is painted.
+     */
     private static ExitResult run(
             TestTerminal fixture,
             RuntimeOptions options,
@@ -373,7 +385,7 @@ class TerminalHandoffTest {
             assertThat(loop.get().model()).containsExactly("suspend", "suspend:resumed");
             String output = fixture.outputText();
             assertThat(output).contains("\u001B[?1049l", "\u001B[?1049h");
-            assertThat(output)
+            assertThat(fixture.screenText())
                     .as("the resumed frame is laid out for the size measured after the resume")
                     .contains(SCENE + ":2:50");
             assertThat(output.lastIndexOf("\u001B[?1049h"))
@@ -445,7 +457,11 @@ class TerminalHandoffTest {
                     ClipboardConfig.defaults(),
                     io.github.dhoard.braxton.app.TerminalOptions.DEFAULT.withAlternateScreen(false),
                     InputOptions.DEFAULT,
-                    ColorProfile.AUTO);
+                    ColorProfile.AUTO,
+                    null,
+                    RuntimeOptions.DEFAULT_FPS,
+                    false,
+                    true);
             ExitResult result = run(fixture, inline, program, services(new ManualTimers()), "r", null);
 
             assertThat(result.kind()).isEqualTo(ExitResult.Kind.QUIT);
@@ -492,13 +508,13 @@ class TerminalHandoffTest {
                 }
 
                 @Override
-                public View<String> view(List<String> model, ViewContext context) {
-                    return Views.focus(
-                            ElementId.of("scene"),
-                            true,
-                            List.of(new Binding<>(Key.of("r"), "run")),
-                            View.InputHandler.none(),
-                            Views.text(SCENE + ":" + model.size()));
+                public Element<String> view(List<String> model, ViewContext context) {
+                    return Elements.text(SCENE + ":" + model.size());
+                }
+
+                @Override
+                public java.util.List<Binding<String>> claims(List<String> model) {
+                    return List.of(new Binding<>(Key.of("r"), "run"));
                 }
 
                 @Override
@@ -521,7 +537,9 @@ class TerminalHandoffTest {
         }
     }
 
-    /** One child result as the token the scene records. */
+    /**
+     * One child result as the token the scene records.
+     */
     static String describe(ProcessResult result) {
         return switch (result) {
             case ProcessResult.Exited exited -> "handed:exited:" + exited.status();
@@ -530,7 +548,9 @@ class TerminalHandoffTest {
         };
     }
 
-    /** One suspend outcome as the token the scene records. */
+    /**
+     * One suspend outcome as the token the scene records.
+     */
     static String describeSuspend(SuspendResult result) {
         return switch (result) {
             case SuspendResult.Resumed resumed -> "suspend:resumed";

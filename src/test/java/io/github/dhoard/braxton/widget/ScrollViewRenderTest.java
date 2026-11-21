@@ -33,10 +33,8 @@ import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.RenderedScreen;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.ScrollView.Msg;
 import java.util.Arrays;
 import java.util.List;
@@ -72,12 +70,12 @@ class ScrollViewRenderTest {
      * context the parent passes. The context is deliberately larger than the pane so a window that
      * read it instead of its own state would paint the wrong rows.
      */
-    private static View<String> paneView(ScrollView view, ScrollView.Model state) {
+    private static Element<String> paneView(ScrollView view, ScrollView.Model state) {
         return view.view(state, new ViewContext(new Viewport(24, 80))).map(message -> "pane");
     }
 
-    private static List<String> rows(View<String> view, int viewportRows, int viewportCols) {
-        return new ScreenRenderer().plainLines(view, new Viewport(viewportRows, viewportCols));
+    private static List<String> rows(Element<String> view, int viewportRows, int viewportCols) {
+        return ElementScreen.render(view, viewportRows, viewportCols).lines();
     }
 
     @Test
@@ -109,13 +107,13 @@ class ScrollViewRenderTest {
         ScrollView view = pane(1, false);
         ScrollView.Model state = state(view, ScrollView.Content.of(List.of(styled)));
 
-        RenderedScreen screen = new ScreenRenderer().screen(paneView(view, state), new Viewport(1, 4));
+        ElementScreen screen = ElementScreen.render(paneView(view, state), 1, 4);
 
-        assertThat(screen.plainLine(0)).isEqualTo("abcd");
-        assertThat(screen.cell(0, 0).style()).isEqualTo(Style.fg(RED));
-        assertThat(screen.cell(0, 1).style()).isEqualTo(Style.fg(RED));
-        assertThat(screen.cell(0, 2).style()).isEqualTo(Style.NONE.withBold());
-        assertThat(screen.cell(0, 3).style()).isEqualTo(Style.NONE.withBold());
+        assertThat(screen.line(0)).isEqualTo("abcd");
+        assertThat(screen.canvas().style(0, 0)).isEqualTo(Style.fg(RED));
+        assertThat(screen.canvas().style(0, 1)).isEqualTo(Style.fg(RED));
+        assertThat(screen.canvas().style(0, 2)).isEqualTo(Style.NONE.withBold());
+        assertThat(screen.canvas().style(0, 3)).isEqualTo(Style.NONE.withBold());
     }
 
     @Test
@@ -202,9 +200,9 @@ class ScrollViewRenderTest {
     void thePanePaintsNothingOutsideItsRectangle() {
         ScrollView view = pane(2, false);
         // In a row the fixed size is the pane's width in columns; each pane is two rows tall.
-        View<String> left = Views.fixed(4, paneView(view, state(2, false, "aaaa", "bbbb")));
-        View<String> right = Views.fixed(4, paneView(view, state(2, false, "cccc", "dddd")));
-        View<String> both = Views.column(Views.row(left, right), Views.text("footer"));
+        Element<String> left = Elements.fixed(4, paneView(view, state(2, false, "aaaa", "bbbb")));
+        Element<String> right = Elements.fixed(4, paneView(view, state(2, false, "cccc", "dddd")));
+        Element<String> both = Elements.column(Elements.row(left, right), Elements.text("footer"));
 
         assertThat(rows(both, 3, 8)).containsExactly("aaaacccc", "bbbbdddd", "footer");
     }
@@ -213,7 +211,7 @@ class ScrollViewRenderTest {
     void aNestedPaneUsesItsAllocatedHeightAndNotTheRootViewport() {
         ScrollView view = pane(3, true);
         ScrollView.Model state = state(3, true, "L0", "L1", "L2", "L3", "L4", "L5", "L6");
-        View<String> nested = Views.column(Views.fixed(3, paneView(view, state)), Views.text("footer"));
+        Element<String> nested = Elements.column(Elements.fixed(3, paneView(view, state)), Elements.text("footer"));
 
         // The pane's own view context says 24 rows and the root viewport says 8; neither is the
         // pane's height, and neither may decide the window.
@@ -231,8 +229,8 @@ class ScrollViewRenderTest {
     void aFramedPaneClipsToItsInnerRectangle() {
         ScrollView view = pane(3, false);
         ScrollView.Model state = state(3, false, "aaaa", "bbbb", "cccc");
-        View<String> framed =
-                Views.fixed(7, Views.border(Border.SINGLE, Views.padding(Insets.uniform(1), paneView(view, state))));
+        Element<String> framed = Elements.fixed(
+                7, Elements.frame(Border.SINGLE, Elements.pad(Insets.uniform(1), paneView(view, state))));
 
         assertThat(rows(framed, 7, 8))
                 .containsExactly(
@@ -254,8 +252,8 @@ class ScrollViewRenderTest {
         assertThat(rows(paneView(view, state(2, false, "ab", "cd")), 2, 0)).containsOnly("");
 
         ScrollView view1 = pane(2, false);
-        View<String> pane = paneView(view1, state(2, false, "ab", "cd"));
-        assertThat(new ScreenRenderer().plainLines(pane, Viewport.EMPTY)).isEmpty();
+        Element<String> pane = paneView(view1, state(2, false, "ab", "cd"));
+        assertThat(ElementScreen.render(pane, 0, 0).lines()).isEmpty();
     }
 
     @Test
@@ -266,13 +264,14 @@ class ScrollViewRenderTest {
         ScrollView view = pane(3, true);
         ScrollView.Model state = state(view, ScrollView.Content.of(List.of(styled, StyledText.plain(""), styled)));
 
-        RenderedScreen first = new ScreenRenderer().screen(paneView(view, state), new Viewport(3, 8));
-        RenderedScreen second = new ScreenRenderer().screen(paneView(view, state), new Viewport(3, 8));
+        ElementScreen first = ElementScreen.render(paneView(view, state), 3, 8);
+        ElementScreen second = ElementScreen.render(paneView(view, state), 3, 8);
 
-        assertThat(second.plainLines()).isEqualTo(first.plainLines());
+        assertThat(second.lines()).isEqualTo(first.lines());
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 8; col++) {
-                assertThat(second.cell(row, col)).isEqualTo(first.cell(row, col));
+                assertThat(second.canvas().cell(row, col))
+                        .isEqualTo(first.canvas().cell(row, col));
             }
         }
     }

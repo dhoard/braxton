@@ -28,7 +28,9 @@ import java.util.List;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** One complete-string policy converts LF, CRLF, and lone CR without doubling a CRLF pair. */
+/**
+ * One complete-string policy converts LF, CRLF, and lone CR without doubling a CRLF pair.
+ */
 class LineBreaksTest {
 
     @Test

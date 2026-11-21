@@ -38,7 +38,8 @@ import java.util.Objects;
  */
 public final class StyledText {
 
-    /** One styled run of text. {@code link} may be null but cannot contain C0/C1 controls.
+    /**
+     * One styled run of text. {@code link} may be null but cannot contain C0/C1 controls.
      *
      * @param text the run of text, with control characters removed
      * @param style the style painted with it
@@ -568,7 +569,9 @@ public final class StyledText {
         return spans().hashCode();
     }
 
-    /** Bounded diagnostic form; never contains escape sequences and never includes links. */
+    /**
+     * Bounded diagnostic form; never contains escape sequences and never includes links.
+     */
     @Override
     public String toString() {
         String text = plainText();

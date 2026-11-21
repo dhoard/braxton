@@ -24,18 +24,20 @@ package io.github.dhoard.braxton.widget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.dhoard.braxton.internal.render.LayoutEngine;
-import io.github.dhoard.braxton.layout.Viewport;
+import io.github.dhoard.braxton.layout.Size;
 import io.github.dhoard.braxton.style.Color;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.ScreenRenderer;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.ElementTree;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** The bar clamps its fill, renders nothing unusable, and never draws past its width. */
+/**
+ * The bar clamps its fill, renders nothing unusable, and never draws past its width.
+ */
 class ProgressBarTest {
 
     private static final String ACTIVE = "\u2588";
@@ -129,10 +131,12 @@ class ProgressBarTest {
                     .isEqualTo("a b");
             // The painted grid and the measured height are the oracle: one bar is one row, and the
             // icon keeps its characters on it.
-            assertThat(new ScreenRenderer().plainLines(active.view(1.0, 1.0), new Viewport(1, 20)))
+            assertThat(ElementScreen.render(active.<String>element(1.0, 1.0), 1, 20)
+                            .lines())
                     .as("painted rows for icon %s", shown)
                     .containsExactly("a b");
-            assertThat(new LayoutEngine().intrinsicHeight(active.view(1.0, 1.0), 20))
+            assertThat(ElementTree.measure(active.<String>element(1.0, 1.0), new Size(1, 20))
+                            .rows())
                     .as("measured rows for icon %s", shown)
                     .isEqualTo(1);
         }
@@ -204,7 +208,7 @@ class ProgressBarTest {
                 .as("a graded cell occupies the same columns as the icon it replaces")
                 .isEqualTo(3 + 6 * 2 + 5 + 4 + 4);
 
-        // The ramp is anchored to the bar: each filled cell carries its own position's colour.
+        // The ramp is anchored to the bar: each filled cell carries its own position's color.
         assertThat(foregroundOf(graded, "\u6F22"))
                 .containsExactly(new Color(255, 0, 0), new Color(204, 0, 51), new Color(153, 0, 102));
         assertThat(foregroundOf(graded, "\u258C "))
@@ -236,7 +240,9 @@ class ProgressBarTest {
         }
     }
 
-    /** The foreground every span whose text is {@code content} carries. */
+    /**
+     * The foreground every span whose text is {@code content} carries.
+     */
     private static List<Color> foregroundOf(StyledText text, String content) {
         List<Color> colors = new ArrayList<>();
         for (StyledText.Span span : text.spans()) {

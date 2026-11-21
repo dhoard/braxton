@@ -70,14 +70,32 @@ public final class InputDecoder {
     private final int maxClipboardReplyCharacters;
     private long escapeDeadline;
 
+    /**
+     * Creates a {@code InputDecoder} value.
+     *
+     * @param in the timed character reader
+     */
     public InputDecoder(TimedReader in) {
         this(in, InputOptions.DEFAULT);
     }
 
+    /**
+     * Creates a {@code InputDecoder} value.
+     *
+     * @param in the timed character reader
+     * @param options the immutable configuration
+     */
     public InputDecoder(TimedReader in, InputOptions options) {
         this(in, options, () -> false);
     }
 
+    /**
+     * Creates a {@code InputDecoder} value.
+     *
+     * @param in the timed character reader
+     * @param options the immutable configuration
+     * @param cancelled the supplier indicating cancellation
+     */
     public InputDecoder(TimedReader in, InputOptions options, java.util.function.BooleanSupplier cancelled) {
         this(in, options, cancelled, MAX_CLIPBOARD_REPLY_CHARACTERS);
     }
@@ -116,6 +134,7 @@ public final class InputDecoder {
      * end-of-input, so an ignored report can never be mistaken for the end of the session.</p>
      *
      * @return the event, or empty at end-of-input or when the session closed the stream
+     * @throws java.io.IOException if input or output fails
      */
     public Optional<InputEvent> read() throws IOException {
         while (true) {
@@ -133,7 +152,7 @@ public final class InputDecoder {
 
     private InputEvent decodeScalar(int value) throws IOException {
         if (value < 0x20 || value == 0x7F) {
-            return InputEvent.KeyInput.of(keyForControlByte(value));
+            return InputEvent.KeyInput.of(ControlKeys.keyForControlByte(value));
         }
         if (value < 0x80) {
             char c = (char) value;
@@ -150,47 +169,6 @@ public final class InputDecoder {
             return null;
         }
         return InputEvent.KeyInput.of(keyForText(text), text);
-    }
-
-    /**
-     * The key a control byte names on its own: every C0 control and DEL names a gesture here.
-     * ESC plus one of them is that gesture with ALT (see {@link #readEscape()}), so the pair and the
-     * bare byte agree on the key and only differ by the modifier. A control byte is never used as a
-     * key name or text, because {@link Key} rejects control characters in a name.
-     *
-     * @param value a C0 control byte or DEL
-     */
-    private static Key keyForControlByte(int value) {
-        if (value == 0x0D) {
-            return Key.ENTER;
-        }
-        if (value == 0x0A) {
-            return Key.of("j", Modifiers.CTRL);
-        }
-        if (value == 0x09) {
-            return Key.TAB;
-        }
-        if (value == 0x7F || value == 0x08) {
-            return Key.BACKSPACE;
-        }
-        if (value == 0x00) {
-            return Key.of("space", Modifiers.CTRL);
-        }
-        if (value == 0x1C) {
-            return Key.of("\\", Modifiers.CTRL);
-        }
-        if (value == 0x1D) {
-            return Key.of("]", Modifiers.CTRL);
-        }
-        if (value == 0x1E) {
-            return Key.of("^", Modifiers.CTRL);
-        }
-        if (value == 0x1F) {
-            return Key.of("_", Modifiers.CTRL);
-        }
-        // Remaining C0 controls are Ctrl+letter.
-        char letter = (char) ('a' + value - 1);
-        return Key.of(String.valueOf(letter), Modifiers.CTRL);
     }
 
     private Optional<InputEvent> readEscape() throws IOException {
@@ -240,7 +218,7 @@ public final class InputDecoder {
             // plain Alt+C. Consuming the pair as a bare Escape instead loses the keystroke the user
             // pressed and delivers one they never pressed, and Escape and Ctrl+C are two-press
             // gestures in real applications.
-            Key control = keyForControlByte(second);
+            Key control = ControlKeys.keyForControlByte(second);
             return Optional.of(
                     InputEvent.KeyInput.of(control.with(control.modifiers().withAlt(true))));
         }
@@ -262,7 +240,9 @@ public final class InputDecoder {
                 InputEvent.KeyInput.of(keyForText(String.valueOf(c)).with(Modifiers.ALT), String.valueOf(c)));
     }
 
-    /** Whether every code point of {@code text} is printable, so it can be a key name and text. */
+    /**
+     * Whether every code point of {@code text} is printable, so it can be a key name and text.
+     */
     private static boolean isPrintable(String text) {
         return text.codePoints().noneMatch(code -> code < 0x20 || code == 0x7F || (code >= 0x80 && code <= 0x9F));
     }
@@ -330,7 +310,7 @@ public final class InputDecoder {
         }
         InputEvent exact = decodeExactCsi(sequence);
         // The exact forms carry no parameters, which is what a legacy terminal sends. Anything else
-        // is a parameterised form: the same keys with modifiers and an optional event type.
+        // is a parameterized form: the same keys with modifiers and an optional event type.
         return exact == null ? decodeParameterizedCsi(sequence) : exact;
     }
 
@@ -366,7 +346,9 @@ public final class InputDecoder {
         return null;
     }
 
-    /** Whether a field is a nonempty run of ASCII digits, the only shape a reply parameter has. */
+    /**
+     * Whether a field is a nonempty run of ASCII digits, the only shape a reply parameter has.
+     */
     private static boolean isDecimal(String field) {
         for (int index = 0; index < field.length(); index++) {
             char digit = field.charAt(index);
@@ -422,7 +404,7 @@ public final class InputDecoder {
                 return Optional.of(reply(new TerminalReply.OperatingSystem(code, data.text())));
             }
             if (next == 0x18 || next == 0x1A) {
-                // A cancelled command carries no value, whatever it had sent so far.
+                // A canceled command carries no value, whatever it had sent so far.
                 return Optional.empty();
             }
             if (next == 0x07) {
@@ -488,14 +470,16 @@ public final class InputDecoder {
                 : Optional.of(reply(new TerminalReply.DeviceControl(header.toString(), data.text())));
     }
 
-    /** The key a lone {@code ESC} plus one printable byte names with ALT, as it always has. */
+    /**
+     * The key a lone {@code ESC} plus one printable byte names with ALT, as it always has.
+     */
     private static InputEvent altKey(char value) {
         String text = String.valueOf(value);
         return InputEvent.KeyInput.of(keyForText(text).with(Modifiers.ALT), text);
     }
 
     /**
-     * The data of a string sequence, or null when it was cancelled or never terminated.
+     * The data of a string sequence, or null when it was canceled or never terminated.
      *
      * <p>Every byte gets the escape timeout afresh: a reply is one write from the terminal, but a
      * long one may still arrive in pieces, and a reply that stops half-way must not hold the reader
@@ -622,13 +606,19 @@ public final class InputDecoder {
     public static final int MAX_CLIPBOARD_REPLY_CHARACTERS =
             ClipboardConfig.defaults().maxReadEncodedCharacters();
 
-    /** The largest device-control header kept, in characters; every documented one is four bytes. */
+    /**
+     * The largest device-control header kept, in characters; every documented one is four bytes.
+     */
     private static final int MAX_DCS_HEADER = 16;
 
-    /** The largest OSC command number accepted; the allowlisted ones are two digits. */
+    /**
+     * The largest OSC command number accepted; the allowlisted ones are two digits.
+     */
     private static final int MAX_OSC_CODE = 99_999;
 
-    /** The parameterless CSI forms: cursor keys, editing keys, function keys, mouse and focus. */
+    /**
+     * The parameterless CSI forms: cursor keys, editing keys, function keys, mouse and focus.
+     */
     private InputEvent decodeExactCsi(String sequence) throws IOException {
         return switch (sequence) {
             case "A" -> InputEvent.KeyInput.of(Key.UP);
@@ -728,7 +718,9 @@ public final class InputDecoder {
         return InputEvent.KeyInput.of(key.with(modifiers), "", type);
     }
 
-    /** The key a parameterised functional form names, or null when the form names none we report. */
+    /**
+     * The key a parameterized functional form names, or null when the form names none we report.
+     */
     private static Key parameterizedKey(char last, String number) {
         if (last == '~') {
             return switch (number) {
@@ -824,7 +816,9 @@ public final class InputDecoder {
         return kittyKey(code, shifted, modifiers, type, reported);
     }
 
-    /** One enhanced key event from its decoded fields. */
+    /**
+     * One enhanced key event from its decoded fields.
+     */
     private static InputEvent kittyKey(int code, int shifted, Modifiers modifiers, KeyEventType type, String reported) {
         Key named = functionalKey(code);
         String text = reported;
@@ -858,7 +852,9 @@ public final class InputDecoder {
                 keyForText(new String(Character.toChars(code))).with(modifiers), text, type);
     }
 
-    /** The key a Kitty keyboard protocol number names, or null when the number names a text key. */
+    /**
+     * The key a Kitty keyboard protocol number names, or null when the number names a text key.
+     */
     private static Key functionalKey(int code) {
         return switch (code) {
             case 27, 57344 -> Key.ESCAPE;
@@ -879,12 +875,16 @@ public final class InputDecoder {
         };
     }
 
-    /** Whether a code point is in the Private Use Area the protocol reserves for functional keys. */
+    /**
+     * Whether a code point is in the Private Use Area the protocol reserves for functional keys.
+     */
     private static boolean isPrivateUse(int code) {
         return code >= 0xE000 && code <= 0xF8FF;
     }
 
-    /** Whether a code point can be a key name and text, by the rule {@link #isPrintable} applies. */
+    /**
+     * Whether a code point can be a key name and text, by the rule {@link #isPrintable} applies.
+     */
     private static boolean printable(int code) {
         return code >= 0x20
                 && code <= Character.MAX_CODE_POINT
@@ -893,7 +893,9 @@ public final class InputDecoder {
                 && !(code >= Character.MIN_SURROGATE && code <= Character.MAX_SURROGATE);
     }
 
-    /** The modifier states a printable key carries its text under: none, or shift alone. */
+    /**
+     * The modifier states a printable key carries its text under: none, or shift alone.
+     */
     private static boolean plainModifiers(Modifiers modifiers) {
         return modifiers.none() || (modifiers.shift() && !modifiers.ctrl() && !modifiers.alt());
     }
@@ -943,7 +945,9 @@ public final class InputDecoder {
         return text.toString();
     }
 
-    /** A nonnegative decimal field, or {@code fallback} when the field is empty, or -1 when malformed. */
+    /**
+     * A nonnegative decimal field, or {@code fallback} when the field is empty, or -1 when malformed.
+     */
     private static int number(String field, int fallback) {
         if (field.isEmpty()) {
             return fallback;
@@ -964,7 +968,9 @@ public final class InputDecoder {
         return value;
     }
 
-    /** The largest decimal parameter accepted: every key code and text code point fits in it. */
+    /**
+     * The largest decimal parameter accepted: every key code and text code point fits in it.
+     */
     private static final int MAX_PARAMETER = Character.MAX_CODE_POINT;
 
     private InputEvent decodeSs3(char value) {
@@ -1037,13 +1043,17 @@ public final class InputDecoder {
         return pointerReport(code, column - X10_OFFSET, row - X10_OFFSET, namesNoButton(code));
     }
 
-    /** Whether a legacy report's code is its form's release: button three with nothing else set. */
+    /**
+     * Whether a legacy report's code is its form's release: button three with nothing else set.
+     */
     private static boolean namesNoButton(int code) {
         int base = code & ~(MOUSE_SHIFT | MOUSE_ALT | MOUSE_CTRL);
         return (base & MOTION) == 0 && (base & WHEEL) == 0 && (base & BUTTON_MASK) == BUTTON_MASK;
     }
 
-    /** The value one legacy report byte adds to the number it carries. */
+    /**
+     * The value one legacy report byte adds to the number it carries.
+     */
     private static final int X10_OFFSET = 32;
 
     /**
@@ -1095,7 +1105,9 @@ public final class InputDecoder {
                 : new InputEvent.PointerInput(PointerEvent.press(named, held, row, column));
     }
 
-    /** The button one wheel report names. */
+    /**
+     * The button one wheel report names.
+     */
     private static PointerButton wheel(int button) {
         return switch (button) {
             case 0 -> PointerButton.WHEEL_UP;
@@ -1105,7 +1117,9 @@ public final class InputDecoder {
         };
     }
 
-    /** The button two button bits name, or {@code none} for the value that names no button. */
+    /**
+     * The button two button bits name, or {@code none} for the value that names no button.
+     */
     private static PointerButton pressed(int bits, PointerButton none) {
         return switch (bits) {
             case 0 -> PointerButton.LEFT;
@@ -1115,28 +1129,44 @@ public final class InputDecoder {
         };
     }
 
-    /** Shift, as the pointer protocol's code spells it. */
+    /**
+     * Shift, as the pointer protocol's code spells it.
+     */
     private static final int MOUSE_SHIFT = 4;
 
-    /** Alt (the protocol's meta), as the pointer protocol's code spells it. */
+    /**
+     * Alt (the protocol's meta), as the pointer protocol's code spells it.
+     */
     private static final int MOUSE_ALT = 8;
 
-    /** Ctrl, as the pointer protocol's code spells it. */
+    /**
+     * Ctrl, as the pointer protocol's code spells it.
+     */
     private static final int MOUSE_CTRL = 16;
 
-    /** The largest code a pointer report can carry: its fields are one byte of flags. */
+    /**
+     * The largest code a pointer report can carry: its fields are one byte of flags.
+     */
     private static final int MAX_MOUSE_CODE = 255;
 
-    /** The two bits that name a button. */
+    /**
+     * The two bits that name a button.
+     */
     private static final int BUTTON_MASK = 3;
 
-    /** The bit a report sets for motion. */
+    /**
+     * The bit a report sets for motion.
+     */
     private static final int MOTION = 32;
 
-    /** The bit a report sets for a wheel gesture instead of a button. */
+    /**
+     * The bit a report sets for a wheel gesture instead of a button.
+     */
     private static final int WHEEL = 64;
 
-    /** The bit a report sets for one of the four buttons this project does not model. */
+    /**
+     * The bit a report sets for one of the four buttons this project does not model.
+     */
     private static final int EXTRA_BUTTONS = 128;
 
     /**

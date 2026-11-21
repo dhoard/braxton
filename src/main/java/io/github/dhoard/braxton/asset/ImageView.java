@@ -27,13 +27,13 @@ import io.github.dhoard.braxton.style.LineBreaks;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Pixel art rendered from an {@link ImageAsset}: one symbol per pixel, coloured per pixel, with
+ * Pixel art rendered from an {@link ImageAsset}: one symbol per pixel, colored per pixel, with
  * transparent pixels left blank. A transparent pixel spans as many columns as the symbol does, so
  * a wide symbol keeps the pixel grid aligned.
  *
@@ -51,6 +51,12 @@ public final class ImageView {
         this.image = image;
     }
 
+    /**
+     * Creates a half-block image view from a bounded immutable asset.
+     *
+     * @param image the bounded immutable image asset
+     * @return a half-block image view from a bounded immutable asset
+     */
     public static ImageView of(ImageAsset image) {
         if (image == null) {
             throw new IllegalArgumentException("image is required");
@@ -64,6 +70,9 @@ public final class ImageView {
      * pixel sits. Text the styled-text boundary cannot carry is dropped before measurement, so the
      * measured grid and the painted grid agree. A value that occupies no column falls back to the
      * block.
+     *
+     * @param value the symbol painted in one cell
+     * @return this view for chaining
      */
     public ImageView symbol(String value) {
         String single = singleLine(value);
@@ -85,13 +94,24 @@ public final class ImageView {
         return StyledText.plain(flattened).plainText();
     }
 
-    /** Horizontal repetition of each pixel; values below one are treated as one. */
+    /**
+     * Horizontal repetition of each pixel; values below one are treated as one.
+     *
+     * @param value the horizontal repetition, treated as one below one
+     * @return horizontal repetition of each pixel; values below one are treated as one
+     */
     public ImageView scale(int value) {
         scale = Math.max(1, value);
         return this;
     }
 
-    /** Replaces one exact RGB value with a colour; invalid hex input is ignored. */
+    /**
+     * Replaces one exact RGB value with a color; invalid hex input is ignored.
+     *
+     * @param sourceHex the source RGB hexadecimal color
+     * @param targetHex the target RGB hexadecimal color
+     * @return this view after registering the replacement, or unchanged for invalid hex input
+     */
     public ImageView replace(String sourceHex, String targetHex) {
         Color source = Color.parse(sourceHex).orElse(null);
         Color target = Color.parse(targetHex).orElse(null);
@@ -105,6 +125,11 @@ public final class ImageView {
         return (color.red() << 16) | (color.green() << 8) | color.blue();
     }
 
+    /**
+     * Renders the image as styled half-block text.
+     *
+     * @return the image as styled half-block text
+     */
     public StyledText render() {
         int cellColumns = Math.max(1, TextMeasure.columns(symbol));
         StyledText out = StyledText.empty();
@@ -128,7 +153,12 @@ public final class ImageView {
         return out;
     }
 
-    public View<Object> view() {
-        return Views.text(render());
+    /**
+     * The image as a one-element tree, for a scene that paints it.
+     *
+     * @return the image as text
+     */
+    public Element<Object> element() {
+        return Elements.text(render());
     }
 }

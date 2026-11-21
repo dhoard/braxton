@@ -32,10 +32,11 @@ import java.util.Set;
  * The tokenizers behind {@code Markdown.Highlighter}: a pure, allocation-bounded split of one code
  * block into styled token spans.
  *
- * <p>Three dialects are recognised - Java, JSON and a POSIX shell - and every other language falls
- * back to plain text, so an unknown fence is painted exactly as it was written. Nothing here reads a
+ * <p>Nine dialect families are recognized - Java, Kotlin, JSON, a POSIX shell, Python, Ruby,
+ * JavaScript and TypeScript, Go, Rust and C (including C++) - and every other language falls back to
+ * plain text, so an unknown fence is painted exactly as it was written. Nothing here reads a
  * file, runs a program or emits terminal escapes: a tokenizer walks the source once and answers
- * {@link StyledText} spans carrying foreground colours only, which the markdown renderer merges over
+ * {@link StyledText} spans carrying foreground colors only, which the markdown renderer merges over
  * the theme's code-block style. That is what keeps a highlight palette usable under either theme
  * without a second parsing pass.</p>
  *
@@ -47,7 +48,7 @@ import java.util.Set;
 public final class CodeHighlighter {
 
     /**
-     * The token colours one highlight palette uses.
+     * The token colors one highlight palette uses.
      *
      * @param keyword the style of a language keyword
      * @param string the style of a string or character literal
@@ -57,7 +58,9 @@ public final class CodeHighlighter {
      */
     public record Styles(Style keyword, Style string, Style comment, Style number, Style literal) {
 
-        /** Substitutes a plain style for a missing colour. */
+        /**
+         * Substitutes a plain style for a missing color.
+         */
         public Styles {
             keyword = keyword == null ? Style.NONE : keyword;
             string = string == null ? Style.NONE : string;
@@ -95,7 +98,9 @@ public final class CodeHighlighter {
         }
     }
 
-    /** How one source language decides what a token is. */
+    /**
+     * How one source language decides what a token is.
+     */
     private enum Dialect {
         JAVA(
                 "//",
@@ -156,8 +161,62 @@ public final class CodeHighlighter {
                         "void",
                         "volatile",
                         "while",
-                        "yield")),
-        JSON(null, null, false, Set.of()),
+                        "yield"),
+                Set.of("true", "false", "null")),
+        KOTLIN(
+                "//",
+                "/*",
+                true,
+                Set.of(
+                        "as",
+                        "break",
+                        "by",
+                        "catch",
+                        "class",
+                        "companion",
+                        "constructor",
+                        "continue",
+                        "data",
+                        "do",
+                        "else",
+                        "enum",
+                        "field",
+                        "finally",
+                        "for",
+                        "fun",
+                        "get",
+                        "if",
+                        "import",
+                        "in",
+                        "init",
+                        "interface",
+                        "internal",
+                        "is",
+                        "it",
+                        "object",
+                        "open",
+                        "operator",
+                        "out",
+                        "override",
+                        "package",
+                        "private",
+                        "protected",
+                        "public",
+                        "return",
+                        "sealed",
+                        "set",
+                        "super",
+                        "this",
+                        "throw",
+                        "try",
+                        "typealias",
+                        "val",
+                        "var",
+                        "when",
+                        "where",
+                        "while"),
+                Set.of("true", "false", "null")),
+        JSON(null, null, false, Set.of(), Set.of("true", "false", "null")),
         SHELL(
                 "#",
                 null,
@@ -181,23 +240,257 @@ public final class CodeHighlighter {
                         "set",
                         "then",
                         "unset",
-                        "while"));
+                        "while"),
+                Set.of("true", "false")),
+        PYTHON(
+                "#",
+                null,
+                false,
+                Set.of(
+                        "and",
+                        "as",
+                        "assert",
+                        "async",
+                        "await",
+                        "break",
+                        "class",
+                        "continue",
+                        "def",
+                        "del",
+                        "elif",
+                        "else",
+                        "except",
+                        "finally",
+                        "for",
+                        "from",
+                        "global",
+                        "if",
+                        "import",
+                        "in",
+                        "is",
+                        "lambda",
+                        "nonlocal",
+                        "not",
+                        "or",
+                        "pass",
+                        "raise",
+                        "return",
+                        "try",
+                        "while",
+                        "with",
+                        "yield"),
+                Set.of("True", "False", "None")),
+        RUBY(
+                "#",
+                null,
+                true,
+                Set.of(
+                        "alias", "and", "begin", "break", "case", "class", "def", "defined", "do", "else", "elsif",
+                        "end", "ensure", "for", "if", "in", "module", "next", "not", "or", "redo", "rescue", "retry",
+                        "return", "self", "super", "then", "undef", "unless", "until", "when", "while", "yield"),
+                Set.of("true", "false", "nil")),
+        JAVASCRIPT(
+                "//",
+                "/*",
+                true,
+                Set.of(
+                        "async",
+                        "await",
+                        "break",
+                        "case",
+                        "catch",
+                        "class",
+                        "const",
+                        "constructor",
+                        "continue",
+                        "debugger",
+                        "default",
+                        "delete",
+                        "do",
+                        "else",
+                        "export",
+                        "extends",
+                        "finally",
+                        "for",
+                        "from",
+                        "function",
+                        "get",
+                        "if",
+                        "implements",
+                        "import",
+                        "in",
+                        "instanceof",
+                        "interface",
+                        "let",
+                        "new",
+                        "of",
+                        "return",
+                        "set",
+                        "static",
+                        "super",
+                        "switch",
+                        "this",
+                        "throw",
+                        "try",
+                        "type",
+                        "typeof",
+                        "var",
+                        "void",
+                        "while",
+                        "yield"),
+                Set.of("true", "false", "null", "undefined")),
+        GO(
+                "//",
+                "/*",
+                true,
+                Set.of(
+                        "break",
+                        "case",
+                        "chan",
+                        "const",
+                        "continue",
+                        "default",
+                        "defer",
+                        "else",
+                        "fallthrough",
+                        "for",
+                        "func",
+                        "go",
+                        "goto",
+                        "if",
+                        "import",
+                        "interface",
+                        "map",
+                        "package",
+                        "range",
+                        "return",
+                        "select",
+                        "struct",
+                        "switch",
+                        "type",
+                        "var"),
+                Set.of("true", "false", "nil")),
+        RUST(
+                "//",
+                "/*",
+                false,
+                Set.of(
+                        "as",
+                        "async",
+                        "await",
+                        "break",
+                        "const",
+                        "continue",
+                        "crate",
+                        "dyn",
+                        "else",
+                        "enum",
+                        "extern",
+                        "fn",
+                        "for",
+                        "if",
+                        "impl",
+                        "in",
+                        "let",
+                        "loop",
+                        "match",
+                        "mod",
+                        "move",
+                        "mut",
+                        "pub",
+                        "ref",
+                        "return",
+                        "self",
+                        "static",
+                        "struct",
+                        "super",
+                        "trait",
+                        "type",
+                        "unsafe",
+                        "use",
+                        "where",
+                        "while"),
+                Set.of("true", "false")),
+        C(
+                "//",
+                "/*",
+                false,
+                Set.of(
+                        "auto",
+                        "bool",
+                        "break",
+                        "case",
+                        "catch",
+                        "char",
+                        "class",
+                        "const",
+                        "constexpr",
+                        "continue",
+                        "default",
+                        "delete",
+                        "do",
+                        "double",
+                        "else",
+                        "enum",
+                        "explicit",
+                        "extern",
+                        "false",
+                        "float",
+                        "for",
+                        "friend",
+                        "goto",
+                        "if",
+                        "inline",
+                        "int",
+                        "long",
+                        "namespace",
+                        "new",
+                        "operator",
+                        "private",
+                        "protected",
+                        "public",
+                        "register",
+                        "return",
+                        "short",
+                        "signed",
+                        "sizeof",
+                        "static",
+                        "struct",
+                        "switch",
+                        "template",
+                        "this",
+                        "throw",
+                        "try",
+                        "typedef",
+                        "typename",
+                        "union",
+                        "unsigned",
+                        "using",
+                        "virtual",
+                        "void",
+                        "volatile",
+                        "while"),
+                Set.of("true", "false", "nullptr", "NULL"));
 
         private final String lineComment;
         private final String blockComment;
         private final boolean backtickStrings;
         private final Set<String> keywords;
+        private final Set<String> literals;
 
-        Dialect(String lineComment, String blockComment, boolean backtickStrings, Set<String> keywords) {
+        Dialect(
+                String lineComment,
+                String blockComment,
+                boolean backtickStrings,
+                Set<String> keywords,
+                Set<String> literals) {
             this.lineComment = lineComment;
             this.blockComment = blockComment;
             this.backtickStrings = backtickStrings;
             this.keywords = keywords;
+            this.literals = literals;
         }
     }
-
-    /** The words a literal token holds, whichever dialect reads them. */
-    private static final Set<String> LITERALS = Set.of("true", "false", "null");
 
     private CodeHighlighter() {}
 
@@ -226,7 +519,7 @@ public final class CodeHighlighter {
      * @param code the block's text, without a trailing fence
      * @param language the language name {@link #language(String)} answered
      * @param styles the palette to paint with
-     * @return the block's spans; plain text when the language is not recognised
+     * @return the block's spans; plain text when the language is not recognized
      */
     public static StyledText highlight(String code, String language, Styles styles) {
         String source = code == null ? "" : code;
@@ -260,7 +553,7 @@ public final class CodeHighlighter {
                 } else if (identifierStart(value)) {
                     end = identifierEnd(source, index);
                     String word = source.substring(index, end);
-                    style = LITERALS.contains(word)
+                    style = dialect.literals.contains(word)
                             ? styles.literal()
                             : dialect.keywords.contains(word) ? styles.keyword() : null;
                 }
@@ -282,18 +575,29 @@ public final class CodeHighlighter {
         return out.isEmpty() ? StyledText.plain(source) : out;
     }
 
-    /** The dialect a language name selects, or null when the name is not a bundled one. */
+    /**
+     * The dialect a language name selects, or null when the name is not a bundled one.
+     */
     private static Dialect dialect(String language) {
         return switch (language == null ? "" : language) {
             case "java" -> Dialect.JAVA;
-            case "json" -> Dialect.JSON;
+            case "kotlin", "kt", "kts" -> Dialect.KOTLIN;
+            case "json", "json5", "jsonc" -> Dialect.JSON;
             case "sh", "shell", "bash", "zsh", "ksh", "dash" -> Dialect.SHELL;
+            case "python", "py", "python3" -> Dialect.PYTHON;
+            case "ruby", "rb" -> Dialect.RUBY;
+            case "javascript", "js", "jsx", "mjs", "cjs", "typescript", "ts", "tsx" -> Dialect.JAVASCRIPT;
+            case "go", "golang" -> Dialect.GO;
+            case "rust", "rs" -> Dialect.RUST;
+            case "c", "h", "cc", "cpp", "c++", "cxx", "hpp", "hxx" -> Dialect.C;
             default -> null;
         };
     }
 
-    /** The end of the string literal that opens at {@code start}, unterminated strings running to
-     * the end of the block. A Java text block is one token, its newlines included. */
+    /**
+     * The end of the string literal that opens at {@code start}, unterminated strings running to
+     * the end of the block. A Java text block is one token, its newlines included.
+     */
     private static int stringEnd(String source, int start, char quote) {
         int length = source.length();
         if (quote == '"' && source.startsWith("\"\"\"", start)) {
@@ -320,7 +624,9 @@ public final class CodeHighlighter {
         return length;
     }
 
-    /** The end of the numeric literal that opens at {@code start}. */
+    /**
+     * The end of the numeric literal that opens at {@code start}.
+     */
     private static int numberEnd(String source, int start) {
         int index = start;
         int length = source.length();
@@ -342,7 +648,9 @@ public final class CodeHighlighter {
         return index;
     }
 
-    /** The end of the identifier that opens at {@code start}. */
+    /**
+     * The end of the identifier that opens at {@code start}.
+     */
     private static int identifierEnd(String source, int start) {
         int index = start;
         while (index < source.length() && identifierPart(source.charAt(index))) {
@@ -351,7 +659,9 @@ public final class CodeHighlighter {
         return index;
     }
 
-    /** The character before {@code index}, or a space at the start of the block. */
+    /**
+     * The character before {@code index}, or a space at the start of the block.
+     */
     private static char previous(String source, int index) {
         return index == 0 ? ' ' : source.charAt(index - 1);
     }

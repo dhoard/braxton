@@ -32,21 +32,46 @@ package io.github.dhoard.braxton.layout;
  */
 public record Rect(int row, int col, int rows, int cols) {
 
+    /**
+     * Creates a {@code Rect} value.
+     *
+     * @param row the first row, never negative
+     * @param col the first column, never negative
+     * @param rows the number of rows, never negative
+     * @param cols the number of columns, never negative
+     */
     public Rect {
         if (row < 0 || col < 0 || rows < 0 || cols < 0) {
             throw new IllegalArgumentException("rect must be non-negative");
         }
     }
 
+    /**
+     * Tests whether at least one cell dimension is zero.
+     *
+     * @return {@code true} if at least one cell dimension is zero; otherwise {@code false}
+     */
     public boolean isEmpty() {
         return rows == 0 || cols == 0;
     }
 
+    /**
+     * Tests whether the target cell is inside this half-open rectangle.
+     *
+     * @param targetRow the zero-based target row
+     * @param targetCol the zero-based target column
+     * @return {@code true} if the target cell is inside this half-open rectangle; otherwise {@code false}
+     */
     public boolean contains(int targetRow, int targetCol) {
         return targetRow >= row && targetRow < (long) row + rows && targetCol >= col && targetCol < (long) col + cols;
     }
 
-    /** Shrinks this rectangle by insets; never produces negative dimensions. */
+    /**
+     * Shrinks this rectangle by insets; never produces negative dimensions.
+     *
+     * @param insets the edge insets in cells
+     * @return shrinks this rectangle by insets; never produces negative dimensions
+     */
     public Rect inset(Insets insets) {
         // The origin addition saturates for the same reason the sums below do: a row or column
         // already inside the screen plus a huge inset would otherwise wrap negative and be rejected
@@ -62,6 +87,12 @@ public record Rect(int row, int col, int rows, int cols) {
         return (int) Math.min(Integer.MAX_VALUE, (long) origin + offset);
     }
 
+    /**
+     * Returns the intersection with the supplied clipping rectangle.
+     *
+     * @param bounds the allocated cell rectangle
+     * @return the intersection with the supplied clipping rectangle
+     */
     public Rect clip(Rect bounds) {
         int top = Math.max(row, bounds.row);
         int left = Math.max(col, bounds.col);

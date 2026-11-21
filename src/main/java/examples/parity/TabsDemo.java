@@ -26,6 +26,7 @@ import io.github.dhoard.braxton.app.Application;
 import io.github.dhoard.braxton.app.ExitResult;
 import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.effect.Subscription;
+import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.KeyAction;
 import io.github.dhoard.braxton.input.KeyMap;
 import io.github.dhoard.braxton.mvu.Component;
@@ -40,13 +41,18 @@ import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Countdown;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.Paginator;
 import io.github.dhoard.braxton.widget.RichList;
+import io.github.dhoard.braxton.widget.RichListConfig;
+import io.github.dhoard.braxton.widget.RichListModel;
+import io.github.dhoard.braxton.widget.RichListMsg;
+import io.github.dhoard.braxton.widget.RichListOutput;
 import io.github.dhoard.braxton.widget.Tabs;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -88,46 +94,70 @@ import java.util.Locale;
  */
 public final class TabsDemo {
 
-    /** The editor page's tab id. */
+    /**
+     * The editor page's tab id.
+     */
     public static final String NOTES_PAGE = "notes";
 
-    /** The list page's tab id. */
+    /**
+     * The list page's tab id.
+     */
     public static final String INBOX_PAGE = "inbox";
 
-    /** The timer page's tab id. */
+    /**
+     * The timer page's tab id.
+     */
     public static final String TIMER_PAGE = "timer";
 
-    /** The tab id of the disabled page, which the keyboard can never reach. */
+    /**
+     * The tab id of the disabled page, which the keyboard can never reach.
+     */
     public static final String ARCHIVE_PAGE = "archive";
 
-    /** The tabs, in paint order: three reachable pages and one disabled one. */
+    /**
+     * The tabs, in paint order: three reachable pages and one disabled one.
+     */
     public static final List<Tabs.Tab> TABS = List.of(
             Tabs.Tab.of(NOTES_PAGE, "Notes"),
             Tabs.Tab.of(INBOX_PAGE, "Inbox"),
             Tabs.Tab.of(TIMER_PAGE, "Timer"),
             Tabs.Tab.of(ARCHIVE_PAGE, "Archive", false));
 
-    /** The id of the page the demo starts on. */
+    /**
+     * The id of the page the demo starts on.
+     */
     public static final String START_PAGE = NOTES_PAGE;
 
-    /** The draft the editor page starts with: several wrapped rows, so a resize is visible. */
+    /**
+     * The draft the editor page starts with: several wrapped rows, so a resize is visible.
+     */
     public static final String DRAFT = "A tab bar is a claim about identity: the page you were "
             + "looking at is still there when you come back. Keep typing here, walk to another tab, "
             + "and the draft, the caret and the wrap of this page survive the trip.";
 
-    /** The countdown the timer page runs. */
+    /**
+     * The countdown the timer page runs.
+     */
     public static final Duration TIMER_DURATION = Duration.ofMinutes(2);
 
-    /** The rows the scene paints above the bar. */
+    /**
+     * The rows the scene paints above the bar.
+     */
     public static final int STATUS_ROWS = 2;
 
-    /** The rows the scene paints below the frame: the region's help and the scene's help. */
+    /**
+     * The rows the scene paints below the frame: the region's help and the scene's help.
+     */
     public static final int HELP_ROWS = 2;
 
-    /** The rows the bar's own cells occupy. */
+    /**
+     * The rows the bar's own cells occupy.
+     */
     public static final int BAR_ROWS = 2;
 
-    /** The rows the frame spends on its top and bottom edges. */
+    /**
+     * The rows the frame spends on its top and bottom edges.
+     */
     public static final int FRAME_ROWS = 2;
 
     /**
@@ -139,7 +169,9 @@ public final class TabsDemo {
      */
     public static final int RESERVED_ROWS = STATUS_ROWS + BAR_ROWS + FRAME_ROWS + HELP_ROWS;
 
-    /** The page rows a mounted page falls back to when it is initialized without a terminal. */
+    /**
+     * The page rows a mounted page falls back to when it is initialized without a terminal.
+     */
     public static final int PAGE_ROWS = 24 - RESERVED_ROWS;
 
     private static final Style STATUS = Style.NONE.withBold();
@@ -167,12 +199,14 @@ public final class TabsDemo {
             "Waterproof cover",
             "From the coast road",
             "Washable, mostly",
-            "An old favourite",
+            "An old favorite",
             "Smells of jasmine",
             "Brass, and loud",
             "Sow them in spring");
 
-    /** The list page's items: a small fixture, so nothing is read or fetched. */
+    /**
+     * The list page's items: a small fixture, so nothing is read or fetched.
+     */
     public static final List<RichList.Item> ITEMS = items();
 
     private TabsDemo() {}
@@ -186,10 +220,14 @@ public final class TabsDemo {
      */
     public enum Pane {
 
-        /** The bar holds the keyboard and its own gestures navigate between tabs. */
+        /**
+         * The bar holds the keyboard and its own gestures navigate between tabs.
+         */
         BAR,
 
-        /** The visible page holds the keyboard. */
+        /**
+         * The visible page holds the keyboard.
+         */
         PAGE
     }
 
@@ -211,14 +249,16 @@ public final class TabsDemo {
     public record Model(
             Tabs.Model bar,
             Editor.Model notes,
-            RichList.Model inbox,
+            RichListModel inbox,
             Countdown.Model timer,
             Pane pane,
             boolean expandedHelp,
             int switched,
             String last) {
 
-        /** Substitutes an initialized default for a missing value and derives every focus flag. */
+        /**
+         * Substitutes an initialized default for a missing value and derives every focus flag.
+         */
         public Model {
             pane = pane == null ? Pane.PAGE : pane;
             last = last == null ? "none" : last;
@@ -226,7 +266,7 @@ public final class TabsDemo {
             String active = bar.activeId();
             notes = (notes == null ? Editor.Model.of(DRAFT) : notes)
                     .withFocus(pane == Pane.PAGE && NOTES_PAGE.equals(active));
-            inbox = (inbox == null ? RichList.Model.of(ITEMS, PAGE_ROWS) : inbox)
+            inbox = (inbox == null ? RichListModel.of(ITEMS, PAGE_ROWS) : inbox)
                     .withFocus(pane == Pane.PAGE && INBOX_PAGE.equals(active));
             timer = timer == null ? Countdown.Model.stopped(TIMER_DURATION) : timer;
             switched = Math.max(0, switched);
@@ -276,7 +316,7 @@ public final class TabsDemo {
             return new Model(bar, value, inbox, timer, pane, expandedHelp, switched, last);
         }
 
-        Model withInbox(RichList.Model value) {
+        Model withInbox(RichListModel value) {
             return new Model(bar, notes, value, timer, pane, expandedHelp, switched, last);
         }
 
@@ -301,7 +341,9 @@ public final class TabsDemo {
         }
     }
 
-    /** Every message the scene handles. */
+    /**
+     * Every message the scene handles.
+     */
     public sealed interface Msg {
 
         /**
@@ -337,14 +379,14 @@ public final class TabsDemo {
          *
          * @param value the list's message
          */
-        record Inbox(RichList.Msg value) implements Msg {}
+        record Inbox(RichListMsg value) implements Msg {}
 
         /**
          * An output the mounted list routed to the scene.
          *
          * @param value the list's output
          */
-        record InboxOutput(RichList.Output value) implements Msg {}
+        record InboxOutput(RichListOutput value) implements Msg {}
 
         /**
          * A message from the mounted countdown: a gesture the scene sent it, or one runtime reading.
@@ -360,7 +402,9 @@ public final class TabsDemo {
          */
         record TimedOut(Countdown.Output value) implements Msg {}
 
-        /** Moves the keyboard between the bar and the visible page. */
+        /**
+         * Moves the keyboard between the bar and the visible page.
+         */
         record TogglePane() implements Msg {}
 
         /**
@@ -370,20 +414,32 @@ public final class TabsDemo {
          */
         record Show(String id) implements Msg {}
 
-        /** Starts, pauses or resumes the countdown, whichever its state allows. */
+        /**
+         * Starts, pauses or resumes the countdown, whichever its state allows.
+         */
         record ToggleTimer() implements Msg {}
 
-        /** Puts the countdown back at its configured duration, stopped. */
+        /**
+         * Puts the countdown back at its configured duration, stopped.
+         */
         record ResetTimer() implements Msg {}
 
-        /** Toggles full help. */
+        /**
+         * Toggles full help.
+         */
         record ToggleHelp() implements Msg {}
 
-        /** Ends the session. */
+        /**
+         * Ends the session.
+         */
         record Quit() implements Msg {}
     }
 
-    /** Runs the demo against the owned terminal. */
+    /**
+     * Runs the demo against the owned terminal.
+     *
+     * @return the structured session exit outcome
+     */
     public static ExitResult run() {
         return Application.run(new Scene());
     }
@@ -422,8 +478,8 @@ public final class TabsDemo {
      *
      * @return the policy
      */
-    public static Editor.Config editorConfig() {
-        return Editor.Config.defaults();
+    public static EditorConfig editorConfig() {
+        return EditorConfig.defaults();
     }
 
     /**
@@ -435,8 +491,8 @@ public final class TabsDemo {
      *
      * @return the definition
      */
-    public static RichList.Config listConfig() {
-        return RichList.Config.defaults()
+    public static RichListConfig listConfig() {
+        return RichListConfig.defaults()
                 .withItems(ITEMS)
                 .withTitle("Inbox")
                 .withMode(RichList.FilterMode.FUZZY)
@@ -590,7 +646,9 @@ public final class TabsDemo {
                 + " help=" + (model.expandedHelp() ? "full" : "compact");
     }
 
-    /** The fixture: twelve items, so the list pages and pages through them. */
+    /**
+     * The fixture: twelve items, so the list pages and pages through them.
+     */
     private static List<RichList.Item> items() {
         List<RichList.Item> items = new ArrayList<>(TITLES.size());
         for (int index = 0; index < TITLES.size(); index++) {
@@ -605,7 +663,9 @@ public final class TabsDemo {
         return model.pageFocused() && TIMER_PAGE.equals(model.activePage());
     }
 
-    /** What the editor asked for, as one token a verifier can assert. */
+    /**
+     * What the editor asked for, as one token a verifier can assert.
+     */
     private static String output(Editor.Output output) {
         return switch (output) {
             case Editor.Output.Submit submit -> "submit:" + submit.text().length();
@@ -614,16 +674,25 @@ public final class TabsDemo {
         };
     }
 
-    /** What the list asked for, as one token. */
-    private static String output(RichList.Output output) {
+    /**
+     * What the list asked for, as one token.
+     */
+    private static String output(RichListOutput output) {
         return switch (output) {
-            case RichList.Output.Chosen chosen -> "chose:" + chosen.item().id();
-            case RichList.Output.Cancelled cancelled -> "cancelled";
+            case RichListOutput.Chosen chosen -> "chose:" + chosen.item().id();
+            case RichListOutput.Canceled cancelled -> "canceled";
         };
     }
 
-    /** The scene: four mounted children, two status rows, the composition and two help rows. */
+    /**
+     * The scene: four mounted children, two status rows, the composition and two help rows.
+     */
     public static final class Scene implements Component<Model, Msg, Never> {
+
+        /**
+         * Creates the scene with its default state.
+         */
+        public Scene() {}
 
         private final Tabs bar = new Tabs(barConfig());
         private final Editor notes = Editor.textarea(editorConfig());
@@ -641,7 +710,7 @@ public final class TabsDemo {
                 ModelLens.of(Model::notes, Model::withNotes),
                 Msg.Notes::new,
                 OutputRoute.toMessage(Msg.NotesOutput::new));
-        private final Mount<Model, Msg, Never, RichList.Model, RichList.Msg, RichList.Output> inboxMount = Mount.of(
+        private final Mount<Model, Msg, Never, RichListModel, RichListMsg, RichListOutput> inboxMount = Mount.of(
                 ComponentId.of(INBOX_PAGE),
                 inbox,
                 ModelLens.of(Model::inbox, Model::withInbox),
@@ -699,7 +768,9 @@ public final class TabsDemo {
             };
         }
 
-        /** Every mounted child declares its sources, including the pages that are not painted. */
+        /**
+         * Every mounted child declares its sources, including the pages that are not painted.
+         */
         @Override
         public Subscription<Msg> subscriptions(Model model) {
             return Subscription.batch(
@@ -715,7 +786,7 @@ public final class TabsDemo {
          * <p>This is the keep-alive policy: the node is declared for the whole session, so a page
          * keeps its model, its scoped element ids and its subscriptions while another page is shown.
          * Omitting the node of a page would be the deliberate unmount - that page's scoped work would
-         * be cancelled and its state dropped.</p>
+         * be canceled and its state dropped.</p>
          */
         @Override
         public ComponentTree children(Model model) {
@@ -724,33 +795,53 @@ public final class TabsDemo {
         }
 
         @Override
-        public View<Msg> view(Model model, ViewContext context) {
+        public Element<Msg> view(Model model, ViewContext context) {
+            return scene(model, context);
+        }
+
+        /**
+         * The gestures this scene answers once no widget has taken them.
+         */
+        @Override
+        public List<Binding<Msg>> bindings(Model model) {
+            return keys(model).bindings();
+        }
+
+        /**
+         * The status rows, the bar with its page, and the help lines, as one element tree.
+         */
+        private Element<Msg> scene(Model model, ViewContext context) {
             int cols = Math.max(1, context.viewport().cols());
             // Only the shown page is painted; every page stays mounted and subscribed.
-            View<Msg> page = switch (model.activePage() == null ? "" : model.activePage()) {
+            Element<Msg> page = switch (model.activePage() == null ? "" : model.activePage()) {
                 case NOTES_PAGE -> notesMount.view(model, context);
                 case INBOX_PAGE -> inboxMount.view(model, context);
                 case TIMER_PAGE ->
-                    Views.column(Views.fixed(1, timerMount.view(model, context)), Views.grow(Views.blank()));
-                default -> Views.blank();
+                    Elements.column(
+                            Elements.fixed(1, timerMount.view(model, context)), Elements.grow(Elements.spacer()));
+                default -> Elements.spacer();
             };
-            List<View<Msg>> rows = new ArrayList<>(STATUS_ROWS + 1 + HELP_ROWS);
-            rows.add(Views.fixed(1, Views.text(status(model), STATUS)));
-            rows.add(Views.fixed(1, Views.text(pages(model), STATUS)));
-            rows.add(Views.grow(bar.view(model.bar(), page, Msg.Bar::new)));
+            List<Element<Msg>> rows = new ArrayList<>(STATUS_ROWS + 1 + HELP_ROWS);
+            rows.add(Elements.fixed(1, Elements.text(status(model), STATUS)));
+            rows.add(Elements.fixed(1, Elements.text(pages(model), STATUS)));
+            rows.add(Elements.grow(bar.element(model.bar(), page, Msg.Bar::new)));
             for (StyledText line : helpLines(model, cols)) {
-                rows.add(Views.fixed(1, Views.text(line)));
+                rows.add(Elements.fixed(1, Elements.text(line)));
             }
-            return Views.onKeys(keys(model).bindings(), Views.column(rows));
+            return Elements.column(rows);
         }
 
-        /** The countdown's own gesture, dispatched through its mount so its command is the mount's. */
+        /**
+         * The countdown's own gesture, dispatched through its mount so its command is the mount's.
+         */
         private Update<Model, Msg, Never> gesture(Model model, Countdown.Msg message, String last) {
             Update<Model, Msg, Never> applied = timerMount.update(model, message);
             return Update.next(applied.model().withLast(last), applied.command());
         }
 
-        /** What the bar reported: a changed page, which leaves the keyboard where it was. */
+        /**
+         * What the bar reported: a changed page, which leaves the keyboard where it was.
+         */
         private Update<Model, Msg, Never> shown(Model model, Tabs.Output output) {
             return switch (output) {
                 case Tabs.Output.Activated activated ->

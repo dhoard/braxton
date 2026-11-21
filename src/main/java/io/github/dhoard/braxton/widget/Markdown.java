@@ -26,13 +26,10 @@ import io.github.dhoard.braxton.internal.markdown.CodeHighlighter;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -53,15 +50,16 @@ import java.util.Objects;
  * autolinks, so a bare {@code https://example.com} is a link and so is {@code <https://example.com>}.
  * Block quotes, ordered and bullet lists (nested and tight or loose), fenced and indented code
  * blocks, thematic breaks, hard and soft line breaks, escapes, images, and inline HTML are all
- * recognised. An image paints its alt text and nothing else: a terminal renderer does not fetch a
- * picture. Raw HTML is <em>literal text</em> - every {@code <div>}, {@code <script>} and
+ * recognized. An image paints its alt text unless the configuration supplies an {@link ImageHook},
+ * which is how a terminal renderer paints a picture it was given out of band: the renderer never
+ * fetches one itself. Raw HTML is <em>literal text</em> - every {@code <div>}, {@code <script>} and
  * {@code <style>} in a document is painted as the characters that were written, never as terminal
  * output and never executed, which is the same promise {@link Markup} keeps for its own grammar.</p>
  *
  * <h2>Links</h2>
  *
  * <p>A link paints its text with the theme's link style and carries a hyperlink target only when its
- * destination names one of {@link Config#linkSchemes()} - {@code http}, {@code https} and
+ * destination names one of {@link MarkdownConfig#linkSchemes()} - {@code http}, {@code https} and
  * {@code mailto} by default. A destination with no scheme, a relative path, a {@code javascript:} or
  * {@code file:} target, and a destination containing a control character all paint as plain styled
  * text with no target, so the renderer cannot hand a terminal a scheme it was not asked to allow.
@@ -70,10 +68,11 @@ import java.util.Objects;
  * <h2>Themes and code highlighting</h2>
  *
  * <p>{@link Theme#light()} and {@link Theme#dark()} are the two documented palettes, and
- * {@link Config#defaults()} and {@link Config#dark()} pair each with a matching code highlighter.
+ * {@link MarkdownConfig#defaults()} and {@link MarkdownConfig#dark()} pair each with a matching code highlighter.
  * Highlighting is a {@link Highlighter}: a pure function from a code block's language and text to
- * styled spans, so an application can plug its own in. The bundled tokenizers cover Java, JSON and a
- * POSIX shell; any other language, and a fence with no language, paints its text unchanged.</p>
+ * styled spans, so an application can plug its own in. The bundled tokenizers cover Java, Kotlin,
+ * JSON, a POSIX shell, Python, Ruby, JavaScript and TypeScript, Go, Rust and C and C++; any other
+ * language, and a fence with no language, paints its text unchanged.</p>
  *
  * <h2>Bounds</h2>
  *
@@ -105,44 +104,60 @@ import java.util.Objects;
  * {@link TextInput} for a find field:</p>
  *
  * <pre>{@code
- * Markdown markdown = new Markdown(Markdown.Config.defaults().withWidth(columns));
+ * Markdown markdown = new Markdown(MarkdownConfig.defaults().withWidth(columns));
  * Markdown.Document document = markdown.document(source);
  * Update<Model, Msg, Never> published =
  *         pager.update(model, new TextViewport.Msg.ContentChanged(document.content()));
  * }</pre>
  *
- * <p>Width is projection data: a prose paragraph is word-wrapped to {@link Config#width()} when it
+ * <p>Width is projection data: a prose paragraph is word-wrapped to {@link MarkdownConfig#width()} when it
  * is projected, so a wider terminal is a new projection rather than a second wrapping rule in the
  * pager. A renderer that keeps a document at one width inside a pane that changed width paints rows
  * that no longer fit; the demo re-projects on a resize, and the pager keeps its logical anchor.</p>
  */
 public final class Markdown {
 
-    /** The width a projection wraps prose to when the configuration names none. */
+    /**
+     * The width a projection wraps prose to when the configuration names none.
+     */
     public static final int DEFAULT_WIDTH = 80;
 
-    /** The cells one nesting level of a list or a quote indents by. */
+    /**
+     * The cells one nesting level of a list or a quote indents by.
+     */
     public static final int DEFAULT_INDENT = 2;
 
-    /** The largest input, in UTF-8 bytes, a projection accepts by default. */
+    /**
+     * The largest input, in UTF-8 bytes, a projection accepts by default.
+     */
     public static final int DEFAULT_MAX_INPUT_BYTES = 1 << 20;
 
-    /** The most nodes a projection visits by default. */
+    /**
+     * The most nodes a projection visits by default.
+     */
     public static final int DEFAULT_MAX_NODES = 100_000;
 
-    /** The deepest block and inline nesting a projection descends by default. */
+    /**
+     * The deepest block and inline nesting a projection descends by default.
+     */
     public static final int DEFAULT_MAX_DEPTH = 128;
 
-    /** The most cells a projection paints by default, counting every row as at least one. */
+    /**
+     * The most cells a projection paints by default, counting every row as at least one.
+     */
     public static final long DEFAULT_MAX_CELLS = 1_000_000L;
 
-    /** The link schemes a projected document keeps unless the configuration names others. */
+    /**
+     * The link schemes a projected document keeps unless the configuration names others.
+     */
     public static final List<String> DEFAULT_LINK_SCHEMES = List.of("http", "https", "mailto");
 
-    /** How many projections one instance keeps. */
+    /**
+     * How many projections one instance keeps.
+     */
     private static final int CACHE_ENTRIES = 4;
 
-    private final Config config;
+    private final MarkdownConfig config;
 
     private final Cache cache = new Cache();
 
@@ -151,8 +166,8 @@ public final class Markdown {
      *
      * @param config the definition, or null for the defaults
      */
-    public Markdown(Config config) {
-        this.config = config == null ? Config.defaults() : config;
+    public Markdown(MarkdownConfig config) {
+        this.config = config == null ? MarkdownConfig.defaults() : config;
     }
 
     /**
@@ -161,7 +176,7 @@ public final class Markdown {
      * @return the renderer
      */
     public static Markdown of() {
-        return new Markdown(Config.defaults());
+        return new Markdown(MarkdownConfig.defaults());
     }
 
     /**
@@ -170,7 +185,7 @@ public final class Markdown {
      * @param config the definition, or null for the defaults
      * @return the renderer
      */
-    public static Markdown of(Config config) {
+    public static Markdown of(MarkdownConfig config) {
         return new Markdown(config);
     }
 
@@ -179,7 +194,7 @@ public final class Markdown {
      *
      * @return the definition
      */
-    public Config config() {
+    public MarkdownConfig config() {
         return config;
     }
 
@@ -215,10 +230,14 @@ public final class Markdown {
         cache.clear();
     }
 
-    /** The cache key: the whole projection input, because every part of it changes the output. */
-    private record Key(String source, Config config) {}
+    /**
+     * The cache key: the whole projection input, because every part of it changes the output.
+     */
+    private record Key(String source, MarkdownConfig config) {}
 
-    /** A bounded, synchronized, least-recently-used map from a key to its projection. */
+    /**
+     * A bounded, synchronized, least-recently-used map from a key to its projection.
+     */
     private static final class Cache {
 
         private final Map<Key, Document> entries = new LinkedHashMap<>(8, 0.75f, true);
@@ -288,18 +307,18 @@ public final class Markdown {
      * What one styled role paints with.
      *
      * <p>A style is merged over the styles around it, so an emphasis inside a heading keeps the
-     * heading's colour and adds the italic attribute, and a code block's background survives the
-     * highlighter's token colours. A theme is a value: two themes with the same styles are equal, so
+     * heading's color and adds the italic attribute, and a code block's background survives the
+     * highlighter's token colors. A theme is a value: two themes with the same styles are equal, so
      * a projection cached under one is answered under the other.</p>
      *
      * @param text the body text
      * @param headings the six heading levels, index 0 for level 1
      * @param emphasis italic emphasis
-     * @param strong strong emphasis
+     * @param strong bold emphasis
      * @param strikethrough struck-through text
      * @param code inline code
      * @param codeBlock the base style of a fenced or indented code block
-     * @param link link text
+     * @param link hyperlink text
      * @param quote quoted text
      * @param muted raw HTML, image alt text and the quotation bar
      * @param marker list bullets, ordered numbers, task boxes and list continuation indents
@@ -325,7 +344,9 @@ public final class Markdown {
             Style header,
             Style diagnostic) {
 
-        /** The number of heading levels markdown has. */
+        /**
+         * The number of heading levels markdown has.
+         */
         private static final int LEVELS = 6;
 
         /**
@@ -805,12 +826,87 @@ public final class Markdown {
     }
 
     /**
+     * An image a document names: everything a hook needs to paint it and nothing else.
+     *
+     * <p>The renderer never resolves the destination, reads the file or fetches the picture, so an
+     * image in a document the application did not write cannot make it reach anything. The
+     * destination is exactly the URL the document wrote, which the hook - and only the hook -
+     * decides whether to trust.</p>
+     *
+     * @param url the image destination as the document wrote it, never null
+     * @param alt the alternative text, empty when the image declared none
+     * @param title the image title, empty when the image declared none
+     */
+    public record ImageRef(String url, String alt, String title) {
+
+        /**
+         * Substitutes an empty value for a missing one.
+         */
+        public ImageRef {
+            url = url == null ? "" : url;
+            alt = alt == null ? "" : alt;
+            title = title == null ? "" : title;
+        }
+    }
+
+    /**
+     * Turns the images a document names into the rows a terminal paints for them.
+     *
+     * <p>A hook is the renderer's one extension point for pictures, and it is deliberately narrow:
+     * it is asked only for an image that <em>stands alone</em> in a paragraph - an image on a line of
+     * its own, which is how markdown writes a picture in a document - and answers the rows that take
+     * the image's place. An image inside running text still paints its alt text, because a paragraph
+     * is one logical line and a picture is a block: splicing rows into it would move the text after
+     * the image onto rows of its own and break the width the renderer already wrapped to. Returning
+     * null paints the alt text as usual; returning an empty list paints nothing.</p>
+     *
+     * <p>Every returned row is subject to the projection's bounds and width: a row holding a line
+     * break is split, and a row wider than the available columns is broken at the cell that fits, so
+     * a hook cannot paint outside the pane it is rendered into. The style of each row is the hook's
+     * own, so it can carry a link or a picture's colors; the renderer does not restyle it.</p>
+     *
+     * <p>An image that shares its paragraph with text is a single cell range, not a block: the
+     * default {@link #inline} answers null and the alt text paints where the image stood. An
+     * application that has a one-row representation - a placeholder, an icon, a half-block picture -
+     * overrides it and returns that value, which is measured like any other inline text. A value
+     * holding a line break paints as a row break, because the projection splits rows where the text
+     * says to.</p>
+     *
+     * <p>An implementation must be pure and deterministic for the same reference and width, and it
+     * is called while rendering, so it must not block on I/O of unbounded cost. Decoding a picture
+     * that is already in memory, or returning a cached projection of one, are the intended uses.</p>
+     */
+    @FunctionalInterface
+    public interface ImageHook {
+
+        /**
+         * The rows that take one image's place when it stands alone in a paragraph.
+         *
+         * @param image the image the document named
+         * @param width the columns available to one row, at least one
+         * @return the rows to paint, or null to paint the image's alt text instead
+         */
+        List<StyledText> rows(ImageRef image, int width);
+
+        /**
+         * The value an image inside running text paints, in place of its alt text.
+         *
+         * @param image the image the document named
+         * @param style the style the alt text would paint with, for a hook that wants to match it
+         * @return the value to paint, or null to paint the image's alt text
+         */
+        default StyledText inline(ImageRef image, Style style) {
+            return null;
+        }
+    }
+
+    /**
      * Highlights one fenced code block.
      *
      * <p>An implementation must be pure and deterministic: the same language and text answer the
      * same spans, nothing is read or written, and no terminal escape sequence is produced. The
      * renderer merges the theme's code-block style over the spans the highlighter answers, so a
-     * highlighter only has to name token colours.</p>
+     * highlighter only has to name token colors.</p>
      */
     @FunctionalInterface
     public interface Highlighter {
@@ -834,7 +930,7 @@ public final class Markdown {
         }
 
         /**
-         * The bundled Java, JSON and shell tokenizers with their light palette.
+         * The bundled tokenizers with their light palette.
          *
          * @return the light highlighter
          */
@@ -843,7 +939,7 @@ public final class Markdown {
         }
 
         /**
-         * The bundled Java, JSON and shell tokenizers with their dark palette.
+         * The bundled tokenizers with their dark palette.
          *
          * @return the dark highlighter
          */
@@ -852,7 +948,9 @@ public final class Markdown {
         }
     }
 
-    /** The three highlighters the widget ships, so a definition's identity is stable. */
+    /**
+     * The three highlighters the widget ships, so a definition's identity is stable.
+     */
     private enum Bundled implements Highlighter {
         PLAIN,
         LIGHT,
@@ -950,6 +1048,9 @@ public final class Markdown {
      */
     public static final class Document {
 
+        /**
+         * The identity of a document snapshot's frame; a mount scopes it to its own path.
+         */
         private final List<StyledText> lines;
 
         private final List<Diagnostic> diagnostics;
@@ -1040,15 +1141,6 @@ public final class Markdown {
             return joined;
         }
 
-        /**
-         * A one-element view of the whole projection.
-         *
-         * @return a text view holding {@link #text()}
-         */
-        public View<Object> view() {
-            return Views.text(text());
-        }
-
         @Override
         public boolean equals(Object other) {
             return other instanceof Document document
@@ -1061,7 +1153,9 @@ public final class Markdown {
             return Objects.hash(lines, diagnostics);
         }
 
-        /** Bounded diagnostic form; never contains escape sequences. */
+        /**
+         * Bounded diagnostic form; never contains escape sequences.
+         */
         @Override
         public String toString() {
             return "Markdown.Document[" + lines.size() + " lines, diagnostics=" + diagnostics.size() + "]";
@@ -1095,124 +1189,6 @@ public final class Markdown {
         @Override
         public String toString() {
             return "Markdown.Content[" + lines.size() + " lines]";
-        }
-    }
-
-    /**
-     * The immutable definition of one projection.
-     *
-     * @param theme the styles the document paints with
-     * @param highlighter the code-block highlighter
-     * @param limits the bounds the projection is held to
-     * @param width the cells one projected row may occupy
-     * @param indent the cells one nesting level indents by
-     * @param linkSchemes the link schemes that keep their hyperlink target, lower case
-     */
-    public record Config(
-            Theme theme, Highlighter highlighter, Limits limits, int width, int indent, List<String> linkSchemes) {
-
-        /**
-         * Substitutes the defaults for a missing value and normalizes a negative width or indent.
-         */
-        public Config {
-            theme = theme == null ? Theme.light() : theme;
-            highlighter = highlighter == null ? Highlighter.light() : highlighter;
-            limits = limits == null ? Limits.defaults() : limits;
-            width = Math.max(0, width);
-            indent = Math.max(0, indent);
-            List<String> schemes = linkSchemes == null ? DEFAULT_LINK_SCHEMES : linkSchemes;
-            List<String> normalized = new ArrayList<>(schemes.size());
-            for (String scheme : schemes) {
-                if (scheme != null && !scheme.isBlank()) {
-                    normalized.add(scheme.strip().toLowerCase(Locale.ROOT));
-                }
-            }
-            linkSchemes = List.copyOf(normalized);
-        }
-
-        /**
-         * The light definition: a light theme, its highlighter, the default bounds and an
-         * eighty-column projection.
-         *
-         * @return the default definition
-         */
-        public static Config defaults() {
-            return new Config(
-                    Theme.light(),
-                    Highlighter.light(),
-                    Limits.defaults(),
-                    DEFAULT_WIDTH,
-                    DEFAULT_INDENT,
-                    DEFAULT_LINK_SCHEMES);
-        }
-
-        /**
-         * The dark definition: a dark theme and its highlighter, everything else default.
-         *
-         * @return the dark definition
-         */
-        public static Config dark() {
-            return defaults().withTheme(Theme.dark()).withHighlighter(Highlighter.dark());
-        }
-
-        /**
-         * The same definition with a different theme.
-         *
-         * @param value the theme
-         * @return the new definition
-         */
-        public Config withTheme(Theme value) {
-            return new Config(value, highlighter, limits, width, indent, linkSchemes);
-        }
-
-        /**
-         * The same definition with a different code highlighter.
-         *
-         * @param value the highlighter
-         * @return the new definition
-         */
-        public Config withHighlighter(Highlighter value) {
-            return new Config(theme, value, limits, width, indent, linkSchemes);
-        }
-
-        /**
-         * The same definition with different bounds.
-         *
-         * @param value the bounds
-         * @return the new definition
-         */
-        public Config withLimits(Limits value) {
-            return new Config(theme, highlighter, value, width, indent, linkSchemes);
-        }
-
-        /**
-         * The same definition with a different projection width.
-         *
-         * @param value the cells one row may occupy; zero paints every token on its own row
-         * @return the new definition
-         */
-        public Config withWidth(int value) {
-            return new Config(theme, highlighter, limits, value, indent, linkSchemes);
-        }
-
-        /**
-         * The same definition with a different nesting indent.
-         *
-         * @param value the cells one nesting level indents by
-         * @return the new definition
-         */
-        public Config withIndent(int value) {
-            return new Config(theme, highlighter, limits, width, value, linkSchemes);
-        }
-
-        /**
-         * The same definition with a different set of link schemes.
-         *
-         * @param value the schemes that keep a hyperlink target; null restores the defaults
-         * @return the new definition
-         */
-        public Config withLinkSchemes(List<String> value) {
-            return new Config(theme, highlighter, limits, width, indent, value);
         }
     }
 }

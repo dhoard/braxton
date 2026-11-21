@@ -34,7 +34,9 @@ import java.util.List;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
-/** A badge is one row of padded pills, joined by arrows only when a pathway is requested. */
+/**
+ * A badge is one row of padded pills, joined by arrows only when a pathway is requested.
+ */
 class BadgeTest {
 
     @Test
@@ -53,7 +55,9 @@ class BadgeTest {
         assertThat(badge.render().plainText()).isEqualTo(" a  \u2192  b ");
     }
 
-    /** A pill is one row, so line breaks and tabs become spaces instead of splitting the badge. */
+    /**
+     * A pill is one row, so line breaks and tabs become spaces instead of splitting the badge.
+     */
     @Test
     void aLabelWithLineBreaksAndTabsStaysOnOneRow() {
         Badge badge = Badge.of().append(StyledText.plain("a\nb\tc")).append(StyledText.plain("d"));

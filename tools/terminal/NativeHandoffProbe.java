@@ -45,7 +45,7 @@ public final class NativeHandoffProbe {
         if (mode.equals("close")) {
             // Output is refused while released. That failure is the session's own output failure,
             // which is fatal for a run by design, so it is asserted only here, where nothing is
-            // written afterwards: a refused write poisons the writer on purpose.
+            // written afterward: a refused write poisons the writer on purpose.
             terminal.writer().write("frame");
             terminal.writer().flush();
             check(terminal.writer().checkError(), "a released terminal accepted output");

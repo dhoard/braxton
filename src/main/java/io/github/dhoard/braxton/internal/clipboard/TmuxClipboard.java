@@ -23,7 +23,7 @@
 package io.github.dhoard.braxton.internal.clipboard;
 
 /**
- * tmux DCS passthrough encoding for terminal sequences.
+ * The tmux DCS passthrough encoding for terminal sequences.
  *
  * <p>The format is {@code ESC P tmux ; <sequence> ESC \} with every ESC byte inside the sequence
  * doubled. tmux unescapes one layer before sending the inner sequence to the outer terminal. The
@@ -44,6 +44,7 @@ public final class TmuxClipboard {
     /**
      * Wraps {@code sequence} for tmux passthrough.
      *
+     * @param sequence the ordered sequence
      * @return the wrapped sequence, an empty string for {@code null}/empty input, or the input
      *     unchanged when it is already a tmux passthrough sequence
      */
@@ -65,7 +66,12 @@ public final class TmuxClipboard {
         return PREFIX + escaped + SUFFIX;
     }
 
-    /** Whether {@code sequence} is already a tmux passthrough payload. */
+    /**
+     * Whether {@code sequence} is already a tmux passthrough payload.
+     *
+     * @param sequence the ordered sequence
+     * @return {@code true} if {@code sequence} is already a tmux passthrough payload; otherwise {@code false}
+     */
     public static boolean isPassthrough(String sequence) {
         return sequence != null && sequence.startsWith(PREFIX);
     }

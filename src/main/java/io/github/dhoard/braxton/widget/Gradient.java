@@ -24,31 +24,49 @@ package io.github.dhoard.braxton.widget;
 
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Vertical colour gradient over styled text.
+ * Vertical color gradient over styled text.
  *
- * <p>The colour position advances one cluster at a time, over the clusters of each span in order.
+ * <p>The color position advances one cluster at a time, over the clusters of each span in order.
  * A style boundary that splits one grapheme - a base in one span, its combining mark or variation
- * selector in the next - therefore colours the two pieces from their own positions, and only the
- * painted text stays unchanged: the two spans still paint one cell. Malformed or unusable colours
+ * selector in the next - therefore colors the two pieces from their own positions, and only the
+ * painted text stays unchanged: the two spans still paint one cell. Malformed or unusable colors
  * are ignored: the original text is returned unchanged rather than partially repainted.</p>
  */
 public final class Gradient {
 
-    /** Gradient direction. */
+    /**
+     * Gradient direction.
+     */
     public enum Direction {
+        /**
+         * Applies the color ramp down rows.
+         */
         VERTICAL,
+        /**
+         * Applies the color ramp across columns.
+         */
         HORIZONTAL,
+        /**
+         * Applies the color ramp across both rows and columns.
+         */
         DIAGONAL
     }
 
     private Gradient() {}
 
+    /**
+     * Applies the color ramp across the text in the requested direction.
+     *
+     * @param text the text to process
+     * @param colors the gradient color stops
+     * @param direction the layout or navigation direction
+     * @return the text with the gradient applied
+     */
     public static StyledText apply(
             StyledText text, List<io.github.dhoard.braxton.style.Color> colors, Direction direction) {
         String plain = text.plainText();
@@ -118,8 +136,17 @@ public final class Gradient {
                 (int) Math.round(a.blue() + (b.blue() - a.blue()) * t));
     }
 
-    public static View<Object> view(
+    /**
+     * The gradient as a leaf of an element tree.
+     *
+     * @param <Msg> the message type of the tree
+     * @param text the text to shade; required
+     * @param colors the colors to run through; required
+     * @param direction the axis the colors run along; required
+     * @return the element
+     */
+    public static <Msg> Element<Msg> element(
             StyledText text, List<io.github.dhoard.braxton.style.Color> colors, Direction direction) {
-        return Views.text(apply(text, colors, direction));
+        return RenderedText.of(cols -> apply(text, colors, direction));
     }
 }

@@ -32,7 +32,9 @@ import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** A gradient recolours every cluster in place and leaves the text itself untouched. */
+/**
+ * A gradient recolors every cluster in place and leaves the text itself untouched.
+ */
 class GradientTest {
 
     private static final Color RED = new Color(255, 0, 0);
@@ -52,7 +54,7 @@ class GradientTest {
                         .as("bold kept for %s", direction)
                         .isTrue();
                 assertThat(span.style().foreground())
-                        .as("colour set for %s", direction)
+                        .as("color set for %s", direction)
                         .isNotNull();
                 assertThat(span.link()).as("link kept for %s", direction).isEqualTo("https://example.test");
             }
@@ -74,7 +76,9 @@ class GradientTest {
         assertThat(horizontal.spans().get(1).style().foreground()).isEqualTo(BLUE);
     }
 
-    /** A wide cluster advances the horizontal column by its painted width, not by one. */
+    /**
+     * A wide cluster advances the horizontal column by its painted width, not by one.
+     */
     @Test
     void aWideClusterAdvancesTheHorizontalPositionByItsWidth() {
         StyledText horizontal =
@@ -98,7 +102,9 @@ class GradientTest {
                 .isTrue();
     }
 
-    /** A null entry is dropped rather than treated as a colour between the neighbours. */
+    /**
+     * A null entry is dropped rather than treated as a color between the neighbors.
+     */
     @Test
     void aNullEntryIsIgnoredRatherThanInterpolated() {
         StyledText painted = Gradient.apply(

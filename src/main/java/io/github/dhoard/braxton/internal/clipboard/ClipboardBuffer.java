@@ -43,7 +43,11 @@ public final class ClipboardBuffer {
     private final int maxChars;
     private String text = "";
 
-    /** Creates a buffer bounded to {@code maxChars} UTF-16 units (at least one). */
+    /**
+     * Creates a buffer bounded to {@code maxChars} UTF-16 units (at least one).
+     *
+     * @param maxChars the maximum retained character count
+     */
     public ClipboardBuffer(int maxChars) {
         this.maxChars = Math.max(1, maxChars);
     }
@@ -62,6 +66,7 @@ public final class ClipboardBuffer {
      * kept verbatim, including a value that fits the bound; a truncated value never ends with a
      * lone high surrogate, because a high surrogate with nothing after it is not a character.</p>
      *
+     * @param value the text to store; null stores nothing
      * @return the text actually stored
      */
     public synchronized String set(String value) {
@@ -137,27 +142,45 @@ public final class ClipboardBuffer {
         return end;
     }
 
-    /** Returns the stored text, or an empty string. */
+    /**
+     * Returns the stored text, or an empty string.
+     *
+     * @return the stored text, or an empty string
+     */
     public synchronized String get() {
         return text;
     }
 
-    /** Removes the stored text. */
+    /**
+     * Removes the stored text.
+     */
     public synchronized void clear() {
         text = "";
     }
 
-    /** Number of stored UTF-16 units. */
+    /**
+     * Number of stored UTF-16 units.
+     *
+     * @return number of stored UTF-16 units
+     */
     public synchronized int length() {
         return text.length();
     }
 
-    /** Whether no text is stored. */
+    /**
+     * Whether no text is stored.
+     *
+     * @return {@code true} if no text is stored; otherwise {@code false}
+     */
     public synchronized boolean isEmpty() {
         return text.isEmpty();
     }
 
-    /** Maximum number of stored UTF-16 units. */
+    /**
+     * Maximum number of stored UTF-16 units.
+     *
+     * @return maximum number of stored UTF-16 units
+     */
     public int maxChars() {
         return maxChars;
     }

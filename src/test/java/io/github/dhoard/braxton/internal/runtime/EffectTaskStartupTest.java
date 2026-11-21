@@ -32,7 +32,9 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** An executor may retain a task until after its effect has been invalidated. */
+/**
+ * An executor may retain a task until after its effect has been invalidated.
+ */
 class EffectTaskStartupTest {
 
     @Test

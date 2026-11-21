@@ -35,17 +35,49 @@ import java.util.Map;
  */
 public final class FontLoader {
 
-    /** The ten fonts shipped in {@code src/main/resources/fonts}. */
+    /**
+     * The ten fonts shipped in {@code src/main/resources/fonts}.
+     */
     public enum Family {
+        /**
+         * The bundled big FIGlet font.
+         */
         BIG("big"),
+        /**
+         * The bundled block FIGlet font.
+         */
         BLOCK("block"),
+        /**
+         * The bundled digital FIGlet font.
+         */
         DIGITAL("digital"),
+        /**
+         * The bundled lean FIGlet font.
+         */
         LEAN("lean"),
+        /**
+         * The bundled shadow FIGlet font.
+         */
         SHADOW("shadow"),
+        /**
+         * The bundled slant FIGlet font.
+         */
         SLANT("slant"),
+        /**
+         * The bundled small FIGlet font.
+         */
         SMALL("small"),
+        /**
+         * The bundled smshadow FIGlet font.
+         */
         SMSHADOW("smshadow"),
+        /**
+         * The bundled standard FIGlet font.
+         */
         STANDARD("standard"),
+        /**
+         * The bundled term FIGlet font.
+         */
         TERM("term");
 
         private final String resource;
@@ -54,6 +86,11 @@ public final class FontLoader {
             this.resource = resource;
         }
 
+        /**
+         * Returns the packaged resource path for this bundled font.
+         *
+         * @return the packaged resource path for this bundled font
+         */
         public String resource() {
             return "/fonts/" + resource + ".flf";
         }
@@ -63,7 +100,13 @@ public final class FontLoader {
 
     private FontLoader() {}
 
-    /** Loads (and caches) a bundled font. */
+    /**
+     * Loads (and caches) a bundled font.
+     *
+     * @param family the bundled font family
+     * @return the cached or newly loaded bundled font
+     * @throws java.io.IOException if input or output fails
+     */
     public static synchronized FigletFont load(Family family) throws IOException {
         Family key = family == null ? Family.STANDARD : family;
         FigletFont cached = CACHE.get(key);
@@ -80,7 +123,14 @@ public final class FontLoader {
         }
     }
 
-    /** Loads a font from an arbitrary stream, e.g. a test fixture. */
+    /**
+     * Loads a font from an arbitrary stream, e.g. a test fixture.
+     *
+     * @param stream the caller-owned input stream
+     * @param name the name to resolve
+     * @return the font parsed from the supplied stream
+     * @throws java.io.IOException if input or output fails
+     */
     public static FigletFont load(InputStream stream, String name) throws IOException {
         return FigletFont.parse(stream, name);
     }

@@ -22,5 +22,7 @@
 
 package io.github.dhoard.braxton.mvu;
 
-/** Uninhabited output type for a root component. */
+/**
+ * Uninhabited output type for a root component.
+ */
 public enum Never {}

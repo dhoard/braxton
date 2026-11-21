@@ -41,7 +41,7 @@ class ManualTimersTest {
             peer[0].cancel();
             timers.schedule(0, () -> calls.add("nested"));
         });
-        peer[0] = timers.schedule(10, () -> calls.add("cancelled"));
+        peer[0] = timers.schedule(10, () -> calls.add("canceled"));
         timers.schedule(10, () -> calls.add("third"));
         timers.advance(9);
         assertThat(calls).isEmpty();

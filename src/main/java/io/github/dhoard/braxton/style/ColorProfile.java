@@ -25,16 +25,16 @@ package io.github.dhoard.braxton.style;
 import java.util.Locale;
 
 /**
- * How much colour a session may put on the wire.
+ * How much color a session may put on the wire.
  *
  * <p>A profile is a property of the session's output, not of a {@link Style}: the same styled text
- * encodes as 24-bit SGR, as a palette index, as one of the sixteen ANSI colours, or as no colour at
- * all. Downsampling keeps every non-colour attribute and every hyperlink, so a session that loses
- * colour loses only colour.</p>
+ * encodes as 24-bit SGR, as a palette index, as one of the sixteen ANSI colors, or as no color at
+ * all. Downsampling keeps every non-color attribute and every hyperlink, so a session that loses
+ * color loses only color.</p>
  *
  * <p>{@link #AUTO} is not a capability: it is the request to negotiate one, and no frame is ever
  * encoded with it. {@link #negotiated(boolean, String)} resolves it from facts the session already
- * has. An explicit profile is honoured as given; a terminal that cannot render it is the caller's
+ * has. An explicit profile is honored as given; a terminal that cannot render it is the caller's
  * decision to make.</p>
  *
  * @see Colors#nearestAnsi256(Color)
@@ -49,20 +49,28 @@ public enum ColorProfile {
      */
     AUTO,
 
-    /** No colour at all; only attributes, borders, glyphs and hyperlinks are emitted. */
+    /**
+     * No color at all; only attributes, borders, glyphs and hyperlinks are emitted.
+     */
     NONE,
 
-    /** The sixteen ANSI colours a plain terminal has, named by their classic SGR codes. */
+    /**
+     * The sixteen ANSI colors a plain terminal has, named by their classic SGR codes.
+     */
     ANSI16,
 
-    /** The xterm 256-colour palette: a 6x6x6 cube plus a 24-step grey ramp. */
+    /**
+     * The xterm 256-color palette: a 6x6x6 cube plus a 24-step gray ramp.
+     */
     ANSI256,
 
-    /** 24-bit SGR colour, exactly as the styled text carries it. */
+    /**
+     * 24-bit SGR color, exactly as the styled text carries it.
+     */
     TRUECOLOR;
 
     /**
-     * Whether this profile emits colour at all.
+     * Whether this profile emits color at all.
      *
      * @return false for {@link #NONE} and for the unresolved {@link #AUTO}
      */
@@ -71,7 +79,7 @@ public enum ColorProfile {
     }
 
     /**
-     * How many distinct colours this profile can name.
+     * How many distinct colors this profile can name.
      *
      * <p>Comparisons between profiles use this rather than declaration order, so an upgrade is "can
      * this profile say more" instead of "is it declared later".</p>
@@ -99,22 +107,22 @@ public enum ColorProfile {
     /**
      * Negotiates the profile a session starts with.
      *
-     * <p>Two facts decide it. A terminal the session has already found unable to address colour is
+     * <p>Two facts decide it. A terminal the session has already found unable to address color is
      * {@link #NONE}: there is nothing to emit. {@code NO_COLOR}, when set to any non-empty value,
-     * is the user's own request to lose colour and outranks the terminal's ability
+     * is the user's own request to lose color and outranks the terminal's ability
      * (<a href="https://no-color.org/">no-color.org</a>; the specification says the value is not
-     * inspected, so {@code NO_COLOR=0} also disables colour). Everything else negotiates
-     * {@link #TRUECOLOR}, which is what Braxton has always emitted on a colour terminal: a
+     * inspected, so {@code NO_COLOR=0} also disables color). Everything else negotiates
+     * {@link #TRUECOLOR}, which is what Braxton has always emitted on a color terminal: a
      * conservative downgrade of the default would change the look of every existing application on a
-     * 256-colour terminal, so a narrower profile is a choice the caller makes, not one the library
+     * 256-color terminal, so a narrower profile is a choice the caller makes, not one the library
      * makes for it.</p>
      *
-     * <p>This is deliberately not an environment-based colour-capability guess. A terminal's own
+     * <p>This is deliberately not an environment-based color-capability guess. A terminal's own
      * answers - the {@code RGB} and {@code Tc} termcap capabilities - are the only authority for
      * truecolor, and a session that wants them asks for them; the runtime upgrades a narrower profile
      * when such a reply arrives.</p>
      *
-     * @param supportsColor whether the attached terminal accepts colour SGR at all
+     * @param supportsColor whether the attached terminal accepts color SGR at all
      * @param noColor the {@code NO_COLOR} value, or null when the variable is unset
      * @return {@link #NONE} or {@link #TRUECOLOR}; never {@link #AUTO}
      */
@@ -137,7 +145,7 @@ public enum ColorProfile {
      *
      * @param current the profile in force
      * @param candidate the profile the new evidence supports
-     * @return whichever can name more colours
+     * @return whichever can name more colors
      */
     public static ColorProfile wider(ColorProfile current, ColorProfile candidate) {
         ColorProfile resolved = current == null ? AUTO : current;

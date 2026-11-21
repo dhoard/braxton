@@ -32,18 +32,42 @@ package io.github.dhoard.braxton.layout;
  */
 public record Insets(int top, int right, int bottom, int left) {
 
+    /**
+     * No inset on any edge.
+     */
     public static final Insets NONE = new Insets(0, 0, 0, 0);
 
+    /**
+     * Creates a {@code Insets} value.
+     *
+     * @param top the cells reserved above the content, never negative
+     * @param right the cells reserved to the right of the content, never negative
+     * @param bottom the cells reserved below the content, never negative
+     * @param left the cells reserved to the left of the content, never negative
+     */
     public Insets {
         if (top < 0 || right < 0 || bottom < 0 || left < 0) {
             throw new IllegalArgumentException("insets must be non-negative");
         }
     }
 
+    /**
+     * Creates equal insets on all four sides.
+     *
+     * @param value the inset applied to every side, in cells
+     * @return equal insets on all four sides
+     */
     public static Insets uniform(int value) {
         return new Insets(value, value, value, value);
     }
 
+    /**
+     * Creates equal vertical and equal horizontal insets.
+     *
+     * @param vertical the top and bottom inset in cells
+     * @param horizontal the left and right inset in cells
+     * @return equal vertical and equal horizontal insets
+     */
     public static Insets symmetric(int vertical, int horizontal) {
         return new Insets(vertical, horizontal, vertical, horizontal);
     }
@@ -54,12 +78,18 @@ public record Insets(int top, int right, int bottom, int left) {
      * <p>Both halves are non-negative but their sum need not fit in an {@code int}; a wrapped
      * negative total would make {@link Rect#inset(Insets)} grow a rectangle instead of shrinking
      * it.</p>
+     *
+     * @return the sum of the left and right insets
      */
     public int horizontal() {
         return saturatedSum(left, right);
     }
 
-    /** Total vertical spacing, saturating at {@link Integer#MAX_VALUE} like {@link #horizontal()}. */
+    /**
+     * Total vertical spacing, saturating at {@link Integer#MAX_VALUE} like {@link #horizontal()}.
+     *
+     * @return the sum of the top and bottom insets
+     */
     public int vertical() {
         return saturatedSum(top, bottom);
     }

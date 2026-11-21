@@ -27,7 +27,9 @@ import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.util.concurrent.TimeUnit;
 
-/** Bounded byte acquisition for owned streams; the terminal path polls natively instead. */
+/**
+ * Bounded byte acquisition for owned streams; the terminal path polls natively instead.
+ */
 final class StreamBytes implements Utf8Reader.Bytes {
     private final InputStream source;
     private final byte[] ring = new byte[8192];

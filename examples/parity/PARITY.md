@@ -1,6 +1,6 @@
 # Reference-to-phase parity
 
-This record answers one question: for every behaviour the reference implementation demonstrates, is
+This record answers one question: for every behavior the reference implementation demonstrates, is
 there an implemented phase, a demo, a deterministic regression test and a terminal scenario that
 proves Braxton does the same thing - and where it does not, is the difference written down?
 
@@ -12,7 +12,7 @@ proves Braxton does the same thing - and where it does not, is the difference wr
 | reference examples | `examples/go.mod` in that checkout | pins Bubbles 2.1.0, Lip Gloss 2.0.3, Glamour 2.0.0 |
 | Braxton | this checkout | implementation under acceptance |
 
-The comparison is between *behaviour*, not dependencies: Braxton takes no dependency on any of them,
+The comparison is between *behavior*, not dependencies: Braxton takes no dependency on any of them,
 and the versions above say what the reference examples exercised when this matrix was written. A
 reference revision that adds an example adds a row here before the phase can claim it.
 
@@ -20,11 +20,11 @@ reference revision that adds an example adds a row here before the phase can cla
 
 `Kind` says what the reference example is:
 
-- **component** - a widget whose behaviour Braxton implements and tests directly.
-- **runtime** - a runtime or terminal-integration behaviour: a mode, a query, a lifecycle event.
+- **component** - a widget whose behavior Braxton implements and tests directly.
+- **runtime** - a runtime or terminal-integration behavior: a mode, a query, a lifecycle event.
 - **application** - an application built *from* covered primitives rather than a widget. Braxton's
   answer is the composed workspace or the relevant phase demo, because what the reference shows is
-  an arrangement of behaviour this library already owns.
+  an arrangement of behavior this library already owns.
 - **unsupported** - a deliberate policy difference, named below.
 
 Two rows name a component rather than an example directory: the reference corpus has no clipboard
@@ -99,10 +99,14 @@ final phase adds. Every other row is one directory in the reference `examples` t
 | `window-size` | runtime | 02 | `examples.parity.KeyboardFocusDemo` | `ParityKeyboardTest` | `02` |
 | `bubbles/clipboard` | component | 19 | `examples.parity.ClipboardDemo` | `ParityClipboardTest` | `19` |
 | `tea.Program (composition)` | component | 24 | `examples.parity.WorkspaceDemo` | `ParityAcceptanceTest` | `24` |
+| `bubbles (the component set)` | component | 28 | `examples.parity.WidgetGalleryDemo` | `ParityGalleryTest` | `28` |
+| `prompts (confirm, select, multi-select, progress)` | component | 29 | `examples.parity.LinePromptsDemo` | `ParityLinePromptsTest` | `29` |
+| `rich output (Braxton)` | application | 30 | `examples.parity.RichOutputDemo` | `ParityRichOutputTest` | `30` |
+| `developer diagnostics (Braxton)` | application | 31 | `examples.parity.DebugOverlayDemo` | `ParityDebugOverlayTest` | `31` |
 
 ## Component gaps and deliberate differences
 
-Every row above maps to behaviour Braxton implements. The differences that remain are deliberate and
+Every row above maps to behavior Braxton implements. The differences that remain are deliberate and
 are recorded here rather than left implicit:
 
 | Area | Reference | Braxton | Why |
@@ -112,6 +116,7 @@ are recorded here rather than left implicit:
 | Markdown dialect | Glamour's renderer and style set | Braxton's own renderer over CommonMark with its own themes | A renderer is a style decision, and the projection is deterministic and bounded |
 | Inline region | `package-manager` uses `tea.Println` above a live region | The same `Command.println`, with the region's placement defined per session | The alternate screen has no scrollback, so `println` is an explicit no-op there |
 | Windows | The reference runs there | Not supported; Linux x86_64/ARM64 and macOS ARM64 only | The owned POSIX backend is the supported surface, and native claims are only made for platforms that were actually run |
+| Line editing and prompts | The pinned corpus is a full-screen component set with no line-oriented prompt of its own | The public `line` package: a one-row editor with history, search, completion, highlighting and masking, plus `ConfirmPrompt`, `SelectPrompt`, `MultiSelectPrompt` and `ProgressPrompt` in the inline region, phase 29 | A shell, a REPL or a wizard reads one line at a time and must not take the screen, so the inline region is the honest host; the prompts ask the same vocabulary the widget family paints, without an MVU runtime |
 | Games and demos | `doom-fire`, `splash`, `vanish`, `space`, `eyes`, `cellbuffer` are canvas-style applications | Built from the covered primitives (`Views`, `TextMeasure`, commands, subscriptions) rather than a canvas widget | There is no retained canvas in the MVU model, and none of these examples need one |
 
 ## Evidence
@@ -122,6 +127,10 @@ are recorded here rather than left implicit:
 | every `application` row | the same phase's demo and test, which is what makes the primitives it uses true |
 | the whole matrix | `ParityAcceptanceTest` reads this file and fails if a row names a demo, test or scenario that does not exist, or a phase the verifier or the probe does not dispatch |
 | composition | phase `24` adds the catalog (`examples.parity.Showcase`) and the composed workspace (`examples.parity.WorkspaceDemo`) |
+| the bundled widget set | phase `28` adds the gallery (`examples.parity.WidgetGalleryDemo`), which places every milestone-4 widget - the two scroll controls, the tree, the menu and palette, the four choice controls, the form, the dialog, toast and notification center, the four charts and the calendar - in one composed scene on four pages. Each widget's own suite and phase prove it alone; the gallery is the evidence that the set composes under one model, one key path and one theme store |
+| line editing and prompts | phase `29` adds the prompts (`examples.parity.LinePromptsDemo`): a confirmation read as a line, a single choice, a set of marks and a bounded progress count, each painted in the terminal's own rows, with the four prompts' focused suites and `ParityLinePromptsTest` as the deterministic regression |
+| rich output | phase `30` composes an image fallback with time-driven transitions and a stable reduced-motion presentation; `TransitionTest`, `ReducedMotionTest`, image codec tests and `ParityRichOutputTest` provide deterministic evidence |
+| developer diagnostics | phase `31` verifies the runtime overlay over real widget interactions, including bounded message history, actual focus paths, geometry, frame timing, toggling and resize; headless snapshot, effect and runtime tests pin the underlying contracts |
 | integrated run | `python3 tools/terminal/verify_terminal.py --parity-all` runs every scenario and every packaged demo launch together |
 
 Nothing in this document is a claim about a future phase: a row exists only after its phase's demo,

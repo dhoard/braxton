@@ -32,17 +32,32 @@ import java.util.function.Function;
  * <p>Replacement must preserve every unrelated parent field: it replaces exactly the child slot
  * selected by {@link #get()}. Neither function may mutate the parent or the child.</p>
  *
- * @param get reads the current child model from the parent model
- * @param replace returns the parent model with that child slot replaced
  * @param <P> the parent model type
  * @param <C> the child model type
+ * @param get reads the current child model from the parent model
+ * @param replace returns the parent model with that child slot replaced
  */
 public record ModelLens<P, C>(Function<P, C> get, BiFunction<P, C, P> replace) {
+    /**
+     * Creates a {@code ModelLens} value.
+     *
+     * @param get reads the current child model from the parent model
+     * @param replace returns the parent model with that child slot replaced
+     */
     public ModelLens {
         Objects.requireNonNull(get, "get");
         Objects.requireNonNull(replace, "replace");
     }
 
+    /**
+     * Creates a {@code ModelLens} value.
+     *
+     * @param <P> the parent model type
+     * @param <C> the child model type
+     * @param get reads the current child model from the parent model
+     * @param replace returns the parent model with that child slot replaced
+     * @return the parent-to-child model lens
+     */
     public static <P, C> ModelLens<P, C> of(Function<P, C> get, BiFunction<P, C, P> replace) {
         return new ModelLens<>(get, replace);
     }

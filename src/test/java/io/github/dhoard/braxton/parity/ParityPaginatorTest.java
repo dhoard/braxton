@@ -31,11 +31,9 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
 import io.github.dhoard.braxton.input.KeyMap;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.Component;
 import io.github.dhoard.braxton.mvu.ComponentId;
-import io.github.dhoard.braxton.mvu.ComponentPath;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.ModelLens;
 import io.github.dhoard.braxton.mvu.Mount;
@@ -47,9 +45,10 @@ import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.testing.ElementScreen;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.ui.InteractionRouter;
+import io.github.dhoard.braxton.widget.Elements;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.Paginator;
 import java.time.Duration;
@@ -61,7 +60,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Phase 06 acceptance: page state, slicing bounds, dot and numeric indicators, and a paged list.
  *
- * <p>Every assertion is against public behaviour: the model a message produces, the bounds it
+ * <p>Every assertion is against public behavior: the model a message produces, the bounds it
  * reports, the indicator a width paints, and what a routed key does to the demo scene. The
  * installed paginator is the demo's own component, so the mounted integration is the shipped
  * composition rather than a second copy of it.</p>
@@ -106,22 +105,26 @@ class ParityPaginatorTest {
         return InputEvent.KeyInput.of(key, key.name());
     }
 
-    private static List<String> painted(View<?> view) {
-        return new ScreenRenderer().plainLines(view, new Viewport(SCREEN_ROWS, SCREEN_COLS));
+    private static List<String> painted(Element<?> view) {
+        return ElementScreen.render(view, SCREEN_ROWS, SCREEN_COLS).lines();
     }
 
-    private static List<String> painted(View<?> view, int rows, int cols) {
-        return new ScreenRenderer().plainLines(view, new Viewport(rows, cols));
+    private static List<String> painted(Element<?> view, int rows, int cols) {
+        return ElementScreen.render(view, rows, cols).lines();
     }
 
-    /** The expanded help of a key map: one line per group, holding every action in the map. */
+    /**
+     * The expanded help of a key map: one line per group, holding every action in the map.
+     */
     private static List<String> help(KeyMap<?> keys) {
-        return painted(Help.view(keys, true, 200), 8, 200).stream()
+        return painted(Help.element(keys, Help.Config.defaults(), true, 200), 8, 200).stream()
                 .filter(line -> !line.isBlank())
                 .toList();
     }
 
-    /** The demo the packaged launch runs, driven as its own component. */
+    /**
+     * The demo the packaged launch runs, driven as its own component.
+     */
     private static PaginatorDemo.Scene demo() {
         return new PaginatorDemo.Scene();
     }
@@ -134,16 +137,21 @@ class ParityPaginatorTest {
         return demo().update(model, message).model();
     }
 
-    /** What one key does to the demo's screen, as the scene's own message. */
+    /**
+     * What one key does to the demo's screen, as the scene's own message.
+     */
     private static Optional<PaginatorDemo.Msg> route(PaginatorDemo.Model model, String keyName) {
-        return InputRouter.route(demo().view(model, CONTEXT), key(keyName));
+        return io.github.dhoard.braxton.testing.Routing.route(demo(), model, CONTEXT, key(keyName)).stream()
+                .findFirst();
     }
 
     private static PaginatorDemo.Model send(PaginatorDemo.Model model, String keyName) {
         return apply(model, route(model, keyName).orElseThrow(() -> new AssertionError("no message for " + keyName)));
     }
 
-    /** The status rows the demo paints, so a test can assert the scene without decoding styles. */
+    /**
+     * The status rows the demo paints, so a test can assert the scene without decoding styles.
+     */
     private static String headline(PaginatorDemo.Model model) {
         return painted(demo().view(model, CONTEXT)).get(0).strip();
     }
@@ -591,17 +599,17 @@ class ParityPaginatorTest {
         assertThat(lines.get(0)).contains("previous page").contains("next page");
         assertThat(lines.get(1)).contains("first page").contains("last page");
 
-        View<Paginator.Msg> view = pager().view(Paginator.Model.of(90, 10), CONTEXT);
-        assertThat(InputRouter.route(view, key("right"))).contains(new Paginator.Msg.Next());
-        assertThat(InputRouter.route(view, key("l"))).contains(new Paginator.Msg.Next());
-        assertThat(InputRouter.route(view, key("pagedown"))).contains(new Paginator.Msg.Next());
-        assertThat(InputRouter.route(view, key("left"))).contains(new Paginator.Msg.Previous());
-        assertThat(InputRouter.route(view, key("home"))).contains(new Paginator.Msg.First());
-        assertThat(InputRouter.route(view, key("end"))).contains(new Paginator.Msg.Last());
-        assertThat(InputRouter.route(view, key("x")))
+        Element<Paginator.Msg> view = pager().view(Paginator.Model.of(90, 10), CONTEXT);
+        assertThat(InteractionRouter.message(view, key("right"))).contains(new Paginator.Msg.Next());
+        assertThat(InteractionRouter.message(view, key("l"))).contains(new Paginator.Msg.Next());
+        assertThat(InteractionRouter.message(view, key("pagedown"))).contains(new Paginator.Msg.Next());
+        assertThat(InteractionRouter.message(view, key("left"))).contains(new Paginator.Msg.Previous());
+        assertThat(InteractionRouter.message(view, key("home"))).contains(new Paginator.Msg.First());
+        assertThat(InteractionRouter.message(view, key("end"))).contains(new Paginator.Msg.Last());
+        assertThat(InteractionRouter.message(view, key("x")))
                 .as("a pager never consumes text")
                 .isEmpty();
-        assertThat(InputRouter.route(view, key("tab"))).isEmpty();
+        assertThat(InteractionRouter.message(view, key("tab"))).isEmpty();
     }
 
     @Test
@@ -613,9 +621,9 @@ class ParityPaginatorTest {
                         .withAliases("n")
                         .withLabel(""));
         Paginator remapped = new Paginator(Paginator.Config.defaults(), keys);
-        View<Paginator.Msg> view = remapped.view(Paginator.Model.of(90, 10), CONTEXT);
-        assertThat(InputRouter.route(view, key("n"))).contains(new Paginator.Msg.Next());
-        assertThat(InputRouter.route(view, key("right")))
+        Element<Paginator.Msg> view = remapped.view(Paginator.Model.of(90, 10), CONTEXT);
+        assertThat(InteractionRouter.message(view, key("n"))).contains(new Paginator.Msg.Next());
+        assertThat(InteractionRouter.message(view, key("right")))
                 .as("the old gesture is gone")
                 .isEmpty();
         assertThat(help(remapped.keys())).anySatisfy(line -> assertThat(line).contains("n next page"));
@@ -624,8 +632,8 @@ class ParityPaginatorTest {
     @Test
     void anUnfocusedPaginatorReceivesNoKeys() {
         Paginator.Model unfocused = Paginator.Model.of(90, 10).withFocus(false);
-        View<Paginator.Msg> view = pager().view(unfocused, CONTEXT);
-        assertThat(InputRouter.route(view, key("right"))).isEmpty();
+        Element<Paginator.Msg> view = pager().view(unfocused, CONTEXT);
+        assertThat(InteractionRouter.message(view, key("right"))).isEmpty();
         assertThat(pager().update(unfocused, new Paginator.Msg.Next()).model().focused())
                 .as("a reduction never moves the focus the application owns")
                 .isFalse();
@@ -796,7 +804,9 @@ class ParityPaginatorTest {
 
     // ── mounted scope isolation ─────────────────────────────────────────────
 
-    /** Two paginators in one parent: each owns one slot, one focus region and one visible window. */
+    /**
+     * Two paginators in one parent: each owns one slot, one focus region and one visible window.
+     */
     record Pair(Paginator.Model left, Paginator.Model right) {}
 
     sealed interface PairMsg {
@@ -836,8 +846,8 @@ class ParityPaginatorTest {
         }
 
         @Override
-        public View<PairMsg> view(Pair model, ViewContext context) {
-            return Views.row(left.view(model, context), right.view(model, context));
+        public Element<PairMsg> view(Pair model, ViewContext context) {
+            return Elements.row(left.view(model, context), right.view(model, context));
         }
     }
 
@@ -846,18 +856,24 @@ class ParityPaginatorTest {
         TwoPagers component = new TwoPagers();
         Pair start = component.init(new InitContext(null, null)).model();
 
-        assertThat(InputRouter.route(component.view(start, CONTEXT), key("right")))
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(component, start, CONTEXT, key("right")).stream()
+                        .findFirst())
                 .contains(new PairMsg.Left(new Paginator.Msg.Next()));
-        assertThat(InputRouter.route(component.view(start, CONTEXT), key("end")))
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(component, start, CONTEXT, key("end")).stream()
+                        .findFirst())
                 .contains(new PairMsg.Left(new Paginator.Msg.Last()));
 
         Pair rightFocused =
                 new Pair(start.left().withFocus(false), start.right().withFocus(true));
-        assertThat(InputRouter.route(component.view(rightFocused, CONTEXT), key("right")))
+        assertThat(
+                        io.github.dhoard.braxton.testing.Routing.route(component, rightFocused, CONTEXT, key("right"))
+                                .stream()
+                                .findFirst())
                 .contains(new PairMsg.Right(new Paginator.Msg.Next()));
 
         Pair unfocused = new Pair(start.left().withFocus(false), start.right().withFocus(false));
-        assertThat(InputRouter.route(component.view(unfocused, CONTEXT), key("right")))
+        assertThat(io.github.dhoard.braxton.testing.Routing.route(component, unfocused, CONTEXT, key("right")).stream()
+                        .findFirst())
                 .as("no paginator owns focus, so no paginator pages")
                 .isEmpty();
     }
@@ -880,13 +896,17 @@ class ParityPaginatorTest {
     void siblingRegionsKeepTheirScopedIdentities() {
         TwoPagers component = new TwoPagers();
         Pair start = component.init(new InitContext(null, null)).model();
-        var regions = new ScreenRenderer().regions(component.view(start, CONTEXT), CONTEXT.viewport());
-        assertThat(regions).extracting(region -> region.id().value()).containsExactly("paginator", "paginator");
-        assertThat(regions)
-                .extracting(region -> region.id().path())
-                .containsExactly(
-                        ComponentPath.ROOT.append(ComponentId.of("left")),
-                        ComponentPath.ROOT.append(ComponentId.of("right")));
+        // Two siblings are two leaves: each answers only for its own rectangle, so a pointer that
+        // lands in one of them never reaches the other.
+        var screen = io.github.dhoard.braxton.testing.ElementScreen.render(
+                component.view(start, CONTEXT),
+                CONTEXT.viewport().rows(),
+                CONTEXT.viewport().cols());
+        assertThat(io.github.dhoard.braxton.ui.InteractionRouter.focusables(screen.placement()))
+                .hasSize(2);
+        assertThat(screen.hit(0, 0))
+                .isNotNull()
+                .isNotSameAs(screen.hit(0, CONTEXT.viewport().cols() - 1));
     }
 
     @Test
@@ -895,8 +915,8 @@ class ParityPaginatorTest {
                 ComponentDriver.initialize(demo(), new InitContext(null, null));
         driver.send(new PaginatorDemo.Msg.Pager(new Paginator.Msg.Next()));
         assertThat(driver.model().pager().page()).isEqualTo(1);
-        assertThat(driver.screen(CONTEXT).plainLine(0)).startsWith("page=2/9");
+        assertThat(driver.screen(CONTEXT).line(0)).startsWith("page=2/9");
         driver.send(new PaginatorDemo.Msg.ToggleMode());
-        assertThat(driver.screen(CONTEXT).plainLine(14).strip()).isEqualTo("2/9");
+        assertThat(driver.screen(CONTEXT).line(14).strip()).isEqualTo("2/9");
     }
 }

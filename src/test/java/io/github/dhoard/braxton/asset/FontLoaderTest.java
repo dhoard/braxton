@@ -28,7 +28,9 @@ import java.io.IOException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Every bundled FIGlet font loads and renders through the artwork path the widget uses. */
+/**
+ * Every bundled FIGlet font loads and renders through the artwork path the widget uses.
+ */
 class FontLoaderTest {
 
     @Test

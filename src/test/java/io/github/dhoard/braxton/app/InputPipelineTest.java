@@ -35,9 +35,10 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
 import io.github.dhoard.braxton.widget.Editor;
+import io.github.dhoard.braxton.widget.EditorConfig;
+import io.github.dhoard.braxton.widget.Elements;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -47,7 +48,7 @@ import org.junit.jupiter.api.Timeout;
  */
 class InputPipelineTest {
 
-    private static final Editor.Config OPTIONS = Editor.Config.defaults();
+    private static final EditorConfig OPTIONS = EditorConfig.defaults();
 
     private record Model(Editor.Model draft, int submitted) {}
 
@@ -68,18 +69,23 @@ class InputPipelineTest {
         }
 
         @Override
-        public View<Editor.Msg> view(Model model, ViewContext context) {
-            return Views.keyed(
-                    java.util.List.of(Binding.of("q", new Editor.Msg.Submit())),
-                    Views.column(
-                            Views.text("draft=[" + model.draft().text() + "] submitted=" + model.submitted()),
-                            new Editor(OPTIONS)
-                                    .view(
-                                            (model.draft()).withFocus(true),
-                                            new io.github.dhoard.braxton.mvu.ViewContext(
-                                                    io.github.dhoard.braxton.layout.Viewport.EMPTY))
-                                    .map(action -> action)),
-                    java.util.List.of());
+        public Element<Editor.Msg> view(Model model, ViewContext context) {
+            return Elements.column(
+                    Elements.text("draft=[" + model.draft().text() + "] submitted=" + model.submitted()),
+                    new Editor(OPTIONS)
+                            .view(
+                                    (model.draft()).withFocus(true),
+                                    new io.github.dhoard.braxton.mvu.ViewContext(
+                                            io.github.dhoard.braxton.layout.Viewport.EMPTY))
+                            .map(action -> action));
+        }
+
+        /**
+         * The gestures this fixture answers, once no leaf has taken them.
+         */
+        @Override
+        public java.util.List<Binding<Editor.Msg>> claims(Model model) {
+            return java.util.List.of(Binding.of("q", new Editor.Msg.Submit()));
         }
     }
 
@@ -94,6 +100,69 @@ class InputPipelineTest {
         throw new AssertionError("condition not met within the deadline");
     }
 
+    /**
+     * A scene that binds the two wheel keys and counts what it was told, and nothing else.
+     */
+    private record WheelModel(int up, int down) {}
+
+    private static final class WheelProgram implements Component<WheelModel, String, Never> {
+
+        @Override
+        public Update<WheelModel, String, Never> init(InitContext context) {
+            return Update.next(new WheelModel(0, 0));
+        }
+
+        @Override
+        public Update<WheelModel, String, Never> update(WheelModel model, String action) {
+            return Update.next(
+                    switch (action) {
+                        case "up" -> new WheelModel(model.up() + 1, model.down());
+                        case "down" -> new WheelModel(model.up(), model.down() + 1);
+                        default -> model;
+                    });
+        }
+
+        @Override
+        public Element<String> view(WheelModel model, ViewContext context) {
+            return Elements.column(Elements.text("wheel up=" + model.up() + " down=" + model.down()));
+        }
+
+        /**
+         * The wheel keys are the application's: nothing in the tree answers a report it was shown.
+         */
+        @Override
+        public java.util.List<Binding<String>> bindings(WheelModel model) {
+            return java.util.List.of(Binding.of("wheelup", "up"), Binding.of("wheeldown", "down"));
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aWheelNothingConsumesIsOfferedOnceAsTheKeyItUsedToBe() throws Exception {
+        TestTerminal terminal = new TestTerminal(new Size(4, 40));
+        RuntimeOptions options = RuntimeOptions.defaults().withLimits(64, 4, 4);
+        RuntimeServices services = RuntimeServices.system()
+                .withTimers(new ManualTimers())
+                .withEffectExecutor(Runnable::run)
+                .withNanoTime(() -> 1_000L);
+        Thread run = Thread.ofVirtual()
+                .name("wheel-pipeline")
+                .start(() -> run(new WheelProgram(), options, terminal, services));
+        await(() -> terminal.screenText().contains("wheel up=0 down=0"));
+        // A wheel report is a pointer report first: nothing in the tree takes it, so the runtime
+        // turns it into the wheel key an application has always been able to bind.
+        terminal.feed("\u001B[<65;4;2M");
+        await(() -> terminal.screenText().contains("wheel up=0 down=1"));
+        terminal.feed("\u001B[<64;4;2M");
+        await(() -> terminal.screenText().contains("wheel up=1 down=1"));
+        // A horizontal wheel has no key to become, so it reaches nobody and changes nothing.
+        terminal.feed("\u001B[<66;4;2M");
+        terminal.endInput();
+        run.join(5_000L);
+        assertThat(run.isAlive()).isFalse();
+        assertThat(terminal.screenText()).contains("wheel up=1 down=1");
+    }
+
     @Test
     @Timeout(20)
     void keystrokesEditTheDraftAndSubmitThroughTheRuntime() throws Exception {
@@ -106,13 +175,13 @@ class InputPipelineTest {
         Thread run = Thread.ofVirtual()
                 .name("input-pipeline")
                 .start(() -> run(new DraftProgram(), options, terminal, services));
-        await(() -> terminal.outputText().contains("draft=[] submitted=0"));
+        await(() -> terminal.screenText().contains("draft=[] submitted=0"));
         terminal.feed("hi");
-        await(() -> terminal.outputText().contains("draft=[hi] submitted=0"));
+        await(() -> terminal.screenText().contains("draft=[hi] submitted=0"));
         terminal.feed("\u007f");
-        await(() -> terminal.outputText().contains("draft=[h] submitted=0"));
+        await(() -> terminal.screenText().contains("draft=[h] submitted=0"));
         terminal.feed("\r");
-        await(() -> terminal.outputText().contains("draft=[] submitted=1"));
+        await(() -> terminal.screenText().contains("draft=[] submitted=1"));
         terminal.endInput();
         run.join(5_000L);
         assertThat(run.isAlive()).isFalse();

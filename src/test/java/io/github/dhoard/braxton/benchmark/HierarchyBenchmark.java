@@ -34,15 +34,17 @@ import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.OutputRoute;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 
-/** Opt-in hierarchy overhead: isolated child replacement, view composition and retained scopes. */
+/**
+ * Opt-in hierarchy overhead: isolated child replacement, view composition and retained scopes.
+ */
 @State(Scope.Benchmark)
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
@@ -69,8 +71,8 @@ public class HierarchyBenchmark {
             return Update.next(m + message);
         }
 
-        public View<Integer> view(Integer m, ViewContext c) {
-            return Views.text("count: " + m);
+        public Element<Integer> view(Integer m, ViewContext c) {
+            return Elements.text("count: " + m);
         }
     };
 
@@ -96,7 +98,7 @@ public class HierarchyBenchmark {
 
     @Benchmark
     public void composeView(Blackhole sink) {
-        sink.consume(Views.column(
+        sink.consume(io.github.dhoard.braxton.widget.Elements.column(
                 mounts.stream().map(mount -> mount.view(parent, context)).toList()));
     }
 

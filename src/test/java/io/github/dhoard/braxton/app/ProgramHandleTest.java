@@ -39,9 +39,8 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.ElementId;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -70,7 +69,9 @@ class ProgramHandleTest {
     private static final String SCENE = "handle";
     private static final long WAIT_SECONDS = 10L;
 
-    /** Real timers; a direct effect executor so a task body is the owner thread when that matters. */
+    /**
+     * Real timers; a direct effect executor so a task body is the owner thread when that matters.
+     */
     private static RuntimeServices services() {
         return RuntimeServices.system().withEffectExecutor(Runnable::run);
     }
@@ -78,12 +79,12 @@ class ProgramHandleTest {
     /**
      * A one-row scene that records every committed model.
      *
-     * @param behaviour the command each message returns, or null for none
+     * @param behavior the command each message returns, or null for none
      * @param snapshots where to record each committed model
      * @return the program
      */
     private static Component<List<String>, String, Never> scene(
-            BiFunction<List<String>, String, Command<String>> behaviour, List<List<String>> snapshots) {
+            BiFunction<List<String>, String, Command<String>> behavior, List<List<String>> snapshots) {
         List<Binding<String>> bindings = List.of(new Binding<>(Key.of("q"), "q"));
         return new Component<>() {
             @Override
@@ -96,24 +97,29 @@ class ProgramHandleTest {
                 List<String> next = new ArrayList<>(model);
                 next.add(message);
                 List<String> recorded = List.copyOf(next);
-                Command<String> command = behaviour.apply(recorded, message);
+                Command<String> command = behavior.apply(recorded, message);
                 return command == null ? Update.next(recorded) : Update.next(recorded, command);
             }
 
             @Override
-            public View<String> view(List<String> model, ViewContext context) {
+            public Element<String> view(List<String> model, ViewContext context) {
                 snapshots.add(List.copyOf(model));
-                return Views.focus(
-                        ElementId.of("scene"),
-                        true,
-                        bindings,
-                        View.InputHandler.none(),
-                        Views.text(SCENE + ":" + String.join(",", model)));
+                return Elements.text(SCENE + ":" + String.join(",", model));
+            }
+
+            /**
+             * The gestures this fixture answers, once no leaf has taken them.
+             */
+            @Override
+            public java.util.List<Binding<String>> claims(List<String> model) {
+                return bindings;
             }
         };
     }
 
-    /** A handle over an owned stream terminal, with its runtime thread not yet started. */
+    /**
+     * A handle over an owned stream terminal, with its runtime thread not yet started.
+     */
     private static ProgramHandle<List<String>, String> handle(
             TestTerminal fixture,
             Component<List<String>, String, Never> program,
@@ -124,7 +130,9 @@ class ProgramHandleTest {
         return new ProgramHandle<>(new RuntimeLoop<>(program, options, fixture.terminal(), services, mailbox), mailbox);
     }
 
-    /** Waits until some committed model satisfies {@code condition}. */
+    /**
+     * Waits until some committed model satisfies {@code condition}.
+     */
     private static List<String> awaitModel(
             List<List<String>> snapshots, Predicate<List<String>> condition, String description)
             throws InterruptedException {

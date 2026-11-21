@@ -9,6 +9,14 @@ Braxton's Java and native implementation are licensed under the MIT License; see
 Bundled FIGlet fonts and Unicode data retain their respective licenses, copyright notices,
 and provenance, as detailed below.
 
+The terminal transport, element/layout kernel, ANSI diff encoder, image protocol
+encoders, transition helpers, developer diagnostics, and line editor are owned
+Braxton implementations. Protocol references describe interoperable formats and
+do not add third-party implementation code or a bundled terminal dependency.
+Kitty/Sixel serialization and iTerm2 PNG packaging use the JDK's standard APIs;
+image support adds no external runtime dependency. Markdown retains the existing
+CommonMark runtime dependencies listed below.
+
 ================================================================================
 BUNDLED THIRD-PARTY COMPONENTS
 ================================================================================

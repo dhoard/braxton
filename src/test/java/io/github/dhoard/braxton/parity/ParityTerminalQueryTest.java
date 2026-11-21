@@ -35,7 +35,6 @@ import io.github.dhoard.braxton.effect.SubscriptionId;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.TerminalReply;
 import io.github.dhoard.braxton.internal.render.AnsiEncoder;
-import io.github.dhoard.braxton.internal.render.LayoutEngine;
 import io.github.dhoard.braxton.internal.render.Screen;
 import io.github.dhoard.braxton.internal.runtime.ManualTimers;
 import io.github.dhoard.braxton.internal.runtime.ScopeManager;
@@ -53,8 +52,8 @@ import io.github.dhoard.braxton.style.ColorProfile;
 import io.github.dhoard.braxton.style.Colors;
 import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -66,7 +65,7 @@ import org.junit.jupiter.api.Timeout;
 
 /**
  * Phase 18 acceptance: terminal queries, their typed answers, the session facts derived from them, and
- * the colour profiles frames are encoded with.
+ * the color profiles frames are encoded with.
  *
  * <p>The correlation cases drive the shipped {@link TerminalQueries} engine with manual timers, so a
  * one-second deadline is tested in microseconds and the order of a timeout against a late reply is
@@ -77,7 +76,9 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(20)
 class ParityTerminalQueryTest {
 
-    /** The request sequences, exactly as the xterm control sequence reference documents them. */
+    /**
+     * The request sequences, exactly as the xterm control sequence reference documents them.
+     */
     private static final String CURSOR_REQUEST = "\u001B[6n";
 
     private static final String IDENTITY_REQUEST = "\u001B[>q";
@@ -86,7 +87,9 @@ class ParityTerminalQueryTest {
 
     // ── the correlation engine ───────────────────────────────────────────────
 
-    /** An engine wired to an owned timer, a recorded output and a delivered-answer list. */
+    /**
+     * An engine wired to an owned timer, a recorded output and a delivered-answer list.
+     */
     private static final class Engine {
         final ManualTimers timers = new ManualTimers();
         final List<String> written = new CopyOnWriteArrayList<>();
@@ -187,7 +190,7 @@ class ParityTerminalQueryTest {
         engine.ask("foreground", new TerminalQuery.ColorReport(TerminalQuery.Target.FOREGROUND));
         engine.queries.accept(new TerminalReply.OperatingSystem(10, "rgb:f/8/0"));
         assertThat(engine.delivered.get(1))
-                .as("a one-digit channel scales to the same colour the full form names")
+                .as("a one-digit channel scales to the same color the full form names")
                 .isEqualTo(new TerminalQuery.Reply.ColorValue(
                         TerminalQuery.Target.FOREGROUND, new Color(0xFF, 0x88, 0x00)));
     }
@@ -204,7 +207,7 @@ class ParityTerminalQueryTest {
                 .as("five digits is not a channel")
                 .isNull();
         assertThat(TerminalQueries.parseColor("chartreuse"))
-                .as("a named colour is not documented")
+                .as("a named color is not documented")
                 .isNull();
         assertThat(TerminalQueries.parseColor("rgb:zz/00/00")).isNull();
         assertThat(TerminalQueries.parseColor("#12345"))
@@ -368,9 +371,11 @@ class ParityTerminalQueryTest {
 
     // ── the mounted runtime ──────────────────────────────────────────────────
 
-    /** A program that records every message the runtime delivers to it. */
+    /**
+     * A program that records every message the runtime delivers to it.
+     */
     private static Component<List<Object>, Object, Never> recorder(
-            List<Object> messages, View<Object> view, Command<Object> onInit) {
+            List<Object> messages, Element<Object> view, Command<Object> onInit) {
         return new Component<>() {
             @Override
             public Update<List<Object>, Object, Never> init(InitContext context) {
@@ -384,7 +389,7 @@ class ParityTerminalQueryTest {
             }
 
             @Override
-            public View<Object> view(List<Object> model, ViewContext context) {
+            public Element<Object> view(List<Object> model, ViewContext context) {
                 return view;
             }
         };
@@ -415,8 +420,8 @@ class ParityTerminalQueryTest {
                 }
 
                 @Override
-                public View<Object> view(List<Object> model, ViewContext context) {
-                    return Views.text("ready");
+                public Element<Object> view(List<Object> model, ViewContext context) {
+                    return Elements.text("ready");
                 }
             };
             TestTerminal.run(program, RuntimeOptions.defaults(), fixture);
@@ -433,7 +438,7 @@ class ParityTerminalQueryTest {
             // A cursor report nobody asked for must vanish; end-of-input then ends the run.
             fixture.feed("\u001B[3;3R");
             fixture.endInput();
-            Component<List<Object>, Object, Never> program = recorder(messages, Views.text("ready"), Command.none());
+            Component<List<Object>, Object, Never> program = recorder(messages, Elements.text("ready"), Command.none());
             TestTerminal.run(program, RuntimeOptions.defaults(), fixture);
 
             assertThat(messages).noneMatch(message -> message instanceof InputEvent.TerminalReplyInput);
@@ -443,9 +448,11 @@ class ParityTerminalQueryTest {
 
     @Test
     void aProfileCommandRepaintsEveryCellWithTheNewProfile() {
-        Screen sample = new LayoutEngine()
-                .layout(Views.text(StyledText.of("hi", Style.fg(Colors.ERROR_400))), new Rect(0, 0, 1, 4))
-                .screen();
+        Screen sample = new Screen(1, 4);
+        io.github.dhoard.braxton.ui.ElementTree.paint(
+                io.github.dhoard.braxton.ui.ElementTree.layout(
+                        Elements.text(StyledText.of("hi", Style.fg(Colors.ERROR_400))), new Rect(0, 0, 1, 4)),
+                sample);
         String truecolor = AnsiEncoder.frame(sample, ColorProfile.TRUECOLOR);
         String ansi256 = AnsiEncoder.frame(sample, ColorProfile.ANSI256);
         String ansi16 = AnsiEncoder.frame(sample, ColorProfile.ANSI16);
@@ -456,15 +463,17 @@ class ParityTerminalQueryTest {
                 .contains("38;5;" + Colors.nearestAnsi256(Colors.ERROR_400))
                 .doesNotContain("38;2;");
         assertThat(ansi16)
-                .as("a 16-colour session names the nearest of the sixteen, by its classic code")
+                .as("a 16-color session names the nearest of the sixteen, by its classic code")
                 .contains("9" + (Colors.nearestAnsi16(Colors.ERROR_400) - 8) + "m");
         assertThat(plain).doesNotContain("38;2;", "38;5;");
         assertThat(Colors.ansi256(Colors.nearestAnsi256(Colors.ERROR_400)))
-                .as("the palette entry the session emits is the colour it meant to show")
+                .as("the palette entry the session emits is the color it meant to show")
                 .isEqualTo(nearestPaletteColour(Colors.ERROR_400));
     }
 
-    /** The palette entry a nearest-colour search should pick, computed independently. */
+    /**
+     * The palette entry a nearest-color search should pick, computed independently.
+     */
     private static Color nearestPaletteColour(Color wanted) {
         Color best = null;
         int bestDistance = Integer.MAX_VALUE;
@@ -489,7 +498,7 @@ class ParityTerminalQueryTest {
     void everyProfileKeepsTheAttributesAndTheHyperlink() {
         Style decorated = Style.NONE.withBold().withUnderline().withForeground(Colors.BLUE_400);
         assertThat(AnsiEncoder.sgr(decorated, ColorProfile.NONE))
-                .as("losing colour keeps decoration")
+                .as("losing color keeps decoration")
                 .isEqualTo("\u001B[1;4m");
         assertThat(AnsiEncoder.sgr(decorated, ColorProfile.ANSI16))
                 .as("the nearest of the sixteen is blue, by its classic code")
@@ -548,8 +557,8 @@ class ParityTerminalQueryTest {
                 }
 
                 @Override
-                public View<Object> view(List<Object> model, ViewContext context) {
-                    return Views.text("ready");
+                public Element<Object> view(List<Object> model, ViewContext context) {
+                    return Elements.text("ready");
                 }
             };
             TestTerminal.run(program, RuntimeOptions.defaults().withColorProfile(ColorProfile.ANSI256), fixture);
@@ -569,7 +578,7 @@ class ParityTerminalQueryTest {
         try (TestTerminal fixture = new TestTerminal()) {
             List<Object> messages = Collections.synchronizedList(new ArrayList<>());
             Component<List<Object>, Object, Never> program =
-                    recorder(messages, Views.text(StyledText.of("hi", Style.fg(Colors.ERROR_400))), Command.none());
+                    recorder(messages, Elements.text(StyledText.of("hi", Style.fg(Colors.ERROR_400))), Command.none());
             // Nothing asks a question here, so end-of-input is what ends the run: the frame is
             // painted before the reader reports the stream closed.
             fixture.endInput();
@@ -577,16 +586,16 @@ class ParityTerminalQueryTest {
 
             String output = fixture.outputText();
             assertThat(output)
-                    .as("the session painted the sample cell with a 16-colour code and no wider one")
+                    .as("the session painted the sample cell with a 16-color code and no wider one")
                     .contains("hi")
                     .doesNotContain("38;2;", "38;5;");
         }
         // A later session with another profile is unaffected by the first one: the palette memo is a
-        // pure colour-to-index mapping, not a per-session cache.
+        // pure color-to-index mapping, not a per-session cache.
         try (TestTerminal fixture = new TestTerminal()) {
             List<Object> messages = Collections.synchronizedList(new ArrayList<>());
             Component<List<Object>, Object, Never> program =
-                    recorder(messages, Views.text(StyledText.of("hi", Style.fg(Colors.ERROR_400))), Command.none());
+                    recorder(messages, Elements.text(StyledText.of("hi", Style.fg(Colors.ERROR_400))), Command.none());
             fixture.endInput();
             TestTerminal.run(program, RuntimeOptions.defaults().withColorProfile(ColorProfile.TRUECOLOR), fixture);
             assertThat(fixture.outputText()).contains("38;2;240;68;56");

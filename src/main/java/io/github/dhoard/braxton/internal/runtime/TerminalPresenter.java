@@ -23,11 +23,11 @@
 package io.github.dhoard.braxton.internal.runtime;
 
 import io.github.dhoard.braxton.app.MouseMode;
-import io.github.dhoard.braxton.app.TerminalCapabilities;
 import io.github.dhoard.braxton.app.TerminalOptions;
+import io.github.dhoard.braxton.app.TerminalPresentation;
 import io.github.dhoard.braxton.internal.render.AnsiEncoder;
 import io.github.dhoard.braxton.style.Color;
-import io.github.dhoard.braxton.view.TerminalPresentation;
+import io.github.dhoard.braxton.terminal.Capabilities;
 import java.util.Objects;
 
 /**
@@ -35,7 +35,7 @@ import java.util.Objects;
  *
  * <p>The runtime owns one presenter per session. Each frame hands it the intent the root view
  * declared, and it answers with the sequences that take the terminal from what this session last
- * applied to what the frame asks for - a screen buffer, a pointer level, a title, a colour default, a
+ * applied to what the frame asks for - a screen buffer, a pointer level, a title, a color default, a
  * progress value and a status record, each written only when it differs. A frame that asks for
  * nothing new writes nothing at all, so an idle application keeps emitting no traffic.</p>
  *
@@ -46,7 +46,7 @@ import java.util.Objects;
  * announced.</p>
  *
  * <p>Everything the session changed is undone here: {@link #restoreModes()} gives back the pointer,
- * paste and focus modes, and {@link #restoreMetadata()} pops the title, resets the colour defaults,
+ * paste and focus modes, and {@link #restoreMetadata()} pops the title, resets the color defaults,
  * removes the progress value and clears a status record that the protocol does not retain. A final
  * {@code done} or {@code error} record is deliberately left in place, because the protocol keeps a
  * finished result for the user to find.</p>
@@ -121,9 +121,9 @@ public final class TerminalPresenter {
      * @param focusReporting whether the terminal is reporting focus changes
      * @param title the window title this session set, or null when it set none
      * @param titlePushed whether the title this session replaced was saved and must be popped
-     * @param foreground the default text colour this session set, or null
-     * @param background the default background colour this session set, or null
-     * @param cursorColor the default cursor colour this session set, or null
+     * @param foreground the default text color this session set, or null
+     * @param background the default background color this session set, or null
+     * @param cursorColor the default cursor color this session set, or null
      * @param progress the progress value on show, or null for none
      * @param status the status record on show, or null for none
      */
@@ -140,7 +140,7 @@ public final class TerminalPresenter {
             TerminalPresentation.Progress progress,
             TerminalPresentation.Status status) {}
 
-    private final TerminalCapabilities capabilities;
+    private final Capabilities capabilities;
     private final boolean defaultAlternateScreen;
     private final MouseMode defaultMouse;
     private final boolean defaultBracketedPaste;
@@ -158,10 +158,10 @@ public final class TerminalPresenter {
      *
      * @param options the session options the runtime opened with; null is the documented default
      * @param capabilities the attached terminal's capabilities; null is a terminal that offers none
-     * @param color whether colour output is enabled, which also gates the default colours
+     * @param color whether color output is enabled, which also gates the default colors
      */
-    public TerminalPresenter(TerminalOptions options, TerminalCapabilities capabilities, boolean color) {
-        this.capabilities = capabilities == null ? TerminalCapabilities.PLAIN : capabilities;
+    public TerminalPresenter(TerminalOptions options, Capabilities capabilities, boolean color) {
+        this.capabilities = capabilities == null ? Capabilities.PLAIN : capabilities;
         TerminalOptions defaults = options == null ? TerminalOptions.DEFAULT : options;
         this.defaultAlternateScreen = defaults.alternateScreen() && this.capabilities.alternateScreen();
         this.defaultMouse = defaults.mouse() && this.capabilities.mouse() ? defaults.mouseMode() : MouseMode.NONE;
@@ -171,7 +171,9 @@ public final class TerminalPresenter {
         this.applied = sessionDefaults();
     }
 
-    /** The modes a session that has applied nothing of its own is asking its terminal for. */
+    /**
+     * The modes a session that has applied nothing of its own is asking its terminal for.
+     */
     private Applied sessionDefaults() {
         return new Applied(
                 defaultAlternateScreen,
@@ -188,13 +190,13 @@ public final class TerminalPresenter {
     }
 
     /**
-     * Changes whether the session may set the terminal's default colours.
+     * Changes whether the session may set the terminal's default colors.
      *
-     * <p>A session that loses colour gives the defaults back, exactly as the cursor presenter gives
-     * back its caret colour: a palette the application imposed would otherwise outlive the profile it
-     * was chosen for. Turning colour on again lets the frame's colours apply as usual.</p>
+     * <p>A session that loses color gives the defaults back, exactly as the cursor presenter gives
+     * back its caret color: a palette the application imposed would otherwise outlive the profile it
+     * was chosen for. Turning color on again lets the frame's colors apply as usual.</p>
      *
-     * @param value whether colour output is enabled
+     * @param value whether color output is enabled
      */
     public void colorEnabled(boolean value) {
         this.color = value;
@@ -241,7 +243,7 @@ public final class TerminalPresenter {
      * The sequences that take the terminal to one frame's intent, without recording them.
      *
      * <p>Nothing is written and the committed ledger is unchanged, so the caller may write the frame
-     * and call {@link #commit} afterwards. A modifier the intent leaves out resolves to the session
+     * and call {@link #commit} afterward. A modifier the intent leaves out resolves to the session
      * default; metadata the intent leaves out resolves to "none", which is the terminal's own state.</p>
      *
      * @param intent the presentation the frame declared, or null when it declared none
@@ -380,7 +382,7 @@ public final class TerminalPresenter {
     /**
      * The sequences that give back the metadata the session applied.
      *
-     * <p>The saved title is popped, every colour default this session set is reset to the terminal's
+     * <p>The saved title is popped, every color default this session set is reset to the terminal's
      * own, the progress value is removed, and a status record is cleared unless the protocol keeps it:
      * a final {@code done} or {@code error} stays for the user to find, while a run still in progress
      * does not outlive the session that reported it.</p>
@@ -460,7 +462,9 @@ public final class TerminalPresenter {
         return AnsiEncoder.ALT_SCREEN_OFF;
     }
 
-    /** The record the session must remove for a status it no longer reports, or nothing. */
+    /**
+     * The record the session must remove for a status it no longer reports, or nothing.
+     */
     private static String clearSequence(TerminalPresentation.Status previous) {
         if (previous == null || previous.state() == TerminalPresentation.Status.State.CLEAR) {
             // Nothing is on show: a frame that declares no status has nothing to remove.

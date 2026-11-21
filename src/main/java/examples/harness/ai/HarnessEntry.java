@@ -34,10 +34,17 @@ public sealed interface HarnessEntry {
      * When this entry entered the session, in Unix milliseconds, or zero when it carries no time.
      * The header renders it when it is positive; a fixture record with no recorded time therefore
      * shows its label alone rather than an invented time.
+     *
+     * @return when this entry entered the session, in Unix milliseconds, or zero when it carries no time
      */
     long epochMillis();
 
-    /** Returns this entry with the supplied time, or with no time when it is not positive. */
+    /**
+     * Returns this entry with the supplied time, or with no time when it is not positive.
+     *
+     * @param millis the timestamp in milliseconds
+     * @return this entry with the supplied time, or with no time when it is not positive
+     */
     default HarnessEntry at(long millis) {
         long time = Math.max(0L, millis);
         return switch (this) {
@@ -57,10 +64,21 @@ public sealed interface HarnessEntry {
      * @param epochMillis when the message entered the session, or zero
      */
     public record User(String text, long epochMillis) implements HarnessEntry {
+        /**
+         * Creates a {@code User} value.
+         *
+         * @param text the prompt text
+         */
         public User(String text) {
             this(text, 0L);
         }
 
+        /**
+         * Creates a {@code User} value.
+         *
+         * @param text the prompt text
+         * @param epochMillis when the message entered the session, or zero
+         */
         public User {
             text = text == null ? "" : text;
             epochMillis = Math.max(0L, epochMillis);
@@ -74,10 +92,21 @@ public sealed interface HarnessEntry {
      * @param epochMillis when the message entered the session, or zero
      */
     public record Assistant(String text, long epochMillis) implements HarnessEntry {
+        /**
+         * Creates a {@code Assistant} value.
+         *
+         * @param text the reply text
+         */
         public Assistant(String text) {
             this(text, 0L);
         }
 
+        /**
+         * Creates a {@code Assistant} value.
+         *
+         * @param text the reply text
+         * @param epochMillis when the message entered the session, or zero
+         */
         public Assistant {
             text = text == null ? "" : text;
             epochMillis = Math.max(0L, epochMillis);
@@ -91,10 +120,21 @@ public sealed interface HarnessEntry {
      * @param epochMillis when the message entered the session, or zero
      */
     public record Reasoning(String text, long epochMillis) implements HarnessEntry {
+        /**
+         * Creates a {@code Reasoning} value.
+         *
+         * @param text the reasoning text
+         */
         public Reasoning(String text) {
             this(text, 0L);
         }
 
+        /**
+         * Creates a {@code Reasoning} value.
+         *
+         * @param text the reasoning text
+         * @param epochMillis when the message entered the session, or zero
+         */
         public Reasoning {
             text = text == null ? "" : text;
             epochMillis = Math.max(0L, epochMillis);
@@ -113,10 +153,27 @@ public sealed interface HarnessEntry {
     public record Tool(String call, String result, boolean truncated, ToolStatus status, long epochMillis)
             implements HarnessEntry {
 
+        /**
+         * Creates a {@code Tool} value.
+         *
+         * @param call the tool name and arguments as one display line
+         * @param result the preview of the tool's output
+         * @param truncated whether the preview was cut short
+         * @param status whether the call completed, failed, or is still pending
+         */
         public Tool(String call, String result, boolean truncated, ToolStatus status) {
             this(call, result, truncated, status, 0L);
         }
 
+        /**
+         * Creates a {@code Tool} value.
+         *
+         * @param call the tool name and arguments as one display line
+         * @param result the preview of the tool's output
+         * @param truncated whether the preview was cut short
+         * @param status whether the call completed, failed, or is still pending
+         * @param epochMillis when the message entered the session, or zero
+         */
         public Tool {
             call = call == null ? "" : call;
             result = result == null ? "" : result;
@@ -132,10 +189,21 @@ public sealed interface HarnessEntry {
      * @param epochMillis when the message entered the session, or zero
      */
     public record Notice(String text, long epochMillis) implements HarnessEntry {
+        /**
+         * Creates a {@code Notice} value.
+         *
+         * @param text the notice text
+         */
         public Notice(String text) {
             this(text, 0L);
         }
 
+        /**
+         * Creates a {@code Notice} value.
+         *
+         * @param text the notice text
+         * @param epochMillis when the message entered the session, or zero
+         */
         public Notice {
             text = text == null ? "" : text;
             epochMillis = Math.max(0L, epochMillis);
@@ -149,20 +217,42 @@ public sealed interface HarnessEntry {
      * @param epochMillis when the message entered the session, or zero
      */
     public record Failure(String text, long epochMillis) implements HarnessEntry {
+        /**
+         * Creates a {@code Failure} value.
+         *
+         * @param text the diagnostic text
+         */
         public Failure(String text) {
             this(text, 0L);
         }
 
+        /**
+         * Creates a {@code Failure} value.
+         *
+         * @param text the diagnostic text
+         * @param epochMillis when the message entered the session, or zero
+         */
         public Failure {
             text = text == null ? "" : text;
             epochMillis = Math.max(0L, epochMillis);
         }
     }
 
-    /** Visual state of a tool call. */
+    /**
+     * Visual state of a tool call.
+     */
     public enum ToolStatus {
+        /**
+         * The tool result has not yet arrived.
+         */
         PENDING,
+        /**
+         * The tool completed successfully.
+         */
         SUCCESS,
+        /**
+         * The tool completed with an error.
+         */
         ERROR
     }
 }

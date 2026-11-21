@@ -41,15 +41,24 @@ package io.github.dhoard.braxton.clipboard;
  */
 public final class ClipboardConfig {
 
-    /** Default maximum UTF-8 payload for a single OSC 52 write (64 KiB). */
+    /**
+     * Default maximum UTF-8 payload for a single OSC 52 write (64 KiB).
+     */
     public static final int DEFAULT_MAX_PAYLOAD_BYTES = 65_536;
 
-    /** Default bound for the in-process clipboard buffer (1 Mi chars). */
+    /**
+     * Default bound for the in-process clipboard buffer (1 Mi chars).
+     */
     public static final int DEFAULT_MAX_INTERNAL_CHARS = 1_048_576;
 
-    /** Default maximum decoded payload for a single OSC 52 read (1 MiB). */
+    /**
+     * Default maximum decoded payload for a single OSC 52 read (1 MiB).
+     */
     public static final int DEFAULT_MAX_READ_PAYLOAD_BYTES = 1_048_576;
 
+    /**
+     * The default tmux OSC 52 forwarding policy.
+     */
     public static final TmuxStrategy DEFAULT_TMUX_STRATEGY = TmuxStrategy.AUTO;
 
     private final boolean osc52Enabled;
@@ -68,17 +77,29 @@ public final class ClipboardConfig {
         this.tmuxStrategy = builder.tmuxStrategy == null ? DEFAULT_TMUX_STRATEGY : builder.tmuxStrategy;
     }
 
-    /** Returns the default configuration. */
+    /**
+     * Returns the default configuration.
+     *
+     * @return the default configuration
+     */
     public static ClipboardConfig defaults() {
         return builder().build();
     }
 
-    /** Returns a new builder seeded with the defaults. */
+    /**
+     * Returns a new builder seeded with the defaults.
+     *
+     * @return this builder
+     */
     public static Builder builder() {
         return new Builder();
     }
 
-    /** Returns a builder seeded with this configuration. */
+    /**
+     * Returns a builder seeded with this configuration.
+     *
+     * @return this builder
+     */
     public Builder toBuilder() {
         return new Builder()
                 .osc52Enabled(osc52Enabled)
@@ -92,6 +113,8 @@ public final class ClipboardConfig {
     /**
      * Reads configuration from system properties. Missing or invalid values fall back to the
      * defaults instead of failing application startup.
+     *
+     * @return the configuration resolved from system properties
      */
     public static ClipboardConfig fromSystemProperties() {
         Builder builder = builder();
@@ -105,17 +128,29 @@ public final class ClipboardConfig {
         return builder.build();
     }
 
-    /** Whether OSC 52 writes may be emitted. Internal storage is unaffected. */
+    /**
+     * Whether OSC 52 writes may be emitted. Internal storage is unaffected.
+     *
+     * @return {@code true} if oSC 52 writes may be emitted; otherwise {@code false}
+     */
     public boolean osc52Enabled() {
         return osc52Enabled;
     }
 
-    /** Maximum UTF-8 bytes encoded into one OSC 52 payload. */
+    /**
+     * Maximum UTF-8 bytes encoded into one OSC 52 payload.
+     *
+     * @return maximum UTF-8 bytes encoded into one OSC 52 payload
+     */
     public int maxPayloadBytes() {
         return maxPayloadBytes;
     }
 
-    /** Maximum characters retained by the in-process clipboard buffer. */
+    /**
+     * Maximum characters retained by the in-process clipboard buffer.
+     *
+     * @return maximum characters retained by the in-process clipboard buffer
+     */
     public int maxInternalChars() {
         return maxInternalChars;
     }
@@ -126,12 +161,18 @@ public final class ClipboardConfig {
      * <p>Asking is already opt-in because it takes an explicit read command; this switch exists for a
      * deployment that wants the question never asked at all. Turning it off does not affect copying,
      * which keeps the in-process buffer as its dependable destination.</p>
+     *
+     * @return {@code true} if the session may ask the terminal for its clipboard; otherwise {@code false}
      */
     public boolean terminalReadsEnabled() {
         return terminalReadsEnabled;
     }
 
-    /** Maximum decoded UTF-8 bytes accepted from one OSC 52 read. */
+    /**
+     * Maximum decoded UTF-8 bytes accepted from one OSC 52 read.
+     *
+     * @return maximum decoded UTF-8 bytes accepted from one OSC 52 read
+     */
     public int maxReadPayloadBytes() {
         return maxReadPayloadBytes;
     }
@@ -144,6 +185,8 @@ public final class ClipboardConfig {
      * separator are added on top, because the reply carries them inside the same string. The input
      * decoder uses this as its framing bound for OSC 52, so a reply that could decode within the
      * limit is never dropped before it can be checked.</p>
+     *
+     * @return the maximum encoded clipboard reply length in characters
      */
     public int maxReadEncodedCharacters() {
         // Computed as a long and saturated: a caller may configure an absurd byte limit, and a bound
@@ -153,7 +196,11 @@ public final class ClipboardConfig {
         return (int) Math.min(Integer.MAX_VALUE, encoded);
     }
 
-    /** Transport strategy for OSC 52 writes. */
+    /**
+     * Transport strategy for OSC 52 writes.
+     *
+     * @return transport strategy for OSC 52 writes
+     */
     public TmuxStrategy tmuxStrategy() {
         return tmuxStrategy;
     }
@@ -193,7 +240,9 @@ public final class ClipboardConfig {
         }
     }
 
-    /** Fluent builder for {@link ClipboardConfig}. */
+    /**
+     * Fluent builder for {@link ClipboardConfig}.
+     */
     public static final class Builder {
         private boolean osc52Enabled = true;
         private int maxPayloadBytes = DEFAULT_MAX_PAYLOAD_BYTES;
@@ -204,36 +253,77 @@ public final class ClipboardConfig {
 
         private Builder() {}
 
+        /**
+         * Sets this builder's osc52 enabled.
+         *
+         * @param enabled whether the feature is enabled
+         * @return this builder
+         */
         public Builder osc52Enabled(boolean enabled) {
             this.osc52Enabled = enabled;
             return this;
         }
 
+        /**
+         * Sets this builder's max payload bytes.
+         *
+         * @param bytes the byte limit
+         * @return this builder
+         */
         public Builder maxPayloadBytes(int bytes) {
             this.maxPayloadBytes = Math.max(1, bytes);
             return this;
         }
 
+        /**
+         * Sets this builder's max internal chars.
+         *
+         * @param chars the character limit
+         * @return this builder
+         */
         public Builder maxInternalChars(int chars) {
             this.maxInternalChars = Math.max(1, chars);
             return this;
         }
 
+        /**
+         * Sets this builder's terminal reads enabled.
+         *
+         * @param enabled whether the feature is enabled
+         * @return this builder
+         */
         public Builder terminalReadsEnabled(boolean enabled) {
             this.terminalReadsEnabled = enabled;
             return this;
         }
 
+        /**
+         * Sets this builder's max read payload bytes.
+         *
+         * @param bytes the byte limit
+         * @return this builder
+         */
         public Builder maxReadPayloadBytes(int bytes) {
             this.maxReadPayloadBytes = Math.max(1, bytes);
             return this;
         }
 
+        /**
+         * Sets this builder's tmux strategy.
+         *
+         * @param strategy the transport policy
+         * @return this builder
+         */
         public Builder tmuxStrategy(TmuxStrategy strategy) {
             this.tmuxStrategy = strategy == null ? DEFAULT_TMUX_STRATEGY : strategy;
             return this;
         }
 
+        /**
+         * Builds the immutable clipboard policy, validating its bounds.
+         *
+         * @return the immutable clipboard policy, validating its bounds
+         */
         public ClipboardConfig build() {
             return new ClipboardConfig(this);
         }

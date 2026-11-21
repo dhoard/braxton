@@ -30,7 +30,6 @@ import io.github.dhoard.braxton.effect.Command;
 import io.github.dhoard.braxton.input.Binding;
 import io.github.dhoard.braxton.input.InputEvent;
 import io.github.dhoard.braxton.input.Key;
-import io.github.dhoard.braxton.internal.input.InputRouter;
 import io.github.dhoard.braxton.layout.Border;
 import io.github.dhoard.braxton.layout.Viewport;
 import io.github.dhoard.braxton.mvu.InitContext;
@@ -41,10 +40,12 @@ import io.github.dhoard.braxton.style.Style;
 import io.github.dhoard.braxton.style.StyledText;
 import io.github.dhoard.braxton.style.TextMeasure;
 import io.github.dhoard.braxton.testing.ComponentDriver;
-import io.github.dhoard.braxton.view.RenderedScreen;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.testing.ElementScreen;
 import io.github.dhoard.braxton.widget.DataTable;
+import io.github.dhoard.braxton.widget.DataTableConfig;
+import io.github.dhoard.braxton.widget.DataTableContent;
+import io.github.dhoard.braxton.widget.DataTableModel;
+import io.github.dhoard.braxton.widget.DataTableMsg;
 import io.github.dhoard.braxton.widget.Help;
 import io.github.dhoard.braxton.widget.Table;
 import io.github.dhoard.braxton.widget.TableSelector;
@@ -59,7 +60,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Phase 13 acceptance: scrollable interactive tables, the static table's width budget and the demo.
  *
- * <p>Every assertion is against public behaviour: the lines a window paints, the model a gesture
+ * <p>Every assertion is against public behavior: the lines a window paints, the model a gesture
  * produces, the widths a schema resolves and what a routed key does to the demo scene. The component
  * a test drives is the shipped {@code DataTable}, and the scene a verifier runs is the demo's own, so
  * a mounted composition is the one an application writes rather than a second copy of it.</p>
@@ -72,15 +73,21 @@ class ParityTableTest {
 
     private static final int SCREEN_COLS = 80;
 
-    /** The row the header occupies on the demo's 24-row screen: the two status rows come first. */
+    /**
+     * The row the header occupies on the demo's 24-row screen: the two status rows come first.
+     */
     private static final int DEMO_HEADER_ROW = TableDemo.STATUS_ROWS;
 
-    /** The cells one CJK glyph occupies under the pinned width policy. */
+    /**
+     * The cells one CJK glyph occupies under the pinned width policy.
+     */
     private static final String WIDE = "\u671d";
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    /** The schema most tests use: a fixed id, an automatic name, a right-aligned count and a note. */
+    /**
+     * The schema most tests use: a fixed id, an automatic name, a right-aligned count and a note.
+     */
     private static List<DataTable.Column> columns() {
         return List.of(
                 DataTable.Column.of("id", "id", 4),
@@ -89,17 +96,21 @@ class ParityTableTest {
                 DataTable.Column.of("note", "note"));
     }
 
-    /** Content over {@link #columns()}, one {@code {id, name, sown, note}} row per argument. */
-    private static DataTable.Content content(String[]... rows) {
+    /**
+     * Content over {@link #columns()}, one {@code {id, name, sown, note}} row per argument.
+     */
+    private static DataTableContent content(String[]... rows) {
         List<DataTable.Row> values = new ArrayList<>(rows.length);
         for (String[] row : rows) {
             values.add(DataTable.Row.of(row[0], row));
         }
-        return DataTable.Content.of(columns(), values);
+        return DataTableContent.of(columns(), values);
     }
 
-    /** Count generated rows named {@code row-0 ... row-(count-1)}. */
-    private static DataTable.Content content(int count) {
+    /**
+     * Count generated rows named {@code row-0 ... row-(count-1)}.
+     */
+    private static DataTableContent content(int count) {
         String[][] rows = new String[count][];
         for (int index = 0; index < count; index++) {
             rows[index] = new String[] {"A-" + index, "row-" + index, Integer.toString(index), "note " + index};
@@ -107,42 +118,48 @@ class ParityTableTest {
         return content(rows);
     }
 
-    /** The three-row content most tests use: widths [4, 7, 5, 6] and a 26-cell row. */
-    private static DataTable.Content three() {
+    /**
+     * The three-row content most tests use: widths [4, 7, 5, 6] and a 26-cell row.
+     */
+    private static DataTableContent three() {
         return content(
                 new String[] {"A-1", "alpha", "1", "first"},
                 new String[] {"B-2", "bravo", "22", "second"},
                 new String[] {"C-3", "charlie", "333", "third"});
     }
 
-    private static DataTable.Config config(DataTable.Content content, int height, int width) {
-        return DataTable.Config.defaults()
+    private static DataTableConfig config(DataTableContent content, int height, int width) {
+        return DataTableConfig.defaults()
                 .withContent(content)
                 .withHeight(height)
                 .withWidth(width);
     }
 
-    private static DataTable table(DataTable.Config config) {
+    private static DataTable table(DataTableConfig config) {
         return new DataTable(config);
     }
 
-    private static DataTable.Model model(DataTable.Config config) {
+    private static DataTableModel model(DataTableConfig config) {
         return table(config).init(new InitContext(new Viewport(0, 0), null)).model();
     }
 
-    private static DataTable.Model apply(DataTable view, DataTable.Model state, DataTable.Msg message) {
+    private static DataTableModel apply(DataTable view, DataTableModel state, DataTableMsg message) {
         return view.update(state, message).model();
     }
 
-    /** The lines one window paints, as plain text. */
-    private static List<String> painted(DataTable.Model state, DataTable.Config config) {
+    /**
+     * The lines one window paints, as plain text.
+     */
+    private static List<String> painted(DataTableModel state, DataTableConfig config) {
         return DataTable.lines(state, config).stream()
                 .map(line -> line.text().plainText())
                 .toList();
     }
 
-    /** The body lines only, with the header left off. */
-    private static List<String> body(DataTable.Model state, DataTable.Config config) {
+    /**
+     * The body lines only, with the header left off.
+     */
+    private static List<String> body(DataTableModel state, DataTableConfig config) {
         List<String> lines = new ArrayList<>();
         for (DataTable.Line line : DataTable.lines(state, config)) {
             if (!line.header()) {
@@ -152,14 +169,12 @@ class ParityTableTest {
         return List.copyOf(lines);
     }
 
-    private static List<String> screen(DataTable view, DataTable.Model state, int rows, int cols) {
-        View<DataTable.Msg> view1 = view.view(state, new ViewContext(new Viewport(rows, cols)));
-        return new ScreenRenderer().plainLines(view1, new Viewport(rows, cols));
+    private static List<String> screen(DataTable view, DataTableModel state, int rows, int cols) {
+        return rendered(view, state, rows, cols).lines();
     }
 
-    private static RenderedScreen rendered(DataTable view, DataTable.Model state, int rows, int cols) {
-        View<DataTable.Msg> view1 = view.view(state, new ViewContext(new Viewport(rows, cols)));
-        return new ScreenRenderer().screen(view1, new Viewport(rows, cols));
+    private static ElementScreen rendered(DataTable view, DataTableModel state, int rows, int cols) {
+        return ElementScreen.render(view.view(state, new ViewContext(new Viewport(rows, cols))), rows, cols);
     }
 
     private static InputEvent.KeyInput key(String spec) {
@@ -170,7 +185,7 @@ class ParityTableTest {
 
     @Test
     void anAutomaticColumnIsAsWideAsItsWidestHeaderOrCell() {
-        DataTable.Config config = config(three(), 8, 80);
+        DataTableConfig config = config(three(), 8, 80);
 
         // id is fixed at four; name is as wide as "charlie"; sown is fixed at five; note is as wide
         // as "second".
@@ -185,9 +200,9 @@ class ParityTableTest {
 
     @Test
     void aFixedColumnIsExactlyAsWideAsItSays() {
-        DataTable.Content content = DataTable.Content.of(
+        DataTableContent content = DataTableContent.of(
                 List.of(DataTable.Column.of("narrow", "a long heading", 3)), List.of(DataTable.Row.of("r", "content")));
-        DataTable.Config config = config(content, 4, 40);
+        DataTableConfig config = config(content, 4, 40);
 
         assertThat(content.widths()).containsExactly(3);
         assertThat(painted(model(config), config)).containsExactly("a l ", "con ");
@@ -196,7 +211,7 @@ class ParityTableTest {
     @Test
     void aBoundedColumnObeysItsFloorItsPreferredWidthAndItsCap() {
         DataTable.Width bounded = DataTable.Width.of(4, 8, 12);
-        DataTable.Content content = DataTable.Content.of(
+        DataTableContent content = DataTableContent.of(
                 List.of(DataTable.Column.of("v", "v").withWidth(bounded)),
                 List.of(DataTable.Row.of("short", "ab"), DataTable.Row.of("long", "x".repeat(40))));
 
@@ -224,15 +239,15 @@ class ParityTableTest {
 
     @Test
     void twoColumnsMayNotShareAKeyAndTwoRowsMayNotShareAnId() {
-        assertThatThrownBy(() -> DataTable.Content.of(
+        assertThatThrownBy(() -> DataTableContent.of(
                         List.of(DataTable.Column.of("k", "a"), DataTable.Column.of("k", "b")), List.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("duplicate column key: k");
-        assertThatThrownBy(() -> DataTable.Content.of(
-                        columns(), List.of(DataTable.Row.of("r", "a"), DataTable.Row.of("r", "b"))))
+        assertThatThrownBy(() ->
+                        DataTableContent.of(columns(), List.of(DataTable.Row.of("r", "a"), DataTable.Row.of("r", "b"))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("duplicate row id: r");
-        DataTable.Content content = three();
+        DataTableContent content = three();
         assertThatThrownBy(() -> content.inserted(0, DataTable.Row.of("A-1", "again")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("duplicate row id: A-1");
@@ -250,10 +265,10 @@ class ParityTableTest {
 
     @Test
     void aRaggedRowPaintsEmptyValuesAndIgnoresExtraOnes() {
-        DataTable.Content content = DataTable.Content.of(
+        DataTableContent content = DataTableContent.of(
                 List.of(DataTable.Column.of("a", "a", 3), DataTable.Column.of("b", "b", 3)),
                 List.of(DataTable.Row.of("short", "x"), DataTable.Row.of("long", "y", "z", "ignored")));
-        DataTable.Config config = config(content, 4, 40);
+        DataTableConfig config = config(content, 4, 40);
 
         assertThat(painted(model(config), config)).containsExactly("a   b   ", "x       ", "y   z   ");
         assertThat(content.cell(0, 1)).as("a value the row does not hold").isEqualTo(StyledText.empty());
@@ -262,26 +277,26 @@ class ParityTableTest {
 
     @Test
     void anEmptyTableHasNothingSelectedAndChoosesNothing() {
-        DataTable.Config config = config(DataTable.Content.empty(), 4, 40);
+        DataTableConfig config = config(DataTableContent.empty(), 4, 40);
         DataTable view = table(config);
-        DataTable.Model empty = model(config);
+        DataTableModel empty = model(config);
 
         assertThat(empty.selection().present()).isFalse();
         assertThat(empty.selectedRow()).isEmpty();
         assertThat(empty.selectedColumn()).isEmpty();
         assertThat(empty.selectedValue()).isEmpty();
         assertThat(painted(empty, config)).isEmpty();
-        assertThat(view.update(empty, new DataTable.Msg.Choose()).outputs()).isEmpty();
-        assertThat(apply(view, empty, new DataTable.Msg.Down())).isSameAs(empty);
-        assertThat(apply(view, empty, new DataTable.Msg.Bottom())).isSameAs(empty);
+        assertThat(view.update(empty, new DataTableMsg.Choose()).outputs()).isEmpty();
+        assertThat(apply(view, empty, new DataTableMsg.Down())).isSameAs(empty);
+        assertThat(apply(view, empty, new DataTableMsg.Bottom())).isSameAs(empty);
     }
 
     @Test
     void aSelectionModeIsStateAndKeepsTheRowAndTheColumn() {
-        DataTable.Config config = config(three(), 4, 80);
+        DataTableConfig config = config(three(), 4, 80);
         DataTable view = table(config);
-        DataTable.Model state = apply(view, model(config), new DataTable.Msg.Down());
-        state = apply(view, state, new DataTable.Msg.Right());
+        DataTableModel state = apply(view, model(config), new DataTableMsg.Down());
+        state = apply(view, state, new DataTableMsg.Right());
 
         assertThat(state.selection().mode())
                 .as("a row selection has no column to move")
@@ -289,53 +304,53 @@ class ParityTableTest {
         assertThat(state.selection().row()).isEqualTo(1);
         assertThat(state.selection().column()).isZero();
 
-        state = apply(view, state, new DataTable.Msg.ToggleMode());
+        state = apply(view, state, new DataTableMsg.ToggleMode());
         assertThat(state.selection().mode()).isEqualTo(DataTable.Mode.CELL);
         assertThat(state.selection().row()).as("the row the reader was on").isEqualTo(1);
         assertThat(state.selection().column())
                 .as("the column a cell selection starts on")
                 .isZero();
 
-        state = apply(view, state, new DataTable.Msg.Right());
+        state = apply(view, state, new DataTableMsg.Right());
         assertThat(state.selection().column()).isEqualTo(1);
-        state = apply(view, state, new DataTable.Msg.ToggleMode());
+        state = apply(view, state, new DataTableMsg.ToggleMode());
         assertThat(state.selection().mode()).isEqualTo(DataTable.Mode.ROW);
         assertThat(state.selection().column())
                 .as("the column is kept for the next switch")
                 .isEqualTo(1);
-        assertThat(apply(view, state, new DataTable.Msg.SetMode(DataTable.Mode.ROW)))
+        assertThat(apply(view, state, new DataTableMsg.SetMode(DataTable.Mode.ROW)))
                 .as("setting the mode it already has")
                 .isSameAs(state);
     }
 
     @Test
     void aRowSelectionNamesTheRowAndACellSelectionNamesTheCell() {
-        DataTable.Config config = config(three(), 4, 80);
+        DataTableConfig config = config(three(), 4, 80);
         DataTable view = table(config);
-        DataTable.Model state = apply(view, model(config), new DataTable.Msg.Down());
+        DataTableModel state = apply(view, model(config), new DataTableMsg.Down());
 
-        assertThat(view.update(state, new DataTable.Msg.Choose()).outputs())
+        assertThat(view.update(state, new DataTableMsg.Choose()).outputs())
                 .containsExactly(new DataTable.Output.Chosen("B-2", 1, "", -1, StyledText.empty()));
 
-        DataTable.Model cell = apply(view, state, new DataTable.Msg.SetMode(DataTable.Mode.CELL));
-        cell = apply(view, cell, new DataTable.Msg.Right());
-        assertThat(view.update(cell, new DataTable.Msg.Choose()).outputs())
+        DataTableModel cell = apply(view, state, new DataTableMsg.SetMode(DataTable.Mode.CELL));
+        cell = apply(view, cell, new DataTableMsg.Right());
+        assertThat(view.update(cell, new DataTableMsg.Choose()).outputs())
                 .containsExactly(new DataTable.Output.Chosen("B-2", 1, "name", 1, StyledText.plain("bravo")));
-        assertThat(view.update(cell, new DataTable.Msg.Cancel()).outputs())
+        assertThat(view.update(cell, new DataTableMsg.Cancel()).outputs())
                 .containsExactly(new DataTable.Output.Cancelled());
-        assertThat(view.update(cell, new DataTable.Msg.Cancel()).model())
+        assertThat(view.update(cell, new DataTableMsg.Cancel()).model())
                 .as("a report changes nothing")
                 .isSameAs(cell);
     }
 
     @Test
     void theColumnGesturesDoNothingInARowSelection() {
-        DataTable.Config config = config(three(), 4, 20);
+        DataTableConfig config = config(three(), 4, 20);
         DataTable view = table(config);
-        DataTable.Model state = model(config);
+        DataTableModel state = model(config);
 
-        assertThat(apply(view, state, new DataTable.Msg.Right())).isSameAs(state);
-        assertThat(apply(view, state, new DataTable.Msg.Left())).isSameAs(state);
+        assertThat(apply(view, state, new DataTableMsg.Right())).isSameAs(state);
+        assertThat(apply(view, state, new DataTableMsg.Left())).isSameAs(state);
         assertThat(DataTable.keys(state).action("right"))
                 .hasValueSatisfying(action -> assertThat(action.enabled()).isFalse());
         assertThat(Help.render(DataTable.keys(state), true, 120).plainText())
@@ -348,12 +363,12 @@ class ParityTableTest {
 
     @Test
     void theHeaderStaysWhileTheBodyScrolls() {
-        DataTable.Config config = config(content(20), 6, 80);
+        DataTableConfig config = config(content(20), 6, 80);
         DataTable view = table(config);
-        DataTable.Model state = model(config);
+        DataTableModel state = model(config);
         String header = painted(state, config).get(0);
 
-        DataTable.Model scrolled = apply(view, state, new DataTable.Msg.PageDown());
+        DataTableModel scrolled = apply(view, state, new DataTableMsg.PageDown());
 
         assertThat(painted(scrolled, config).get(0))
                 .as("the header after a page")
@@ -366,65 +381,63 @@ class ParityTableTest {
 
     @Test
     void aPageMovesExactlyOneWindow() {
-        DataTable.Config config = config(content(20), 6, 80);
+        DataTableConfig config = config(content(20), 6, 80);
         DataTable view = table(config);
-        DataTable.Model state = model(config);
+        DataTableModel state = model(config);
 
         assertThat(DataTable.bodyHeight(state, config)).isEqualTo(5);
-        DataTable.Model paged = apply(view, state, new DataTable.Msg.PageDown());
+        DataTableModel paged = apply(view, state, new DataTableMsg.PageDown());
         assertThat(paged.selection().row()).isEqualTo(5);
         assertThat(DataTable.top(paged, config)).isEqualTo(5);
-        assertThat(apply(view, paged, new DataTable.Msg.PageUp()).selection().row())
+        assertThat(apply(view, paged, new DataTableMsg.PageUp()).selection().row())
                 .isZero();
     }
 
     @Test
     void aHalfPageMovesHalfAWindow() {
-        DataTable.Config config = config(content(20), 7, 80);
+        DataTableConfig config = config(content(20), 7, 80);
         DataTable view = table(config);
-        DataTable.Model state = model(config);
+        DataTableModel state = model(config);
 
         assertThat(DataTable.bodyHeight(state, config)).isEqualTo(6);
-        assertThat(apply(view, state, new DataTable.Msg.HalfPageDown())
+        assertThat(apply(view, state, new DataTableMsg.HalfPageDown())
                         .selection()
                         .row())
                 .isEqualTo(3);
-        assertThat(apply(view, state, new DataTable.Msg.HalfPageUp())
-                        .selection()
-                        .row())
+        assertThat(apply(view, state, new DataTableMsg.HalfPageUp()).selection().row())
                 .isZero();
     }
 
     @Test
     void homeAndEndSelectTheFirstAndLastRowAndRevealThem() {
-        DataTable.Config config = config(content(20), 6, 80);
+        DataTableConfig config = config(content(20), 6, 80);
         DataTable view = table(config);
 
-        DataTable.Model end = apply(view, model(config), new DataTable.Msg.Bottom());
+        DataTableModel end = apply(view, model(config), new DataTableMsg.Bottom());
         assertThat(end.selection().row()).isEqualTo(19);
         assertThat(DataTable.top(end, config)).isEqualTo(15);
         assertThat(body(end, config)).last().asString().startsWith("A-19 ");
 
-        DataTable.Model home = apply(view, end, new DataTable.Msg.Top());
+        DataTableModel home = apply(view, end, new DataTableMsg.Top());
         assertThat(home.selection().row()).isZero();
         assertThat(DataTable.top(home, config)).isZero();
     }
 
     @Test
     void aSelectionIsNeverLeftOutsideTheWindow() {
-        DataTable.Config config = config(content(30), 5, 80);
+        DataTableConfig config = config(content(30), 5, 80);
         DataTable view = table(config);
-        DataTable.Model state = model(config);
+        DataTableModel state = model(config);
 
-        for (DataTable.Msg message : List.of(
-                new DataTable.Msg.Up(),
-                new DataTable.Msg.Down(),
-                new DataTable.Msg.PageUp(),
-                new DataTable.Msg.PageDown(),
-                new DataTable.Msg.HalfPageUp(),
-                new DataTable.Msg.HalfPageDown(),
-                new DataTable.Msg.Top(),
-                new DataTable.Msg.Bottom())) {
+        for (DataTableMsg message : List.of(
+                new DataTableMsg.Up(),
+                new DataTableMsg.Down(),
+                new DataTableMsg.PageUp(),
+                new DataTableMsg.PageDown(),
+                new DataTableMsg.HalfPageUp(),
+                new DataTableMsg.HalfPageDown(),
+                new DataTableMsg.Top(),
+                new DataTableMsg.Bottom())) {
             for (int step = 0; step < 7; step++) {
                 state = apply(view, state, message);
                 int top = DataTable.top(state, config);
@@ -437,32 +450,32 @@ class ParityTableTest {
 
     @Test
     void aMoveThatChangesNothingKeepsTheInstance() {
-        DataTable.Config config = config(content(4), 6, 80);
+        DataTableConfig config = config(content(4), 6, 80);
         DataTable view = table(config);
-        DataTable.Model top = model(config);
+        DataTableModel top = model(config);
 
-        assertThat(apply(view, top, new DataTable.Msg.Up())).isSameAs(top);
-        assertThat(apply(view, top, new DataTable.Msg.PanLeft(4))).isSameAs(top);
-        assertThat(apply(view, top, new DataTable.Msg.Resized(6, 80))).isSameAs(top);
+        assertThat(apply(view, top, new DataTableMsg.Up())).isSameAs(top);
+        assertThat(apply(view, top, new DataTableMsg.PanLeft(4))).isSameAs(top);
+        assertThat(apply(view, top, new DataTableMsg.Resized(6, 80))).isSameAs(top);
 
-        DataTable.Model end = apply(view, top, new DataTable.Msg.Bottom());
-        assertThat(apply(view, end, new DataTable.Msg.Down())).isSameAs(end);
-        assertThat(apply(view, end, new DataTable.Msg.Bottom())).isSameAs(end);
+        DataTableModel end = apply(view, top, new DataTableMsg.Bottom());
+        assertThat(apply(view, end, new DataTableMsg.Down())).isSameAs(end);
+        assertThat(apply(view, end, new DataTableMsg.Bottom())).isSameAs(end);
     }
 
     @Test
     void panningRevealsTheColumnsTheWindowClips() {
-        DataTable.Config config = config(three(), 4, 20);
+        DataTableConfig config = config(three(), 4, 20);
         DataTable view = table(config);
-        DataTable.Model state = model(config);
+        DataTableModel state = model(config);
 
         assertThat(DataTable.rowWidth(state)).isEqualTo(26);
         assertThat(DataTable.firstColumn(state, config)).isZero();
         assertThat(painted(state, config).get(1)).isEqualTo("A-1  alpha       1 f");
 
-        DataTable.Model cell = apply(view, state, new DataTable.Msg.SetMode(DataTable.Mode.CELL));
+        DataTableModel cell = apply(view, state, new DataTableMsg.SetMode(DataTable.Mode.CELL));
         for (int step = 0; step < 3; step++) {
-            cell = apply(view, cell, new DataTable.Msg.Right());
+            cell = apply(view, cell, new DataTableMsg.Right());
         }
 
         assertThat(cell.selection().column()).isEqualTo(3);
@@ -474,28 +487,28 @@ class ParityTableTest {
 
     @Test
     void aCellSelectionStaysVisibleWhilePanning() {
-        DataTable.Config config = config(three(), 4, 20);
+        DataTableConfig config = config(three(), 4, 20);
         DataTable view = table(config);
-        DataTable.Model state = apply(view, model(config), new DataTable.Msg.SetMode(DataTable.Mode.CELL));
+        DataTableModel state = apply(view, model(config), new DataTableMsg.SetMode(DataTable.Mode.CELL));
 
         // The selection is the first column, so panning right can never take it off the window.
-        DataTable.Model panned = apply(view, state, new DataTable.Msg.PanRight(100));
+        DataTableModel panned = apply(view, state, new DataTableMsg.PanRight(100));
         assertThat(DataTable.firstColumn(panned, config)).isZero();
         assertThat(painted(panned, config).get(1)).startsWith("A-1");
 
-        DataTable.Model rowed = apply(view, state, new DataTable.Msg.SetMode(DataTable.Mode.ROW));
-        assertThat(DataTable.firstColumn(apply(view, rowed, new DataTable.Msg.PanRight(100)), config))
+        DataTableModel rowed = apply(view, state, new DataTableMsg.SetMode(DataTable.Mode.ROW));
+        assertThat(DataTable.firstColumn(apply(view, rowed, new DataTableMsg.PanRight(100)), config))
                 .as("a row selection may pan the whole row")
                 .isEqualTo(6);
     }
 
     @Test
     void aResizeRecomputesTheWindowAndKeepsTheSelection() {
-        DataTable.Config config = config(content(20), 6, 80);
+        DataTableConfig config = config(content(20), 6, 80);
         DataTable view = table(config);
-        DataTable.Model state = apply(view, model(config), new DataTable.Msg.Bottom());
+        DataTableModel state = apply(view, model(config), new DataTableMsg.Bottom());
 
-        DataTable.Model smaller = apply(view, state, new DataTable.Msg.Resized(4, 30));
+        DataTableModel smaller = apply(view, state, new DataTableMsg.Resized(4, 30));
 
         assertThat(DataTable.bodyHeight(smaller, config)).isEqualTo(3);
         assertThat(smaller.selection().row()).isEqualTo(19);
@@ -507,28 +520,28 @@ class ParityTableTest {
 
     @Test
     void aHugePanCountClamps() {
-        DataTable.Config config = config(three(), 4, 20);
+        DataTableConfig config = config(three(), 4, 20);
         DataTable view = table(config);
-        DataTable.Model right = apply(view, model(config), new DataTable.Msg.PanRight(Integer.MAX_VALUE));
+        DataTableModel right = apply(view, model(config), new DataTableMsg.PanRight(Integer.MAX_VALUE));
 
         assertThat(DataTable.firstColumn(right, config)).isEqualTo(6);
-        assertThat(DataTable.firstColumn(apply(view, right, new DataTable.Msg.PanLeft(Integer.MAX_VALUE)), config))
+        assertThat(DataTable.firstColumn(apply(view, right, new DataTableMsg.PanLeft(Integer.MAX_VALUE)), config))
                 .isZero();
-        DataTable.Model state = model(config);
-        assertThat(apply(view, state, new DataTable.Msg.PanRight(0)))
+        DataTableModel state = model(config);
+        assertThat(apply(view, state, new DataTableMsg.PanRight(0)))
                 .as("a zero pan changes nothing")
                 .isSameAs(state);
     }
 
     @Test
     void aZeroSizedTablePaintsAndScrollsNothing() {
-        DataTable.Config config = config(three(), 0, 0);
+        DataTableConfig config = config(three(), 0, 0);
         DataTable view = table(config);
-        DataTable.Model state = model(config);
+        DataTableModel state = model(config);
 
         assertThat(painted(state, config)).isEmpty();
         assertThat(DataTable.bodyHeight(state, config)).isZero();
-        assertThat(apply(view, state, new DataTable.Msg.PageDown())).isSameAs(state);
+        assertThat(apply(view, state, new DataTableMsg.PageDown())).isSameAs(state);
         assertThat(screen(view, state, 4, 20))
                 .allSatisfy(line -> assertThat(line).isBlank());
     }
@@ -537,10 +550,10 @@ class ParityTableTest {
 
     @Test
     void aValueWiderThanItsColumnIsTruncatedOnAClusterBoundary() {
-        DataTable.Content content = DataTable.Content.of(
+        DataTableContent content = DataTableContent.of(
                 List.of(DataTable.Column.of("w", "w", 3)),
                 List.of(DataTable.Row.of("wide", "a" + WIDE + "b"), DataTable.Row.of("only", WIDE + WIDE)));
-        DataTable.Config config = config(content, 4, 20);
+        DataTableConfig config = config(content, 4, 20);
 
         assertThat(painted(model(config), config))
                 .as("a wide glyph is dropped whole rather than half painted")
@@ -549,17 +562,17 @@ class ParityTableTest {
 
     @Test
     void alignmentPlacesThePaddingOnTheNamedSide() {
-        DataTable.Content content = DataTable.Content.of(
+        DataTableContent content = DataTableContent.of(
                 List.of(
                         DataTable.Column.of("l", "l", 5),
                         DataTable.Column.of("c", "c", 5).withAlignment(DataTable.Alignment.CENTER),
                         DataTable.Column.of("r", "r", 5).withAlignment(DataTable.Alignment.RIGHT)),
                 List.of(DataTable.Row.of("row", "ab", "ab", "ab")));
-        DataTable.Config config = config(content, 4, 40);
+        DataTableConfig config = config(content, 4, 40);
         List<String> lines = painted(model(config), config);
 
         assertThat(lines.get(1).indexOf("ab")).as("left").isZero();
-        assertThat(lines.get(1).indexOf("ab", 1)).as("centred").isEqualTo(7);
+        assertThat(lines.get(1).indexOf("ab", 1)).as("centered").isEqualTo(7);
         assertThat(lines.get(1).indexOf("ab", 8)).as("right").isEqualTo(15);
         assertThat(lines.get(0).indexOf("c")).isEqualTo(8);
         assertThat(lines.get(0).indexOf("r")).isEqualTo(16);
@@ -567,8 +580,8 @@ class ParityTableTest {
 
     @Test
     void theHeaderAndTheBodyShareOneGrid() {
-        DataTable.Config config = config(three(), 6, 80);
-        DataTable.Model state = apply(table(config), model(config), new DataTable.Msg.Down());
+        DataTableConfig config = config(three(), 6, 80);
+        DataTableModel state = apply(table(config), model(config), new DataTableMsg.Down());
         String header = DataTable.lines(state, config).get(0).text().plainText();
 
         assertThat(header.indexOf("name")).isEqualTo(DataTable.columnStart(state, 1));
@@ -597,10 +610,10 @@ class ParityTableTest {
 
     @Test
     void aTabStopExpandsTheWayTheStaticTableExpandsIt() {
-        DataTable.Content content = DataTable.Content.of(
+        DataTableContent content = DataTableContent.of(
                 List.of(DataTable.Column.of("v", "v", 6)),
                 List.of(DataTable.Row.of("tab", "a\tb"), DataTable.Row.of("next", "x")));
-        DataTable.Config config = config(content, 4, 20);
+        DataTableConfig config = config(content, 4, 20);
 
         assertThat(painted(model(config), config)).containsExactly("v      ", "a   b  ", "x      ");
     }
@@ -608,7 +621,7 @@ class ParityTableTest {
     @Test
     void aBreakInsideACellBecomesOneSpaceAndKeepsItsSpans() {
         Style bold = Style.NONE.withBold();
-        DataTable.Content content = DataTable.Content.of(
+        DataTableContent content = DataTableContent.of(
                 List.of(DataTable.Column.of("v", "v", 8)),
                 List.of(
                         DataTable.Row.of("lf", "one\ntwo"),
@@ -617,7 +630,7 @@ class ParityTableTest {
                                 "styled",
                                 List.of(StyledText.concat(
                                         StyledText.of("one\n", bold), StyledText.of("two", Style.NONE))))));
-        DataTable.Config config = config(content, 5, 20);
+        DataTableConfig config = config(content, 5, 20);
 
         // A bare CR never reaches a cell: StyledText drops an unrepresentable control character where
         // the span is made, so an application that reads raw text prepares it with LineBreaks first.
@@ -654,8 +667,8 @@ class ParityTableTest {
                 return Style.NONE.withItalic();
             }
         };
-        DataTable.Config config = config(content(2000), 6, 80).withTheme(theme);
-        DataTable.Model state = model(config);
+        DataTableConfig config = config(content(2000), 6, 80).withTheme(theme);
+        DataTableModel state = model(config);
 
         List<DataTable.Line> lines = DataTable.lines(state, config);
 
@@ -670,9 +683,9 @@ class ParityTableTest {
 
     @Test
     void theSelectionIsMergedOverWhatTheThemePaints() {
-        DataTable.Config config =
+        DataTableConfig config =
                 config(three(), 6, 80).withTheme(DataTable.Theme.of(null, null, Style.NONE.withBold()));
-        DataTable.Model state = apply(table(config), model(config), new DataTable.Msg.Down());
+        DataTableModel state = apply(table(config), model(config), new DataTableMsg.Down());
 
         List<DataTable.Line> lines = DataTable.lines(state, config);
         Style selected = lines.get(2).text().spans().get(0).style();
@@ -695,13 +708,13 @@ class ParityTableTest {
 
     @Test
     void aBaselessClusterAtTheHeadOfACellDoesNotMoveTheColumns() {
-        DataTable.Content content = DataTable.Content.of(
+        DataTableContent content = DataTableContent.of(
                 List.of(DataTable.Column.of("a", "a", 4), DataTable.Column.of("b", "b", 4)),
                 List.of(
                         DataTable.Row.of("plain", "x", "y"),
                         DataTable.Row.of("baseless", "\u0301x", "y"),
                         DataTable.Row.of("widened", "\uFE0Fx", "y")));
-        DataTable.Config config = config(content, 5, 40);
+        DataTableConfig config = config(content, 5, 40);
         List<String> lines = painted(model(config), config);
 
         assertThat(lines)
@@ -713,13 +726,13 @@ class ParityTableTest {
 
     @Test
     void largeContentIsMeasuredOnceAndPaintsOnlyTheWindow() {
-        DataTable.Config config = config(content(5000), 8, 80);
+        DataTableConfig config = config(content(5000), 8, 80);
         DataTable view = table(config);
-        DataTable.Model state = model(config);
+        DataTableModel state = model(config);
 
-        DataTable.Model moved = state;
+        DataTableModel moved = state;
         for (int step = 0; step < 200; step++) {
-            moved = apply(view, moved, new DataTable.Msg.Down());
+            moved = apply(view, moved, new DataTableMsg.Down());
         }
 
         assertThat(moved.content())
@@ -730,8 +743,8 @@ class ParityTableTest {
 
     @Test
     void theHeaderCanBeTurnedOff() {
-        DataTable.Config config = config(three(), 6, 80).withHeader(false);
-        DataTable.Model state = model(config);
+        DataTableConfig config = config(three(), 6, 80).withHeader(false);
+        DataTableModel state = model(config);
 
         assertThat(DataTable.bodyHeight(state, config)).isEqualTo(6);
         assertThat(DataTable.lines(state, config)).hasSize(3);
@@ -836,7 +849,7 @@ class ParityTableTest {
 
     private static List<String> lines(
             ComponentDriver<TableDemo.Model, TableDemo.Msg, Never> driver, int rows, int cols) {
-        return driver.screen(new ViewContext(new Viewport(rows, cols))).plainLines();
+        return driver.screen(new ViewContext(new Viewport(rows, cols))).lines();
     }
 
     private static List<String> statuses(ComponentDriver<TableDemo.Model, TableDemo.Msg, Never> driver) {
@@ -845,11 +858,14 @@ class ParityTableTest {
 
     private static Optional<TableDemo.Msg> route(
             ComponentDriver<TableDemo.Model, TableDemo.Msg, Never> driver, String keySpec) {
-        View<TableDemo.Msg> view = driver.view(CONTEXT);
-        return InputRouter.route(view, key(keySpec));
+        return io.github.dhoard.braxton.testing.Routing.route(driver.component(), driver.model(), CONTEXT, key(keySpec))
+                .stream()
+                .findFirst();
     }
 
-    /** Presses one key through the scene's own view, then delivers the messages it dispatches. */
+    /**
+     * Presses one key through the scene's own view, then delivers the messages it dispatches.
+     */
     private static void press(ComponentDriver<TableDemo.Model, TableDemo.Msg, Never> driver, String keySpec) {
         TableDemo.Msg message =
                 route(driver, keySpec).orElseThrow(() -> new AssertionError("no message for " + keySpec));
@@ -859,7 +875,9 @@ class ParityTableTest {
         }
     }
 
-    /** The messages a command dispatches, in order, which is how a routed output reaches its parent. */
+    /**
+     * The messages a command dispatches, in order, which is how a routed output reaches its parent.
+     */
     private static List<TableDemo.Msg> dispatched(Command<TableDemo.Msg> command) {
         List<TableDemo.Msg> messages = new ArrayList<>();
         collect(command, messages);
@@ -1039,28 +1057,28 @@ class ParityTableTest {
         assertThat(TableDemo.run()).isNotNull();
     }
 
-    // ── R-05: preserved behaviour, purity and repaired state ────────────────
+    // ── R-05: preserved behavior, purity and repaired state ────────────────
 
     @Test
     void paintingIsPureAndRepeatable() {
-        DataTable.Config config = config(three(), 6, 20);
+        DataTableConfig config = config(three(), 6, 20);
         DataTable view = table(config);
-        DataTable.Model state = apply(view, model(config), new DataTable.Msg.Bottom());
+        DataTableModel state = apply(view, model(config), new DataTableMsg.Bottom());
 
         List<DataTable.Line> first = DataTable.lines(state, config);
         List<DataTable.Line> second = DataTable.lines(state, config);
 
         assertThat(second).isEqualTo(first);
         assertThat(view.view(state, CONTEXT)).isNotNull();
-        assertThat(apply(view, state, new DataTable.Msg.Cancel()))
+        assertThat(apply(view, state, new DataTableMsg.Cancel()))
                 .as("a report is a no-op")
                 .isSameAs(state);
     }
 
     @Test
     void theModelRepairsAnImpossibleState() {
-        DataTable.Model state = new DataTable.Model(
-                three(), new DataTable.Selection(DataTable.Mode.CELL, 99, 99), -4, -4, -1, -1, true);
+        DataTableModel state =
+                new DataTableModel(three(), new DataTable.Selection(DataTable.Mode.CELL, 99, 99), -4, -4, -1, -1, true);
 
         assertThat(state.selection().row()).isEqualTo(2);
         assertThat(state.selection().column()).isEqualTo(3);
@@ -1068,9 +1086,9 @@ class ParityTableTest {
         assertThat(state.firstColumn()).isZero();
         assertThat(state.height()).isZero();
         assertThat(state.width()).isZero();
-        assertThat(new DataTable.Model(null, null, 0, 0, 0, 0, true).content())
+        assertThat(new DataTableModel(null, null, 0, 0, 0, 0, true).content())
                 .as("a missing content is empty content")
-                .isEqualTo(DataTable.Content.empty());
+                .isEqualTo(DataTableContent.empty());
     }
 
     @Test
@@ -1092,16 +1110,16 @@ class ParityTableTest {
 
     @Test
     void theRenderedScreenIsTheWindowItDescribes() {
-        DataTable.Config config = config(three(), 4, 20);
+        DataTableConfig config = config(three(), 4, 20);
         DataTable view = table(config);
-        DataTable.Model state = apply(view, model(config), new DataTable.Msg.Down());
+        DataTableModel state = apply(view, model(config), new DataTableMsg.Down());
         List<String> painted = painted(state, config);
         List<String> screen = screen(view, state, 6, 20);
 
         assertThat(painted).hasSize(4);
         assertThat(screen.get(0)).isEqualTo(painted.get(0));
         assertThat(screen.get(1)).isEqualTo(painted.get(1));
-        assertThat(rendered(view, state, 6, 20).plainLines()).hasSize(6);
+        assertThat(rendered(view, state, 6, 20).lines()).hasSize(6);
         assertThat(DataTable.keys(state).bindings())
                 .isNotEmpty()
                 .extracting(Binding::key)

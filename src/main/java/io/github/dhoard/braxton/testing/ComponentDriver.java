@@ -28,14 +28,14 @@ import io.github.dhoard.braxton.mvu.ComponentTree;
 import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.RenderedScreen;
-import io.github.dhoard.braxton.view.ScreenRenderer;
-import io.github.dhoard.braxton.view.View;
+import io.github.dhoard.braxton.ui.Element;
 import java.util.Objects;
 
-/** Deterministic single-component test driver. Commands (including dispatch and quit) remain inert
+/**
+ * Deterministic single-component test driver. Commands (including dispatch and quit) remain inert
  * and inspectable. This is not a runtime: no executor, subscription start, lifecycle or terminal I/O.
  * Send resulting dispatch messages explicitly when testing a composed pure update sequence.
+ *
  * @param <M> the component model type
  * @param <Msg> the component message type
  * @param <Out> the component output type
@@ -49,6 +49,16 @@ public final class ComponentDriver<M, Msg, Out> {
         this.latest = latest;
     }
 
+    /**
+     * Initializes a pure component driver with the supplied context.
+     *
+     * @param <M> the component model type
+     * @param <Msg> the component message type
+     * @param <Out> the component output type
+     * @param component the typed component to drive
+     * @param context the initialization or view context
+     * @return initializes a pure component driver with the supplied context
+     */
     public static <M, Msg, Out> ComponentDriver<M, Msg, Out> initialize(
             Component<M, Msg, Out> component, InitContext context) {
         Objects.requireNonNull(component, "component");
@@ -57,33 +67,82 @@ public final class ComponentDriver<M, Msg, Out> {
                 Objects.requireNonNull(component.init(Objects.requireNonNull(context, "context")), "update"));
     }
 
+    /**
+     * Applies a typed message through the component update.
+     *
+     * @param message the typed message to deliver
+     * @return this driver after applying the message
+     */
     public Update<M, Msg, Out> send(Msg message) {
         latest = Objects.requireNonNull(
                 component.update(latest.model(), Objects.requireNonNull(message, "message")), "update");
         return latest;
     }
 
+    /**
+     * Returns the current immutable component model.
+     *
+     * @return the current immutable component model
+     */
     public M model() {
         return latest.model();
     }
 
+    /**
+     * The component being driven, for a test that routes an event the way the runtime does.
+     *
+     * @return the component being driven, for a test that routes an event the way the runtime does
+     */
+    public Component<M, Msg, Out> component() {
+        return component;
+    }
+
+    /**
+     * Returns the most recently applied transition.
+     *
+     * @return the most recently applied transition
+     */
     public Update<M, Msg, Out> latest() {
         return latest;
     }
 
-    public View<Msg> view(ViewContext context) {
+    /**
+     * Builds the current element tree for the supplied viewport.
+     *
+     * @param context the initialization or view context
+     * @return the current element tree for the supplied viewport
+     */
+    public Element<Msg> view(ViewContext context) {
         return component.view(model(), context);
     }
 
+    /**
+     * Returns the current subscription declarations without starting them.
+     *
+     * @return the current subscription declarations without starting them
+     */
     public Subscription<Msg> subscriptions() {
         return component.subscriptions(model());
     }
 
+    /**
+     * Returns the active child declaration for the current model.
+     *
+     * @return the active child declaration for the current model
+     */
     public ComponentTree children() {
         return component.children(model());
     }
 
-    public RenderedScreen screen(ViewContext context) {
-        return new ScreenRenderer().screen(view(context), context.viewport());
+    /**
+     * The frame this model paints, laid out and painted as the runtime would paint it.
+     *
+     * @param context the initialization or view context
+     * @return the frame this model paints, laid out and painted as the runtime would paint it
+     */
+    public ElementScreen screen(ViewContext context) {
+        ViewContext frame = context;
+        return ElementScreen.render(
+                view(frame), frame.viewport().rows(), frame.viewport().cols());
     }
 }

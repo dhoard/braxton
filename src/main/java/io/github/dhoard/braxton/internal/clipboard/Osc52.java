@@ -40,7 +40,7 @@ import java.util.Base64;
  * ESC byte in a tmux passthrough payload. A read is the same command with {@code ?} in place of the
  * payload; the terminal answers with the payload it holds.</p>
  *
- * <p>There is no acknowledgement in the protocol. A caller can know that a sequence was written,
+ * <p>There is no acknowledgment in the protocol. A caller can know that a sequence was written,
  * never that a terminal or tmux actually placed the text on the system clipboard.</p>
  *
  * <p>Decoding is strict in both steps, because a reply is the one place terminal bytes become text an
@@ -50,13 +50,19 @@ import java.util.Base64;
  */
 public final class Osc52 {
 
-    /** The default clipboard selection: the system clipboard. */
+    /**
+     * The default clipboard selection: the system clipboard.
+     */
     public static final String CLIPBOARD_SELECTION = "c";
 
-    /** The OSC command number that reads and writes a clipboard. */
+    /**
+     * The OSC command number that reads and writes a clipboard.
+     */
     public static final int CODE = 52;
 
-    /** The payload a read sends in place of the text. */
+    /**
+     * The payload a read sends in place of the text.
+     */
     private static final String READ_MARKER = "?";
 
     private static final char ESC = '\u001b';
@@ -74,6 +80,7 @@ public final class Osc52 {
     /**
      * Encodes {@code text} for the system clipboard without a size limit.
      *
+     * @param text the text to process
      * @return the complete OSC 52 sequence, or an empty string when there is no text (including
      *     {@code null}), because an empty payload would clear the user's clipboard
      */
@@ -88,6 +95,10 @@ public final class Osc52 {
     /**
      * Encodes {@code text} for the system clipboard, truncating it on a grapheme-cluster boundary
      * when it exceeds {@code maxBytes}.
+     *
+     * @param text the text to process
+     * @param maxBytes the maximum payload length in UTF-8 bytes
+     * @return the encoded OSC 52 control sequence
      */
     public static Encoded encode(String text, int maxBytes) {
         return encode(text, CLIPBOARD_SELECTION, maxBytes);
@@ -100,6 +111,7 @@ public final class Osc52 {
      * @param selection the selection to write; a missing selection writes the system clipboard
      * @param text the text to encode; {@code null} is treated as empty
      * @param maxBytes maximum UTF-8 payload size
+     * @return the encoded OSC 52 control sequence
      */
     public static Encoded encode(ClipboardSelection selection, String text, int maxBytes) {
         return encode(text, selection == null ? CLIPBOARD_SELECTION : String.valueOf(selection.code()), maxBytes);
@@ -112,6 +124,7 @@ public final class Osc52 {
      * session that never reads a clipboard writes nothing.</p>
      *
      * @param selection the selection to ask about; a missing selection reads the system clipboard
+     * @return the OSC 52 clipboard-read request
      */
     public static String request(ClipboardSelection selection) {
         return PREFIX + (selection == null ? CLIPBOARD_SELECTION : String.valueOf(selection.code())) + ";" + READ_MARKER
@@ -226,9 +239,10 @@ public final class Osc52 {
      * Encodes {@code text} for the requested selection.
      *
      * @param text clipboard text; {@code null} is treated as empty
-     * @param selection OSC 52 selection ({@code c}, {@code p}, {@code s}, {@code 0}–{@code 7}); an
+     * @param selection OSC 52 selection ({@code c}, {@code p}, {@code s}, {@code 0}\u2013{@code 7}); an
      *     unknown value falls back to {@code c} so the sequence cannot be injected through it
      * @param maxBytes maximum UTF-8 payload size; a value below zero is treated as zero
+     * @return the encoded OSC 52 control sequence
      */
     public static Encoded encode(String text, String selection, int maxBytes) {
         String safeText = text == null ? "" : text;
@@ -245,12 +259,21 @@ public final class Osc52 {
     /**
      * The encoded payload. {@code byteLength} is the UTF-8 size of {@code text} after any
      * truncation, and {@code truncated} reports whether the configured limit removed text.
+     *
      * @param sequence the complete OSC 52 sequence
      * @param text the payload text after any truncation
      * @param byteLength the UTF-8 length of the payload text
      * @param truncated whether a limit removed text
      */
     public record Encoded(String sequence, String text, int byteLength, boolean truncated) {
+        /**
+         * Creates a {@code Encoded} value.
+         *
+         * @param sequence the complete OSC 52 sequence
+         * @param text the payload text after any truncation
+         * @param byteLength the UTF-8 length of the payload text
+         * @param truncated whether a limit removed text
+         */
         public Encoded {
             sequence = sequence == null ? "" : sequence;
             text = text == null ? "" : text;
@@ -284,7 +307,9 @@ public final class Osc52 {
             }
         }
 
-        /** The terminal understood the question and cannot answer it. */
+        /**
+         * The terminal understood the question and cannot answer it.
+         */
         record Refused() implements Decoded {}
 
         /**

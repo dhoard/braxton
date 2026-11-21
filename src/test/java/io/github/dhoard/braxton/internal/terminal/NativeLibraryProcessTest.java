@@ -38,7 +38,9 @@ class NativeLibraryProcessTest {
     @TempDir
     Path work;
 
-    /** Stands in for the build-recorded hash; the fixture only needs a valid, stable identity. */
+    /**
+     * Stands in for the build-recorded hash; the fixture only needs a valid, stable identity.
+     */
     private static final String CONTENT_HASH = "5c".repeat(32);
 
     private Process start(String mode, Path root, Path ready, Path release, Path payload, String name)

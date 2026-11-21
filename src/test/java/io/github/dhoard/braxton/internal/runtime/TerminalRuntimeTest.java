@@ -31,8 +31,8 @@ import io.github.dhoard.braxton.mvu.InitContext;
 import io.github.dhoard.braxton.mvu.Never;
 import io.github.dhoard.braxton.mvu.Update;
 import io.github.dhoard.braxton.mvu.ViewContext;
-import io.github.dhoard.braxton.view.View;
-import io.github.dhoard.braxton.view.Views;
+import io.github.dhoard.braxton.ui.Element;
+import io.github.dhoard.braxton.widget.Elements;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import org.junit.jupiter.api.Test;
@@ -50,8 +50,8 @@ class TerminalRuntimeTest {
                 return Update.next(model);
             }
 
-            public View<String> view(Integer model, ViewContext context) {
-                return Views.text("ready");
+            public Element<String> view(Integer model, ViewContext context) {
+                return Elements.text("ready");
             }
         };
     }
